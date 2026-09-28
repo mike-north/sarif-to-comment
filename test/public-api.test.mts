@@ -1,8 +1,6 @@
-'use strict';
-
 /**
  * Contract tests for the public library operation publishSarifReview
- * (src/index.cjs).
+ * (src/index.cts).
  *
  * The operation takes an in-memory SARIF value and composes the same private
  * cores as the CLI: whole-review preparation, the GitHub client, and durable
@@ -30,7 +28,7 @@
  * what prepareReview itself produces for the same SARIF and context, plus
  * independent facts from the fixture (which line the inline comment is on,
  * which text is general feedback). The GitHub client is a private seam backed
- * by a file-backed host double shaped like src/github.cjs; mocks are not
+ * by a file-backed host double shaped like src/github.cts; mocks are not
  * evidence of GitHub behavior.
  *
  * @see https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/sarif-v2.1.0-errata01-os-complete.html
@@ -39,29 +37,103 @@
  * @see https://www.rfc-editor.org/rfc/rfc8089 (file URI scheme)
  */
 
-const test = require('node:test');
-const { describe } = test;
-const assert = require('node:assert/strict');
-const crypto = require('node:crypto');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const util = require('node:util');
+import * as assert from 'node:assert/strict';
+import { AssertionError } from 'node:assert';
+import * as crypto from 'node:crypto';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { describe, test } from 'node:test';
+import * as util from 'node:util';
 
-const { publishSarifReview } = require('../dist/index.cjs');
-const { GitHubError } = require('../dist/github.cjs');
-const { prepareReview } = require('../dist/prepare-review.cjs');
-const { FakeGitHubRemote, DEFAULT_USER } = require('./fixtures/publication/fake-github.mts');
-const {
+import { GitHubError } from '../dist/github.cjs';
+import { publishSarifReview } from '../dist/index.cjs';
+import { prepareReview } from '../dist/prepare-review.cjs';
+import type { IPreparedReview, PrepareReviewOutcome } from '../dist/prepare-review.cjs';
+import type {
+  IPublishSarifReviewInput,
+  IPublishSarifReviewInternals,
+  IPullRequestDestination,
+  PublishSarifReviewOutcome,
+} from '../dist/publish-sarif-review.cjs';
+import { FakeGitHubRemote, DEFAULT_USER } from './fixtures/publication/fake-github.mts';
+import type { IFakeRemoteConfig, IRecordedCall } from './fixtures/publication/fake-github.mts';
+import {
   REPOSITORY,
   createFakeClientFactory,
   readSource,
   setAdapterConfig,
   trustedContext,
-} = require('./fixtures/public-api/fake-adapter.mts');
+} from './fixtures/public-api/fake-adapter.mts';
+import type { FakeClientFactory, ITrustedContext } from './fixtures/public-api/fake-adapter.mts';
+import { expectType, isArrayOf, isNumber, isShape, isString, isUnknown, readJson } from './support/runtime-types.mts';
+import type { Guard } from './support/runtime-types.mts';
 
-const FIXTURE_DIR = path.join(__dirname, 'fixtures', 'public-api');
-const loadSarif = (name) => JSON.parse(fs.readFileSync(path.join(FIXTURE_DIR, name), 'utf8'));
+// ---------------------------------------------------------------------------
+// Typing of fixture and state data (runtime-checked; see test/support/runtime-types.mts)
+// ---------------------------------------------------------------------------
+
+/** The type a guard checks. */
+type Guarded<G> = G extends Guard<infer T> ? T : never;
+
+/**
+ * The part of a SARIF log these tests read or change: every result's message
+ * text and each run's properties. Other members are kept, unchecked.
+ */
+const isTestSarif = isShape({
+  runs: isArrayOf(isShape({ results: isArrayOf(isShape({ message: isShape({ text: isString }) })), properties: isUnknown })),
+});
+type TestSarif = Guarded<typeof isTestSarif>;
+
+/** The create-review request fields these tests read (as the fake transport records it). */
+const isSentRequest = isShape({
+  owner: isString,
+  repo: isString,
+  pullNumber: isNumber,
+  commitId: isString,
+  body: isString,
+  comments: isArrayOf(isShape({ path: isString, side: isString, line: isNumber, body: isString })),
+});
+
+/** The publication state field these tests read (the full format is src/publication.cts's). */
+const isStateRecord = isShape({ inputFingerprint: isString });
+
+/** `T` with its properties writable. */
+type Mutable<T> = { -readonly [K in keyof T]: T[K] };
+
+/**
+ * A publishSarifReview input the tests may change in place: the public input
+ * type, writable, with the SARIF typed as far as the tests reach into it.
+ * Changes the public types refuse are marked where they are made.
+ */
+type TestInput = Omit<Mutable<IPublishSarifReviewInput>, 'sarif' | 'destination'> & {
+  sarif: TestSarif;
+  destination: Mutable<IPullRequestDestination>;
+};
+
+/** Element `index` of `items`; fails (AssertionError) when there is none. */
+function at<T>(items: readonly T[], index: number): T {
+  const item = items[index];
+  if (item === undefined) throw new AssertionError({ message: `expected an element at index ${String(index)}`, actual: items });
+  return item;
+}
+
+/** Own entry `key` of `record`; fails (AssertionError) when there is none. */
+function entry<T>(record: Readonly<Record<string, T>>, key: string): T {
+  const value = Object.hasOwn(record, key) ? record[key] : undefined;
+  if (value === undefined) throw new AssertionError({ message: `expected an entry ${JSON.stringify(key)}`, actual: Object.keys(record) });
+  return value;
+}
+
+/** `err && err[key]`: a property of a rejection value, or the value itself when it is falsy. */
+function errorField(err: unknown, key: 'name' | 'message'): unknown {
+  if (!err) return err;
+  const value: unknown = Reflect.get(Object(err), key);
+  return value;
+}
+
+const FIXTURE_DIR = path.join(import.meta.dirname, 'fixtures', 'public-api');
+const loadSarif = (name: string): TestSarif => expectType(readJson(path.join(FIXTURE_DIR, name)), isTestSarif, `the SARIF fixture ${name}`);
 const READY = loadSarif('ready.sarif.json');
 const HELD = loadSarif('held.sarif.json');
 const INVALID = loadSarif('invalid.sarif.json');
@@ -73,31 +145,36 @@ const TOKEN = 'ghp_PUBLICAPI_SENTINEL_token_value_0123456789';
 const MARKER = /\n\n<!-- sarif-to-comment:review:[0-9a-f-]{36} -->$/;
 
 // ---------------------------------------------------------------------------
-// Independent fingerprint (spec in src/index.cjs: sha256 over canonical JSON
+// Independent fingerprint (spec in src/publish-sarif-review.cts: sha256 over canonical JSON
 // with recursively sorted keys, no insignificant whitespace, UTF-8)
 // ---------------------------------------------------------------------------
 
-function canonicalJson(value) {
+function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
   if (value && typeof value === 'object') {
+    const members = new Map<string, unknown>(Object.entries(value));
     return `{${Object.keys(value)
       .sort()
-      .map((k) => `${JSON.stringify(k)}:${canonicalJson(value[k])}`)
+      .map((k) => `${JSON.stringify(k)}:${canonicalJson(members.get(k))}`)
       .join(',')}}`;
   }
   return JSON.stringify(value);
 }
 
-function expectedInputFingerprint(sarif, { sourceRootUri = null, oldSourceCommit = null } = {}) {
+function expectedInputFingerprint(
+  sarif: unknown,
+  { sourceRootUri = null, oldSourceCommit = null }: { sourceRootUri?: string | null; oldSourceCommit?: string | null } = {},
+): string {
   const identity = { format: 'sarif-to-comment.input', version: 1, sarif, sourceRootUri, oldSourceCommit };
   return `sha256:${crypto.createHash('sha256').update(canonicalJson(identity), 'utf8').digest('hex')}`;
 }
 
 /** Deep copy with object keys in reverse order at every level. */
-function reverseKeys(value) {
+function reverseKeys(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(reverseKeys);
   if (value && typeof value === 'object') {
-    return Object.fromEntries(Object.keys(value).reverse().map((k) => [k, reverseKeys(value[k])]));
+    const members = new Map<string, unknown>(Object.entries(value));
+    return Object.fromEntries(Object.keys(value).reverse().map((k) => [k, reverseKeys(members.get(k))]));
   }
   return value;
 }
@@ -106,7 +183,15 @@ function reverseKeys(value) {
 // World and helpers
 // ---------------------------------------------------------------------------
 
-function makeWorld(hostConfig = {}) {
+interface IWorld {
+  readonly root: string;
+  readonly stateDir: string;
+  readonly statePath: string;
+  readonly remote: FakeGitHubRemote;
+  readonly createGitHubClient: FakeClientFactory;
+}
+
+function makeWorld(hostConfig: Partial<IFakeRemoteConfig> = {}): IWorld {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'public-api-'));
   const stateDir = path.join(root, 'state');
   fs.mkdirSync(stateDir);
@@ -120,7 +205,7 @@ function makeWorld(hostConfig = {}) {
   };
 }
 
-function baseInput(world, overrides = {}) {
+function baseInput(world: IWorld, overrides: Partial<TestInput> = {}): TestInput {
   return {
     sarif: structuredClone(READY),
     destination: { ...DESTINATION },
@@ -131,41 +216,49 @@ function baseInput(world, overrides = {}) {
   };
 }
 
-function run(world, input = baseInput(world)) {
-  return publishSarifReview(input, { createGitHubClient: world.createGitHubClient });
+function run(world: IWorld, input: TestInput = baseInput(world)): Promise<PublishSarifReviewOutcome> {
+  const internals: IPublishSarifReviewInternals = { createGitHubClient: world.createGitHubClient };
+  return publishSarifReview(
+    input,
+    // @ts-expect-error -- the private internals seam is deliberately absent from the public declaration; this suite proves the public entry honours it at runtime
+    internals,
+  );
 }
 
-function calls(world, method) {
+function calls(world: IWorld, method: string): IRecordedCall[] {
   return world.remote.calls(method);
 }
 
-function assertNoRemoteWrites(world) {
+function assertNoRemoteWrites(world: IWorld): void {
   assert.deepEqual(world.remote.writeCalls().map((c) => c.method), [], 'no remote write may occur');
 }
 
-function assertStateDirEmpty(world) {
+function assertStateDirEmpty(world: IWorld): void {
   assert.deepEqual(fs.readdirSync(world.stateDir), [], 'no publication state may be written');
 }
 
-function stateText(world) {
+function stateText(world: IWorld): string {
   return fs
     .readdirSync(world.stateDir)
     .map((name) => fs.readFileSync(path.join(world.stateDir, name), 'utf8'))
     .join('\n');
 }
 
-function assertTokenAbsent(world, outcome) {
+function assertTokenAbsent(world: IWorld, outcome?: PublishSarifReviewOutcome): void {
   assert.equal(stateText(world).includes(TOKEN), false, 'token reached publication state');
   if (outcome) assert.equal(JSON.stringify(outcome).includes(TOKEN), false, 'token reached the outcome');
 }
 
 /** Everything an inspecting caller could see of a rejection, including causes and hidden properties. */
-function inspectDeep(err) {
+function inspectDeep(err: unknown): string {
   return util.inspect(err, { depth: null, showHidden: true });
 }
 
 /** Exact public shape per status: no internal codes, evidence or diagnostics. */
-function assertPublicShape(outcome, status) {
+function assertPublicShape<S extends PublishSarifReviewOutcome['status']>(
+  outcome: PublishSarifReviewOutcome,
+  status: S,
+): asserts outcome is Extract<PublishSarifReviewOutcome, { status: S }> {
   assert.equal(outcome.status, status, `expected ${status}, got ${JSON.stringify(outcome)}`);
   const keys = {
     published: ['markdown', 'review', 'statePath', 'status'],
@@ -174,7 +267,7 @@ function assertPublicShape(outcome, status) {
     rejected: ['markdown', 'statePath', 'status'],
   }[status];
   assert.deepEqual(Object.keys(outcome).sort(), keys);
-  // Field order is the documented outcome order (src/index.cjs module doc,
+  // Field order is the documented outcome order (src/publish-sarif-review.cts module doc,
   // contract §3.5): status first, markdown last. It is what JSON.stringify of
   // an outcome shows a caller, so it must not drift.
   const ordered = {
@@ -186,14 +279,15 @@ function assertPublicShape(outcome, status) {
   assert.deepEqual(Object.keys(outcome), ordered, 'outcome fields in documented order');
   assert.equal(typeof outcome.markdown, 'string');
   assert.ok(outcome.markdown.length > 0);
-  if (status === 'published') {
+  // The status was asserted equal above; comparing the outcome's own status narrows its type.
+  if (outcome.status === 'published') {
     assert.deepEqual(Object.keys(outcome.review), ['id', 'url']);
     assert.ok(outcome.markdown.includes(outcome.review.url), 'published Markdown must link the review');
   }
 }
 
 /** Guidance for uncertain delivery: keep and reuse the state path; never resend. */
-function assertUncertainGuidance(outcome, statePath) {
+function assertUncertainGuidance(outcome: PublishSarifReviewOutcome, statePath: string): void {
   assert.ok(outcome.markdown.includes(statePath), 'Markdown must name the preserved state path');
   assert.match(outcome.markdown, /same state path/i);
   assert.match(outcome.markdown, /do not delete/i);
@@ -201,29 +295,46 @@ function assertUncertainGuidance(outcome, statePath) {
 }
 
 /** Guidance for a definitive refusal: named state path, never resent, new path after fixing. */
-function assertRejectedGuidance(outcome, statePath) {
+function assertRejectedGuidance(outcome: PublishSarifReviewOutcome, statePath: string): void {
   assert.ok(outcome.markdown.includes(statePath));
   assert.match(outcome.markdown, /never resent/i);
   assert.match(outcome.markdown, /new state path/i);
 }
 
 /** What prepareReview itself produces for this SARIF and the fixture context. */
-async function preparedDirectly(sarif, { ignoreApprovalHold, sourceRootUri, historical, oldSourceCommit } = {}) {
-  const context = trustedContext({ historical, oldSourceCommit });
+async function preparedDirectly(
+  sarif: TestSarif,
+  {
+    ignoreApprovalHold,
+    sourceRootUri,
+    historical,
+    oldSourceCommit,
+  }: { ignoreApprovalHold?: boolean; sourceRootUri?: string; historical?: boolean; oldSourceCommit?: string } = {},
+): Promise<PrepareReviewOutcome> {
+  const context: ITrustedContext & { sourceRootUri?: string } = trustedContext({ historical, oldSourceCommit });
   if (sourceRootUri !== undefined) context.sourceRootUri = sourceRootUri;
-  const input = { sarif: structuredClone(sarif), context, readSource };
+  const input: { sarif: TestSarif; context: typeof context; readSource: typeof readSource; options?: { ignoreApprovalHold: boolean } } = {
+    sarif: structuredClone(sarif),
+    context,
+    readSource,
+  };
   if (ignoreApprovalHold !== undefined) input.options = { ignoreApprovalHold };
   return prepareReview(input);
 }
 
-function sentRequest(world) {
-  const creates = calls(world, 'createReview');
-  assert.equal(creates.length, 1, `expected exactly one create-review attempt, saw ${creates.length}`);
-  return creates[0].args;
+/** `prepared.review`: the review of a ready outcome, undefined for a blocked one. */
+function readyReviewOf(prepared: PrepareReviewOutcome): IPreparedReview | undefined {
+  return prepared.status === 'ready' ? prepared.review : undefined;
 }
 
-function readState(world) {
-  return JSON.parse(fs.readFileSync(world.statePath, 'utf8'));
+function sentRequest(world: IWorld): Guarded<typeof isSentRequest> {
+  const creates = calls(world, 'createReview');
+  assert.equal(creates.length, 1, `expected exactly one create-review attempt, saw ${String(creates.length)}`);
+  return expectType(at(creates, 0).args, isSentRequest, 'the create-review request');
+}
+
+function readState(world: IWorld): Guarded<typeof isStateRecord> {
+  return expectType(readJson(world.statePath), isStateRecord, `the publication state in ${world.statePath}`);
 }
 
 // ===========================================================================
@@ -234,13 +345,14 @@ describe('harness control: the injected context is coherent', () => {
   for (const [label, diff, head] of [
     ['reviewed head', REPOSITORY.diff, HEAD],
     ['advanced head', REPOSITORY.advancedDiff, REPOSITORY.commits.advanced],
-  ]) {
+  ] as const) {
     test(`the authored patch reproduces both authored snapshots exactly (${label})`, () => {
-      const [file] = diff.files;
+      const file = at(diff.files, 0);
       const body = file.patch.slice(1); // one hunk covering the whole file
-      const side = (keep) => body.filter((l) => keep.includes(l[0])).map((l) => l.slice(1)).join('');
-      assert.equal(side(' -'), REPOSITORY.snapshots[BASE][file.path].join(''));
-      assert.equal(side(' +'), REPOSITORY.snapshots[head][file.path].join(''));
+      // String(l[0]) is the coercion includes() applies itself (an empty line has no l[0]).
+      const side = (keep: string): string => body.filter((l) => keep.includes(String(l[0]))).map((l) => l.slice(1)).join('');
+      assert.equal(side(' -'), entry(entry(REPOSITORY.snapshots, BASE), file.path).join(''));
+      assert.equal(side(' +'), entry(entry(REPOSITORY.snapshots, head), file.path).join(''));
       assert.equal(diff.headCommit, head);
     });
   }
@@ -251,9 +363,9 @@ describe('harness control: the injected context is coherent', () => {
     const { context, readSource: reader } = await client.fetchContext({ destination: DESTINATION, reviewedCommit: HEAD });
     assert.equal(context.reviewedCommit, HEAD);
     assert.equal(context.diff.headCommit, HEAD);
-    assert.equal(await reader(HEAD, 'src/app.js'), REPOSITORY.snapshots[HEAD]['src/app.js'].join(''));
+    assert.equal(await reader(HEAD, 'src/app.js'), entry(entry(REPOSITORY.snapshots, HEAD), 'src/app.js').join(''));
     assert.equal(await reader(HEAD, 'absent.js'), null);
-    assert.deepEqual(calls(world, 'adapter:create').map((c) => c.args.token), [TOKEN]);
+    assert.deepEqual(calls(world, 'adapter:create').map((c) => c.args['token']), [TOKEN]);
 
     setAdapterConfig(world.remote.dir, { network: 'down' });
     const offline = world.createGitHubClient({ token: TOKEN, fetch: globalThis.fetch });
@@ -263,29 +375,34 @@ describe('harness control: the injected context is coherent', () => {
 });
 
 describe('input is validated and captured before any remote read', () => {
-  const inRun = (value) => (i) => {
-    i.sarif.runs[0].properties = { probe: value };
+  const inRun = (value: unknown) => (i: TestInput) => {
+    at(i.sarif.runs, 0).properties = { probe: value };
   };
   class Custom {
+    x: number;
     constructor() {
       this.x = 1;
     }
   }
-  const cyclic = (i) => {
-    const node = { name: 'loop' };
+  const cyclic = (i: TestInput) => {
+    const node: { name: string; self?: unknown } = { name: 'loop' };
     node.self = node;
-    i.sarif.runs[0].properties = { node };
+    at(i.sarif.runs, 0).properties = { node };
   };
-  const invalid = {
+  const invalid: Record<string, (i: TestInput) => unknown> = {
+    // @ts-expect-error -- deliberately invalid: proves runtime validation of a missing sarif
     'missing sarif': (i) => delete i.sarif,
+    // @ts-expect-error -- deliberately invalid: proves runtime validation of a null sarif
     'null sarif': (i) => (i.sarif = null),
+    // @ts-expect-error -- deliberately invalid: proves runtime validation of an array sarif
     'array sarif': (i) => (i.sarif = [READY]),
+    // @ts-expect-error -- deliberately invalid: proves runtime validation of unparsed SARIF text
     'string sarif (not parsed)': (i) => (i.sarif = JSON.stringify(READY)),
     'cyclic sarif': cyclic,
     'function value': inRun(() => 1),
     'undefined property value': inRun(undefined),
     'undefined array element': inRun([1, undefined]),
-    'sparse array hole': inRun([1, , 3]), // eslint-disable-line no-sparse-arrays -- the array hole is the input under test
+    'sparse array hole': inRun([1, , 3]), // the array hole is the input under test (no-sparse-arrays is not enabled for TypeScript)
     'NaN': inRun(Number.NaN),
     'Infinity': inRun(Number.POSITIVE_INFINITY),
     'negative zero': inRun(-0),
@@ -295,25 +412,35 @@ describe('input is validated and captured before any remote read', () => {
     'class instance': inRun(new Custom()),
     'symbol-keyed property': inRun({ [Symbol('hidden')]: 1 }),
     'accessor property': inRun(Object.defineProperty({}, 'computed', { enumerable: true, get: () => 'varies' })),
+    // @ts-expect-error -- deliberately invalid: proves runtime validation of a missing destination
     'missing destination': (i) => delete i.destination,
     'owner containing a slash': (i) => (i.destination.owner = 'acme/other'),
     'zero pull number': (i) => (i.destination.pullNumber = 0),
+    // @ts-expect-error -- deliberately invalid: proves runtime validation of a string pull number
     'string pull number': (i) => (i.destination.pullNumber = '7'),
     'short reviewed commit': (i) => (i.reviewedCommit = HEAD.slice(0, 12)),
     'uppercase reviewed commit': (i) => (i.reviewedCommit = 'A'.repeat(40)),
     'short old-source commit': (i) => (i.oldSourceCommit = BASE.slice(0, 7)),
+    // @ts-expect-error -- deliberately invalid: proves runtime validation of a non-string old-source commit
     'non-string old-source commit': (i) => (i.oldSourceCommit = 1234),
+    // @ts-expect-error -- deliberately invalid: proves runtime validation of a missing state path
     'missing state path': (i) => delete i.statePath,
     'relative state path': (i) => (i.statePath = 'state/review.publication.json'),
+    // @ts-expect-error -- deliberately invalid: proves runtime validation of a missing token
     'missing token': (i) => delete i.token,
     'empty token': (i) => (i.token = ''),
+    // @ts-expect-error -- deliberately invalid: proves runtime validation of a non-string token
     'non-string token': (i) => (i.token = 12345),
     'relative source root': (i) => (i.sourceRootUri = 'work/gizmos/'),
     'non-file source root': (i) => (i.sourceRootUri = 'https://example.com/gizmos/'),
     'source root without trailing slash': (i) => (i.sourceRootUri = 'file:///work/gizmos'),
+    // @ts-expect-error -- deliberately invalid: proves runtime validation of an unknown option
     'unknown option': (i) => (i.options = { ignoreApprovalHolds: true }),
+    // @ts-expect-error -- deliberately invalid: proves runtime validation of a non-boolean override
     'non-boolean override': (i) => (i.options = { ignoreApprovalHold: 'yes' }),
+    // @ts-expect-error -- deliberately invalid: proves runtime validation of array options
     'array options': (i) => (i.options = []),
+    // @ts-expect-error -- deliberately invalid: proves runtime validation of an unknown top-level field
     'unknown top-level field': (i) => (i.reviewCommit = HEAD),
   };
 
@@ -323,7 +450,7 @@ describe('input is validated and captured before any remote read', () => {
       const input = baseInput(world);
       breakIt(input);
       await assert.rejects(run(world, input), (err) => {
-        assert.ok(err instanceof TypeError, `expected TypeError, got ${err && err.name}: ${err && err.message}`);
+        assert.ok(err instanceof TypeError, `expected TypeError, got ${String(errorField(err, 'name'))}: ${String(errorField(err, 'message'))}`);
         assert.equal(inspectDeep(err).includes(TOKEN), false, 'error leaked the token');
         return true;
       });
@@ -336,7 +463,7 @@ describe('input is validated and captured before any remote read', () => {
     const world = makeWorld();
     const input = baseInput(world);
     let reads = 0;
-    Object.defineProperty(input.sarif.runs[0], 'properties', {
+    Object.defineProperty(at(input.sarif.runs, 0), 'properties', {
       enumerable: true,
       get() {
         reads += 1;
@@ -351,8 +478,8 @@ describe('input is validated and captured before any remote read', () => {
     const world = makeWorld();
     const input = baseInput(world);
     const pending = run(world, input);
-    input.sarif.runs[0].results[0].message.text = 'MUTATED AFTER CALL';
-    input.sarif.runs[0].results.push({ message: { text: 'late addition' } });
+    at(at(input.sarif.runs, 0).results, 0).message.text = 'MUTATED AFTER CALL';
+    at(input.sarif.runs, 0).results.push({ message: { text: 'late addition' } });
     input.destination.pullNumber = 99;
     const outcome = await pending;
 
@@ -391,7 +518,7 @@ describe('original-input identity', () => {
     assertPublicShape(first, 'published');
     setAdapterConfig(world.remote.dir, { network: 'down' });
     for (const overrides of [
-      { sarif: reverseKeys(READY) },
+      { sarif: expectType(reverseKeys(READY), isTestSarif, 'the key-reversed SARIF') },
       { token: 'ghp_a_different_but_valid_token_value' },
       { options: { ignoreApprovalHold: true } },
     ]) {
@@ -403,8 +530,8 @@ describe('original-input identity', () => {
     assert.equal(calls(world, 'createReview').length, 1);
   });
 
-  const changedIdentity = {
-    'different SARIF': (i) => (i.sarif.runs[0].results[0].message.text = 'A different finding.'),
+  const changedIdentity: Record<string, (i: TestInput) => unknown> = {
+    'different SARIF': (i) => (at(at(i.sarif.runs, 0).results, 0).message.text = 'A different finding.'),
     'different source root': (i) => (i.sourceRootUri = 'file:///elsewhere/gizmos/'),
     'an added old-source commit candidate': (i) => (i.oldSourceCommit = BASE),
     'different pull request': (i) => (i.destination.pullNumber = 8),
@@ -418,8 +545,8 @@ describe('original-input identity', () => {
       const input = baseInput(world);
       change(input);
       await assert.rejects(run(world, input), (err) => {
-        assert.ok(String(err.message).includes(world.statePath), 'refusal must name the state path');
-        assert.match(String(err.message), /new state path/i);
+        assert.ok(String(errorField(err, 'message')).includes(world.statePath), 'refusal must name the state path');
+        assert.match(String(errorField(err, 'message')), /new state path/i);
         return true;
       });
       assert.equal(calls(world, 'adapter:fetchContext').length, fetches);
@@ -449,13 +576,13 @@ describe('a new publication prepares once and publishes once', () => {
     // Independent facts from the fixture: one inline comment on the added
     // `const MAX = 100;` (new line 4); the location-free result is general.
     assert.equal(request.comments.length, 1);
-    assert.equal(request.comments[0].path, 'src/app.js');
+    assert.equal(request.comments[0]?.path, 'src/app.js');
     assert.equal(request.comments[0].side, 'RIGHT');
     assert.equal(request.comments[0].line, 4);
     assert.ok(request.comments[0].body.includes('MAX is exported but never validated.'));
     assert.ok(request.body.includes('Consider documenting the new limits in the changelog.'));
 
-    const [stored] = world.remote.reviews();
+    const stored = at(world.remote.reviews(), 0);
     assert.deepEqual(outcome.review, { id: stored.id, url: stored.htmlUrl });
     assert.equal(outcome.statePath, world.statePath);
     assertTokenAbsent(world, outcome);
@@ -466,11 +593,11 @@ describe('a new publication prepares once and publishes once', () => {
     await run(world);
     const creates = calls(world, 'adapter:create');
     assert.equal(creates.length, 1);
-    assert.equal(creates[0].args.token, TOKEN);
-    assert.equal(creates[0].args.fetchProvided, true);
+    assert.equal(creates[0]?.args['token'], TOKEN);
+    assert.equal(creates[0].args['fetchProvided'], true);
     const fetches = calls(world, 'adapter:fetchContext');
     assert.equal(fetches.length, 1);
-    assert.deepEqual(fetches[0].args, { destination: DESTINATION, reviewedCommit: HEAD });
+    assert.deepEqual(fetches[0]?.args, { destination: DESTINATION, reviewedCommit: HEAD });
   });
 
   test('an explicit old-source commit is only passed to the client as a candidate', async () => {
@@ -478,9 +605,9 @@ describe('a new publication prepares once and publishes once', () => {
     const outcome = await run(world, baseInput(world, { oldSourceCommit: BASE }));
     assertPublicShape(outcome, 'published');
     const [fetch] = calls(world, 'adapter:fetchContext');
-    assert.deepEqual(fetch.args, { destination: DESTINATION, reviewedCommit: HEAD, oldSourceCommit: BASE });
+    assert.deepEqual(fetch?.args, { destination: DESTINATION, reviewedCommit: HEAD, oldSourceCommit: BASE });
     const prepared = await preparedDirectly(READY, { oldSourceCommit: BASE });
-    assert.deepEqual(sentRequest(world).comments, prepared.review.comments);
+    assert.deepEqual(sentRequest(world).comments, readyReviewOf(prepared)?.comments);
   });
 
   test('a historical reviewed commit stays the review commit while the pull request has advanced', async () => {
@@ -526,13 +653,13 @@ describe('a new publication prepares once and publishes once', () => {
     );
     assertPublicShape(published, 'published');
     const prepared = await preparedDirectly(HELD, { ignoreApprovalHold: true });
-    assert.deepEqual(sentRequest(overridden).comments, prepared.review.comments);
+    assert.deepEqual(sentRequest(overridden).comments, readyReviewOf(prepared)?.comments);
   });
 
   for (const [mode, label, mention] of [
     ['wrong-commit', 'a context for another commit (no silent substitution of the current head)', /reviewed commit/i],
     ['wrong-pull', 'a context for another pull request', /pull request/i],
-  ]) {
+  ] as const) {
     test(`${label} is refused before preparation or state`, async () => {
       const world = makeWorld();
       setAdapterConfig(world.remote.dir, { context: mode });
@@ -551,7 +678,7 @@ describe('a new publication prepares once and publishes once', () => {
     assertStateDirEmpty(world);
   });
 
-  for (const mode of ['throw-with-token', 'throw-with-token-cause']) {
+  for (const mode of ['throw-with-token', 'throw-with-token-cause'] as const) {
     test(`an operational error carrying the token (${mode}) rejects without exposing it`, async () => {
       const world = makeWorld();
       setAdapterConfig(world.remote.dir, { context: mode });
@@ -566,7 +693,8 @@ describe('a new publication prepares once and publishes once', () => {
   }
 
   /** The fake client for `world`, except that fetchContext throws `error`. */
-  function contextThrowing(world, error) {
+  function contextThrowing(world: IWorld, error: unknown): NonNullable<IPublishSarifReviewInternals['createGitHubClient']> {
+    // eslint-disable-next-line @typescript-eslint/require-await -- fetchContext is async by contract: its failure reaches the caller as a rejection
     return (args) => ({ ...world.createGitHubClient(args), fetchContext: async () => { throw error; } });
   }
 
@@ -577,9 +705,13 @@ describe('a new publication prepares once and publishes once', () => {
     // absent status is an own undefined key must not change the replacement.
     const world = makeWorld();
     const thrown = new GitHubError('network', 'GET /repos/acme/gizmos/pulls/7 failed', { cause: new Error(`bearer ${TOKEN}`) });
-    const err = await publishSarifReview(baseInput(world), { createGitHubClient: contextThrowing(world, thrown) }).then(
+    const err = await publishSarifReview(
+      baseInput(world),
+      // @ts-expect-error -- the private internals seam is deliberately absent from the public declaration; this test proves the public entry honours it at runtime
+      { createGitHubClient: contextThrowing(world, thrown) },
+    ).then(
       () => assert.fail('expected a rejection'),
-      (e) => e,
+      (e: unknown) => e,
     );
     assert.notEqual(err, thrown, 'an error mentioning the token is replaced');
     assert.ok(err instanceof Error);
@@ -597,9 +729,13 @@ describe('a new publication prepares once and publishes once', () => {
   test('an operational error that never mentions the token rejects as the same error, own keys unchanged', async () => {
     const world = makeWorld();
     const thrown = new GitHubError('network', 'GET /repos/acme/gizmos/pulls/7 failed');
-    const err = await publishSarifReview(baseInput(world), { createGitHubClient: contextThrowing(world, thrown) }).then(
+    const err = await publishSarifReview(
+      baseInput(world),
+      // @ts-expect-error -- the private internals seam is deliberately absent from the public declaration; this test proves the public entry honours it at runtime
+      { createGitHubClient: contextThrowing(world, thrown) },
+    ).then(
       () => assert.fail('expected a rejection'),
-      (e) => e,
+      (e: unknown) => e,
     );
     assert.equal(err, thrown, 'a token-free error is passed through, not rebuilt');
     assert.equal(Object.hasOwn(err, 'status'), false, 'an unknown status stays absent');
@@ -645,13 +781,13 @@ describe('existing state is honoured before any branch or source preparation', (
 
     // The branch has since changed: preparing again would fail, and must not happen.
     setAdapterConfig(world.remote.dir, { context: 'throw' });
-    let outcome = first;
+    let outcome: PublishSarifReviewOutcome = first;
     for (let i = 0; i < 10 && outcome.status === 'uncertain'; i += 1) {
       outcome = await run(world);
       if (outcome.status === 'uncertain') assertUncertainGuidance(outcome, world.statePath);
     }
     assertPublicShape(outcome, 'published');
-    assert.equal(outcome.review.id, world.remote.reviews()[0].id);
+    assert.equal(outcome.review.id, at(world.remote.reviews(), 0).id);
     assert.equal(calls(world, 'adapter:fetchContext').length, fetches, 'context must not be refetched');
     assert.equal(calls(world, 'createReview').length, 1);
   });
@@ -659,7 +795,7 @@ describe('existing state is honoured before any branch or source preparation', (
   test('corrupt state rejects without context fetch or send', async () => {
     const world = makeWorld();
     fs.writeFileSync(world.statePath, '{"format":"sarif-to-comment.publication-state","vers', { mode: 0o600 });
-    await assert.rejects(run(world), (err) => String(err.message).includes(world.statePath));
+    await assert.rejects(run(world), (err) => String(errorField(err, 'message')).includes(world.statePath));
     assert.equal(calls(world, 'adapter:fetchContext').length, 0);
     assert.equal(calls(world, 'createReview').length, 0);
   });

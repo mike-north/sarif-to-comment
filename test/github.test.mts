@@ -1,7 +1,5 @@
-'use strict';
-
 /**
- * Contract tests for the GitHub host adapter (src/github.cjs).
+ * Contract tests for the GitHub host adapter (src/github.cts).
  *
  * The adapter is exercised only through an injected WHATWG `fetch`, so every
  * test observes the raw HTTP it would send — URL, method, headers, redirect
@@ -30,20 +28,214 @@
  * @see https://git-scm.com/book/en/v2/Git-Internals-Git-Objects (blob object hashing)
  */
 
-const test = require('node:test');
-const { describe } = test;
-const assert = require('node:assert/strict');
-const crypto = require('node:crypto');
-const fs = require('node:fs');
-const path = require('node:path');
-const util = require('node:util');
+import { AssertionError } from 'node:assert';
+import * as assert from 'node:assert/strict';
+import * as crypto from 'node:crypto';
+import * as path from 'node:path';
+import { describe, test } from 'node:test';
+import * as util from 'node:util';
 
-const { createGitHubClient, GitHubError } = require('../dist/github.cjs');
+import { createGitHubClient, GitHubError } from '../dist/github.cjs';
+import type {
+  ICreateGitHubClientOptions,
+  IFetchContextRequest,
+  IFetchedContext,
+  IGitHubClient,
+  IReviewCommentDraft,
+  IReviewCommentPage,
+} from '../dist/github.cjs';
+import {
+  asRecord,
+  asString,
+  expectType,
+  isArray,
+  isArrayOf,
+  isBoolean,
+  isEither,
+  isNull,
+  isNumber,
+  isOneOf,
+  isOptional,
+  isRecord,
+  isShape,
+  isString,
+  parseJson,
+  readJson,
+} from './support/runtime-types.mts';
+import type { Guard } from './support/runtime-types.mts';
 
-const FIXTURE_DIR = path.join(__dirname, 'fixtures', 'github');
-const load = (name) => JSON.parse(fs.readFileSync(path.join(FIXTURE_DIR, name), 'utf8'));
-const PR = load('pull-request.json');
-const RV = load('reviews.json');
+// ---------------------------------------------------------------------------
+// Fixture shapes (checked when loaded; tests change clones of the documents)
+// ---------------------------------------------------------------------------
+
+/** The type a guard narrows to. */
+type Guarded<G> = G extends Guard<infer T> ? T : never;
+
+/** Returns `value`, or fails naming `what` was missing (an absent element, map entry or optional member). */
+function defined<T>(value: T | undefined, what: string): T {
+  if (value === undefined) throw new AssertionError({ message: `expected ${what}, got undefined`, operator: 'defined' });
+  return value;
+}
+
+/** The element at `index`, which must exist. */
+function at<T>(list: readonly T[], index: number, what: string): T {
+  return defined(list[index], `${what}[${String(index)}]`);
+}
+
+const isNullableString = isEither(isString, isNull);
+const isNullableNumber = isEither(isNumber, isNull);
+const isReviewSide = isOneOf('LEFT', 'RIGHT');
+
+const isContentsEntry = isShape({
+  commit: isString,
+  path: isString,
+  url: isString,
+  text: isOptional(isString),
+  bytesHex: isOptional(isString),
+  absent: isOptional(isBoolean),
+  mode: isOptional(isString),
+});
+type ContentsEntry = Guarded<typeof isContentsEntry>;
+
+const isPullFile = isShape({
+  filename: isString,
+  status: isString,
+  additions: isNumber,
+  deletions: isNumber,
+  patch: isOptional(isString),
+  previous_filename: isOptional(isString),
+});
+type PullFile = Guarded<typeof isPullFile>;
+
+const isFilesPage = isShape({ url: isString, link: isOptional(isNullableString), body: isArrayOf(isPullFile) });
+type FilesPage = Guarded<typeof isFilesPage>;
+
+const isSpecialEntry = isShape({
+  commit: isString,
+  path: isString,
+  mode: isString,
+  target: isOptional(isString),
+  text: isOptional(isString),
+  submoduleCommit: isOptional(isString),
+  contents: isShape({
+    requestedPath: isString,
+    url: isString,
+    servesFileOf: isOptional(isString),
+    notFound: isOptional(isBoolean),
+  }),
+});
+
+const isPullRequestFixture = isShape({
+  destination: isShape({ owner: isString, repo: isString, pullNumber: isNumber }),
+  commits: isShape({
+    head: isString,
+    mergeBase: isString,
+    advancedBaseTip: isString,
+    racedHead: isString,
+    historical: isString,
+  }),
+  pullUrl: isString,
+  pull: isRecord,
+  filesPages: isArrayOf(isFilesPage),
+  compareUrl: isString,
+  compare: isRecord,
+  advancedCompareUrl: isString,
+  expectedContext: isRecord,
+  contents: isArrayOf(isContentsEntry),
+  specialEntries: isShape({ entries: isArrayOf(isSpecialEntry) }),
+});
+
+const isCommentDraftShape = isShape({
+  path: isString,
+  side: isReviewSide,
+  line: isNumber,
+  startSide: isOptional(isReviewSide),
+  startLine: isOptional(isNumber),
+  body: isString,
+});
+
+/** A create-review comment: the draft shape, with its optional members absent rather than undefined. */
+function isReviewCommentDraft(value: unknown): value is IReviewCommentDraft {
+  return isCommentDraftShape(value) && Object.values(value).every((member) => member !== undefined);
+}
+
+const isCreateReviewRequest = isShape({
+  owner: isString,
+  repo: isString,
+  pullNumber: isNumber,
+  commitId: isString,
+  body: isString,
+  comments: isArrayOf(isReviewCommentDraft),
+});
+
+const isThreadNode = isShape({
+  path: isString,
+  subjectType: isString,
+  diffSide: isNullableString,
+  startDiffSide: isNullableString,
+  startLine: isNullableNumber,
+  originalLine: isNullableNumber,
+  originalStartLine: isNullableNumber,
+  comments: isShape({
+    nodes: isArrayOf(isShape({ databaseId: isNumber, originalCommit: isShape({ oid: isString }) })),
+  }),
+});
+type ThreadNode = Guarded<typeof isThreadNode>;
+type ThreadComment = ThreadNode['comments']['nodes'][number];
+
+const isReviewThreads = isShape({
+  pageInfo: isShape({ hasNextPage: isBoolean, endCursor: isNullableString }),
+  nodes: isArrayOf(isThreadNode),
+});
+type ReviewThreads = Guarded<typeof isReviewThreads>;
+
+const isGraphqlPage = isShape({
+  after: isNullableString,
+  response: isShape({
+    data: isEither(isNull, isShape({ repository: isShape({ pullRequest: isShape({ reviewThreads: isReviewThreads }) }) })),
+    errors: isOptional(isArray),
+  }),
+});
+type GraphqlPage = Guarded<typeof isGraphqlPage>;
+
+const isRestComment = isShape({
+  id: isNumber,
+  pull_request_review_id: isNumber,
+  line: isOptional(isNullableNumber),
+  side: isOptional(isNullableString),
+  original_line: isOptional(isNullableNumber),
+});
+type RestComment = Guarded<typeof isRestComment>;
+
+const isReviewCommentsFixture = isShape({
+  reviewId: isNumber,
+  restPages: isArrayOf(isShape({ url: isString, link: isOptional(isNullableString), body: isArrayOf(isRestComment) })),
+  graphqlUrl: isString,
+  graphqlPages: isArrayOf(isGraphqlPage),
+  expected: isArray,
+});
+type ReviewCommentsFixture = Guarded<typeof isReviewCommentsFixture>;
+
+const isReviewsPage = isShape({ url: isString, link: isOptional(isNullableString), body: isArray, expected: isArray });
+type ReviewsPage = Guarded<typeof isReviewsPage>;
+
+const isReviewsFixture = isShape({
+  user: isShape({ url: isString, body: isRecord, expected: isRecord }),
+  createReview: isShape({
+    url: isString,
+    request: isCreateReviewRequest,
+    expectedPostBody: isRecord,
+    response: isRecord,
+    expected: isRecord,
+  }),
+  reviewPages: isArrayOf(isReviewsPage),
+  reviewComments: isReviewCommentsFixture,
+});
+
+const FIXTURE_DIR = path.join(import.meta.dirname, 'fixtures', 'github');
+const load = (name: string): unknown => readJson(path.join(FIXTURE_DIR, name));
+const PR = expectType(load('pull-request.json'), isPullRequestFixture, 'the pull-request fixture');
+const RV = expectType(load('reviews.json'), isReviewsFixture, 'the reviews fixture');
 
 /** Placeholder credential; every test that can leak it asserts that it does not. */
 const TOKEN = 'ghp_TESTONLY_github_adapter_token_never_log_91c2';
@@ -59,11 +251,42 @@ const DESTINATION = PR.destination;
 /** Marks a request no route answered; the adapter must never issue one. */
 class UnroutedRequest extends Error {}
 
-function jsonResponse(status, body, headers = {}) {
+function jsonResponse(status: number, body: unknown, headers: Readonly<Record<string, string>> = {}): Response {
   return new Response(body === undefined ? null : JSON.stringify(body), {
     status,
     headers: { 'content-type': 'application/json; charset=utf-8', ...headers },
   });
+}
+
+/** One request as the adapter sent it. */
+interface IRecordedRequest {
+  readonly url: string;
+  readonly method: string;
+  readonly headers: Headers;
+  readonly body: string | undefined;
+  readonly redirect: RequestInit['redirect'];
+  unrouted?: boolean;
+}
+
+/** Answers one routed request (or throws, as a failing fetch does). */
+type Responder = (request: IRecordedRequest) => Response;
+
+/** A route: method, exact URL, optional request predicate and its queue of responders. */
+interface IRoute {
+  readonly method: string;
+  readonly url: string;
+  readonly when: ((request: IRecordedRequest) => boolean) | undefined;
+  readonly queue: Responder[];
+}
+
+/** The WHATWG fetch signature the host implements. */
+type FakeFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+
+/** A request body as text; the adapter only ever sends JSON strings. */
+function bodyText(body: RequestInit['body']): string | undefined {
+  if (body === undefined || body === null) return undefined;
+  if (typeof body !== 'string') throw new TypeError('fake host: the request body is not a string');
+  return body;
 }
 
 /**
@@ -73,24 +296,34 @@ function jsonResponse(status, body, headers = {}) {
  * sent it.
  */
 class FakeHost {
+  routes: IRoute[];
+  readonly requests: IRecordedRequest[];
+  /** The fetch the client is constructed with (bound: it is passed around alone). */
+  readonly fetch: FakeFetch;
+  /** Each snapshot of a pull scenario by commit (see pullScenario). */
+  git: Record<string, ISnapshot>;
+
   constructor() {
     this.routes = [];
     this.requests = [];
-    this.fetch = this.fetch.bind(this);
+    this.git = {};
+    this.fetch = this.receive.bind(this);
   }
 
   /** Adds a route answered by `responders` in order (a function or a list of them). */
-  on(method, url, responders, when) {
-    this.routes.push({ method, url, when, queue: [].concat(responders) });
+  on(method: string, url: string, responders: Responder | readonly Responder[], when?: (request: IRecordedRequest) => boolean): this {
+    this.routes.push({ method, url, when, queue: typeof responders === 'function' ? [responders] : [...responders] });
     return this;
   }
 
-  async fetch(input, init = {}) {
-    const request = {
+  /** Handles one fetch call (exposed as the bound `fetch`). */
+  // eslint-disable-next-line @typescript-eslint/require-await -- fetch is async by contract: a failure, including a synchronous throw, reaches the client as a rejection
+  async receive(input: string | URL | Request, init: RequestInit = {}): Promise<Response> {
+    const request: IRecordedRequest = {
       url: typeof input === 'string' ? input : input instanceof URL ? input.href : input.url,
-      method: String(init.method ?? 'GET').toUpperCase(),
+      method: (init.method ?? 'GET').toUpperCase(),
       headers: new Headers(init.headers),
-      body: init.body === undefined || init.body === null ? undefined : String(init.body),
+      body: bodyText(init.body),
       redirect: init.redirect,
     };
     this.requests.push(request);
@@ -101,13 +334,23 @@ class FakeHost {
       request.unrouted = true;
       throw new UnroutedRequest(`unrouted ${request.method} ${request.url}`);
     }
-    const respond = route.queue.length > 1 ? route.queue.shift() : route.queue[0];
+    const respond = defined(route.queue.length > 1 ? route.queue.shift() : route.queue[0], 'a queued responder');
     return respond(request);
   }
 
-  urls() {
+  urls(): string[] {
     return this.requests.map((r) => r.url);
   }
+}
+
+/** The JSON body of a recorded request. */
+function requestJson(request: IRecordedRequest): unknown {
+  return parseJson(defined(request.body, `a body on ${request.method} ${request.url}`));
+}
+
+/** The JSON body of a recorded GraphQL request: a query document and its variables. */
+function graphqlBody(request: IRecordedRequest): { query: string; variables: Record<string, unknown> } {
+  return expectType(requestJson(request), isShape({ query: isString, variables: isRecord }), 'a GraphQL request body');
 }
 
 /**
@@ -115,7 +358,7 @@ class FakeHost {
  * redirects, the bearer token on every request, documented REST headers, and
  * no write except the single review creation and GraphQL queries.
  */
-function assertHttpDiscipline(host) {
+function assertHttpDiscipline(host: FakeHost): void {
   for (const r of host.requests) {
     assert.ok(!r.unrouted, `adapter issued an unexpected request: ${r.method} ${r.url}`);
     assert.ok(!new URL(r.url).pathname.includes('/contents/'), `the dereferencing Contents API is never trusted: ${r.url}`);
@@ -130,7 +373,7 @@ function assertHttpDiscipline(host) {
     if (r.method === 'POST') {
       assert.equal(r.headers.get('content-type')?.split(';')[0], 'application/json');
       if (isGraphql) {
-        const { query } = JSON.parse(r.body);
+        const { query } = graphqlBody(r);
         assert.doesNotMatch(query, /\bmutation\b/, 'GraphQL requests are read-only queries');
       } else {
         assert.match(r.url, /^https:\/\/api\.github\.com\/repos\/[^/]+\/[^/]+\/pulls\/\d+\/reviews$/);
@@ -141,12 +384,12 @@ function assertHttpDiscipline(host) {
   }
 }
 
-function client(host, extra = {}) {
+function client(host: FakeHost, extra: Partial<ICreateGitHubClientOptions> = {}): IGitHubClient {
   return createGitHubClient({ token: TOKEN, fetch: host.fetch, ...extra });
 }
 
 /** Deep, hidden-property rendering used to prove a value carries no token. */
-function assertNoToken(value, label) {
+function assertNoToken(value: unknown, label: string): void {
   const rendered = [
     util.inspect(value, { depth: 20, showHidden: true, getters: true }),
     value instanceof Error ? String(value.stack) : '',
@@ -154,16 +397,38 @@ function assertNoToken(value, label) {
   assert.ok(!rendered.includes(TOKEN), `${label} exposes the token`);
 }
 
-async function rejectsWith(promise, code, extra = {}) {
+/** `value && value[key]` over an unknown thrown value (a primitive has no name or message). */
+function memberOf(value: unknown, key: string): unknown {
+  if (!value) return value;
+  return typeof value === 'object' || typeof value === 'function' ? Reflect.get(value, key) : undefined;
+}
+
+async function rejectsWith(
+  promise: Promise<unknown>,
+  code: string,
+  extra: Readonly<Record<string, unknown>> = {},
+): Promise<GitHubError> {
   const err = await promise.then(
     () => assert.fail(`expected GitHubError ${code}`),
-    (e) => e,
+    (e: unknown) => e,
   );
-  assert.ok(err instanceof GitHubError, `expected GitHubError, got ${err && err.name}: ${err && err.message}`);
+  assert.ok(err instanceof GitHubError, `expected GitHubError, got ${String(memberOf(err, 'name'))}: ${String(memberOf(err, 'message'))}`);
   assert.equal(err.code, code, err.message);
-  for (const [key, value] of Object.entries(extra)) assert.equal(err[key], value, key);
+  for (const [key, value] of Object.entries(extra)) {
+    const actual: unknown = Reflect.get(err, key);
+    assert.equal(actual, value, key);
+  }
   assertNoToken(err, `error ${code}`);
   return err;
+}
+
+/** The redacted cause description a GitHubError carries: an Error that may have a `code`. */
+function causeOf(err: GitHubError): Error & { readonly code?: unknown } {
+  const { cause } = err;
+  if (!(cause instanceof Error)) {
+    throw new AssertionError({ message: `expected an Error cause, got ${String(cause)}`, operator: 'causeOf' });
+  }
+  return cause;
 }
 
 // ---------------------------------------------------------------------------
@@ -171,30 +436,50 @@ async function rejectsWith(promise, code, extra = {}) {
 // ---------------------------------------------------------------------------
 
 /** Git object id: SHA-1 of "<type> <size>\0" followed by the object bytes. */
-function gitObjectSha(type, bytes) {
+function gitObjectSha(type: string, bytes: Buffer): string {
   return crypto
     .createHash('sha1')
-    .update(Buffer.concat([Buffer.from(`${type} ${bytes.length}\0`, 'utf8'), bytes]))
+    .update(Buffer.concat([Buffer.from(`${type} ${String(bytes.length)}\0`, 'utf8'), bytes]))
     .digest('hex');
 }
 
 /** Git blob object id of raw bytes. */
-function blobSha(bytes) {
+function blobSha(bytes: Buffer): string {
   return gitObjectSha('blob', bytes);
 }
 
-function entryBytes(entry) {
-  return entry.bytesHex !== undefined ? Buffer.from(entry.bytesHex, 'hex') : Buffer.from(entry.text, 'utf8');
+/** Authored file text (or raw bytes as hex) and the path it is served under. */
+interface ISourceEntry {
+  readonly path: string;
+  readonly text?: string | undefined;
+  readonly bytesHex?: string | undefined;
+}
+
+/** The authored text of an entry, which must exist and have text. */
+function textOf(entry: ISourceEntry | undefined, what: string): string {
+  return defined(defined(entry, what).text, `the text of ${what}`);
+}
+
+function entryBytes(entry: ISourceEntry): Buffer {
+  return entry.bytesHex !== undefined ? Buffer.from(entry.bytesHex, 'hex') : Buffer.from(textOf(entry, entry.path), 'utf8');
 }
 
 const REPO_API = `${API}/repos/acme/widgets`;
-const commitUrl = (sha) => `${REPO_API}/git/commits/${sha}`;
-const treeUrl = (sha) => `${REPO_API}/git/trees/${sha}`;
-const blobUrl = (sha) => `${REPO_API}/git/blobs/${sha}`;
+const commitUrl = (sha: string): string => `${REPO_API}/git/commits/${sha}`;
+const treeUrl = (sha: string): string => `${REPO_API}/git/trees/${sha}`;
+const blobUrl = (sha: string): string => `${REPO_API}/git/blobs/${sha}`;
+
+/** One raw tree entry of a snapshot: a submodule's commit (mode 160000) or file bytes. */
+interface ITreeEntrySpec {
+  readonly path: string;
+  readonly mode: string;
+  readonly commitSha?: string;
+  readonly bytes?: Buffer;
+}
 
 /** Every raw tree entry authored for one commit, minus `omit`ted paths. */
-function authoredEntries(commit, omit = []) {
-  const entries = [];
+function authoredEntries(commit: string, omit: readonly string[] = []): ITreeEntrySpec[] {
+  const entries: ITreeEntrySpec[] = [];
   for (const c of PR.contents) {
     if (c.commit === commit && !c.absent && !omit.includes(c.path)) {
       entries.push({ path: c.path, mode: c.mode ?? '100644', bytes: entryBytes(c) });
@@ -204,11 +489,57 @@ function authoredEntries(commit, omit = []) {
     if (s.commit !== commit || omit.includes(s.path)) continue;
     entries.push(
       s.mode === '160000'
-        ? { path: s.path, mode: s.mode, commitSha: s.submoduleCommit }
-        : { path: s.path, mode: s.mode, bytes: Buffer.from(s.target ?? s.text, 'utf8') },
+        ? { path: s.path, mode: s.mode, commitSha: defined(s.submoduleCommit, `the submodule commit of ${s.path}`) }
+        : { path: s.path, mode: s.mode, bytes: Buffer.from(defined(s.target ?? s.text, `the target or text of ${s.path}`), 'utf8') },
     );
   }
   return entries;
+}
+
+/** One entry of a GitHub non-recursive tree listing. */
+interface ITreeItem {
+  path: string;
+  mode: string;
+  type: string;
+  sha: string;
+  size?: number | undefined;
+  url?: string;
+}
+
+/** A GitHub git tree API body. */
+interface ITreeBody {
+  sha: string;
+  url: string;
+  truncated: boolean;
+  tree: ITreeItem[];
+}
+
+/** A directory's tree id and the listing GitHub serves for it. */
+interface ITreeRecord {
+  readonly sha: string;
+  readonly body: ITreeBody;
+}
+
+/** The Git objects of one snapshot (see buildSnapshot). */
+interface ISnapshot {
+  readonly rootSha: string;
+  readonly trees: Map<string, ITreeRecord>;
+  readonly blobs: Map<string, Buffer>;
+  readonly files: Map<string, string>;
+}
+
+interface IDirectory {
+  readonly dirs: Map<string, IDirectory>;
+  readonly leaves: Map<string, ITreeEntrySpec>;
+}
+
+interface IListingEntry {
+  readonly name: string;
+  readonly gitMode: string;
+  readonly mode: string;
+  readonly type: 'tree' | 'commit' | 'blob';
+  readonly sha: string;
+  readonly size?: number;
 }
 
 /**
@@ -216,39 +547,40 @@ function authoredEntries(commit, omit = []) {
  * tree listing (trees report mode "040000"), keyed by directory path, with a
  * real Git tree id; every blob by id; and each file's blob id by path.
  */
-function buildSnapshot(entries) {
-  const newDir = () => ({ dirs: new Map(), leaves: new Map() });
+function buildSnapshot(entries: readonly ITreeEntrySpec[]): ISnapshot {
+  const newDir = (): IDirectory => ({ dirs: new Map(), leaves: new Map() });
   const root = newDir();
   for (const entry of entries) {
     const parts = entry.path.split('/');
     let dir = root;
     for (const part of parts.slice(0, -1)) {
       if (!dir.dirs.has(part)) dir.dirs.set(part, newDir());
-      dir = dir.dirs.get(part);
+      dir = defined(dir.dirs.get(part), `the directory ${part}`);
     }
-    dir.leaves.set(parts.at(-1), entry);
+    dir.leaves.set(defined(parts.at(-1), `a name in ${entry.path}`), entry);
   }
-  const trees = new Map();
-  const blobs = new Map();
-  const files = new Map();
-  const build = (dir, dirPath) => {
-    const listing = [];
+  const trees = new Map<string, ITreeRecord>();
+  const blobs = new Map<string, Buffer>();
+  const files = new Map<string, string>();
+  const build = (dir: IDirectory, dirPath: string): string => {
+    const listing: IListingEntry[] = [];
     for (const [name, sub] of dir.dirs) {
       const sha = build(sub, dirPath ? `${dirPath}/${name}` : name);
       listing.push({ name, gitMode: '40000', mode: '040000', type: 'tree', sha });
     }
     for (const [name, entry] of dir.leaves) {
       if (entry.mode === '160000') {
-        listing.push({ name, gitMode: '160000', mode: '160000', type: 'commit', sha: entry.commitSha });
+        listing.push({ name, gitMode: '160000', mode: '160000', type: 'commit', sha: defined(entry.commitSha, `the commit of ${entry.path}`) });
       } else {
-        const sha = blobSha(entry.bytes);
-        blobs.set(sha, entry.bytes);
+        const bytes = defined(entry.bytes, `the bytes of ${entry.path}`);
+        const sha = blobSha(bytes);
+        blobs.set(sha, bytes);
         files.set(entry.path, sha);
-        listing.push({ name, gitMode: entry.mode, mode: entry.mode, type: 'blob', sha, size: entry.bytes.length });
+        listing.push({ name, gitMode: entry.mode, mode: entry.mode, type: 'blob', sha, size: bytes.length });
       }
     }
     // Git orders tree entries bytewise by name, comparing subtrees as "name/".
-    const key = (x) => Buffer.from(x.type === 'tree' ? `${x.name}/` : x.name, 'utf8');
+    const key = (x: IListingEntry): Buffer => Buffer.from(x.type === 'tree' ? `${x.name}/` : x.name, 'utf8');
     listing.sort((a, b) => Buffer.compare(key(a), key(b)));
     const serialized = Buffer.concat(
       listing.map((x) => Buffer.concat([Buffer.from(`${x.gitMode} ${x.name}\0`, 'utf8'), Buffer.from(x.sha, 'hex')])),
@@ -276,7 +608,7 @@ function buildSnapshot(entries) {
 }
 
 /** A git blob API body as GitHub encodes it (base64 wrapped at 60 columns). */
-function blobBody(sha, bytes, overrides = {}) {
+function blobBody(sha: string, bytes: Buffer, overrides: { readonly size?: number } = {}): Record<string, unknown> & { content: string } {
   return {
     sha,
     node_id: `B_${sha.slice(0, 12)}`,
@@ -289,13 +621,13 @@ function blobBody(sha, bytes, overrides = {}) {
 }
 
 /** Replaces every route for `url` with a single responder. */
-function replaceRoute(host, url, responder) {
+function replaceRoute(host: FakeHost, url: string, responder: Responder): void {
   host.routes = host.routes.filter((r) => r.url !== url);
   host.on('GET', url, responder);
 }
 
 /** A contents-API file body as GitHub encodes it (base64 wrapped at 60 columns). */
-function contentsBody(entry, overrides = {}) {
+function contentsBody(entry: ISourceEntry, overrides: { readonly name?: string; readonly path?: string } = {}): Record<string, unknown> {
   const bytes = entryBytes(entry);
   return {
     type: 'file',
@@ -311,16 +643,29 @@ function contentsBody(entry, overrides = {}) {
 
 const NOT_FOUND = { message: 'Not Found', documentation_url: 'https://docs.github.com/rest' };
 
-function contentsEntry(commit, filePath, optional = false) {
+function contentsEntry(commit: string, filePath: string): ContentsEntry;
+function contentsEntry(commit: string, filePath: string, optional: true): ContentsEntry | undefined;
+function contentsEntry(commit: string, filePath: string, optional = false): ContentsEntry | undefined {
   const entry = PR.contents.find((c) => c.commit === commit && c.path === filePath);
   if (optional) return entry;
   assert.ok(entry, `fixture has no contents for ${filePath} at ${commit}`);
   return entry;
 }
 
-function routeContents(host, entry, override) {
+function routeContents(host: FakeHost, entry: ContentsEntry, override?: Responder): void {
   const responder = override ?? (() => (entry.absent ? jsonResponse(404, NOT_FOUND) : jsonResponse(200, contentsBody(entry))));
   host.on('GET', entry.url, responder);
+}
+
+/** Changes to the pull-request exchange (see pullScenario); `request` is the fetchContext request `prepared` sends. */
+interface IPullScenarioOptions {
+  readonly pull?: Readonly<Record<string, unknown>>;
+  readonly secondPull?: Readonly<Record<string, unknown>>;
+  readonly filesPages?: readonly FilesPage[];
+  readonly compareUrl?: string;
+  readonly compare?: unknown;
+  readonly omit?: Readonly<Record<string, readonly string[]>>;
+  readonly request?: Partial<IFetchContextRequest>;
 }
 
 /**
@@ -339,7 +684,7 @@ function pullScenario({
   compareUrl = PR.compareUrl,
   compare = PR.compare,
   omit = {},
-} = {}) {
+}: IPullScenarioOptions = {}): FakeHost {
   const host = new FakeHost();
   const first = structuredClone({ ...PR.pull, ...pull });
   const second = structuredClone({ ...first, ...(secondPull ?? {}) });
@@ -370,7 +715,8 @@ function pullScenario({
     const answer = special.contents;
     host.on('GET', answer.url, () => {
       if (answer.notFound) return jsonResponse(404, NOT_FOUND);
-      const target = contentsEntry(special.commit, answer.servesFileOf, true) ?? {
+      const served = answer.servesFileOf === undefined ? undefined : contentsEntry(special.commit, answer.servesFileOf, true);
+      const target = served ?? {
         path: special.path,
         text: special.text,
       };
@@ -380,21 +726,26 @@ function pullScenario({
   return host;
 }
 
+/** The scenario's snapshot at a commit. */
+function snapshotOf(host: FakeHost, commit: string): ISnapshot {
+  return defined(host.git[commit], `a snapshot at ${commit}`);
+}
+
 /** The blob id of an authored file at a commit, from the scenario's snapshot. */
-function fileBlob(host, commit, filePath) {
-  const sha = host.git[commit].files.get(filePath);
+function fileBlob(host: FakeHost, commit: string, filePath: string): string {
+  const sha = snapshotOf(host, commit).files.get(filePath);
   assert.ok(sha, `snapshot has no ${filePath} at ${commit}`);
   return sha;
 }
 
 /** The scenario's tree listing for a directory at a commit. */
-function treeAt(host, commit, dirPath) {
-  const tree = host.git[commit].trees.get(dirPath);
+function treeAt(host: FakeHost, commit: string, dirPath: string): ITreeRecord {
+  const tree = snapshotOf(host, commit).trees.get(dirPath);
   assert.ok(tree, `snapshot has no directory ${dirPath || '(root)'} at ${commit}`);
   return tree;
 }
 
-function withFilePatch(filename, change) {
+function withFilePatch(filename: string, change: (file: PullFile) => void): FilesPage[] {
   const pages = structuredClone(PR.filesPages);
   for (const page of pages) {
     for (const file of page.body) if (file.filename === filename) change(file);
@@ -402,7 +753,12 @@ function withFilePatch(filename, change) {
   return pages;
 }
 
-async function contextFor(host, request = {}) {
+/** The authored patch of a listed file, which must have one. */
+function patchOf(file: PullFile): string {
+  return defined(file.patch, `a patch of ${file.filename}`);
+}
+
+async function contextFor(host: FakeHost, request: Partial<IFetchContextRequest> = {}): Promise<IFetchedContext> {
   return client(host).fetchContext({ destination: DESTINATION, reviewedCommit: HEAD, ...request });
 }
 
@@ -410,7 +766,7 @@ async function contextFor(host, request = {}) {
 // Review readback routes
 // ---------------------------------------------------------------------------
 
-function reviewCommentsScenario(change = () => {}) {
+function reviewCommentsScenario(change: (fixture: ReviewCommentsFixture) => unknown = () => {}): FakeHost {
   const fixture = structuredClone(RV.reviewComments);
   change(fixture);
   const host = new FakeHost();
@@ -419,32 +775,51 @@ function reviewCommentsScenario(change = () => {}) {
   }
   for (const page of fixture.graphqlPages) {
     host.on('POST', fixture.graphqlUrl, () => jsonResponse(200, page.response), (req) => {
-      const { variables } = JSON.parse(req.body);
-      return variables && variables.after === page.after;
+      const { variables } = graphqlBody(req);
+      return variables['after'] === page.after;
     });
   }
   return host;
 }
 
-function threadNodes(fixture, pageIndex) {
-  return fixture.graphqlPages[pageIndex].response.data.repository.pullRequest.reviewThreads.nodes;
+/** A GraphQL page of a readback fixture. */
+function graphqlPage(fixture: ReviewCommentsFixture, pageIndex: number): GraphqlPage {
+  return at(fixture.graphqlPages, pageIndex, 'graphqlPages');
 }
 
-function threadOf(fixture, databaseId) {
+/** The reviewThreads connection of a GraphQL page, which must carry data. */
+function reviewThreadsOf(page: GraphqlPage): ReviewThreads {
+  const { data } = page.response;
+  if (data === null) {
+    throw new AssertionError({ message: 'expected a GraphQL page with data, got data: null', operator: 'reviewThreadsOf' });
+  }
+  return data.repository.pullRequest.reviewThreads;
+}
+
+function threadNodes(fixture: ReviewCommentsFixture, pageIndex: number): ThreadNode[] {
+  return reviewThreadsOf(graphqlPage(fixture, pageIndex)).nodes;
+}
+
+/** The first comment of a thread: its root. */
+function rootOf(node: ThreadNode): ThreadComment {
+  return at(node.comments.nodes, 0, `the comments of a thread on ${node.path}`);
+}
+
+function threadOf(fixture: ReviewCommentsFixture, databaseId: number): ThreadNode {
   for (const page of fixture.graphqlPages) {
-    for (const node of page.response.data.repository.pullRequest.reviewThreads.nodes) {
-      if (node.comments.nodes[0].databaseId === databaseId) return node;
+    for (const node of reviewThreadsOf(page).nodes) {
+      if (rootOf(node).databaseId === databaseId) return node;
     }
   }
-  throw new Error(`no thread rooted at ${databaseId}`);
+  throw new Error(`no thread rooted at ${String(databaseId)}`);
 }
 
-function restCommentOf(fixture, id) {
+function restCommentOf(fixture: ReviewCommentsFixture, id: number): RestComment {
   for (const page of fixture.restPages) for (const c of page.body) if (c.id === id) return c;
-  throw new Error(`no REST comment ${id}`);
+  throw new Error(`no REST comment ${String(id)}`);
 }
 
-async function readComments(host) {
+async function readComments(host: FakeHost): Promise<IReviewCommentPage> {
   return client(host).listReviewComments({ ...DESTINATION, reviewId: RV.reviewComments.reviewId, cursor: null });
 }
 
@@ -474,8 +849,8 @@ describe('fixture integrity', () => {
         const head = PR.contents.find((c) => c.commit === HEAD && c.path === file.filename);
         const base = PR.contents.find((c) => c.commit === MERGE_BASE && c.path === file.filename);
         for (const line of file.patch.split('\n')) {
-          if (line.startsWith('+')) assert.ok(head.text.includes(line.slice(1)), `${file.filename}: ${line}`);
-          if (line.startsWith('-')) assert.ok(base.text.includes(line.slice(1)), `${file.filename}: ${line}`);
+          if (line.startsWith('+')) assert.ok(textOf(head, `${file.filename} at the head`).includes(line.slice(1)), `${file.filename}: ${line}`);
+          if (line.startsWith('-')) assert.ok(textOf(base, `${file.filename} at the base`).includes(line.slice(1)), `${file.filename}: ${line}`);
         }
         const plus = file.patch.split('\n').filter((l) => l.startsWith('+')).length;
         const minus = file.patch.split('\n').filter((l) => l.startsWith('-')).length;
@@ -493,6 +868,7 @@ describe('client construction', () => {
   test('refuses any API origin other than https://api.github.com', () => {
     const host = new FakeHost();
     for (const apiOrigin of ['http://api.github.com', 'https://github.example.com/api/v3', 'https://api.github.com.evil.example']) {
+      // @ts-expect-error -- deliberately invalid: proves runtime validation of the API origin (only https://api.github.com is typed or accepted)
       assert.throws(() => createGitHubClient({ token: TOKEN, fetch: host.fetch, apiOrigin }), TypeError, apiOrigin);
     }
     assert.equal(host.requests.length, 0);
@@ -500,8 +876,10 @@ describe('client construction', () => {
 
   test('requires a token; fetch defaults to the global implementation but must be a function', () => {
     const host = new FakeHost();
+    // @ts-expect-error -- deliberately invalid: proves runtime validation of a missing token
     assert.throws(() => createGitHubClient({ fetch: host.fetch }), TypeError);
     assert.throws(() => createGitHubClient({ token: '', fetch: host.fetch }), TypeError);
+    // @ts-expect-error -- deliberately invalid: proves runtime validation that fetch is a function
     assert.throws(() => createGitHubClient({ token: TOKEN, fetch: 'https://api.github.com' }), TypeError);
     assert.equal(typeof createGitHubClient({ token: TOKEN }).getAuthenticatedUser, 'function');
   });
@@ -522,16 +900,17 @@ describe('client construction', () => {
     assertNoToken(c, 'client');
     assert.ok(!JSON.stringify(c).includes(TOKEN));
     for (const key of Reflect.ownKeys(c)) {
-      const value = c[key];
+      const value: unknown = Reflect.get(c, key);
       if (typeof value === 'string') assert.notEqual(value, TOKEN, String(key));
     }
   });
 
   test('nothing is written to the console, including on failures', async () => {
-    const captured = [];
-    const names = ['log', 'info', 'warn', 'error', 'debug', 'trace'];
+    const captured: unknown[][] = [];
+    const names = ['log', 'info', 'warn', 'error', 'debug', 'trace'] as const;
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- the original methods are only kept to be restored verbatim, never called detached
     const saved = names.map((n) => console[n]);
-    names.forEach((n) => (console[n] = (...args) => captured.push(args)));
+    names.forEach((n) => (console[n] = (...args: unknown[]) => captured.push(args)));
     try {
       const host = new FakeHost()
         .on('GET', RV.user.url, () => jsonResponse(401, { message: 'Bad credentials' }))
@@ -540,7 +919,7 @@ describe('client construction', () => {
       await c.getAuthenticatedUser().catch(() => {});
       await c.createReview(structuredClone(RV.createReview.request)).catch(() => {});
     } finally {
-      names.forEach((n, i) => (console[n] = saved[i]));
+      names.forEach((n, i) => (console[n] = at(saved, i, 'saved console methods')));
     }
     assert.deepEqual(captured, []);
   });
@@ -586,8 +965,8 @@ describe('getAuthenticatedUser', () => {
       throw reset;
     });
     const err = await rejectsWith(client(host).getAuthenticatedUser(), 'network', { hostRejected: false });
-    assert.equal(err.cause.message, 'socket hang up');
-    assert.equal(err.cause.code, 'ECONNRESET');
+    assert.equal(causeOf(err).message, 'socket hang up');
+    assert.equal(causeOf(err).code, 'ECONNRESET');
   });
 
   test('a hostile fetch error echoing credentials cannot leak them through the public error', async () => {
@@ -623,7 +1002,7 @@ describe('createReview', () => {
     const host = new FakeHost().on('POST', url, () => jsonResponse(200, response));
     assert.deepEqual(await client(host).createReview(structuredClone(request)), expected);
     assert.equal(host.requests.length, 1);
-    const sent = JSON.parse(host.requests[0].body);
+    const sent = asRecord(requestJson(at(host.requests, 0, 'requests')), 'the create-review request body');
     assert.deepEqual(sent, expectedPostBody);
     assert.ok(!Object.hasOwn(sent, 'event'), 'a pending draft carries no event');
     assertHttpDiscipline(host);
@@ -647,7 +1026,7 @@ describe('createReview', () => {
   });
 
   for (const status of [400, 401, 403, 404, 409, 429]) {
-    test(`an understood ${status} refusal is definitive and sent once`, async () => {
+    test(`an understood ${String(status)} refusal is definitive and sent once`, async () => {
       const host = new FakeHost().on('POST', url, () => jsonResponse(status, { message: 'refused' }));
       await rejectsWith(client(host).createReview(structuredClone(request)), 'http-status', {
         status,
@@ -658,7 +1037,7 @@ describe('createReview', () => {
   }
 
   for (const status of [408, 499, 500, 502, 503, 504]) {
-    test(`a ${status} answer is indeterminate and never retried`, async () => {
+    test(`a ${String(status)} answer is indeterminate and never retried`, async () => {
       const host = new FakeHost().on('POST', url, () => jsonResponse(status, { message: 'no verdict' }));
       await rejectsWith(client(host).createReview(structuredClone(request)), 'http-status', {
         status,
@@ -701,9 +1080,11 @@ describe('createReview', () => {
 
   test('a request carrying a submission event or unknown comment fields is refused before sending', async () => {
     const host = new FakeHost();
+    // @ts-expect-error -- deliberately invalid: proves runtime refusal of a submission event on a create-review request
     await assert.rejects(client(host).createReview({ ...structuredClone(request), event: 'COMMENT' }), TypeError);
     const withPosition = structuredClone(request);
-    withPosition.comments[0].position = 5;
+    // @ts-expect-error -- deliberately invalid: proves runtime refusal of an unknown comment field (position)
+    at(withPosition.comments, 0, 'comments').position = 5;
     await assert.rejects(client(host).createReview(withPosition), TypeError);
     assert.equal(host.requests.length, 0);
   });
@@ -714,7 +1095,7 @@ describe('createReview', () => {
 // ---------------------------------------------------------------------------
 
 describe('listReviews', () => {
-  function reviewsHost(pages = RV.reviewPages) {
+  function reviewsHost(pages: readonly ReviewsPage[] = RV.reviewPages): FakeHost {
     const host = new FakeHost();
     for (const page of pages) host.on('GET', page.url, () => jsonResponse(200, page.body, page.link ? { link: page.link } : {}));
     return host;
@@ -724,11 +1105,11 @@ describe('listReviews', () => {
     const host = reviewsHost();
     const c = client(host);
     const first = await c.listReviews({ ...DESTINATION, cursor: null });
-    assert.deepEqual(first.reviews, RV.reviewPages[0].expected);
+    assert.deepEqual(first.reviews, at(RV.reviewPages, 0, 'reviewPages').expected);
     assert.equal(typeof first.nextCursor, 'string');
-    assert.ok(first.nextCursor.length > 0);
+    assert.ok(asString(first.nextCursor, 'a next-page cursor').length > 0);
     const second = await c.listReviews({ ...DESTINATION, cursor: first.nextCursor });
-    assert.deepEqual(second, { reviews: RV.reviewPages[1].expected, nextCursor: null });
+    assert.deepEqual(second, { reviews: at(RV.reviewPages, 1, 'reviewPages').expected, nextCursor: null });
     assert.deepEqual(host.urls(), RV.reviewPages.map((p) => p.url));
     assertHttpDiscipline(host);
   });
@@ -747,13 +1128,13 @@ describe('listReviews', () => {
       `<${API}/repos/acme/widgets/pulls/42/reviews?per_page=100&page=2&access_token=abc>; rel="next"`,
       'unsafe-link',
     ],
-  ]) {
+  ] as const) {
     test(`a next link to ${label} is refused without being fetched`, async () => {
       const pages = structuredClone(RV.reviewPages);
-      pages[0].link = link;
+      at(pages, 0, 'reviewPages').link = link;
       const host = reviewsHost(pages);
       await rejectsWith(client(host).listReviews({ ...DESTINATION, cursor: null }), code);
-      assert.deepEqual(host.urls(), [RV.reviewPages[0].url]);
+      assert.deepEqual(host.urls(), [at(RV.reviewPages, 0, 'reviewPages').url]);
       assertHttpDiscipline(host);
     });
   }
@@ -784,14 +1165,14 @@ describe('listReviewComments', () => {
     );
     const graphql = host.requests.filter((r) => r.url === RV.reviewComments.graphqlUrl);
     assert.deepEqual(
-      graphql.map((r) => JSON.parse(r.body).variables),
+      graphql.map((r) => graphqlBody(r).variables),
       [
         { owner: 'acme', repo: 'widgets', number: 42, after: null },
         { owner: 'acme', repo: 'widgets', number: 42, after: 'Y3Vyc29yOjM=' },
       ],
     );
     for (const r of graphql) {
-      const { query } = JSON.parse(r.body);
+      const { query } = graphqlBody(r);
       for (const field of [
         'reviewThreads',
         'pageInfo',
@@ -827,7 +1208,7 @@ describe('listReviewComments', () => {
     );
     for (const page of fixture.graphqlPages) {
       host.on('POST', fixture.graphqlUrl, () => jsonResponse(200, page.response), (req) => {
-        return JSON.parse(req.body).variables.after === page.after;
+        return graphqlBody(req).variables['after'] === page.after;
       });
     }
     assert.deepEqual(await client(host).listReviewComments({ ...DESTINATION, reviewId: 9002, cursor: null }), {
@@ -859,7 +1240,7 @@ describe('listReviewComments', () => {
     assert.deepEqual((await readComments(host)).comments, RV.reviewComments.expected);
   });
 
-  const failures = [
+  const failures: readonly (readonly [string, string, (f: ReviewCommentsFixture) => unknown])[] = [
     ['a REST comment with no thread', 'anchor-unavailable', (f) => threadNodes(f, 1).splice(0, 1)],
     ['two threads rooted at one comment', 'anchor-ambiguous', (f) => threadNodes(f, 1).push(structuredClone(threadOf(f, 101)))],
     [
@@ -867,7 +1248,7 @@ describe('listReviewComments', () => {
       'anchor-ambiguous',
       (f) => {
         const extra = structuredClone(threadOf(f, 103));
-        extra.comments.nodes[0].databaseId = 106;
+        rootOf(extra).databaseId = 106;
         threadNodes(f, 1).push(extra);
       },
     ],
@@ -885,24 +1266,24 @@ describe('listReviewComments', () => {
     [
       'a thread from another original commit',
       'anchor-ambiguous',
-      (f) => (threadOf(f, 102).comments.nodes[0].originalCommit.oid = MERGE_BASE),
+      (f) => (rootOf(threadOf(f, 102)).originalCommit.oid = MERGE_BASE),
     ],
     ['a REST comment from another review', 'malformed-response', (f) => (restCommentOf(f, 103).pull_request_review_id = 8000)],
     [
       'GraphQL errors',
       'graphql-errors',
-      (f) => (f.graphqlPages[1].response = { data: null, errors: [{ type: 'RATE_LIMITED', message: 'rate limited' }] }),
+      (f) => (graphqlPage(f, 1).response = { data: null, errors: [{ type: 'RATE_LIMITED', message: 'rate limited' }] }),
     ],
     [
       'a next page without a cursor',
       'pagination',
-      (f) => (f.graphqlPages[0].response.data.repository.pullRequest.reviewThreads.pageInfo.endCursor = null),
+      (f) => (reviewThreadsOf(graphqlPage(f, 0)).pageInfo.endCursor = null),
     ],
     [
       'a repeated cursor',
       'pagination',
       (f) =>
-        (f.graphqlPages[1].response.data.repository.pullRequest.reviewThreads.pageInfo = {
+        (reviewThreadsOf(graphqlPage(f, 1)).pageInfo = {
           hasNextPage: true,
           endCursor: 'Y3Vyc29yOjM=',
         }),
@@ -910,7 +1291,7 @@ describe('listReviewComments', () => {
     [
       'a REST next link to another origin',
       'unsafe-link',
-      (f) => (f.restPages[0].link = '<https://evil.example/repos/acme/widgets/pulls/42/reviews/9001/comments?per_page=100&page=2>; rel="next"'),
+      (f) => (at(f.restPages, 0, 'restPages').link = '<https://evil.example/repos/acme/widgets/pulls/42/reviews/9001/comments?per_page=100&page=2>; rel="next"'),
     ],
   ];
   for (const [label, code, change] of failures) {
@@ -924,6 +1305,7 @@ describe('listReviewComments', () => {
   test('a continuation cursor is refused: readback is always one complete enumeration', async () => {
     const host = reviewCommentsScenario();
     await assert.rejects(
+      // @ts-expect-error -- deliberately invalid: proves runtime refusal of a continuation cursor (readback accepts only null)
       client(host).listReviewComments({ ...DESTINATION, reviewId: 9001, cursor: '2' }),
       TypeError,
     );
@@ -984,13 +1366,13 @@ describe('fetchContext', () => {
 
   test('a filename listed twice is refused', async () => {
     const pages = structuredClone(PR.filesPages);
-    pages[1].body.push(structuredClone(pages[0].body[0]));
+    at(pages, 1, 'filesPages').body.push(structuredClone(at(at(pages, 0, 'filesPages').body, 0, 'the first page body')));
     await rejectsWith(contextFor(pullScenario({ pull: { changed_files: 8 }, filesPages: pages })), 'duplicate-file');
   });
 
   test('a files next link to another origin is refused without being fetched', async () => {
     const pages = structuredClone(PR.filesPages);
-    pages[0].link = '<https://evil.example/repos/acme/widgets/pulls/42/files?per_page=100&page=2>; rel="next"';
+    at(pages, 0, 'filesPages').link = '<https://evil.example/repos/acme/widgets/pulls/42/files?per_page=100&page=2>; rel="next"';
     const host = pullScenario({ filesPages: pages });
     await rejectsWith(contextFor(host), 'unsafe-link');
     assertHttpDiscipline(host);
@@ -998,7 +1380,7 @@ describe('fetchContext', () => {
 
   test('a patch whose counts disagree with the entry is treated as truncated and dropped', async () => {
     const pages = withFilePatch('src/app.js', (file) => {
-      file.patch = file.patch.slice(0, file.patch.indexOf('\n@@ -8,7'));
+      file.patch = patchOf(file).slice(0, patchOf(file).indexOf('\n@@ -8,7'));
     });
     const { context } = await contextFor(pullScenario({ filesPages: pages }));
     assert.deepEqual(context.diff.files[0], { path: 'src/app.js' });
@@ -1029,7 +1411,7 @@ describe('fetchContext', () => {
 // ---------------------------------------------------------------------------
 
 describe('readSource', () => {
-  async function prepared(options = {}) {
+  async function prepared(options: IPullScenarioOptions = {}): Promise<{ host: FakeHost; readSource: IFetchedContext['readSource'] }> {
     const host = pullScenario(options);
     const { readSource } = await contextFor(host, options.request);
     host.requests.length = 0;
@@ -1054,7 +1436,7 @@ describe('readSource', () => {
     const { host, readSource } = await prepared();
     await readSource(HEAD, 'src/app.js');
     await readSource(HEAD, 'src/same.js');
-    const count = (url) => host.urls().filter((u) => u === url).length;
+    const count = (url: string): number => host.urls().filter((u) => u === url).length;
     assert.equal(count(commitUrl(HEAD)), 1);
     assert.equal(count(treeUrl(treeAt(host, HEAD, '').sha)), 1);
     assert.equal(count(treeUrl(treeAt(host, HEAD, 'src').sha)), 1);
@@ -1117,7 +1499,7 @@ describe('readSource', () => {
 
   test('a patch missing an old-side no-newline marker is incompatible', async () => {
     const pages = withFilePatch('docs/crlf.txt', (file) => {
-      file.patch = file.patch.replace('-three\n\\ No newline at end of file\n', '-three\n');
+      file.patch = patchOf(file).replace('-three\n\\ No newline at end of file\n', '-three\n');
     });
     const { readSource } = await prepared({ filesPages: pages });
     await rejectsWith(readSource(MERGE_BASE, 'docs/crlf.txt'), 'old-source-unverified');
@@ -1125,7 +1507,7 @@ describe('readSource', () => {
 
   test('a patch missing a new-side no-newline marker is incompatible', async () => {
     const pages = withFilePatch('docs/crlf.txt', (file) => {
-      file.patch = file.patch.replace(/\n\\ No newline at end of file$/, '');
+      file.patch = patchOf(file).replace(/\n\\ No newline at end of file$/, '');
     });
     const { readSource } = await prepared({ filesPages: pages });
     await rejectsWith(readSource(MERGE_BASE, 'docs/crlf.txt'), 'old-source-unverified');
@@ -1142,7 +1524,7 @@ describe('readSource', () => {
     const { readSource } = await prepared();
     await rejectsWith(readSource(MERGE_BASE, 'assets/logo.png'), 'patch-unavailable');
     const pages = withFilePatch('src/app.js', (file) => {
-      file.patch = file.patch.slice(0, file.patch.indexOf('\n@@ -8,7'));
+      file.patch = patchOf(file).slice(0, patchOf(file).indexOf('\n@@ -8,7'));
     });
     const truncated = await prepared({ filesPages: pages });
     await rejectsWith(truncated.readSource(MERGE_BASE, 'src/app.js'), 'patch-unavailable');
@@ -1177,7 +1559,7 @@ describe('readSource', () => {
     ['a path inside a submodule', 'vendor/lib/index.js', 'not-a-file'],
     ['a submodule itself', 'vendor/lib', 'not-a-file'],
     ['a directory', 'src', 'not-a-file'],
-  ];
+  ] as const;
   for (const [label, filePath, code] of pathKinds) {
     test(`refuses ${label} instead of reading another path's text`, async () => {
       const { host, readSource } = await prepared();
@@ -1199,29 +1581,36 @@ describe('readSource', () => {
     await rejectsWith(readSource(HEAD, 'links/app-link.js'), 'not-a-file');
   });
 
-  const objectFailures = [
+  const objectFailures: readonly (readonly [string, string, (host: FakeHost) => void])[] = [
     [
       'a missing commit (HTTP 404), which is not evidence of absence',
       'http-status',
-      (host) => replaceRoute(host, commitUrl(HEAD), () => jsonResponse(404, NOT_FOUND)),
+      (host) => {
+        replaceRoute(host, commitUrl(HEAD), () => jsonResponse(404, NOT_FOUND));
+      },
     ],
     [
       'a missing tree (HTTP 404)',
       'http-status',
-      (host) => replaceRoute(host, treeUrl(treeAt(host, HEAD, 'src').sha), () => jsonResponse(404, NOT_FOUND)),
+      (host) => {
+        replaceRoute(host, treeUrl(treeAt(host, HEAD, 'src').sha), () => jsonResponse(404, NOT_FOUND));
+      },
     ],
     [
       'a missing blob (HTTP 404)',
       'http-status',
-      (host) => replaceRoute(host, blobUrl(fileBlob(host, HEAD, 'src/app.js')), () => jsonResponse(404, NOT_FOUND)),
+      (host) => {
+        replaceRoute(host, blobUrl(fileBlob(host, HEAD, 'src/app.js')), () => jsonResponse(404, NOT_FOUND));
+      },
     ],
     [
       'a commit answering for another commit',
       'blob-integrity',
-      (host) =>
+      (host) => {
         replaceRoute(host, commitUrl(HEAD), () =>
-          jsonResponse(200, { sha: MERGE_BASE, tree: { sha: host.git[MERGE_BASE].rootSha } }),
-        ),
+          jsonResponse(200, { sha: MERGE_BASE, tree: { sha: snapshotOf(host, MERGE_BASE).rootSha } }),
+        );
+      },
     ],
     [
       'a truncated tree listing',
@@ -1237,7 +1626,7 @@ describe('readSource', () => {
       (host) => {
         const tree = treeAt(host, HEAD, 'src');
         const body = structuredClone(tree.body);
-        body.tree.push(structuredClone(body.tree.find((e) => e.path === 'app.js')));
+        body.tree.push(structuredClone(defined(body.tree.find((e) => e.path === 'app.js'), 'the app.js entry')));
         replaceRoute(host, treeUrl(tree.sha), () => jsonResponse(200, body));
       },
     ],
@@ -1255,7 +1644,7 @@ describe('readSource', () => {
       (host) => {
         const tree = treeAt(host, HEAD, 'src');
         const body = structuredClone(tree.body);
-        body.tree.find((e) => e.path === 'app.js').mode = '100664';
+        defined(body.tree.find((e) => e.path === 'app.js'), 'the app.js entry').mode = '100664';
         replaceRoute(host, treeUrl(tree.sha), () => jsonResponse(200, body));
       },
     ],
@@ -1265,7 +1654,7 @@ describe('readSource', () => {
       (host) => {
         const tree = treeAt(host, HEAD, 'src');
         const body = structuredClone(tree.body);
-        body.tree.find((e) => e.path === 'app.js').type = 'tree';
+        defined(body.tree.find((e) => e.path === 'app.js'), 'the app.js entry').type = 'tree';
         replaceRoute(host, treeUrl(tree.sha), () => jsonResponse(200, body));
       },
     ],
@@ -1273,7 +1662,7 @@ describe('readSource', () => {
       'a self-consistent blob of other content served for the requested blob id',
       'blob-integrity',
       (host) => {
-        const other = Buffer.from(contentsEntry(HEAD, 'src/same.js').text, 'utf8');
+        const other = Buffer.from(textOf(contentsEntry(HEAD, 'src/same.js'), 'src/same.js at the head'), 'utf8');
         replaceRoute(host, blobUrl(fileBlob(host, HEAD, 'src/app.js')), () =>
           jsonResponse(200, blobBody(blobSha(other), other)),
         );
@@ -1293,7 +1682,7 @@ describe('readSource', () => {
       'blob-integrity',
       (host) => {
         const sha = fileBlob(host, HEAD, 'src/app.js');
-        const bytes = Buffer.from(host.git[HEAD].blobs.get(sha));
+        const bytes = Buffer.from(defined(snapshotOf(host, HEAD).blobs.get(sha), 'the src/app.js blob'));
         bytes[0] = bytes[0] === 0x78 ? 0x79 : 0x78;
         replaceRoute(host, blobUrl(sha), () => jsonResponse(200, blobBody(sha, bytes)));
       },
@@ -1303,7 +1692,7 @@ describe('readSource', () => {
       'blob-integrity',
       (host) => {
         const sha = fileBlob(host, HEAD, 'src/app.js');
-        const bytes = host.git[HEAD].blobs.get(sha);
+        const bytes = defined(snapshotOf(host, HEAD).blobs.get(sha), 'the src/app.js blob');
         replaceRoute(host, blobUrl(sha), () => jsonResponse(200, blobBody(sha, bytes, { size: bytes.length + 1 })));
       },
     ],
@@ -1312,7 +1701,7 @@ describe('readSource', () => {
       'malformed-response',
       (host) => {
         const sha = fileBlob(host, HEAD, 'src/app.js');
-        const bytes = host.git[HEAD].blobs.get(sha);
+        const bytes = defined(snapshotOf(host, HEAD).blobs.get(sha), 'the src/app.js blob');
         const body = blobBody(sha, bytes);
         replaceRoute(host, blobUrl(sha), () => jsonResponse(200, { ...body, content: `*${body.content}` }));
       },
@@ -1356,7 +1745,7 @@ describe('readSource', () => {
 
 describe('GitHubError and client object runtime shape', () => {
   test('a GitHubError without a status has no own status key; code and hostRejected are always present', () => {
-    // src/github.cjs documents `status` as set only when the host answered;
+    // src/github.cts documents `status` as set only when the host answered;
     // callers (publication, credential redaction) enumerate own properties,
     // so "absent" must not become an own key holding undefined. The key
     // order is characterization of 0.2.0 (it is what util.inspect and
@@ -1376,12 +1765,13 @@ describe('GitHubError and client object runtime shape', () => {
 
   test('a GitHubError with a status and cause carries them, in 0.2.0 key order', () => {
     const cause = new Error('socket hang up');
+    // @ts-expect-error -- 'create-refused' is not a GitHubErrorCode; kept as authored, since this test asserts only status, hostRejected, cause and key order, which the constructor sets independently of the code
     const err = new GitHubError('create-refused', 'Unprocessable Entity', { status: 422, hostRejected: true, cause });
     assert.equal(err.status, 422);
     assert.equal(err.hostRejected, true);
     assert.equal(err.cause, cause);
     // A standard Error cause: own, but not enumerable (ECMAScript InstallErrorCause).
-    assert.equal(Object.getOwnPropertyDescriptor(err, 'cause').enumerable, false);
+    assert.equal(defined(Object.getOwnPropertyDescriptor(err, 'cause'), 'an own cause descriptor').enumerable, false);
     assert.deepEqual(Object.keys(err), ['name', 'code', 'status', 'hostRejected']);
   });
 
@@ -1397,9 +1787,11 @@ describe('GitHubError and client object runtime shape', () => {
     const c = client(new FakeHost());
     assert.equal(Object.isFrozen(c), true);
     assert.throws(() => {
-      c.createReview = async () => ({});
+      // @ts-expect-error -- deliberately invalid: proves the frozen client refuses a replaced method at runtime (the property is readonly in the type)
+      c.createReview = async () => ({}); // eslint-disable-line @typescript-eslint/require-await -- the replacement is never called: the assignment itself must throw
     }, TypeError);
     assert.throws(() => {
+      // @ts-expect-error -- deliberately invalid: proves the frozen client refuses a new property at runtime
       c.extra = 1;
     }, TypeError);
   });
