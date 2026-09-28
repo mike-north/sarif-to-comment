@@ -1022,10 +1022,34 @@ function isInspectableLog(captured: unknown): captured is IInspectableLog {
 }
 
 /**
+ * Shows every finding, location and fix in a SARIF document, from any
+ * producer, without changing or judging it.
+ *
+ * @remarks
+ * Messages are never shortened; only fix previews are, and visibly. No
+ * source, Git repository or host is contacted, so deleted source text is not
+ * shown, and inspection says nothing about whether the document can be
+ * published.
+ *
+ * @param sarif - A SARIF log as a parsed JSON object.
+ * @param options - Preview limits and the producer's source root.
+ * @returns `inspected` with the view, or `invalid` for input that is not
+ * schema-valid SARIF.
+ * @throws `TypeError` for non-JSON input or malformed options.
+ *
+ * @public
+ */
+export function inspectSarif(sarif: object, options?: IInspectSarifOptions): InspectSarifOutcome {
+  return inspectSarifWithUntypedInput(sarif, options);
+}
+
+/**
  * Inspects SARIF without changing or judging it (contract §3.3).
  *
  * Both arguments are validated at run time, since JavaScript callers can pass
- * anything.
+ * anything. The public {@link inspectSarif} calls this with its
+ * documented parameter types; the CLI calls it directly, because it
+ * passes parsed file content that only this validation judges.
  *
  * @param sarif - a parsed SARIF log
  * @param options - `{ previewLines?, previewChars?, sourceRootUri? }`; a
@@ -1033,7 +1057,7 @@ function isInspectableLog(captured: unknown): captured is IInspectableLog {
  * @returns `{ status: 'inspected', view }` or `{ status: 'invalid', problems, markdown }`
  * @throws TypeError on non-JSON SARIF or malformed options
  */
-function inspectSarif(sarif: object, options?: IInspectSarifOptions): InspectSarifOutcome {
+function inspectSarifWithUntypedInput(sarif: unknown, options?: IInspectSarifOptions): InspectSarifOutcome {
   const input: unknown = sarif;
   if (input === null || typeof input !== 'object' || Array.isArray(input)) {
     throw misuse('sarif must be a parsed SARIF object, not serialized text');
@@ -1297,4 +1321,4 @@ function renderInspectionText(view: ISarifInspection): string {
   return `${lines.join('\n')}\n`;
 }
 
-export { inspectSarif, renderInspectionText };
+export { renderInspectionText, inspectSarifWithUntypedInput };

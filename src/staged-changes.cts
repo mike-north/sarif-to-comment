@@ -1069,17 +1069,23 @@ function textFor(change: { readonly path: string }, bytes: Buffer, side: string,
  *
  * @public
  */
-function addStagedChangesToSarif(input: IAddStagedChangesInput): Promise<AddStagedChangesOutcome>;
+export async function addStagedChangesToSarif(input: IAddStagedChangesInput): Promise<AddStagedChangesOutcome> {
+  return addStagedChangesToSarifWithUntypedInput(input);
+}
+
 /**
  * Adds proposed changes from the Git index to a SARIF document.
  *
  * The implementation takes `unknown`: JavaScript callers are unconstrained,
- * so every field is validated at run time (captureInput).
+ * so every field is validated at run time (captureInput). The public
+ * {@link addStagedChangesToSarif} calls this with its documented parameter
+ * type; the CLI calls it directly, because it passes parsed file content
+ * that only this validation judges.
  *
  * @param input - { sarif, worktree, reviewedCommit, repository: { owner, repo }, sourceRootUri? }
  * @returns added | invalid | failed outcome (see module documentation)
  */
-async function addStagedChangesToSarif(input: unknown): Promise<AddStagedChangesOutcome> {
+async function addStagedChangesToSarifWithUntypedInput(input: unknown): Promise<AddStagedChangesOutcome> {
   const captured = captureInput(input);
   const invalid = validateSarif(captured.sarif);
   if (invalid) return invalid;
@@ -1670,4 +1676,4 @@ function incorporateFileOperation(
   return entry;
 }
 
-export { addStagedChangesToSarif };
+export { addStagedChangesToSarifWithUntypedInput };
