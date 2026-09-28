@@ -1904,6 +1904,145 @@ describe('existing state is authoritative and fails closed', () => {
   });
 });
 
+/**
+ * Compatibility pins for state files 0.2.0 already accepted. 0.2.0 matched a
+ * record's phase to its field set through property-key string coercion, so a
+ * JSON array whose string form is a phase name (['sending'], [['completed']])
+ * passes validation; it then chose the receipt and rejection branches by
+ * strict equality, so such a record is never answered from its saved receipt
+ * or refusal (which were never validated) and is investigated like an intent.
+ * Every expectation below was observed by running these same files through
+ * the 0.2.0 module; the behavior must not change.
+ */
+describe('historical state with a non-string phase keeps its 0.2.0 handling', () => {
+  const receipt = { reviewId: 77, htmlUrl: 'https://example.test/r/77', via: 'created' };
+  const rejection = { status: 422, message: 'Validation Failed' };
+
+  /** The state file text for the hand-built intent with `phase` and extra fields. */
+  function stateText(phase: unknown, extra: Record<string, unknown> = {}): string {
+    return JSON.stringify({ ...handBuiltIntent(), phase, ...extra });
+  }
+
+  /** The exact corrupt-state message 0.2.0 gives for `problem` at `statePath`. */
+  function corruptMessage(statePath: string, problem: string): string {
+    return `Publication state at ${statePath} is not a valid record (${problem}); it is not treated as absent.`;
+  }
+
+  function isCorrupt(statePath: string, problem: string): (err: unknown) => boolean {
+    return (err) =>
+      isStateError('state-corrupt')(err) && err instanceof Error && err.message === corruptMessage(statePath, problem);
+  }
+
+  /** Seeds the host with exactly this intent's complete review, as a lost create response would leave it. */
+  function seedIntentReview(world: IWorld): { readonly id: number; readonly htmlUrl: string } {
+    const intent = handBuiltIntent();
+    return world.remote.seedReview({
+      ...FIXTURE.input.destination,
+      authorId: DEFAULT_USER.id,
+      authorLogin: DEFAULT_USER.login,
+      commitId: FIXTURE.input.reviewedCommit,
+      body: intent.request.body,
+      comments: EXPECTED.comments,
+    });
+  }
+
+  const coerced: readonly (readonly [string, unknown, Record<string, unknown>])[] = [
+    ["['sending']", ['sending'], {}],
+    ["[['sending']]", [['sending']], {}],
+    ["['completed'] with a valid receipt", ['completed'], { receipt }],
+    ["[['completed']] with a valid receipt", [['completed']], { receipt }],
+    ["['completed'] with an unvalidated malformed receipt", ['completed'], { receipt: 42 }],
+    ["['rejected'] with a valid rejection", ['rejected'], { rejection }],
+    ["[['rejected']] with a valid rejection", [['rejected']], { rejection }],
+    ["['rejected'] with an unvalidated malformed rejection", ['rejected'], { rejection: 'x' }],
+  ];
+
+  for (const [label, phase, extra] of coerced) {
+    for (const [op, run] of [
+      ['publish', publish],
+      ['recover', recover],
+    ] as const) {
+      test(`a phase of ${label} is accepted and investigated by ${op}, never answered from the record`, async () => {
+        const world = makeWorld();
+        const text = stateText(phase, extra);
+        fs.writeFileSync(world.statePath, text, { mode: 0o600 });
+        const result = await run(world);
+        assert.equal(result.status, 'uncertain');
+        assert.equal(result.reason, 'not-found');
+        assert.deepEqual(
+          world.remote.calls().map((c) => c.method),
+          ['getAuthenticatedUser', 'listReviews'],
+        );
+        assert.equal(fs.readFileSync(world.statePath, 'utf8'), text);
+      });
+    }
+
+    test(`a phase of ${label} is recovered from the host and settled as a completed receipt`, async () => {
+      const world = makeWorld();
+      const stored = seedIntentReview(world);
+      fs.writeFileSync(world.statePath, stateText(phase, extra), { mode: 0o600 });
+      const result = published(await recover(world));
+      assert.equal(result.via, 'recovered');
+      assert.deepEqual(result.review, { id: stored.id, htmlUrl: stored.htmlUrl });
+      assert.equal(result.receiptPersisted, true);
+      assertNoCreateAttempt(world.remote);
+      const settled = readRecord(world.statePath);
+      assert.equal(settled.phase, 'completed');
+      assert.deepEqual(settled.receipt, { reviewId: stored.id, htmlUrl: stored.htmlUrl, via: 'recovered' });
+      // Settling copies the record's other fields, so a coerced rejected
+      // record's refusal survives beside the new receipt (as in 0.2.0), and
+      // that record no longer matches its phase on the next read.
+      assert.deepEqual(settled.rejection, extra['rejection']);
+      if ('rejection' in extra) {
+        await assert.rejects(recover(world), isCorrupt(world.statePath, 'record fields do not match its phase'));
+      } else {
+        const again = published(await recover(world));
+        assert.equal(again.via, 'receipt');
+        assert.equal(again.review.id, stored.id);
+      }
+    });
+  }
+
+  test('control: the string phases answer from the record without any transport call', async () => {
+    for (const [phase, extra, status] of [
+      ['completed', { receipt }, 'published'],
+      ['rejected', { rejection }, 'rejected'],
+    ] as const) {
+      const world = makeWorld();
+      fs.writeFileSync(world.statePath, stateText(phase, extra), { mode: 0o600 });
+      const result = await recover(world);
+      assert.equal(result.status, status);
+      assert.deepEqual(world.remote.calls(), []);
+    }
+  });
+
+  const refused: readonly (readonly [string, unknown, Record<string, unknown>, string])[] = [
+    ['an empty array', [], {}, 'unknown record phase'],
+    ["['sending', 'x']", ['sending', 'x'], {}, 'unknown record phase'],
+    ["['mystery']", ['mystery'], {}, 'unknown record phase'],
+    ['[null]', [null], {}, 'unknown record phase'],
+    ['an object', {}, {}, 'unknown record phase'],
+    ['a number', 1, {}, 'unknown record phase'],
+    ['null', null, {}, 'unknown record phase'],
+    ["['completed'] without a receipt", ['completed'], {}, 'record fields do not match its phase'],
+    ["['rejected'] without a rejection", ['rejected'], {}, 'record fields do not match its phase'],
+    ["['sending'] with a receipt", ['sending'], { receipt }, 'record fields do not match its phase'],
+    ["['completed'] with a rejection", ['completed'], { rejection }, 'record fields do not match its phase'],
+  ];
+
+  for (const [label, phase, extra, problem] of refused) {
+    test(`a phase of ${label} is corrupt state (${problem}) for publish and recover`, async () => {
+      const world = makeWorld();
+      const text = stateText(phase, extra);
+      fs.writeFileSync(world.statePath, text, { mode: 0o600 });
+      await assert.rejects(publish(world), isCorrupt(world.statePath, problem));
+      await assert.rejects(recover(world), isCorrupt(world.statePath, problem));
+      assert.deepEqual(world.remote.calls(), []);
+      assert.equal(fs.readFileSync(world.statePath, 'utf8'), text);
+    });
+  }
+});
+
 describe('restart and concurrency use on-disk state and fresh processes', () => {
   test('crash after intent but before send is uncertain in every later process', () => {
     const world = makeWorld({ create: 'crash-before-persist' });
