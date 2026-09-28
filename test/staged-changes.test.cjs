@@ -5,10 +5,10 @@
  *
  * Every repository is a real local Git fixture whose reviewed commit, index
  * and working tree are authored independently (test/fixtures/staged-changes
- * /git-fixture.cjs). Expected regions, inserted text, operations, receipts
+ * /git-fixture.mts). Expected regions, inserted text, operations, receipts
  * and staged bytes are written by hand from those bytes and the accepted
  * contract; none is derived from the implementation. The R2 oracle
- * (apply-oracle.cjs) independently re-applies extracted edits to the
+ * (apply-oracle.mts) independently re-applies extracted edits to the
  * reviewed bytes and must reproduce the staged bytes exactly.
  *
  * @see ../docs/second-milestone-contract-proposal.md §3.4 and §4
@@ -29,8 +29,8 @@ const {
   addRawPathEntry,
   createFixtureRepo,
   removeFixtureRepo,
-} = require('./fixtures/staged-changes/git-fixture.cjs');
-const { applyReplacements } = require('./fixtures/staged-changes/apply-oracle.cjs');
+} = require('./fixtures/staged-changes/git-fixture.mts');
+const { applyReplacements } = require('./fixtures/staged-changes/apply-oracle.mts');
 
 const PACKAGE_VERSION = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8')).version;
 const REPOSITORY = { owner: 'acme', repo: 'widgets' };

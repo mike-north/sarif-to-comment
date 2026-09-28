@@ -1,8 +1,6 @@
 #!/usr/bin/env node
-'use strict';
-
 /**
- * Executable wrapper that runs the real CLI entry point (bin/sarif-to-comment.cjs
+ * Executable wrapper that runs the real CLI entry point (dist/sarif-to-comment.cjs
  * `main`) with a fake createGitHubClient injected through the private internals
  * seam. Argument parsing, file reading, token selection, the library call,
  * Markdown output and exit status all come from the real CLI; only the GitHub
@@ -10,16 +8,16 @@
  * FAKE_GITHUB_DIR environment variable, which the CLI itself ignores.
  */
 
-const { main } = require('../../../dist/sarif-to-comment.cjs');
-const { createFakeClientFactory } = require('./fake-adapter.cjs');
+import { main } from '../../../dist/sarif-to-comment.cjs';
+import { createFakeClientFactory } from './fake-adapter.mts';
 
-const remoteDir = process.env.FAKE_GITHUB_DIR;
+const remoteDir = process.env['FAKE_GITHUB_DIR'];
 if (!remoteDir) {
   process.stderr.write('cli-with-fake-github: FAKE_GITHUB_DIR is required\n');
   process.exit(64);
 }
 
-main(
+void main(
   { argv: process.argv.slice(2), env: process.env, stdout: process.stdout, stderr: process.stderr },
   { createGitHubClient: createFakeClientFactory(remoteDir) },
 ).then((code) => {

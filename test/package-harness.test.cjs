@@ -2,7 +2,7 @@
 
 /**
  * Tests for the clean-consumer installation harness
- * (test/fixtures/package/installed-package.cjs), which the package, type and
+ * (test/fixtures/package/installed-package.mts), which the package, type and
  * documentation tests depend on.
  *
  * The harness must install *this package as a consumer receives it*: the
@@ -34,7 +34,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const ROOT = path.resolve(__dirname, '..');
-const HARNESS = path.join(ROOT, 'test', 'fixtures', 'package', 'installed-package.cjs');
+const HARNESS = path.join(ROOT, 'test', 'fixtures', 'package', 'installed-package.mts');
 const REAL_NPM = spawnSync('sh', ['-c', 'command -v npm'], { encoding: 'utf8' }).stdout.trim();
 const RUNNER_ERROR = 'npm error Exit handler never called!';
 const DEBUG_SENTINEL = 'verbose stack SENTINEL-root-cause-from-npm-debug-log';

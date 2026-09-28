@@ -51,14 +51,14 @@ const util = require('node:util');
 const { publishSarifReview } = require('../dist/index.cjs');
 const { GitHubError } = require('../dist/github.cjs');
 const { prepareReview } = require('../dist/prepare-review.cjs');
-const { FakeGitHubRemote, DEFAULT_USER } = require('./fixtures/publication/fake-github.cjs');
+const { FakeGitHubRemote, DEFAULT_USER } = require('./fixtures/publication/fake-github.mts');
 const {
   REPOSITORY,
   createFakeClientFactory,
   readSource,
   setAdapterConfig,
   trustedContext,
-} = require('./fixtures/public-api/fake-adapter.cjs');
+} = require('./fixtures/public-api/fake-adapter.mts');
 
 const FIXTURE_DIR = path.join(__dirname, 'fixtures', 'public-api');
 const loadSarif = (name) => JSON.parse(fs.readFileSync(path.join(FIXTURE_DIR, name), 'utf8'));

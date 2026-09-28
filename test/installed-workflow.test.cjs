@@ -3,7 +3,7 @@
 /**
  * End-to-end acceptance of the complete workflow through the *installed*
  * package: the tarball `npm pack` produces, installed by npm into a clean
- * consumer (test/fixtures/package/installed-package.cjs). Only public
+ * consumer (test/fixtures/package/installed-package.mts). Only public
  * surfaces are used — the linked `sarif-to-comment` executable and
  * `import … from 'sarif-to-comment'` — never repository modules or
  * hand-built SARIF scaffolding for the authored path.
@@ -38,8 +38,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-const { ROOT, packProject, installIntoConsumer } = require('./fixtures/package/installed-package.cjs');
-const { FakeHttpGitHub } = require('./fixtures/composition/fake-http-github.cjs');
+const { ROOT, packProject, installIntoConsumer } = require('./fixtures/package/installed-package.mts');
+const { FakeHttpGitHub } = require('./fixtures/composition/fake-http-github.mts');
 const {
   ORACLE,
   UPSTREAM_SARIF_PATH,
@@ -48,9 +48,9 @@ const {
   applyReplacements,
   replacementsFor,
   distinctReplacements,
-} = require('./fixtures/authoring-workflow/git-world.cjs');
+} = require('./fixtures/authoring-workflow/git-world.mts');
 
-const PRELOAD = path.join(ROOT, 'test', 'fixtures', 'docs', 'fake-fetch-preload.cjs');
+const PRELOAD = path.join(ROOT, 'test', 'fixtures', 'docs', 'fake-fetch-preload.mts');
 const TOKEN = 'ghp_WORKFLOW_token_for_installed_tests_0123456789';
 const UPSTREAM = JSON.parse(fs.readFileSync(UPSTREAM_SARIF_PATH, 'utf8'));
 const [FINDING_A, FINDING_B] = ORACLE.findings;

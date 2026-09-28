@@ -23,8 +23,8 @@ const crypto = require('node:crypto');
 
 const { addStagedChangesToSarif } = require('../dist/staged-changes.cjs');
 const { prepareReview } = require('../dist/prepare-review.cjs');
-const { createFixtureRepo, removeFixtureRepo } = require('./fixtures/staged-changes/git-fixture.cjs');
-const { applyReplacements } = require('./fixtures/staged-changes/apply-oracle.cjs');
+const { createFixtureRepo, removeFixtureRepo } = require('./fixtures/staged-changes/git-fixture.mts');
+const { applyReplacements } = require('./fixtures/staged-changes/apply-oracle.mts');
 
 const REPOSITORY = { owner: 'acme', repo: 'widgets' };
 const repos = [];
