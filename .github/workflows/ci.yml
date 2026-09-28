@@ -49,5 +49,13 @@ jobs:
       - name: Build dist/ and the API reference
         run: pnpm run build
 
+      # The build regenerates the committed api-report/ and docs/api/ in the
+      # working tree, so the check's API/docs freshness comparison would pass
+      # even when the committed copies are stale. Fail if the build changed
+      # them: the committed API report and reference docs must match the
+      # sources (run `pnpm run build` and commit the result).
+      - name: Committed API report and reference docs match the sources
+        run: git diff --exit-code -- api-report docs/api
+
       - name: Lint, type-check, API/docs freshness, release plan and tests
         run: pnpm run check

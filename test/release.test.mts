@@ -899,6 +899,30 @@ describe('package scripts', () => {
   });
 });
 
+/**
+ * The step that fails a workflow when the committed API report or reference
+ * docs differ from what the build just regenerated from the sources.
+ *
+ * `pnpm run build` rewrites the committed `api-report/` and `docs/api/` in
+ * the working tree, so the later `check:api` (which compares the committed
+ * files with a fresh regeneration) would always pass after it. Diffing the
+ * working tree against the commit right after the build restores the
+ * guarantee that the committed API report and docs match the sources: a
+ * change to the public API or its TSDoc must come with the regenerated
+ * report and docs.
+ */
+const API_FRESHNESS_STEP = /run: git diff --exit-code -- api-report docs\/api\n/;
+
+/** Assert that each pattern appears in `text`, in order. */
+function assertStepOrder(text: string, order: readonly RegExp[]): void {
+  let at = 0;
+  for (const step of order) {
+    const index = text.slice(at).search(step);
+    assert.ok(index >= 0, `missing or out of order: ${String(step)}`);
+    at += index;
+  }
+}
+
 describe('publish workflow', () => {
   const file = path.join(ROOT, '.github', 'workflows', 'publish.yml');
   const text = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
@@ -956,6 +980,13 @@ describe('publish workflow', () => {
     assert.doesNotMatch(config, /changeset publish|changesets\/action/);
   });
 
+  test('fails when the committed API report or docs are stale: diffs them after the build, before the check', () => {
+    assertStepOrder(config, [/id: preflight\n/, /run: pnpm run build\n/, API_FRESHNESS_STEP, /run: pnpm run check\n/]);
+    const step = config.split(/\n {6}- /).filter((s) => API_FRESHNESS_STEP.test(s));
+    assert.equal(step.length, 1);
+    assert.match(step[0] ?? '', /if: steps\.preflight\.outputs\.publish == 'true'/);
+  });
+
   test('every step after the decision runs only when the preflight says publish', () => {
     const steps = config.split(/\n {6}- /).slice(1);
     const decisionAt = steps.findIndex((s) => /id: preflight/.test(s));
@@ -983,6 +1014,10 @@ describe('continuous integration workflow', () => {
     assert.match(text, /pnpm install --frozen-lockfile/);
     assert.match(text, /pnpm run check/);
     assert.doesNotMatch(text, /npm publish|id-token|changeset publish/);
+  });
+
+  test('fails when the committed API report or docs are stale: diffs them after the build, before the check', () => {
+    assertStepOrder(text, [/run: pnpm run build\n/, API_FRESHNESS_STEP, /run: pnpm run check\n/]);
   });
 
   test('builds after installing and before checking, since the tests exercise the built dist/', () => {

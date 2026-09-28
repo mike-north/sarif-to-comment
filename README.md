@@ -240,6 +240,8 @@ Run `pnpm run build` before `pnpm run check` or `pnpm test`, and again after cha
 
 The implementation is strict TypeScript, and there are no hand-written declarations. The public TypeScript declarations are generated from the implementation. `src/public-api.cts` declares the public API, and the CommonJS runtime entry `src/index.cts` is checked at compile time to export exactly its functions. `tsc` emits per-module declarations, API Extractor rolls them up into the shipped `dist/sarif-to-comment.d.ts` and writes a reviewable API report (`api-report/`) and a doc model, and API Documenter renders the doc model as the Markdown reference in `docs/api/`. `pnpm run check` fails when either is out of date.
 
+`pnpm run build` rewrites `api-report/` and `docs/api/` whenever the public API or its TSDoc changes; commit them with the change. CI and the publish workflow build and then fail if either differs from the committed copy.
+
 **Repository layout.**
 - `src/*.cts`: the implementation. `tsc` compiles each module to CommonJS in `dist/*.cjs`; `src/index.cts` is the package entry and `src/sarif-to-comment.cts` the CLI executable.
 - `dist/`: build output. It is not committed; the package ships its runtime modules and the rolled-up declarations.
