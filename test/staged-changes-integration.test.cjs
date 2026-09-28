@@ -21,8 +21,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 
-const { addStagedChangesToSarif } = require('../src/staged-changes.cjs');
-const { prepareReview } = require('../src/prepare-review.cjs');
+const { addStagedChangesToSarif } = require('../dist/staged-changes.cjs');
+const { prepareReview } = require('../dist/prepare-review.cjs');
 const { createFixtureRepo, removeFixtureRepo } = require('./fixtures/staged-changes/git-fixture.cjs');
 const { applyReplacements } = require('./fixtures/staged-changes/apply-oracle.cjs');
 

@@ -37,8 +37,8 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-const { publishSarifReview } = require('../src/index.cjs');
-const { createGitHubClient } = require('../src/github.cjs');
+const { publishSarifReview } = require('../dist/index.cjs');
+const { createGitHubClient } = require('../dist/github.cjs');
 const { FakeHttpGitHub, REPOSITORY } = require('./fixtures/composition/fake-http-github.cjs');
 
 const FIXTURE_DIR = path.join(__dirname, 'fixtures', 'composition');

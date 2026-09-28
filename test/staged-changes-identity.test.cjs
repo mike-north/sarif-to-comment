@@ -20,7 +20,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { addStagedChangesToSarif } = require('../src/staged-changes.cjs');
+const { addStagedChangesToSarif } = require('../dist/staged-changes.cjs');
 const {
   corruptLooseObject,
   createFixtureRepo,

@@ -26,9 +26,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { inspectSarif, renderInspectionText } = require('../src/sarif-inspection.cjs');
-const { createSarifDocument, addSarifComment } = require('../src/sarif-authoring.cjs');
-const { prepareReview } = require('../src/prepare-review.cjs');
+const { inspectSarif, renderInspectionText } = require('../dist/sarif-inspection.cjs');
+const { createSarifDocument, addSarifComment } = require('../dist/sarif-authoring.cjs');
+const { prepareReview } = require('../dist/prepare-review.cjs');
 
 const UPSTREAM = path.join(__dirname, 'fixtures', 'sarif-inspection', 'upstream.sarif.json');
 const loadUpstream = () => JSON.parse(fs.readFileSync(UPSTREAM, 'utf8'));

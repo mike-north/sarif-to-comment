@@ -21,7 +21,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { publishPreparedReview, recoverPublication } = require('../../../src/publication.cjs');
+const { publishPreparedReview, recoverPublication } = require('../../../dist/publication.cjs');
 const { FakeGitHubRemote, DEFAULT_USER } = require('./fake-github.cjs');
 
 const FIXTURE = JSON.parse(fs.readFileSync(path.join(__dirname, 'prepared-review.json'), 'utf8'));

@@ -51,7 +51,7 @@ const {
   publishPreparedReview,
   recoverPublication,
   PublicationStateError,
-} = require('../src/publication.cjs');
+} = require('../dist/publication.cjs');
 const { FakeGitHubRemote, DEFAULT_USER, SENTINEL_TOKEN } = require('./fixtures/publication/fake-github.cjs');
 
 const FIXTURE_DIR = path.join(__dirname, 'fixtures', 'publication');

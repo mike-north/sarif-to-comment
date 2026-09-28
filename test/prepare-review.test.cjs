@@ -38,7 +38,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-const { prepareReview, PRODUCT_LIMITS } = require('../src/prepare-review.cjs');
+const { prepareReview, PRODUCT_LIMITS } = require('../dist/prepare-review.cjs');
 
 const FIXTURE_DIR = path.join(__dirname, 'fixtures', 'prepare-review');
 const loadJson = (name) => JSON.parse(fs.readFileSync(path.join(FIXTURE_DIR, name), 'utf8'));
@@ -1374,7 +1374,7 @@ describe('regression: native suggestions are emitted only where the observed hos
     test(`${name}: ${expected}`, async () => {
       const p = `${probeDirName}/${name}`;
       const probe = probeApplied.find((r) => r.path === p);
-      const { applyReplacement } = require('../src/replacements.cjs');
+      const { applyReplacement } = require('../dist/replacements.cjs');
       const intended = applyReplacement({ sourceText: heads[name], deletedRegion: region, insertedText: inserted, columnKind: 'utf16CodeUnits' });
       assert.equal(intended.editedText, probe.expected, 'the fixture edit must intend the probe\'s expected file');
 

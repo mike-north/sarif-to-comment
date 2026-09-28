@@ -36,7 +36,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { applyReplacement } = require('../src/replacements.cjs');
+const { applyReplacement } = require('../dist/replacements.cjs');
 
 const FIXTURE_DIR = path.join(__dirname, 'fixtures', 'replacements');
 

@@ -32,7 +32,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-const { publishSarifReview } = require('../src/index.cjs');
+const { publishSarifReview } = require('../dist/index.cjs');
 const { FakeGitHubRemote } = require('./fixtures/publication/fake-github.cjs');
 const {
   REPOSITORY,

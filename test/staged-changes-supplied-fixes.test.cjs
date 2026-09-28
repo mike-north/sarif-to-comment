@@ -23,7 +23,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { addStagedChangesToSarif } = require('../src/staged-changes.cjs');
+const { addStagedChangesToSarif } = require('../dist/staged-changes.cjs');
 const { createFixtureRepo, removeFixtureRepo } = require('./fixtures/staged-changes/git-fixture.cjs');
 
 const REPOSITORY = { owner: 'acme', repo: 'widgets' };

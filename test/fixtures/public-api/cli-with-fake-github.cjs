@@ -10,7 +10,7 @@
  * FAKE_GITHUB_DIR environment variable, which the CLI itself ignores.
  */
 
-const { main } = require('../../../bin/sarif-to-comment.cjs');
+const { main } = require('../../../dist/sarif-to-comment.cjs');
 const { createFakeClientFactory } = require('./fake-adapter.cjs');
 
 const remoteDir = process.env.FAKE_GITHUB_DIR;

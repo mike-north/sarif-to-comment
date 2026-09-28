@@ -9,8 +9,8 @@
  * product's own.
  */
 
-const { main } = require('../../../bin/sarif-to-comment.cjs');
-const { createGitHubClient } = require('../../../src/github.cjs');
+const { main } = require('../../../dist/sarif-to-comment.cjs');
+const { createGitHubClient } = require('../../../dist/github.cjs');
 const { FakeHttpGitHub } = require('./fake-http-github.cjs');
 
 const dir = process.env.FAKE_HTTP_GITHUB_DIR;

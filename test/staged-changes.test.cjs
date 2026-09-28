@@ -21,8 +21,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { addStagedChangesToSarif } = require('../src/staged-changes.cjs');
-const { MODE } = require('../src/staged-git.cjs');
+const { addStagedChangesToSarif } = require('../dist/staged-changes.cjs');
+const { MODE } = require('../dist/staged-git.cjs');
 const {
   addConflict,
   addIntentToAdd,
@@ -241,7 +241,7 @@ test('a schema-invalid document is refused with fields in contract order', async
 });
 
 test('selected path output is accepted by the unchanged publisher preparation as two native suggestions', async () => {
-  const { prepareReview } = require('../src/prepare-review.cjs');
+  const { prepareReview } = require('../dist/prepare-review.cjs');
   const repo = fixture({
     before: { [ORACLE.path]: ORACLE.base },
     reviewed: { [ORACLE.path]: ORACLE.reviewed },

@@ -38,7 +38,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const util = require('node:util');
 
-const { createGitHubClient, GitHubError } = require('../src/github.cjs');
+const { createGitHubClient, GitHubError } = require('../dist/github.cjs');
 
 const FIXTURE_DIR = path.join(__dirname, 'fixtures', 'github');
 const load = (name) => JSON.parse(fs.readFileSync(path.join(FIXTURE_DIR, name), 'utf8'));

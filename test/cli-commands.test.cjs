@@ -35,7 +35,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-const library = require('../src/index.cjs');
+const library = require('../dist/index.cjs');
 const { FakeGitHubRemote } = require('./fixtures/publication/fake-github.cjs');
 const { REPOSITORY, setAdapterConfig } = require('./fixtures/public-api/fake-adapter.cjs');
 const {
@@ -49,7 +49,7 @@ const {
 } = require('./fixtures/authoring-workflow/git-world.cjs');
 
 const ROOT = path.resolve(__dirname, '..');
-const BIN = path.join(ROOT, 'bin', 'sarif-to-comment.cjs');
+const BIN = path.join(ROOT, 'dist', 'sarif-to-comment.cjs');
 const WRAPPER = path.join(ROOT, 'test', 'fixtures', 'public-api', 'cli-with-fake-github.cjs');
 const PKG = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
 const SCHEMA_URI = 'https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json';

@@ -43,7 +43,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-const { classifyPlacement } = require('../src/placement.cjs');
+const { classifyPlacement } = require('../dist/placement.cjs');
 
 const FIXTURE_DIR = path.join(__dirname, 'fixtures', 'placement');
 const fixture = JSON.parse(fs.readFileSync(path.join(FIXTURE_DIR, 'pr-basic.json'), 'utf8'));

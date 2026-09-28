@@ -48,9 +48,9 @@ const os = require('node:os');
 const path = require('node:path');
 const util = require('node:util');
 
-const { publishSarifReview } = require('../src/index.cjs');
-const { GitHubError } = require('../src/github.cjs');
-const { prepareReview } = require('../src/prepare-review.cjs');
+const { publishSarifReview } = require('../dist/index.cjs');
+const { GitHubError } = require('../dist/github.cjs');
+const { prepareReview } = require('../dist/prepare-review.cjs');
 const { FakeGitHubRemote, DEFAULT_USER } = require('./fixtures/publication/fake-github.cjs');
 const {
   REPOSITORY,

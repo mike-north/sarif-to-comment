@@ -21,9 +21,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { createSarifDocument, addSarifComment } = require('../src/sarif-authoring.cjs');
-const { validateSarif } = require('../src/sarif-common.cjs');
-const { prepareReview } = require('../src/prepare-review.cjs');
+const { createSarifDocument, addSarifComment } = require('../dist/sarif-authoring.cjs');
+const { validateSarif } = require('../dist/sarif-common.cjs');
+const { prepareReview } = require('../dist/prepare-review.cjs');
 
 const PACKAGE_VERSION = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8')).version;
 const SCHEMA_URI = 'https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json';

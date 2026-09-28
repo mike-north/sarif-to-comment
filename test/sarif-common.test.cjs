@@ -23,8 +23,8 @@ const test = require('node:test');
 const { describe } = test;
 const assert = require('node:assert/strict');
 
-const common = require('../src/sarif-common.cjs');
-const { prepareReview } = require('../src/prepare-review.cjs');
+const common = require('../dist/sarif-common.cjs');
+const { prepareReview } = require('../dist/prepare-review.cjs');
 
 const HEAD = 'c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de';
 const BASE = 'ba5eba5eba5eba5eba5eba5eba5eba5eba5eba5e';

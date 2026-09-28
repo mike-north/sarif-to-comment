@@ -28,7 +28,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const files = require('../src/artifact-files.cjs');
+const files = require('../dist/artifact-files.cjs');
 
 const tempDir = () => fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'artifact-files-')));
 
