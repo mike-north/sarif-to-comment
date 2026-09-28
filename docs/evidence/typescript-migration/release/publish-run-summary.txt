@@ -1,0 +1,7 @@
+publish	Lint, type-check, API/docs freshness, release plan and tests	2026-09-28T22:24:38.1991656Z ℹ tests 1917
+publish	Lint, type-check, API/docs freshness, release plan and tests	2026-09-28T22:24:38.1991867Z ℹ suites 150
+publish	Lint, type-check, API/docs freshness, release plan and tests	2026-09-28T22:24:38.1992073Z ℹ pass 1917
+publish	Lint, type-check, API/docs freshness, release plan and tests	2026-09-28T22:24:38.1992274Z ℹ fail 0
+publish	Lint, type-check, API/docs freshness, release plan and tests	2026-09-28T22:24:38.1992682Z ℹ skipped 0
+publish	Verify the tarball is exactly the distribution boundary	2026-09-28T22:24:39.1284162Z Verified sarif-to-comment-0.2.1.tgz: 247 files, all inside the distribution boundary.
+publish	Publish the verified tarball	2026-09-28T22:24:43.8838105Z + sarif-to-comment@0.2.1

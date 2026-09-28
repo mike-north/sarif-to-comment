@@ -1,0 +1,81 @@
+{
+  "status": "registry-release-verified",
+  "version": "0.2.1",
+  "releaseCommit": "a320567fb4b8267bb5f71228ffda75694ac9ef89",
+  "ciRun": 36492031264,
+  "publishRun": 36492031213,
+  "tarballSha256": "85d3ef8099f2692df9b5a29b5fe0ed45120a76a1d26e1b414b87f7b1d290508a",
+  "registrySha1": "bf8aeba342a2316270b9726725a0d958fd6ce2fc",
+  "registryIntegrity": "sha512-MQaINcLB/+GCyovKYpTxFrs5BA59yBKKQa2LPPUwbkNNNpEPW3OsCLngFfwCeKugOp4OeAZDNlxW2W7GajlKwg==",
+  "identicalPackageFiles": 247,
+  "registrySignaturesAndAttestationsVerified": true,
+  "provenanceBindingVerified": true,
+  "attestationSubjectSha512": "31068835c2c1ffe182ca8bca6294f116bb39040e7dc8128a41ad8b3cf5306e434d36910f5b73ac08b9e015fc0278aba03a9e0e780643365c56d96ec66a394ac2",
+  "installedAcceptance": {
+    "24.14.0": {
+      "libraryCliUpstream": {
+        "status": "passed",
+        "packageVersion": "0.2.1",
+        "reviewedCommit": "998d7cfc7c858adf3bbcea82ef126a900d51ebc3",
+        "paths": [
+          "installed-library",
+          "installed-cli-json",
+          "ordinary-upstream-bypass"
+        ],
+        "remoteAcceptance": "not executed by this runner"
+      },
+      "insertions": {
+        "status": "local-passed",
+        "mode": "insertions",
+        "reviewedCommit": "998d7cfc7c858adf3bbcea82ef126a900d51ebc3",
+        "tarballSha256": "85d3ef8099f2692df9b5a29b5fe0ed45120a76a1d26e1b414b87f7b1d290508a",
+        "independentEditedBytes": true,
+        "unchangedFeedbackSeparate": true
+      }
+    },
+    "22.18.0": {
+      "libraryCliUpstream": {
+        "status": "passed",
+        "packageVersion": "0.2.1",
+        "reviewedCommit": "998d7cfc7c858adf3bbcea82ef126a900d51ebc3",
+        "paths": [
+          "installed-library",
+          "installed-cli-json",
+          "ordinary-upstream-bypass"
+        ],
+        "remoteAcceptance": "not executed by this runner"
+      },
+      "insertions": {
+        "status": "local-passed",
+        "mode": "insertions",
+        "reviewedCommit": "998d7cfc7c858adf3bbcea82ef126a900d51ebc3",
+        "tarballSha256": "85d3ef8099f2692df9b5a29b5fe0ed45120a76a1d26e1b414b87f7b1d290508a",
+        "independentEditedBytes": true,
+        "unchangedFeedbackSeparate": true
+      }
+    }
+  },
+  "runnerAndOracleHashes": {
+    "logs/opus/m2/installed-typescript-acceptance.cjs": "8518c2e25d83c4248ce5d750f150cefdc2fdffa8ce213045646f501754dabb23",
+    "logs/opus/m2/installed-insertion-acceptance.cjs": "1b59c357b628416eb690c76f996ce96d5ae85c3f4fb693dffebe534792e37703",
+    "docs/evidence/second-milestone/source-oracle.json": "8a51cec87afc8e60f3c5139273e74503a4ead44794c2de6fd8099cd1565cefcd",
+    "docs/evidence/second-milestone/insertion-source-oracle.json": "ae50e0264dbb8f0b229edf575b56903475cdbae9f8777f5863e418c678562f70"
+  },
+  "unrelatedFilesPreserved": true,
+  "newRemoteProductAcceptance": "Not performed; migration preserves prior public behavior and is supported by local installed acceptance and historical live evidence.",
+  "rawPublishLogSha256": "105c51637c6393deca91f117c2dd2c11e5268e2380a7fe0571b3c3983597e455",
+  "evidenceHashes": {
+    "ci-run.json": "e97e7aeff9b27658ff3a596100cc520a45e02563965f75bfe2d6892df59d6bee",
+    "publish-run.json": "8e49df5e32a3e731606f7b666d3354a4202aedcaf937918defc3f530f2cfa783",
+    "registry-metadata.json": "2f63070e2ab11d483e5808a1ade7feaff733f8591b2f874d43d226850fb08e0f",
+    "registry-file-identity.json": "80883fad676622186917f1cefc7db28bc112d1ae7d8274317724f8c1a9d7e018",
+    "registry-install.txt": "3ec9465b2d602705be8b219f33111a83800eb0a8c2515dad434d4049546044a0",
+    "signature-verification.json": "b42b58ace6f5f71857469310f2381722592c16554df2b61e217af86d4587dbde",
+    "attestation-statements.json": "b9f4f31689612ec271d63a8e6c6b99b8af88893769ac99f2e0669e56c246b34d",
+    "registry-local.txt": "23d989fb245c429bb5c33f166b9a6b4a50403137bd1790f49bd9accd0b302fdc",
+    "registry-local-node22.txt": "23d989fb245c429bb5c33f166b9a6b4a50403137bd1790f49bd9accd0b302fdc",
+    "registry-insertion.txt": "2a2936dca8746b8e0f3da2b4e845d6ee6640f65fc96afcb6e8d0bfae0599c0c1",
+    "registry-insertion-node22.txt": "2a2936dca8746b8e0f3da2b4e845d6ee6640f65fc96afcb6e8d0bfae0599c0c1",
+    "publish-run-summary.txt": "34cdf06c9d818a4080b0ec9bbaac1593a9fa39866a487b4d5b73120b02d560d7"
+  }
+}

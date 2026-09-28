@@ -1,0 +1,1 @@
+{"status":"passed","packageVersion":"0.2.1","reviewedCommit":"998d7cfc7c858adf3bbcea82ef126a900d51ebc3","paths":["installed-library","installed-cli-json","ordinary-upstream-bypass"],"remoteAcceptance":"not executed by this runner"}

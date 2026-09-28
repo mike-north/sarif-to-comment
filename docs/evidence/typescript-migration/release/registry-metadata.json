@@ -1,0 +1,135 @@
+{
+  "_id": "sarif-to-comment@0.2.1",
+  "_rev": "5-9d5c8ab40f93460ac540192e6ea81024",
+  "name": "sarif-to-comment",
+  "dist-tags": {
+    "latest": "0.2.1"
+  },
+  "versions": [
+    "0.0.0",
+    "0.1.0",
+    "0.1.1",
+    "0.2.0",
+    "0.2.1"
+  ],
+  "time": {
+    "created": "2026-09-27T18:19:21.313Z",
+    "modified": "2026-09-28T22:26:20.373Z",
+    "0.0.0": "2026-09-27T18:19:21.648Z",
+    "0.1.0": "2026-09-28T06:08:46.602Z",
+    "0.1.1": "2026-09-28T14:07:38.402Z",
+    "0.2.0": "2026-09-28T17:30:56.833Z",
+    "0.2.1": "2026-09-28T22:26:20.072Z"
+  },
+  "bugs": {
+    "url": "https://github.com/mike-north/sarif-to-comment/issues"
+  },
+  "license": "ISC",
+  "homepage": "https://github.com/mike-north/sarif-to-comment#readme",
+  "keywords": [
+    "sarif",
+    "github",
+    "code-review",
+    "pull-request"
+  ],
+  "repository": {
+    "url": "git+https://github.com/mike-north/sarif-to-comment.git",
+    "type": "git"
+  },
+  "description": "Write, inspect and publish SARIF 2.1.0 findings as one GitHub draft pull request review, with durable, never-duplicating delivery.",
+  "maintainers": [
+    "northm <michael.l.north@gmail.com>"
+  ],
+  "readmeFilename": "README.md",
+  "bin": {
+    "sarif-to-comment": "dist/sarif-to-comment.cjs"
+  },
+  "dist": {
+    "shasum": "bf8aeba342a2316270b9726725a0d958fd6ce2fc",
+    "tarball": "https://registry.npmjs.org/sarif-to-comment/-/sarif-to-comment-0.2.1.tgz",
+    "fileCount": 247,
+    "integrity": "sha512-MQaINcLB/+GCyovKYpTxFrs5BA59yBKKQa2LPPUwbkNNNpEPW3OsCLngFfwCeKugOp4OeAZDNlxW2W7GajlKwg==",
+    "signatures": [
+      {
+        "sig": "MEUCIGNcMLQiwn96u0b6S/1y3mM3V3120eW1cUJQ90up0aajAiEA9m2dbIfOw/6If3+XXPbo4a1OgOyhl1kbfzh84n0d7Bk=",
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+      },
+      {
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+        "sig": "MEYCIQC7Dga7s7SUd14Hlqkrzh9ByU2+nhOIG+zyl4YR51DtHAIhAKXCwKUV/a6xrk7MI8lP8PEWNxmf32+ClovrIOEokf8C"
+      }
+    ],
+    "attestations": {
+      "url": "https://registry.npmjs.org/-/npm/v1/attestations/sarif-to-comment@0.2.1",
+      "provenance": {
+        "predicateType": "https://slsa.dev/provenance/v1"
+      }
+    },
+    "unpackedSize": 888316
+  },
+  "main": "./dist/index.cjs",
+  "type": "commonjs",
+  "_from": "file:/home/runner/work/_temp/release/sarif-to-comment-0.2.1.tgz",
+  "types": "./dist/sarif-to-comment.d.ts",
+  "author": "",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/sarif-to-comment.d.ts",
+      "default": "./dist/index.cjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "test": "npm run check:build && node --test \"test/**/*.test.mts\"",
+    "build": "node scripts/build.mts",
+    "check": "npm run check:lint && npm run check:types && npm run check:api && npm run check:release && npm test",
+    "check:api": "node scripts/api-docs.mts check",
+    "check:lint": "eslint .",
+    "check:build": "node scripts/build-manifest.mts verify",
+    "check:types": "node scripts/check-types.mts",
+    "check:release": "node scripts/release-guard.mts plan",
+    "prepublishOnly": "node scripts/release-guard.mts check-version",
+    "release:version": "node scripts/release-guard.mts version"
+  },
+  "version": "0.2.1",
+  "_npmUser": "GitHub Actions <npm-oidc-no-reply@github.com>",
+  "_resolved": "/home/runner/work/_temp/release/sarif-to-comment-0.2.1.tgz",
+  "_integrity": "sha512-MQaINcLB/+GCyovKYpTxFrs5BA59yBKKQa2LPPUwbkNNNpEPW3OsCLngFfwCeKugOp4OeAZDNlxW2W7GajlKwg==",
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "onFail": "error",
+      "version": ">=22.18.0"
+    }
+  },
+  "_npmVersion": "11.19.0",
+  "directories": {},
+  "_nodeVersion": "24.21.0",
+  "dependencies": {
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "ajv-draft-04": "^1.0.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "_hasShrinkwrap": false,
+  "devDependencies": {
+    "eslint": "^10.11.0",
+    "prettier": "^3.9.9",
+    "typescript": "~5.9.3",
+    "@types/node": "22.20.4",
+    "@changesets/cli": "^3.0.3",
+    "typescript-eslint": "8.70.1",
+    "@microsoft/api-extractor": "^7.59.2",
+    "@microsoft/api-documenter": "^7.30.16"
+  },
+  "_npmOperationalInternal": {
+    "host": "s3://npm-registry-packages-npm-production",
+    "tmp": "tmp/sarif-to-comment_0.2.1_1790634379953_0.9870973643348502"
+  }
+}
