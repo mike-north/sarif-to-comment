@@ -1,13 +1,13 @@
 # npm release verification
 
-`sarif-to-comment@0.1.0` was published by npm trusted publishing from GitHub Actions and installed successfully from the public npm registry. The CLI, library, type declarations and shipped documentation were verified. The source repository was private at the start of this task but was observed public after publication; no agent changed visibility. The user's visibility decision is pending, so the full task is not yet complete.
+`sarif-to-comment@0.1.0` was published by npm trusted publishing from GitHub Actions and installed successfully from the public npm registry. The CLI, library, type declarations and shipped documentation were verified. The source repository was private at the start of this task but was observed public after publication; no agent changed visibility. On 2026-09-28 the user explicitly instructed: ‘Keep it public.’ This supersedes the earlier private-visibility constraint. The documentation correction is being released as 0.1.1.
 
 ## Acceptance record
 
 | Requirement | Evidence | Status |
 | --- | --- | --- |
 | npm trusted-publisher connection | Saved `mike-north/sarif-to-comment` / `publish.yml` connection, permitting `npm publish`; [screenshot](evidence/npm-release/trusted-publisher.png). [Release run](https://github.com/mike-north/sarif-to-comment/actions/runs/36384821585) succeeded without an npm token in the workflow. | Verified for the actual release |
-| Source repository visibility | Authenticated reads returned PRIVATE before the setup push and PUBLIC after publication. [Current observation](evidence/npm-release/visibility-after-publish.json). | User confirmation pending; private visibility has not been preserved through the entire run |
+| Source repository visibility | Authenticated reads returned PRIVATE before the setup push and PUBLIC after publication. [Current observation](evidence/npm-release/visibility-after-publish.json). | User explicitly chose to keep it public on 2026-09-28; the earlier private constraint is superseded |
 | Changesets release process | The real `release:version` command consumed the initial minor Changeset and generated version 0.1.0 and its changelog entry. [Release commit](https://github.com/mike-north/sarif-to-comment/commit/3797ca6efe2156d4c952fad7fed10b569f1dcbbb). | Verified |
 | Pre-1.0 safeguard | Independent review reproduced quoted and unquoted major refusal, patch/minor progression and the deliberate ceiling override in temporary copies; actual ceiling remains 0. [27 deliberate defects](evidence/npm-release/mutation-results.txt) were detected. | Verified |
 | API Extractor / API Documenter | Generated API report and 38 Markdown pages; independent mutation probes rejected stale declarations, signatures, pages, orphan pages and report edits. Published declarations and all generated pages match source. | Verified |
@@ -25,7 +25,7 @@
 
 The source was unexpectedly public by the time 0.1.0 was published. npm therefore generated an attestation, and npm's own verifier accepted it. Its payload identifies commit `3797ca6efe2156d4c952fad7fed10b569f1dcbbb`, `.github/workflows/publish.yml`, and run `36384821585`. That proves this public-source release; it does not demonstrate a private-source release. The published registry metadata has no `gitHead` field. Commit attribution comes from the verified attestation and release-run evidence.
 
-A user question asks whether the visibility change was intentional or private visibility should be restored. No further visibility-dependent release will be made before that answer. Local documentation corrections describe provenance conditionally and remove the unsupported `gitHead` promise. The same author recorded failing documentation regressions before the edits and passed the full check with 1,415 tests; the parent independently inspected the correction and passed all 29 documentation tests. A prepared patch Changeset will carry those corrections into 0.1.1 once the visibility decision is resolved.
+On 2026-09-28 the user answered “Keep it public.” A fresh authenticated read confirmed PUBLIC. No visibility mutation was needed; the follow-up release retains public source and can receive automatic provenance. Local documentation corrections describe provenance conditionally and remove the unsupported `gitHead` promise. The same author recorded failing documentation regressions before the edits and passed the full check with 1,415 tests; the parent independently inspected the correction and passed all 29 documentation tests. A prepared patch Changeset will carry those corrections into 0.1.1 under this confirmed public-source decision.
 
 ## Review and runner repairs
 
