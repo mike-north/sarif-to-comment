@@ -1,0 +1,240 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "E2ELint",
+          "version": "1.0.0",
+          "rules": [
+            {
+              "id": "E2E001"
+            },
+            {
+              "id": "E2E002"
+            },
+            {
+              "id": "E2E003"
+            },
+            {
+              "id": "E2E004"
+            },
+            {
+              "id": "E2E005"
+            },
+            {
+              "id": "E2E006"
+            },
+            {
+              "id": "E2E007"
+            },
+            {
+              "id": "E2E008"
+            },
+            {
+              "id": "E2E009"
+            }
+          ]
+        }
+      },
+      "columnKind": "utf16CodeUnits",
+      "results": [
+        {
+          "ruleId": "E2E001",
+          "message": {
+            "text": "General fixture note with no source location"
+          }
+        },
+        {
+          "ruleId": "E2E002",
+          "message": {
+            "text": "First line of the file"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "sarif-e2e-fixture/alpha.txt"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "E2E003",
+          "message": {
+            "text": "Added line inserted first"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "sarif-e2e-fixture/alpha.txt"
+                },
+                "region": {
+                  "startLine": 2
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "E2E004",
+          "message": {
+            "text": "Unchanged context shifted by the insertion and deletion"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "sarif-e2e-fixture/alpha.txt"
+                },
+                "region": {
+                  "startLine": 5,
+                  "endLine": 7
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "E2E005",
+          "message": {
+            "text": "Last line in the second hunk"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "sarif-e2e-fixture/alpha.txt"
+                },
+                "region": {
+                  "startLine": 21
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "E2E006",
+          "message": {
+            "text": "Unchanged line outside every hunk"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "sarif-e2e-fixture/alpha.txt"
+                },
+                "region": {
+                  "startLine": 12
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "E2E007",
+          "message": {
+            "text": "Name the parameter person"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "sarif-e2e-fixture/gamma.js"
+                },
+                "region": {
+                  "startLine": 8,
+                  "startColumn": 19,
+                  "endColumn": 23
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "E2E008",
+          "message": {
+            "text": "Return the greeting directly"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "sarif-e2e-fixture/gamma.js"
+                },
+                "region": {
+                  "startLine": 9,
+                  "endLine": 10
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "E2E009",
+          "message": {
+            "text": "Added non-ASCII line"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "sarif-e2e-fixture/notes.md"
+                },
+                "region": {
+                  "startLine": 4
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "tool": {
+        "driver": {
+          "name": "E2EHistory",
+          "version": "1.0.0",
+          "rules": [
+            {
+              "id": "E2H001"
+            }
+          ]
+        }
+      },
+      "columnKind": "utf16CodeUnits",
+      "versionControlProvenance": [
+        {
+          "repositoryUri": "https://github.com/mike-north/doc-linter",
+          "revisionId": "5a5ca130467bb00993c4dc10701bc40f4167796e"
+        }
+      ],
+      "results": [
+        {
+          "ruleId": "E2H001",
+          "message": {
+            "text": "Deleted base line"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "sarif-e2e-fixture/alpha.txt"
+                },
+                "region": {
+                  "startLine": 3
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

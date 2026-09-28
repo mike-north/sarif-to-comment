@@ -1,0 +1,28 @@
+{
+  "format": "sarif-to-comment.publication-state",
+  "version": 1,
+  "phase": "completed",
+  "marker": "<!-- sarif-to-comment:review:9f0cbd16-c626-47b4-8b4f-0671619f2b66 -->",
+  "destination": {
+    "owner": "mike-north",
+    "repo": "doc-linter",
+    "pullNumber": 16
+  },
+  "reviewedCommit": "54cae057bc66ef7b49c3186923e0be0a0a0917ae",
+  "inputFingerprint": "sha256:e0f07895e60dc07efe831f78c8544a86ae8394746bba91531041761eae702857",
+  "authorId": 558005,
+  "request": {
+    "owner": "mike-north",
+    "repo": "doc-linter",
+    "pullNumber": 16,
+    "commitId": "54cae057bc66ef7b49c3186923e0be0a0a0917ae",
+    "body": "**Source:** [apply-fixture/crlf-notes.txt lines 1-2 at 54cae05](https://github.com/mike-north/doc-linter/blob/54cae057bc66ef7b49c3186923e0be0a0a0917ae/apply-fixture/crlf-notes.txt#L1-L2)\n\n```\nalpha\r\nbeta\n```\n\nQuoted CRLF source outside the diff\n\n<sub>— E2EApply 1.0.0 · rule `AP004`</sub>\n\n<!-- sarif-to-comment:review:9f0cbd16-c626-47b4-8b4f-0671619f2b66 -->",
+    "comments": []
+  },
+  "requestFingerprint": "sha256:554881eeddb0d5a6ed673c5200ef958f71a2027990113bec8bf0bddea3a8b47a",
+  "receipt": {
+    "reviewId": 5333374050,
+    "htmlUrl": "https://github.com/mike-north/doc-linter/pull/16#pullrequestreview-5333374050",
+    "via": "created"
+  }
+}

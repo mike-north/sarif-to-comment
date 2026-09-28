@@ -1,0 +1,67 @@
+{
+  "$schema": "https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": { "driver": { "name": "CalcLint", "version": "2.0.0" } },
+      "columnKind": "utf16CodeUnits",
+      "results": [
+        {
+          "message": { "text": "mul is exported without tests." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "src/calc.js" }, "region": { "startLine": 7 } } }]
+        },
+        {
+          "message": { "text": "Document the new function." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "src/calc.js" }, "region": { "startLine": 7, "endLine": 8 } } }]
+        },
+        {
+          "message": { "text": "Closing brace of add is unchanged context." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "src/calc.js" }, "region": { "startLine": 5 } } }]
+        },
+        {
+          "message": { "text": "Operands should be ordered consistently." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "src/calc.js" }, "region": { "startLine": 8, "startColumn": 10, "endColumn": 15 } } }],
+          "fixes": [
+            {
+              "description": { "text": "Swap the operands." },
+              "artifactChanges": [
+                {
+                  "artifactLocation": { "uri": "src/calc.js" },
+                  "replacements": [
+                    { "deletedRegion": { "startLine": 8, "startColumn": 10, "endColumn": 15 }, "insertedContent": { "text": "b * a" } }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        { "message": { "text": "Consider a changelog entry." } },
+        {
+          "message": { "text": "The notes should mention mul." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "docs/notes.md" }, "region": { "startLine": 3 } } }]
+        }
+      ]
+    },
+    {
+      "tool": { "driver": { "name": "BaseAudit", "version": "1.0.0" } },
+      "columnKind": "utf16CodeUnits",
+      "versionControlProvenance": [
+        { "repositoryUri": "https://github.com/octo/calc", "revisionId": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0" }
+      ],
+      "results": [
+        {
+          "message": { "text": "legacy returned a constant; confirm no caller depended on it." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "src/calc.js" }, "region": { "startLine": 8 } } }]
+        },
+        {
+          "message": { "text": "The legacy export is removed." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "src/calc.js" }, "region": { "startLine": 11 } } }]
+        },
+        {
+          "message": { "text": "add was already correct in the base." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "src/calc.js" }, "region": { "startLine": 4 } } }]
+        }
+      ]
+    }
+  ]
+}

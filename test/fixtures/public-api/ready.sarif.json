@@ -1,0 +1,26 @@
+{
+  "$schema": "https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": { "driver": { "name": "LintBot", "version": "1.4.0", "rules": [{ "id": "LB7" }] } },
+      "columnKind": "utf16CodeUnits",
+      "results": [
+        { "message": { "text": "Consider documenting the new limits in the changelog." } },
+        {
+          "ruleId": "LB7",
+          "ruleIndex": 0,
+          "message": { "text": "MAX is exported but never validated." },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "src/app.js" },
+                "region": { "startLine": 4 }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

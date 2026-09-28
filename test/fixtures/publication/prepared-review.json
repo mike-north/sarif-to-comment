@@ -1,0 +1,62 @@
+{
+  "$comment": "input.inputFingerprint stands for the trusted caller's identity of the original SARIF artifact plus options; it is independent of the prepared request. A wholly validated prepared contribution as the core would hand it to the publication coordinator, plus the create-review request the coordinator must send for it. expectedRequest is authored separately from input (not derived from it) so a coordinator that drops, reorders fields of, rewrites, or re-targets a comment is detected. expectedRequest.bodyBeforeMarker is the body the request must carry before the coordinator's single appended marker; the marker itself is random per publication identity and is checked structurally.",
+  "input": {
+    "destination": { "owner": "octo-org", "repo": "widgets", "pullNumber": 42 },
+    "reviewedCommit": "3f9c2a7b1e4d5c6f708192a3b4c5d6e7f8091a2b",
+    "inputFingerprint": "sha256:9d1e4c7a2b8f3065e1d4c9a7b2f8e3d6c1a5b9f4e2d8c7a3b6f1e9d4c2a8b7f3",
+    "preparedReview": {
+      "body": "## Automated review\n\nThree findings need attention before merge.\n\n- Documentation: the changed parser is not described in [README.md at 3f9c2a7](https://github.com/octo-org/widgets/blob/3f9c2a7b1e4d5c6f708192a3b4c5d6e7f8091a2b/README.md#L3) — mise à jour nécessaire.",
+      "comments": [
+        {
+          "path": "src/parser.js",
+          "side": "RIGHT",
+          "line": 17,
+          "body": "**no-shadow**: `value` shadows the outer binding declared on line 4.\n\n_Reported by eslint, rule no-shadow._"
+        },
+        {
+          "path": "src/parser.js",
+          "side": "RIGHT",
+          "startSide": "RIGHT",
+          "startLine": 30,
+          "line": 32,
+          "body": "Prefer the shared helper here.\n\n```suggestion\nconst total = sum(values);\nreturn total;\n```\n\n_Reported by doc-linter._"
+        },
+        {
+          "path": "lib/legacy.js",
+          "side": "LEFT",
+          "line": 8,
+          "body": "The removed guard was load-bearing — 見てください (see issue tracker)."
+        }
+      ]
+    }
+  },
+  "expectedRequest": {
+    "owner": "octo-org",
+    "repo": "widgets",
+    "pullNumber": 42,
+    "commitId": "3f9c2a7b1e4d5c6f708192a3b4c5d6e7f8091a2b",
+    "bodyBeforeMarker": "## Automated review\n\nThree findings need attention before merge.\n\n- Documentation: the changed parser is not described in [README.md at 3f9c2a7](https://github.com/octo-org/widgets/blob/3f9c2a7b1e4d5c6f708192a3b4c5d6e7f8091a2b/README.md#L3) — mise à jour nécessaire.",
+    "comments": [
+      {
+        "path": "src/parser.js",
+        "side": "RIGHT",
+        "line": 17,
+        "body": "**no-shadow**: `value` shadows the outer binding declared on line 4.\n\n_Reported by eslint, rule no-shadow._"
+      },
+      {
+        "path": "src/parser.js",
+        "side": "RIGHT",
+        "startSide": "RIGHT",
+        "startLine": 30,
+        "line": 32,
+        "body": "Prefer the shared helper here.\n\n```suggestion\nconst total = sum(values);\nreturn total;\n```\n\n_Reported by doc-linter._"
+      },
+      {
+        "path": "lib/legacy.js",
+        "side": "LEFT",
+        "line": 8,
+        "body": "The removed guard was load-bearing — 見てください (see issue tracker)."
+      }
+    ]
+  }
+}

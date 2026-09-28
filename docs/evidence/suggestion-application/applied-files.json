@@ -1,0 +1,38 @@
+{
+  "method": "Three native GitHub Apply suggestion / Commit changes UI operations in signed-in Chrome; independent immutable-commit REST content reads and local exact-byte/Git blob comparison. No expected replacement text was committed through Git or API.",
+  "head": "ee7d1ea18c3e99cbd399194eecdb9c908c190e94",
+  "main": "0a7b03fe399255a62118311cbc3e1bd6fe64cb23",
+  "mainUnchanged": true,
+  "results": [
+    {
+      "path": "apply-fixture/one-to-three.txt",
+      "commit": "ee7d1ea18c3e99cbd399194eecdb9c908c190e94",
+      "bytes": 79,
+      "expectedBlob": "bc330c7477115f2e4a7aac83eb993a8078066f52",
+      "actualBlob": "bc330c7477115f2e4a7aac83eb993a8078066f52",
+      "exactBytesMatch": true,
+      "allChecksPass": true,
+      "actualText": "header line\nfirst replacement\nsecond replacement\nthird replacement\nfooter line\n"
+    },
+    {
+      "path": "apply-fixture/two-to-one.js",
+      "commit": "ee7d1ea18c3e99cbd399194eecdb9c908c190e94",
+      "bytes": 57,
+      "expectedBlob": "846ad07e232eaaa60c5e46462bbf373334429ed1",
+      "actualBlob": "846ad07e232eaaa60c5e46462bbf373334429ed1",
+      "exactBytesMatch": true,
+      "allChecksPass": true,
+      "actualText": "function farewell(name) {\n  return 'Goodbye, ' + name;\n}\n"
+    },
+    {
+      "path": "apply-fixture/delete-middle.txt",
+      "commit": "ee7d1ea18c3e99cbd399194eecdb9c908c190e94",
+      "bytes": 38,
+      "expectedBlob": "dd5ec2852977a3379935cb14ff2ecefb2f4a683e",
+      "actualBlob": "dd5ec2852977a3379935cb14ff2ecefb2f4a683e",
+      "exactBytesMatch": true,
+      "allChecksPass": true,
+      "actualText": "keep one\nkeep two\nkeep four\nkeep five\n"
+    }
+  ]
+}

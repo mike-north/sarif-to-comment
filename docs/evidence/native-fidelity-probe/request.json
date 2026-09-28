@@ -1,0 +1,62 @@
+{
+  "commit_id": "fcae0d6a3d5f926a671840a434923edb7331142a",
+  "body": "Synthetic native-suggestion fidelity probe.\n\n<!-- sarif-native-fidelity:20260927-nine-cases -->",
+  "comments": [
+    {
+      "path": "sarif-native-fidelity/lf.txt",
+      "side": "RIGHT",
+      "line": 2,
+      "body": "LF ordinary replacement\n\n```suggestion\nnew\n```"
+    },
+    {
+      "path": "sarif-native-fidelity/crlf-lf.txt",
+      "side": "RIGHT",
+      "line": 2,
+      "body": "CRLF source with LF suggestion body\n\n```suggestion\nnew\n```"
+    },
+    {
+      "path": "sarif-native-fidelity/crlf-crlf.txt",
+      "side": "RIGHT",
+      "line": 2,
+      "body": "CRLF source with CRLF suggestion content\n\n```suggestion\nnew\r\n```"
+    },
+    {
+      "path": "sarif-native-fidelity/no-final-newline.txt",
+      "side": "RIGHT",
+      "line": 2,
+      "body": "Preserve absent terminal newline\n\n```suggestion\nnew\n```"
+    },
+    {
+      "path": "sarif-native-fidelity/delete-last-line.txt",
+      "side": "RIGHT",
+      "line": 2,
+      "body": "Delete final line completely\n\n```suggestion\n```"
+    },
+    {
+      "path": "sarif-native-fidelity/blank-last-line.txt",
+      "side": "RIGHT",
+      "line": 2,
+      "body": "Replace final content line by one blank line\n\n```suggestion\n\n```"
+    },
+    {
+      "path": "sarif-native-fidelity/fences.md",
+      "side": "RIGHT",
+      "line": 2,
+      "body": "Preserve nested triple-backtick content\n\n````suggestion\n```js\ncode\n```\ntrailing\n````"
+    },
+    {
+      "path": "sarif-native-fidelity/delete-no-final-newline.txt",
+      "side": "RIGHT",
+      "line": 2,
+      "body": "Delete final line that lacks newline\n\n```suggestion\n```"
+    },
+    {
+      "path": "sarif-native-fidelity/multiline.txt",
+      "side": "RIGHT",
+      "line": 3,
+      "body": "Two-line native replacement\n\n```suggestion\nnew one\nnew two\n```",
+      "start_line": 2,
+      "start_side": "RIGHT"
+    }
+  ]
+}

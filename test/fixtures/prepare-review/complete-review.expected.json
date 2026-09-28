@@ -1,0 +1,94 @@
+{
+  "description": "Hand-authored expected preparation of complete-review.sarif.json against repository.json. Comment coordinates and host texts are written from the authored snapshots and patch, never captured from the implementation. Bodies follow the rendering rules in src/prepare-review.cjs: message, optional fix description, attribution line; merged suggestions separate items with a rule; a native suggestion fence closes the comment; general body sections are separated by rules and carry an exact-revision permalink with a literal source fence.",
+  "commitId": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+  "comments": [
+    {
+      "path": "src/app.js", "side": "RIGHT", "line": 3,
+      "hostText": "const DEFAULT_LIMIT = 25;",
+      "body": "Limit changed from 10 to 25.\n\n<sub>— LintBot 2.3.1 · rule `LB001`</sub>\n\n---\n\nPrefer a named constant for the default limit.\n\n<sub>— StyleBot 0.9.0 · rule `SB-7`</sub>\n\n```suggestion\nconst DEFAULT_LIMIT = 20;\n```"
+    },
+    {
+      "path": "src/app.js", "side": "RIGHT", "line": 7,
+      "hostText": "  return items.slice(0, limit).map((item) => item.id);",
+      "body": "Callers may pass \\`limit\\` above MAX\\_LIMIT.\n\n<sub>— LintBot 2.3.1 · rule `LB002`</sub>"
+    },
+    {
+      "path": "src/app.js", "side": "RIGHT", "line": 17,
+      "hostText": "  return total(values) / values.length;",
+      "body": "Guard against **empty** input.\n\n<sub>— LintBot 2.3.1 · rule `LB003`</sub>"
+    },
+    {
+      "path": "src/app.js", "side": "RIGHT", "startSide": "RIGHT", "startLine": 16, "line": 18,
+      "hostText": "function average(values) {\n  return total(values) / values.length;\n}",
+      "body": "average() divides by zero for empty arrays.\n\n**Fix:** Return 0 for an empty list.\n\n<sub>— LintBot 2.3.1 · rule `LB004`</sub>\n\n```suggestion\nfunction average(values) {\n  if (values.length === 0) return 0;\n  return total(values) / values.length;\n}\n```"
+    },
+    {
+      "path": "src/app.js", "side": "RIGHT", "line": 20,
+      "hostText": "module.exports = { fetchAll, total, average };",
+      "body": "Export list changed.\n\n<sub>— LintBot 2.3.1 · rule `LB002`</sub>"
+    },
+    {
+      "path": "docs/guide notes/Überblick.md", "side": "RIGHT", "line": 3,
+      "hostText": "Neue Beschreibung.",
+      "body": "Describe the new behaviour.\n\n<sub>— LintBot 2.3.1 · rule `DOC1`</sub>"
+    },
+    {
+      "path": "lib/legacy.js", "side": "LEFT", "line": 1,
+      "hostText": "module.exports = 'legacy';",
+      "body": "Removed module still referenced by docs.\n\n<sub>— HistoryBot</sub>"
+    },
+    {
+      "path": "src/app.js", "side": "LEFT", "line": 3,
+      "hostText": "const DEFAULT_LIMIT = 10;",
+      "body": "Old default was too small.\n\n<sub>— HistoryBot</sub>"
+    },
+    {
+      "path": "src/app.js", "side": "RIGHT", "line": 10,
+      "hostText": "function total(values) {",
+      "body": "total() is unchanged but worth a test.\n\n<sub>— HistoryBot</sub>"
+    }
+  ],
+  "bodySections": [
+    "General note: consider a changelog entry\n\n<sub>— LintBot 2.3.1</sub>",
+    "**Source:** [src/util.js line 4 at c0dec0d](https://github.com/acme/widgets/blob/c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de/src/util.js#L4)\n\n```\n  return Math.min(Math.max(n, lo), hi);\n```\n\nclamp() ignores NaN inputs.\n\n<sub>— LintBot 2.3.1 · rule `LB005`</sub>",
+    "**Source:** [docs/README.md lines 3-5 at c0dec0d](https://github.com/acme/widgets/blob/c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de/docs/README.md#L3-L5)\n\n````\n```js\nrun();\n```\n````\n\nExample should show output.\n\n<sub>— LintBot 2.3.1 · rule `DOC2`</sub>"
+  ],
+  "evidence": [
+    { "pointer": "/runs/0/results/0", "treatment": "suggestion", "commentIndex": 0,
+      "source": { "commit": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de", "path": "src/app.js", "startLine": 3, "endLine": 3, "text": "const DEFAULT_LIMIT = 25;" },
+      "replacement": { "startLine": 3, "endLine": 3, "originalText": "const DEFAULT_LIMIT = 25;\n", "replacementText": "const DEFAULT_LIMIT = 20;\n" } },
+    { "pointer": "/runs/0/results/1", "treatment": "inline", "commentIndex": 1,
+      "source": { "commit": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de", "path": "src/app.js", "startLine": 7, "endLine": 7, "text": "  return items.slice(0, limit).map((item) => item.id);" } },
+    { "pointer": "/runs/0/results/2", "treatment": "general", "bodySectionIndex": 0 },
+    { "pointer": "/runs/0/results/3", "treatment": "inline", "commentIndex": 2,
+      "source": { "commit": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de", "path": "src/app.js", "startLine": 17, "endLine": 17, "text": "  return total(values) / values.length;" } },
+    { "pointer": "/runs/0/results/4", "treatment": "suggestion", "commentIndex": 3,
+      "source": { "commit": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de", "path": "src/app.js", "startLine": 16, "endLine": 18, "text": "function average(values) {\n  return total(values) / values.length;\n}" },
+      "replacement": { "startLine": 16, "endLine": 18, "originalText": "function average(values) {\n  return total(values) / values.length;\n}\n", "replacementText": "function average(values) {\n  if (values.length === 0) return 0;\n  return total(values) / values.length;\n}\n" } },
+    { "pointer": "/runs/0/results/5", "treatment": "inline", "commentIndex": 4,
+      "source": { "commit": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de", "path": "src/app.js", "startLine": 20, "endLine": 20, "text": "module.exports = { fetchAll, total, average };" } },
+    { "pointer": "/runs/0/results/6", "treatment": "inline", "commentIndex": 5,
+      "source": { "commit": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de", "path": "docs/guide notes/Überblick.md", "startLine": 3, "endLine": 3, "text": "Neue Beschreibung." } },
+    { "pointer": "/runs/0/results/7", "treatment": "general", "bodySectionIndex": 1,
+      "source": { "commit": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de", "path": "src/util.js", "startLine": 4, "endLine": 4, "text": "  return Math.min(Math.max(n, lo), hi);" } },
+    { "pointer": "/runs/0/results/8", "treatment": "general", "bodySectionIndex": 2,
+      "source": { "commit": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de", "path": "docs/README.md", "startLine": 3, "endLine": 5, "text": "```js\nrun();\n```" } },
+    { "pointer": "/runs/1/results/0", "treatment": "suggestion", "commentIndex": 0,
+      "source": { "commit": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de", "path": "src/app.js", "startLine": 3, "endLine": 3, "text": "const DEFAULT_LIMIT = 25;" },
+      "replacement": { "startLine": 3, "endLine": 3, "originalText": "const DEFAULT_LIMIT = 25;\n", "replacementText": "const DEFAULT_LIMIT = 20;\n" } },
+    { "pointer": "/runs/2/results/0", "treatment": "inline", "commentIndex": 6,
+      "source": { "commit": "ba5eba5eba5eba5eba5eba5eba5eba5eba5eba5e", "path": "lib/legacy.js", "startLine": 1, "endLine": 1, "text": "module.exports = 'legacy';" } },
+    { "pointer": "/runs/2/results/1", "treatment": "inline", "commentIndex": 7,
+      "source": { "commit": "ba5eba5eba5eba5eba5eba5eba5eba5eba5eba5e", "path": "src/app.js", "startLine": 3, "endLine": 3, "text": "const DEFAULT_LIMIT = 10;" } },
+    { "pointer": "/runs/2/results/2", "treatment": "inline", "commentIndex": 8,
+      "source": { "commit": "ba5eba5eba5eba5eba5eba5eba5eba5eba5eba5e", "path": "src/app.js", "startLine": 9, "endLine": 9, "text": "function total(values) {" } }
+  ],
+  "readSourceCalls": [
+    ["c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de", "src/app.js"],
+    ["c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de", "docs/guide notes/Überblick.md"],
+    ["c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de", "src/util.js"],
+    ["c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de", "docs/README.md"],
+    ["ba5eba5eba5eba5eba5eba5eba5eba5eba5eba5e", "lib/legacy.js"],
+    ["ba5eba5eba5eba5eba5eba5eba5eba5eba5eba5e", "src/app.js"]
+  ]
+}

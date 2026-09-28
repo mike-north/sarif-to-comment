@@ -1,0 +1,12 @@
+PASS  review 5333374050 is readable and authored by mike-north
+PASS  review state is PENDING (PENDING)
+PASS  review commit is the pinned head
+PASS  publication state receipt names this review
+PASS  read-back body equals the saved create request body byte for byte
+PASS  body ends with its single marker
+PASS  no inline comments
+PASS  body contains "Quoted CRLF source outside the diff"
+PASS  body contains "alpha\r\nbeta"
+PASS  body contains "https://github.com/mike-north/doc-linter/blob/54cae057bc66ef7b49c3186923e0be0a0a0917ae/apply-fixture/crlf-notes.txt#L1-L2"
+PASS  body retains raw CR characters
+ALL CHECKS PASSED

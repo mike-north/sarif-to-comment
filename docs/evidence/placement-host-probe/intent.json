@@ -1,0 +1,8 @@
+{
+  "repository": "mike-north/doc-linter",
+  "pr": 12,
+  "reviewedCommit": "b5f2a51d3997d4ce5f07d04edb2ba8d2b282b66a",
+  "baseCommit": "7a02c0365b4730e834648e0479c42e090ed32356",
+  "path": "sarif-placement-probe.txt",
+  "baselineMain": "0a7b03fe399255a62118311cbc3e1bd6fe64cb23"
+}

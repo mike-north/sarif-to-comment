@@ -1,0 +1,49 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "E2EApply",
+          "version": "1.0.0",
+          "rules": [
+            {
+              "id": "AP001"
+            },
+            {
+              "id": "AP002"
+            },
+            {
+              "id": "AP003"
+            },
+            {
+              "id": "AP004"
+            }
+          ]
+        }
+      },
+      "columnKind": "utf16CodeUnits",
+      "results": [
+        {
+          "ruleId": "AP004",
+          "message": {
+            "text": "Quoted CRLF source outside the diff"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apply-fixture/crlf-notes.txt"
+                },
+                "region": {
+                  "startLine": 1,
+                  "endLine": 2
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

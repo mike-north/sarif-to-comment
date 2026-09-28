@@ -1,0 +1,161 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "E2EApply",
+          "version": "1.0.0",
+          "rules": [
+            {
+              "id": "AP001"
+            },
+            {
+              "id": "AP002"
+            },
+            {
+              "id": "AP003"
+            },
+            {
+              "id": "AP004"
+            }
+          ]
+        }
+      },
+      "columnKind": "utf16CodeUnits",
+      "results": [
+        {
+          "ruleId": "AP001",
+          "message": {
+            "text": "Expand the placeholder into three lines"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apply-fixture/one-to-three.txt"
+                },
+                "region": {
+                  "startLine": 2
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "description": {
+                "text": "Replace one line with three"
+              },
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "apply-fixture/one-to-three.txt"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 2
+                      },
+                      "insertedContent": {
+                        "text": "first replacement\nsecond replacement\nthird replacement"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "ruleId": "AP002",
+          "message": {
+            "text": "Return the greeting directly"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apply-fixture/two-to-one.js"
+                },
+                "region": {
+                  "startLine": 2,
+                  "endLine": 3
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "description": {
+                "text": "Replace two lines with one"
+              },
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "apply-fixture/two-to-one.js"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 2,
+                        "endLine": 3
+                      },
+                      "insertedContent": {
+                        "text": "  return 'Goodbye, ' + name;"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "ruleId": "AP003",
+          "message": {
+            "text": "Remove the middle line"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apply-fixture/delete-middle.txt"
+                },
+                "region": {
+                  "startLine": 3
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "description": {
+                "text": "Delete line 3 and its newline"
+              },
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "apply-fixture/delete-middle.txt"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 3,
+                        "startColumn": 1,
+                        "endLine": 4,
+                        "endColumn": 1
+                      },
+                      "insertedContent": {
+                        "text": ""
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

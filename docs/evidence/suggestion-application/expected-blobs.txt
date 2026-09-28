@@ -1,0 +1,3 @@
+bc330c7477115f2e4a7aac83eb993a8078066f52  one-to-three.txt  79 bytes
+846ad07e232eaaa60c5e46462bbf373334429ed1  two-to-one.js  57 bytes
+dd5ec2852977a3379935cb14ff2ecefb2f4a683e  delete-middle.txt  38 bytes

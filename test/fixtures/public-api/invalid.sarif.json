@@ -1,0 +1,8 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "results": [{ "message": { "text": "This run has no tool, which SARIF 2.1.0 requires." } }]
+    }
+  ]
+}

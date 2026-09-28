@@ -1,0 +1,58 @@
+{
+  "commit_id": "c96e4c386527de44b29b507907e2c97d2351d45e",
+  "body": "General fixture note with no source location\n\n<sub>— E2ELint 1.0.0 · rule `E2E001`</sub>\n\n---\n\n**Source:** [sarif-e2e-fixture/alpha.txt line 12 at c96e4c3](https://github.com/mike-north/doc-linter/blob/c96e4c386527de44b29b507907e2c97d2351d45e/sarif-e2e-fixture/alpha.txt#L12)\n\n```\nalpha eleven\n```\n\nUnchanged line outside every hunk\n\n<sub>— E2ELint 1.0.0 · rule `E2E006`</sub>\n\n<!-- sarif-to-comment:review:d0dad03f-6464-4421-9216-9d303034be75 -->",
+  "comments": [
+    {
+      "path": "sarif-e2e-fixture/alpha.txt",
+      "body": "First line of the file\n\n<sub>— E2ELint 1.0.0 · rule `E2E002`</sub>",
+      "line": 1,
+      "side": "RIGHT"
+    },
+    {
+      "path": "sarif-e2e-fixture/alpha.txt",
+      "body": "Added line inserted first\n\n<sub>— E2ELint 1.0.0 · rule `E2E003`</sub>",
+      "line": 2,
+      "side": "RIGHT"
+    },
+    {
+      "path": "sarif-e2e-fixture/alpha.txt",
+      "body": "Unchanged context shifted by the insertion and deletion\n\n<sub>— E2ELint 1.0.0 · rule `E2E004`</sub>",
+      "line": 7,
+      "side": "RIGHT",
+      "start_line": 5,
+      "start_side": "RIGHT"
+    },
+    {
+      "path": "sarif-e2e-fixture/alpha.txt",
+      "body": "Last line in the second hunk\n\n<sub>— E2ELint 1.0.0 · rule `E2E005`</sub>",
+      "line": 21,
+      "side": "RIGHT"
+    },
+    {
+      "path": "sarif-e2e-fixture/gamma.js",
+      "body": "Name the parameter person\n\n**Fix:** Rename the parameter\n\n<sub>— E2ELint 1.0.0 · rule `E2E007`</sub>\n\n```suggestion\nfunction farewell(person) {\n```",
+      "line": 8,
+      "side": "RIGHT"
+    },
+    {
+      "path": "sarif-e2e-fixture/gamma.js",
+      "body": "Return the greeting directly\n\n**Fix:** Inline the temporary\n\n<sub>— E2ELint 1.0.0 · rule `E2E008`</sub>\n\n```suggestion\n  return 'Goodbye, ' + name;\n```",
+      "line": 10,
+      "side": "RIGHT",
+      "start_line": 9,
+      "start_side": "RIGHT"
+    },
+    {
+      "path": "sarif-e2e-fixture/notes.md",
+      "body": "Added non-ASCII line\n\n<sub>— E2ELint 1.0.0 · rule `E2E009`</sub>",
+      "line": 4,
+      "side": "RIGHT"
+    },
+    {
+      "path": "sarif-e2e-fixture/alpha.txt",
+      "body": "Deleted base line\n\n<sub>— E2EHistory 1.0.0 · rule `E2H001`</sub>",
+      "line": 3,
+      "side": "LEFT"
+    }
+  ]
+}

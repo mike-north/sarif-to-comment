@@ -1,0 +1,17 @@
+{
+  "readAt": "2026-09-28T02:16:59.708Z",
+  "viewer": {
+    "login": "mike-north",
+    "id": 558005
+  },
+  "pull": {
+    "number": 15,
+    "state": "open",
+    "head": "c96e4c386527de44b29b507907e2c97d2351d45e",
+    "base": "5a5ca130467bb00993c4dc10701bc40f4167796e",
+    "headRef": "sarif-e2e/advance-20260927",
+    "baseRef": "sarif-e2e/base-20260927"
+  },
+  "reviews": [],
+  "ownedReviews": []
+}

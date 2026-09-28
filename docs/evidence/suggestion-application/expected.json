@@ -1,0 +1,59 @@
+{
+  "description": "Hand-authored expectations for PR mike-north/doc-linter#16, written before any product run. Anchors are GitHub review-comment coordinates on the reviewed head. Suggestion text is the exact fence content the SARIF edit implies (whole replacement lines with their terminators; an empty fence deletes the anchored line). Expected post-application bytes are in expected-after-apply/ with blob ids in expected-blobs.txt.",
+  "repository": "mike-north/doc-linter",
+  "pullNumber": 16,
+  "commits": {
+    "base": "a43efe70bad0b22c31b03db9985abbad89d44d3e",
+    "head": "54cae057bc66ef7b49c3186923e0be0a0a0917ae"
+  },
+  "headBlobsBeforeApply": {
+    "apply-fixture/one-to-three.txt": "1b9fd7f55621ae7d1cb358a82d2c03c3063ef9c8",
+    "apply-fixture/two-to-one.js": "69baa33964d25b60a037129fdae2c4e34b0334b3",
+    "apply-fixture/delete-middle.txt": "18a66067ba0f4490d40903288057fc5ca943ebb0",
+    "apply-fixture/crlf-notes.txt": "b4ec4d1f30d56e5f6c7f71191766764535a9b2e2"
+  },
+  "crlfGeneral": {
+    "sarif": "crlf-general.sarif.json",
+    "inlineComments": 0,
+    "bodyMustContain": [
+      "Quoted CRLF source outside the diff",
+      "alpha\r\nbeta",
+      "https://github.com/mike-north/doc-linter/blob/54cae057bc66ef7b49c3186923e0be0a0a0917ae/apply-fixture/crlf-notes.txt#L1-L2"
+    ],
+    "bodyReadback": "byte-for-byte equal to the saved create request body, including the raw CR characters"
+  },
+  "suggestions": {
+    "sarif": "suggestions.sarif.json",
+    "bodyPattern": "exactly \"\\n\\n\" followed by the single publication marker (an inline-only review has an empty prepared body)",
+    "inline": [
+      {
+        "rule": "AP001",
+        "path": "apply-fixture/one-to-three.txt",
+        "side": "RIGHT",
+        "line": 2,
+        "sourceText": "replace me",
+        "suggestion": "first replacement\nsecond replacement\nthird replacement\n",
+        "expectedBlobAfterApply": "bc330c7477115f2e4a7aac83eb993a8078066f52"
+      },
+      {
+        "rule": "AP002",
+        "path": "apply-fixture/two-to-one.js",
+        "side": "RIGHT",
+        "startLine": 2,
+        "line": 3,
+        "sourceText": "  const message = 'Goodbye, ' + name;\n  return message;",
+        "suggestion": "  return 'Goodbye, ' + name;\n",
+        "expectedBlobAfterApply": "846ad07e232eaaa60c5e46462bbf373334429ed1"
+      },
+      {
+        "rule": "AP003",
+        "path": "apply-fixture/delete-middle.txt",
+        "side": "RIGHT",
+        "line": 3,
+        "sourceText": "delete me",
+        "suggestion": "",
+        "expectedBlobAfterApply": "dd5ec2852977a3379935cb14ff2ecefb2f4a683e"
+      }
+    ]
+  }
+}

@@ -1,0 +1,278 @@
+{
+  "description": "Sources with a leading byte-order mark (U+FEFF). SARIF text-region property values do not depend on a leading byte-order mark, so line/column coordinates, like character offsets, address the text after it: line 1 column 1 is the first character following the mark. The raw mark is never deleted by a coordinate; it is preserved in the edited text and in line 1's original and replacement text.",
+  "cases": [
+    {
+      "name": "line 1 UTF-16 columns start after the byte-order mark",
+      "input": {
+        "sourceText": "﻿ab\ncd\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 1, "endColumn": 2 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "﻿Xb\ncd\n",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "﻿ab\n",
+        "replacementText": "﻿Xb\n",
+        "replacementLines": ["﻿Xb\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "byteOrderMarkCountedAsColumn": "Xab\ncd\n",
+        "byteOrderMarkStripped": "Xb\ncd\n"
+      },
+      "wrongReplacementText": {
+        "byteOrderMarkStripped": "Xb\n"
+      }
+    },
+    {
+      "name": "line 1 code-point columns start after the byte-order mark",
+      "input": {
+        "sourceText": "﻿ab\ncd\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 2, "endColumn": 3 },
+        "insertedText": "X",
+        "columnKind": "unicodeCodePoints"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "﻿aX\ncd\n",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "﻿ab\n",
+        "replacementText": "﻿aX\n",
+        "replacementLines": ["﻿aX\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "byteOrderMarkCountedAsColumn": "﻿Xb\ncd\n"
+      }
+    },
+    {
+      "name": "UTF-16 columns after a byte-order mark and a supplementary-plane character",
+      "input": {
+        "sourceText": "﻿😀 x = 1;\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 8, "endColumn": 9 },
+        "insertedText": "2",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "﻿😀 x = 2;\n",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "﻿😀 x = 1;\n",
+        "replacementText": "﻿😀 x = 2;\n",
+        "replacementLines": ["﻿😀 x = 2;\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "byteOrderMarkCountedAsColumn": "﻿😀 x =21;\n",
+        "codePointColumnsApplied": "﻿😀 x = 12\n"
+      }
+    },
+    {
+      "name": "code-point columns after a byte-order mark and a supplementary-plane character",
+      "input": {
+        "sourceText": "﻿😀 x = 1;\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 7, "endColumn": 8 },
+        "insertedText": "2",
+        "columnKind": "unicodeCodePoints"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "﻿😀 x = 2;\n",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "﻿😀 x = 1;\n",
+        "replacementText": "﻿😀 x = 2;\n",
+        "replacementLines": ["﻿😀 x = 2;\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "byteOrderMarkCountedAsColumn": "﻿😀 x =21;\n",
+        "utf16ColumnsApplied": "﻿😀 x =21;\n"
+      }
+    },
+    {
+      "name": "line-only region on line 1 retains the byte-order mark and the newline",
+      "input": {
+        "sourceText": "﻿ab\ncd\n",
+        "deletedRegion": { "startLine": 1 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "﻿X\ncd\n",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "﻿ab\n",
+        "replacementText": "﻿X\n",
+        "replacementLines": ["﻿X\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "byteOrderMarkReplaced": "X\ncd\n",
+        "accidentalNewlineDeletion": "﻿Xcd\n"
+      }
+    },
+    {
+      "name": "insertion at line 1 column 1 goes after the byte-order mark",
+      "input": {
+        "sourceText": "﻿ab\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 1, "endColumn": 1 },
+        "insertedText": "#",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "﻿#ab\n",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "﻿ab\n",
+        "replacementText": "﻿#ab\n",
+        "replacementLines": ["﻿#ab\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "insertedBeforeByteOrderMark": "#﻿ab\n"
+      }
+    },
+    {
+      "name": "insertion at the end of line 1 counts columns after the byte-order mark",
+      "input": {
+        "sourceText": "﻿ab\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 3, "endColumn": 3 },
+        "insertedText": "!",
+        "columnKind": "unicodeCodePoints"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "﻿ab!\n",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "﻿ab\n",
+        "replacementText": "﻿ab!\n",
+        "replacementLines": ["﻿ab!\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "byteOrderMarkCountedAsColumn": "﻿a!b\n"
+      }
+    },
+    {
+      "name": "region from line 1 into line 2 keeps the byte-order mark",
+      "input": {
+        "sourceText": "﻿ab\ncd\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 2, "endLine": 2, "endColumn": 2 },
+        "insertedText": "-",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "﻿a-d\n",
+        "startLine": 1,
+        "endLine": 2,
+        "originalText": "﻿ab\ncd\n",
+        "replacementText": "﻿a-d\n",
+        "replacementLines": ["﻿a-d\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "byteOrderMarkCountedAsColumn": "﻿-d\n"
+      }
+    },
+    {
+      "name": "deleting the whole of line 1 through line 2 column 1 keeps the byte-order mark, which joins line 2",
+      "input": {
+        "sourceText": "﻿ab\ncd\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 1, "endLine": 2, "endColumn": 1 },
+        "insertedText": "",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "﻿cd\n",
+        "startLine": 1,
+        "endLine": 2,
+        "originalText": "﻿ab\ncd\n",
+        "replacementText": "﻿cd\n",
+        "replacementLines": ["﻿cd\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "byteOrderMarkDeleted": "cd\n"
+      }
+    },
+    {
+      "name": "agreeing line 1 columns and character offsets both exclude the byte-order mark",
+      "input": {
+        "sourceText": "﻿ab\ncd\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 2, "endColumn": 3, "charOffset": 1, "charLength": 1 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "﻿aX\ncd\n",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "﻿ab\n",
+        "replacementText": "﻿aX\n",
+        "replacementLines": ["﻿aX\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      }
+    },
+    {
+      "name": "line-only region on line 1 agrees with the offset span of its content after the byte-order mark",
+      "input": {
+        "sourceText": "﻿ab\ncd\n",
+        "deletedRegion": { "startLine": 1, "charOffset": 0, "charLength": 2 },
+        "insertedText": "X",
+        "columnKind": "unicodeCodePoints"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "﻿X\ncd\n",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "﻿ab\n",
+        "replacementText": "﻿X\n",
+        "replacementLines": ["﻿X\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      }
+    },
+    {
+      "name": "line 1 columns and offsets that disagree once the byte-order mark is excluded are invalid",
+      "input": {
+        "sourceText": "﻿ab\ncd\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 2, "endColumn": 3, "charOffset": 2, "charLength": 1 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "invalid", "reason": "coordinate-disagreement" }
+    },
+    {
+      "name": "UTF-16 column past line 1 content is out of bounds, not absorbed by the byte-order mark",
+      "input": {
+        "sourceText": "﻿ab\ncd\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 4, "endColumn": 4 },
+        "insertedText": "!",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "invalid", "reason": "out-of-bounds" }
+    },
+    {
+      "name": "code-point end column past line 1 content is out of bounds, not absorbed by the byte-order mark",
+      "input": {
+        "sourceText": "﻿😀\nz\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 1, "endColumn": 3 },
+        "insertedText": "!",
+        "columnKind": "unicodeCodePoints"
+      },
+      "expected": { "kind": "invalid", "reason": "out-of-bounds" }
+    }
+  ]
+}

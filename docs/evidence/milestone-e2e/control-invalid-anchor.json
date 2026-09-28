@@ -1,0 +1,33 @@
+{
+  "sentAt": "2026-09-28T02:16:57.430Z",
+  "marker": "<!-- sarif-to-comment:e2e-invalid-anchor-control:965fac01-e7a6-46c8-8b5d-8843fdf685d2 -->",
+  "request": {
+    "owner": "mike-north",
+    "repo": "doc-linter",
+    "pullNumber": 15,
+    "commitId": "c96e4c386527de44b29b507907e2c97d2351d45e",
+    "body": "Invalid-anchor control (must be refused as a whole).\n\n<!-- sarif-to-comment:e2e-invalid-anchor-control:965fac01-e7a6-46c8-8b5d-8843fdf685d2 -->",
+    "comments": [
+      {
+        "path": "sarif-e2e-fixture/alpha.txt",
+        "side": "RIGHT",
+        "line": 2,
+        "body": "Valid first comment of the refused batch."
+      },
+      {
+        "path": "sarif-e2e-fixture/alpha.txt",
+        "side": "RIGHT",
+        "line": 999,
+        "body": "Invalid final comment: line 999 does not exist."
+      }
+    ]
+  },
+  "outcome": "error",
+  "error": {
+    "name": "GitHubError",
+    "code": "http-status",
+    "status": 422,
+    "hostRejected": true,
+    "message": "GitHub answered the create-review request with HTTP 422: Unprocessable Entity; Line could not be resolved"
+  }
+}

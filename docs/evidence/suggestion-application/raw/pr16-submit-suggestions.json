@@ -1,0 +1,18 @@
+{
+  "checked": {
+    "id": 5333375577,
+    "userId": 558005,
+    "viewerId": 558005,
+    "state": "PENDING",
+    "markerOccurrences": 1
+  },
+  "submitted": true,
+  "status": 200,
+  "after": {
+    "id": 5333375577,
+    "state": "COMMENTED",
+    "commit_id": "54cae057bc66ef7b49c3186923e0be0a0a0917ae",
+    "submitted_at": "2026-09-28T02:31:06Z",
+    "bodyUnchanged": true
+  }
+}

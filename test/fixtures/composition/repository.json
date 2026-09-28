@@ -1,0 +1,123 @@
+{
+  "description": "Hand-authored repository, pull request and expectations for the production-composition test (real src/index.cjs + real src/github.cjs over a fake HTTP GitHub). Files are arrays of physical lines with exact terminators. The patch was written by hand from the two snapshots (old lines 4-11 -> new lines 4-11). docs/notes.md is identical at both commits and is not part of the pull request's diff. `expected` was authored from the snapshots and the SARIF, never from program output; each inline anchor states the literal source text it must cover, which the test checks against the snapshots independently.",
+  "destination": { "owner": "octo", "repo": "calc", "pullNumber": 12 },
+  "commits": {
+    "base": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0",
+    "head": "4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e"
+  },
+  "snapshots": {
+    "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0": {
+      "src/calc.js": [
+        "'use strict';\n",
+        "\n",
+        "function add(a, b) {\n",
+        "  return a + b;\n",
+        "}\n",
+        "\n",
+        "function legacy() {\n",
+        "  return 0;\n",
+        "}\n",
+        "\n",
+        "module.exports = { add, legacy };\n"
+      ],
+      "docs/notes.md": [
+        "# Notes\n",
+        "\n",
+        "Keep it simple.\n"
+      ]
+    },
+    "4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e": {
+      "src/calc.js": [
+        "'use strict';\n",
+        "\n",
+        "function add(a, b) {\n",
+        "  return a + b;\n",
+        "}\n",
+        "\n",
+        "function mul(a, b) {\n",
+        "  return a * b;\n",
+        "}\n",
+        "\n",
+        "module.exports = { add, mul };\n"
+      ],
+      "docs/notes.md": [
+        "# Notes\n",
+        "\n",
+        "Keep it simple.\n"
+      ]
+    }
+  },
+  "pullFiles": [
+    {
+      "filename": "src/calc.js",
+      "status": "modified",
+      "additions": 3,
+      "deletions": 3,
+      "patch": [
+        "@@ -4,8 +4,8 @@ function add(a, b) {\n",
+        "   return a + b;\n",
+        " }\n",
+        " \n",
+        "-function legacy() {\n",
+        "-  return 0;\n",
+        "+function mul(a, b) {\n",
+        "+  return a * b;\n",
+        " }\n",
+        " \n",
+        "-module.exports = { add, legacy };\n",
+        "+module.exports = { add, mul };"
+      ]
+    }
+  ],
+  "expected": {
+    "inline": [
+      {
+        "message": "mul is exported without tests.",
+        "path": "src/calc.js", "side": "RIGHT", "line": 7,
+        "hostText": "function mul(a, b) {"
+      },
+      {
+        "message": "Document the new function.",
+        "path": "src/calc.js", "side": "RIGHT", "startSide": "RIGHT", "startLine": 7, "line": 8,
+        "hostText": "function mul(a, b) {\n  return a * b;"
+      },
+      {
+        "message": "Closing brace of add is unchanged context.",
+        "path": "src/calc.js", "side": "RIGHT", "line": 5,
+        "hostText": "}"
+      },
+      {
+        "message": "Operands should be ordered consistently.",
+        "path": "src/calc.js", "side": "RIGHT", "line": 8,
+        "hostText": "  return a * b;",
+        "suggestion": "  return b * a;\n"
+      },
+      {
+        "message": "legacy returned a constant; confirm no caller depended on it.",
+        "path": "src/calc.js", "side": "LEFT", "line": 8,
+        "hostText": "  return 0;"
+      },
+      {
+        "message": "The legacy export is removed.",
+        "path": "src/calc.js", "side": "LEFT", "line": 11,
+        "hostText": "module.exports = { add, legacy };"
+      },
+      {
+        "message": "add was already correct in the base.",
+        "path": "src/calc.js", "side": "RIGHT", "line": 4,
+        "hostText": "  return a + b;"
+      }
+    ],
+    "general": [
+      {
+        "message": "Consider a changelog entry.",
+        "sourceLink": null
+      },
+      {
+        "message": "The notes should mention mul.",
+        "sourceLink": "https://github.com/octo/calc/blob/4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e/docs/notes.md#L3",
+        "sourceText": "Keep it simple."
+      }
+    ]
+  }
+}

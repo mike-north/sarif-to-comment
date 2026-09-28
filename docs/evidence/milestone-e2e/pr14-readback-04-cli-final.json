@@ -1,0 +1,260 @@
+{
+  "readAt": "2026-09-28T02:25:17.245Z",
+  "viewer": {
+    "login": "mike-north",
+    "id": 558005
+  },
+  "pull": {
+    "number": 14,
+    "state": "open",
+    "head": "c96e4c386527de44b29b507907e2c97d2351d45e",
+    "base": "5a5ca130467bb00993c4dc10701bc40f4167796e",
+    "headRef": "sarif-e2e/head-20260927",
+    "baseRef": "sarif-e2e/base-20260927"
+  },
+  "reviews": [
+    {
+      "id": 5333352940,
+      "userId": 558005,
+      "state": "PENDING",
+      "commit_id": "c96e4c386527de44b29b507907e2c97d2351d45e"
+    }
+  ],
+  "ownedReviews": [
+    {
+      "id": 5333352940,
+      "state": "PENDING",
+      "commit_id": "c96e4c386527de44b29b507907e2c97d2351d45e",
+      "html_url": "https://github.com/mike-north/doc-linter/pull/14#pullrequestreview-5333352940",
+      "body": "General fixture note with no source location\n\n<sub>— E2ELint 1.0.0 · rule `E2E001`</sub>\n\n---\n\n**Source:** [sarif-e2e-fixture/alpha.txt line 12 at c96e4c3](https://github.com/mike-north/doc-linter/blob/c96e4c386527de44b29b507907e2c97d2351d45e/sarif-e2e-fixture/alpha.txt#L12)\n\n```\nalpha eleven\n```\n\nUnchanged line outside every hunk\n\n<sub>— E2ELint 1.0.0 · rule `E2E006`</sub>\n\n<!-- sarif-to-comment:review:d0dad03f-6464-4421-9216-9d303034be75 -->",
+      "restComments": [
+        {
+          "id": 4118018537,
+          "path": "sarif-e2e-fixture/alpha.txt",
+          "position": 1,
+          "original_position": 1,
+          "line": null,
+          "side": null,
+          "start_line": null,
+          "original_line": null,
+          "commit_id": "c96e4c386527de44b29b507907e2c97d2351d45e",
+          "original_commit_id": "c96e4c386527de44b29b507907e2c97d2351d45e",
+          "body": "First line of the file\n\n<sub>— E2ELint 1.0.0 · rule `E2E002`</sub>"
+        },
+        {
+          "id": 4118018546,
+          "path": "sarif-e2e-fixture/alpha.txt",
+          "position": 2,
+          "original_position": 2,
+          "line": null,
+          "side": null,
+          "start_line": null,
+          "original_line": null,
+          "commit_id": "c96e4c386527de44b29b507907e2c97d2351d45e",
+          "original_commit_id": "c96e4c386527de44b29b507907e2c97d2351d45e",
+          "body": "Added line inserted first\n\n<sub>— E2ELint 1.0.0 · rule `E2E003`</sub>"
+        },
+        {
+          "id": 4118018551,
+          "path": "sarif-e2e-fixture/alpha.txt",
+          "position": 8,
+          "original_position": 8,
+          "line": null,
+          "side": null,
+          "start_line": null,
+          "original_line": null,
+          "commit_id": "c96e4c386527de44b29b507907e2c97d2351d45e",
+          "original_commit_id": "c96e4c386527de44b29b507907e2c97d2351d45e",
+          "body": "Unchanged context shifted by the insertion and deletion\n\n<sub>— E2ELint 1.0.0 · rule `E2E004`</sub>"
+        },
+        {
+          "id": 4118018555,
+          "path": "sarif-e2e-fixture/alpha.txt",
+          "position": 14,
+          "original_position": 14,
+          "line": null,
+          "side": null,
+          "start_line": null,
+          "original_line": null,
+          "commit_id": "c96e4c386527de44b29b507907e2c97d2351d45e",
+          "original_commit_id": "c96e4c386527de44b29b507907e2c97d2351d45e",
+          "body": "Last line in the second hunk\n\n<sub>— E2ELint 1.0.0 · rule `E2E005`</sub>"
+        },
+        {
+          "id": 4118018559,
+          "path": "sarif-e2e-fixture/gamma.js",
+          "position": 5,
+          "original_position": 5,
+          "line": null,
+          "side": null,
+          "start_line": null,
+          "original_line": null,
+          "commit_id": "c96e4c386527de44b29b507907e2c97d2351d45e",
+          "original_commit_id": "c96e4c386527de44b29b507907e2c97d2351d45e",
+          "body": "Name the parameter person\n\n**Fix:** Rename the parameter\n\n<sub>— E2ELint 1.0.0 · rule `E2E007`</sub>\n\n```suggestion\nfunction farewell(person) {\n```"
+        },
+        {
+          "id": 4118018568,
+          "path": "sarif-e2e-fixture/gamma.js",
+          "position": 7,
+          "original_position": 7,
+          "line": null,
+          "side": null,
+          "start_line": null,
+          "original_line": null,
+          "commit_id": "c96e4c386527de44b29b507907e2c97d2351d45e",
+          "original_commit_id": "c96e4c386527de44b29b507907e2c97d2351d45e",
+          "body": "Return the greeting directly\n\n**Fix:** Inline the temporary\n\n<sub>— E2ELint 1.0.0 · rule `E2E008`</sub>\n\n```suggestion\n  return 'Goodbye, ' + name;\n```"
+        },
+        {
+          "id": 4118018572,
+          "path": "sarif-e2e-fixture/notes.md",
+          "position": 4,
+          "original_position": 4,
+          "line": null,
+          "side": null,
+          "start_line": null,
+          "original_line": null,
+          "commit_id": "c96e4c386527de44b29b507907e2c97d2351d45e",
+          "original_commit_id": "c96e4c386527de44b29b507907e2c97d2351d45e",
+          "body": "Added non-ASCII line\n\n<sub>— E2ELint 1.0.0 · rule `E2E009`</sub>"
+        },
+        {
+          "id": 4118018576,
+          "path": "sarif-e2e-fixture/alpha.txt",
+          "position": 5,
+          "original_position": 5,
+          "line": null,
+          "side": null,
+          "start_line": null,
+          "original_line": null,
+          "commit_id": "c96e4c386527de44b29b507907e2c97d2351d45e",
+          "original_commit_id": "c96e4c386527de44b29b507907e2c97d2351d45e",
+          "body": "Deleted base line\n\n<sub>— E2EHistory 1.0.0 · rule `E2H001`</sub>"
+        }
+      ],
+      "threads": [
+        {
+          "path": "sarif-e2e-fixture/alpha.txt",
+          "subjectType": "LINE",
+          "isOutdated": false,
+          "diffSide": "RIGHT",
+          "startDiffSide": null,
+          "line": 1,
+          "startLine": 1,
+          "originalLine": 1,
+          "originalStartLine": null,
+          "commentIds": [
+            4118018537
+          ],
+          "originalCommit": "c96e4c386527de44b29b507907e2c97d2351d45e"
+        },
+        {
+          "path": "sarif-e2e-fixture/alpha.txt",
+          "subjectType": "LINE",
+          "isOutdated": false,
+          "diffSide": "RIGHT",
+          "startDiffSide": null,
+          "line": 2,
+          "startLine": 2,
+          "originalLine": 2,
+          "originalStartLine": null,
+          "commentIds": [
+            4118018546
+          ],
+          "originalCommit": "c96e4c386527de44b29b507907e2c97d2351d45e"
+        },
+        {
+          "path": "sarif-e2e-fixture/alpha.txt",
+          "subjectType": "LINE",
+          "isOutdated": false,
+          "diffSide": "RIGHT",
+          "startDiffSide": "RIGHT",
+          "line": 7,
+          "startLine": 5,
+          "originalLine": 7,
+          "originalStartLine": 5,
+          "commentIds": [
+            4118018551
+          ],
+          "originalCommit": "c96e4c386527de44b29b507907e2c97d2351d45e"
+        },
+        {
+          "path": "sarif-e2e-fixture/alpha.txt",
+          "subjectType": "LINE",
+          "isOutdated": false,
+          "diffSide": "RIGHT",
+          "startDiffSide": null,
+          "line": 21,
+          "startLine": 21,
+          "originalLine": 21,
+          "originalStartLine": null,
+          "commentIds": [
+            4118018555
+          ],
+          "originalCommit": "c96e4c386527de44b29b507907e2c97d2351d45e"
+        },
+        {
+          "path": "sarif-e2e-fixture/gamma.js",
+          "subjectType": "LINE",
+          "isOutdated": false,
+          "diffSide": "RIGHT",
+          "startDiffSide": null,
+          "line": 8,
+          "startLine": 8,
+          "originalLine": 8,
+          "originalStartLine": null,
+          "commentIds": [
+            4118018559
+          ],
+          "originalCommit": "c96e4c386527de44b29b507907e2c97d2351d45e"
+        },
+        {
+          "path": "sarif-e2e-fixture/gamma.js",
+          "subjectType": "LINE",
+          "isOutdated": false,
+          "diffSide": "RIGHT",
+          "startDiffSide": "RIGHT",
+          "line": 10,
+          "startLine": 9,
+          "originalLine": 10,
+          "originalStartLine": 9,
+          "commentIds": [
+            4118018568
+          ],
+          "originalCommit": "c96e4c386527de44b29b507907e2c97d2351d45e"
+        },
+        {
+          "path": "sarif-e2e-fixture/notes.md",
+          "subjectType": "LINE",
+          "isOutdated": false,
+          "diffSide": "RIGHT",
+          "startDiffSide": null,
+          "line": 4,
+          "startLine": 4,
+          "originalLine": 4,
+          "originalStartLine": null,
+          "commentIds": [
+            4118018572
+          ],
+          "originalCommit": "c96e4c386527de44b29b507907e2c97d2351d45e"
+        },
+        {
+          "path": "sarif-e2e-fixture/alpha.txt",
+          "subjectType": "LINE",
+          "isOutdated": false,
+          "diffSide": "LEFT",
+          "startDiffSide": null,
+          "line": 3,
+          "startLine": 3,
+          "originalLine": 3,
+          "originalStartLine": null,
+          "commentIds": [
+            4118018576
+          ],
+          "originalCommit": "c96e4c386527de44b29b507907e2c97d2351d45e"
+        }
+      ]
+    }
+  ]
+}

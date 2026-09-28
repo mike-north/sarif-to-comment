@@ -1,0 +1,32 @@
+{
+  "commit_id": "b5f2a51d3997d4ce5f07d04edb2ba8d2b282b66a",
+  "body": "Synthetic placement probe: valid-batch\n<!-- sarif-placement-probe-20260927:valid-batch -->",
+  "comments": [
+    {
+      "path": "sarif-placement-probe.txt",
+      "side": "RIGHT",
+      "line": 5,
+      "body": "Probe: unchanged context keep-middle at head line 5."
+    },
+    {
+      "path": "sarif-placement-probe.txt",
+      "side": "LEFT",
+      "line": 3,
+      "body": "Probe: deleted remove-me at base line 3."
+    },
+    {
+      "path": "sarif-placement-probe.txt",
+      "side": "RIGHT",
+      "line": 2,
+      "body": "Probe: added inserted-one at head line 2."
+    },
+    {
+      "path": "sarif-placement-probe.txt",
+      "start_side": "RIGHT",
+      "start_line": 4,
+      "side": "RIGHT",
+      "line": 6,
+      "body": "Probe: keep-before, keep-middle, keep-after at head lines 4 through 6."
+    }
+  ]
+}

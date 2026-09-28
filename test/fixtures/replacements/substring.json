@@ -1,0 +1,101 @@
+{
+  "description": "Single-line substring replacements whose untouched prefix and suffix must survive both the literal edit and the whole-line candidate.",
+  "cases": [
+    {
+      "name": "substring edit preserves untouched prefix and suffix",
+      "input": {
+        "sourceText": "const total = price * qty;\nreturn total;\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 15, "endColumn": 20 },
+        "insertedText": "unitPrice",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "const total = unitPrice * qty;\nreturn total;\n",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "const total = price * qty;\n",
+        "replacementText": "const total = unitPrice * qty;\n",
+        "replacementLines": ["const total = unitPrice * qty;\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "endColumnTreatedAsInclusive": "const total = unitPrice* qty;\nreturn total;\n",
+        "columnsTreatedAsZeroBased": "const total = punitPrice* qty;\nreturn total;\n",
+        "lostPrefixAndSuffix": "unitPrice\nreturn total;\n"
+      },
+      "wrongReplacementText": {
+        "lostPrefixAndSuffix": "unitPrice\n",
+        "lostTerminator": "const total = unitPrice * qty;"
+      }
+    },
+    {
+      "name": "explicit equal endLine addresses a substring on a later line",
+      "input": {
+        "sourceText": "const total = price * qty;\nreturn total;\n",
+        "deletedRegion": { "startLine": 2, "startColumn": 8, "endLine": 2, "endColumn": 13 },
+        "insertedText": "total * 2",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "const total = price * qty;\nreturn total * 2;\n",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "return total;\n",
+        "replacementText": "return total * 2;\n",
+        "replacementLines": ["return total * 2;\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "endColumnTreatedAsInclusive": "const total = price * qty;\nreturn total * 2\n",
+        "columnsTreatedAsZeroBased": "const total = price * qty;\nreturn ttotal * 2\n"
+      }
+    },
+    {
+      "name": "omitted startColumn begins at column 1",
+      "input": {
+        "sourceText": "const total = price * qty;\nreturn total;\n",
+        "deletedRegion": { "startLine": 2, "endColumn": 7 },
+        "insertedText": "yield",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "const total = price * qty;\nyield total;\n",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "return total;\n",
+        "replacementText": "yield total;\n",
+        "replacementLines": ["yield total;\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "absentStartColumnTreatedAsEndColumn": "const total = price * qty;\nreturnyield total;\n"
+      }
+    },
+    {
+      "name": "omitted endColumn ends before the newline, keeping the untouched prefix",
+      "input": {
+        "sourceText": "abcd\nnext\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 3 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "abX\nnext\n",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "abcd\n",
+        "replacementText": "abX\n",
+        "replacementLines": ["abX\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "accidentalNewlineDeletion": "abXnext\n",
+        "lostPrefix": "X\nnext\n"
+      }
+    }
+  ]
+}

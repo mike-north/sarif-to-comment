@@ -1,0 +1,8 @@
+{
+  "repository": "mike-north/doc-linter",
+  "pullRequest": 13,
+  "baseCommit": "53e81a076075f8f61f8b56ff537affb1d0e5c2d2",
+  "reviewedCommit": "fcae0d6a3d5f926a671840a434923edb7331142a",
+  "mainBefore": "0a7b03fe399255a62118311cbc3e1bd6fe64cb23",
+  "reviewMarker": "sarif-native-fidelity:20260927-nine-cases"
+}

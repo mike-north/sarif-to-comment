@@ -1,0 +1,513 @@
+{
+  "description": "charOffset/charLength regions, alone and with line/column coordinates. Offsets are zero-based, count every character of a newline sequence, and ignore a leading byte-order mark (U+FEFF), which is never deleted and is preserved in the edited text. charOffset -1 means unset; charLength defaults to 0. SARIF does not fix whether offsets count UTF-16 code units or code points and columnKind does not govern them, so a span that differs under the two readings is unsupported unless the caller states charOffsetKind.",
+  "cases": [
+    {
+      "name": "character offset and length alone",
+      "input": {
+        "sourceText": "abc\ndef\n",
+        "deletedRegion": { "charOffset": 5, "charLength": 2 },
+        "insertedText": "ghi",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "abc\ndghi\n",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "def\n",
+        "replacementText": "dghi\n",
+        "replacementLines": ["dghi\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "offsetTreatedAsOneBased": "abc\nghif\n"
+      }
+    },
+    {
+      "name": "agreeing line/column and character coordinates",
+      "input": {
+        "sourceText": "abc\ndef\n",
+        "deletedRegion": { "startLine": 2, "startColumn": 2, "endLine": 2, "endColumn": 4, "charOffset": 5, "charLength": 2 },
+        "insertedText": "ghi",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "abc\ndghi\n",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "def\n",
+        "replacementText": "dghi\n",
+        "replacementLines": ["dghi\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      }
+    },
+    {
+      "name": "charOffset -1 is unset, so line/column coordinates alone define the edit",
+      "input": {
+        "sourceText": "abc\ndef\n",
+        "deletedRegion": { "startLine": 2, "startColumn": 2, "endColumn": 4, "charOffset": -1 },
+        "insertedText": "ghi",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "abc\ndghi\n",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "def\n",
+        "replacementText": "dghi\n",
+        "replacementLines": ["dghi\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "unsetOffsetTreatedAsEndOfFile": "abc\ndef\nghi"
+      }
+    },
+    {
+      "name": "absent charLength with an offset is an insertion",
+      "input": {
+        "sourceText": "ab\n",
+        "deletedRegion": { "charOffset": 1 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "aXb\n",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "ab\n",
+        "replacementText": "aXb\n",
+        "replacementLines": ["aXb\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "absentLengthTreatedAsRestOfLine": "aX\n"
+      }
+    },
+    {
+      "name": "line-only region agrees with a character span that excludes the newline",
+      "input": {
+        "sourceText": "abc\ndef\n",
+        "deletedRegion": { "startLine": 2, "charOffset": 4, "charLength": 3 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "abc\nX\n",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "def\n",
+        "replacementText": "X\n",
+        "replacementLines": ["X\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      }
+    },
+    {
+      "name": "character offset in a CRLF file counts both newline characters",
+      "input": {
+        "sourceText": "ab\r\ncd\r\n",
+        "deletedRegion": { "charOffset": 4, "charLength": 1 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "ab\r\nXd\r\n",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "cd\r\n",
+        "replacementText": "Xd\r\n",
+        "replacementLines": ["Xd\r\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "crlfCountedAsOneCharacter": "ab\r\ncX\r\n"
+      }
+    },
+    {
+      "name": "character span crossing a line break",
+      "input": {
+        "sourceText": "ab\ncd\n",
+        "deletedRegion": { "charOffset": 1, "charLength": 3 },
+        "insertedText": "-",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a-d\n",
+        "startLine": 1,
+        "endLine": 2,
+        "originalText": "ab\ncd\n",
+        "replacementText": "a-d\n",
+        "replacementLines": ["a-d\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      }
+    },
+    {
+      "name": "zero-length character span is an insertion",
+      "input": {
+        "sourceText": "ab\n",
+        "deletedRegion": { "charOffset": 1, "charLength": 0 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "aXb\n",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "ab\n",
+        "replacementText": "aXb\n",
+        "replacementLines": ["aXb\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      }
+    },
+    {
+      "name": "character span covering a whole line and its newline stays on that line",
+      "input": {
+        "sourceText": "a\nb\nc\n",
+        "deletedRegion": { "charOffset": 2, "charLength": 2 },
+        "insertedText": "B\n",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a\nB\nc\n",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "b\n",
+        "replacementText": "B\n",
+        "replacementLines": ["B\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      }
+    },
+    {
+      "name": "deleting only the CR of a CRLF is an exact edit whose terminator change is visible",
+      "input": {
+        "sourceText": "ab\r\ncd\r\n",
+        "deletedRegion": { "charOffset": 2, "charLength": 1 },
+        "insertedText": "",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "ab\ncd\r\n",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "ab\r\n",
+        "replacementText": "ab\n",
+        "replacementLines": ["ab\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "wholeCrlfDeleted": "abcd\r\n"
+      }
+    },
+    {
+      "name": "inserting between CR and LF leaves the CR as line content",
+      "input": {
+        "sourceText": "ab\r\ncd\r\n",
+        "deletedRegion": { "charOffset": 3, "charLength": 0 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "ab\rX\ncd\r\n",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "ab\r\n",
+        "replacementText": "ab\rX\n",
+        "replacementLines": ["ab\rX\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "insertedBeforeCrlf": "abX\r\ncd\r\n",
+        "insertedAfterCrlf": "ab\r\nXcd\r\n"
+      }
+    },
+    {
+      "name": "offset 0 follows a leading byte-order mark, which is preserved",
+      "input": {
+        "sourceText": "﻿ab\ncd\n",
+        "deletedRegion": { "charOffset": 0, "charLength": 1 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "﻿Xb\ncd\n",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "﻿ab\n",
+        "replacementText": "﻿Xb\n",
+        "replacementLines": ["﻿Xb\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "byteOrderMarkCountedAsCharacter": "Xab\ncd\n",
+        "byteOrderMarkStripped": "Xb\ncd\n"
+      }
+    },
+    {
+      "name": "offsets on a later line are measured after the byte-order mark",
+      "input": {
+        "sourceText": "﻿ab\ncd\n",
+        "deletedRegion": { "charOffset": 3, "charLength": 1 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "﻿ab\nXd\n",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "cd\n",
+        "replacementText": "Xd\n",
+        "replacementLines": ["Xd\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "byteOrderMarkCountedAsCharacter": "﻿abXcd\n"
+      }
+    },
+    {
+      "name": "line/column coordinates after line 1 are unaffected by a byte-order mark",
+      "input": {
+        "sourceText": "﻿ab\ncd\n",
+        "deletedRegion": { "startLine": 2, "startColumn": 1, "endColumn": 2 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "﻿ab\nXd\n",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "cd\n",
+        "replacementText": "Xd\n",
+        "replacementLines": ["Xd\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      }
+    },
+    {
+      "name": "BMP non-ASCII before an offset is unambiguous without an offset kind",
+      "input": {
+        "sourceText": "café\nx\n",
+        "deletedRegion": { "charOffset": 5, "charLength": 1 },
+        "insertedText": "X",
+        "columnKind": "unicodeCodePoints"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "café\nX\n",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "x\n",
+        "replacementText": "X\n",
+        "replacementLines": ["X\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      }
+    },
+    {
+      "name": "supplementary-plane character after the span is unambiguous without an offset kind",
+      "input": {
+        "sourceText": "ab😀\n",
+        "deletedRegion": { "charOffset": 0, "charLength": 1 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "Xb😀\n",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "ab😀\n",
+        "replacementText": "Xb😀\n",
+        "replacementLines": ["Xb😀\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      }
+    },
+    {
+      "name": "offset after a supplementary-plane character is ambiguous without an offset kind",
+      "input": {
+        "sourceText": "😀ab\n",
+        "deletedRegion": { "charOffset": 2, "charLength": 1 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "unsupported", "reason": "ambiguous-char-offset" }
+    },
+    {
+      "name": "columnKind is not borrowed to resolve an ambiguous offset",
+      "input": {
+        "sourceText": "😀ab\n",
+        "deletedRegion": { "charOffset": 2, "charLength": 1 },
+        "insertedText": "X",
+        "columnKind": "unicodeCodePoints"
+      },
+      "expected": { "kind": "unsupported", "reason": "ambiguous-char-offset" }
+    },
+    {
+      "name": "an ambiguous offset is not resolved by agreement with line/column coordinates",
+      "input": {
+        "sourceText": "😀ab\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 2, "endColumn": 3, "charOffset": 1, "charLength": 1 },
+        "insertedText": "X",
+        "columnKind": "unicodeCodePoints"
+      },
+      "expected": { "kind": "unsupported", "reason": "ambiguous-char-offset" }
+    },
+    {
+      "name": "explicit UTF-16 offset kind after a supplementary-plane character",
+      "input": {
+        "sourceText": "😀ab\n",
+        "deletedRegion": { "charOffset": 2, "charLength": 1 },
+        "insertedText": "X",
+        "columnKind": "unicodeCodePoints",
+        "charOffsetKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "😀Xb\n",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "😀ab\n",
+        "replacementText": "😀Xb\n",
+        "replacementLines": ["😀Xb\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "codePointOffsetsApplied": "😀aX\n"
+      }
+    },
+    {
+      "name": "explicit code-point offset kind after a supplementary-plane character",
+      "input": {
+        "sourceText": "😀ab\n",
+        "deletedRegion": { "charOffset": 2, "charLength": 1 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits",
+        "charOffsetKind": "unicodeCodePoints"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "😀aX\n",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "😀ab\n",
+        "replacementText": "😀aX\n",
+        "replacementLines": ["😀aX\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "utf16OffsetsApplied": "😀Xb\n"
+      }
+    },
+    {
+      "name": "explicit UTF-16 offset inside a surrogate pair is invalid",
+      "input": {
+        "sourceText": "😀a\n",
+        "deletedRegion": { "charOffset": 1, "charLength": 0 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits",
+        "charOffsetKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "invalid", "reason": "splits-surrogate-pair" }
+    },
+    {
+      "name": "unknown offset kind",
+      "input": {
+        "sourceText": "ab\n",
+        "deletedRegion": { "charOffset": 0, "charLength": 1 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits",
+        "charOffsetKind": "bytes"
+      },
+      "expected": { "kind": "invalid", "reason": "unknown-char-offset-kind" }
+    },
+    {
+      "name": "line/column and character coordinates that disagree on start are invalid",
+      "input": {
+        "sourceText": "abc\ndef\n",
+        "deletedRegion": { "startLine": 2, "startColumn": 2, "endColumn": 4, "charOffset": 4, "charLength": 2 },
+        "insertedText": "ghi",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "invalid", "reason": "coordinate-disagreement" }
+    },
+    {
+      "name": "line/column and character coordinates that disagree on length are invalid",
+      "input": {
+        "sourceText": "abc\ndef\n",
+        "deletedRegion": { "startLine": 2, "startColumn": 2, "endColumn": 4, "charOffset": 5, "charLength": 3 },
+        "insertedText": "ghi",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "invalid", "reason": "coordinate-disagreement" }
+    },
+    {
+      "name": "line-only region disagrees with a character span that includes the newline",
+      "input": {
+        "sourceText": "abc\ndef\n",
+        "deletedRegion": { "startLine": 2, "charOffset": 4, "charLength": 4 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "invalid", "reason": "coordinate-disagreement" }
+    },
+    {
+      "name": "character span extending past the end of the file is invalid",
+      "input": {
+        "sourceText": "ab\n",
+        "deletedRegion": { "charOffset": 2, "charLength": 5 },
+        "insertedText": "",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "invalid", "reason": "out-of-bounds" }
+    },
+    {
+      "name": "character offset past the end of the file is invalid",
+      "input": {
+        "sourceText": "ab\n",
+        "deletedRegion": { "charOffset": 10, "charLength": 0 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "invalid", "reason": "out-of-bounds" }
+    },
+    {
+      "name": "negative character length is invalid",
+      "input": {
+        "sourceText": "ab\n",
+        "deletedRegion": { "charOffset": 1, "charLength": -1 },
+        "insertedText": "",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "invalid", "reason": "invalid-region" }
+    },
+    {
+      "name": "character offset below the -1 sentinel is invalid",
+      "input": {
+        "sourceText": "ab\n",
+        "deletedRegion": { "charOffset": -2, "charLength": 0 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "invalid", "reason": "invalid-region" }
+    },
+    {
+      "name": "character length without an effective offset is not silently ignored",
+      "input": {
+        "sourceText": "ab\n",
+        "deletedRegion": { "startLine": 1, "charLength": 1 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "unsupported", "reason": "char-length-without-offset" }
+    }
+  ]
+}

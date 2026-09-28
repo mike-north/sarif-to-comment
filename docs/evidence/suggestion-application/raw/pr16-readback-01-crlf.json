@@ -1,0 +1,34 @@
+{
+  "readAt": "2026-09-28T02:30:18.168Z",
+  "viewer": {
+    "login": "mike-north",
+    "id": 558005
+  },
+  "pull": {
+    "number": 16,
+    "state": "open",
+    "head": "54cae057bc66ef7b49c3186923e0be0a0a0917ae",
+    "base": "a43efe70bad0b22c31b03db9985abbad89d44d3e",
+    "headRef": "sarif-e2e/apply-head-20260927",
+    "baseRef": "sarif-e2e/apply-base-20260927"
+  },
+  "reviews": [
+    {
+      "id": 5333374050,
+      "userId": 558005,
+      "state": "PENDING",
+      "commit_id": "54cae057bc66ef7b49c3186923e0be0a0a0917ae"
+    }
+  ],
+  "ownedReviews": [
+    {
+      "id": 5333374050,
+      "state": "PENDING",
+      "commit_id": "54cae057bc66ef7b49c3186923e0be0a0a0917ae",
+      "html_url": "https://github.com/mike-north/doc-linter/pull/16#pullrequestreview-5333374050",
+      "body": "**Source:** [apply-fixture/crlf-notes.txt lines 1-2 at 54cae05](https://github.com/mike-north/doc-linter/blob/54cae057bc66ef7b49c3186923e0be0a0a0917ae/apply-fixture/crlf-notes.txt#L1-L2)\n\n```\nalpha\r\nbeta\n```\n\nQuoted CRLF source outside the diff\n\n<sub>— E2EApply 1.0.0 · rule `AP004`</sub>\n\n<!-- sarif-to-comment:review:9f0cbd16-c626-47b4-8b4f-0671619f2b66 -->",
+      "restComments": [],
+      "threads": []
+    }
+  ]
+}

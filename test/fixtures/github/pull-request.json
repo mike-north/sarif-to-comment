@@ -1,0 +1,276 @@
+{
+  "description": "Hand-authored GitHub REST exchanges for one pull request (acme/widgets#42), used to test the adapter's context and source boundary against raw HTTP. Every URL is the exact request the adapter must issue; bodies are the documented response shapes, reduced to the fields the adapter may read. File texts are authored independently of any patch logic: each merge-base text below is exactly what reverse-applying that file's authoritative patch to its head text must reproduce. The files listed per commit (regular files, mode 100644 unless stated), plus `specialEntries`, are each commit's complete Git tree for these tests. The harness serializes them as Git objects — commits, non-recursive trees and blobs, with object ids computed by node:crypto — and also serves the Contents API with GitHub's documented dereferencing behavior (each `url` below), so that any read trusting Contents is observable as a defect. `absent` entries do not exist at that commit.",
+  "destination": { "owner": "acme", "repo": "widgets", "pullNumber": 42 },
+  "commits": {
+    "head": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+    "mergeBase": "ba5eba5eba5eba5eba5eba5eba5eba5eba5eba5e",
+    "advancedBaseTip": "adadadadadadadadadadadadadadadadadadadad",
+    "racedHead": "de7ade7ade7ade7ade7ade7ade7ade7ade7ade7a",
+    "historical": "ea71ea71ea71ea71ea71ea71ea71ea71ea71ea71"
+  },
+  "pullUrl": "https://api.github.com/repos/acme/widgets/pulls/42",
+  "pull": {
+    "number": 42,
+    "state": "open",
+    "changed_files": 7,
+    "head": { "sha": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de", "ref": "feature/limits" },
+    "base": { "sha": "ba5eba5eba5eba5eba5eba5eba5eba5eba5eba5e", "ref": "main" }
+  },
+  "filesPages": [
+    {
+      "url": "https://api.github.com/repos/acme/widgets/pulls/42/files?per_page=100&page=1",
+      "link": "<https://api.github.com/repositories/123456/pulls/42/files?per_page=100&page=2>; rel=\"next\", <https://api.github.com/repositories/123456/pulls/42/files?per_page=100&page=2>; rel=\"last\"",
+      "body": [
+        {
+          "filename": "src/app.js",
+          "status": "modified",
+          "additions": 2,
+          "deletions": 1,
+          "changes": 3,
+          "patch": "@@ -1,6 +1,7 @@\n 'use strict';\n \n const A = 1;\n+const LIMIT = 5;\n const B = 2;\n \n function f() {\n@@ -8,7 +9,7 @@ function f() {\n }\n \n function g() {\n-  return B;\n+  return B * LIMIT;\n }\n \n module.exports = { f, g };"
+        },
+        {
+          "filename": "docs/crlf.txt",
+          "status": "modified",
+          "additions": 3,
+          "deletions": 2,
+          "changes": 5,
+          "patch": "@@ -1,3 +1,4 @@\n one\r\n-two\r\n-three\n\\ No newline at end of file\n+TWO\r\n+three\r\n+four\n\\ No newline at end of file"
+        },
+        {
+          "filename": "src/new.js",
+          "status": "added",
+          "additions": 1,
+          "deletions": 0,
+          "changes": 1,
+          "patch": "@@ -0,0 +1 @@\n+export const x = 1;"
+        },
+        {
+          "filename": "src/old.js",
+          "status": "removed",
+          "additions": 0,
+          "deletions": 1,
+          "changes": 1,
+          "patch": "@@ -1 +0,0 @@\n-gone"
+        },
+        {
+          "filename": "docs/guide notes/Überblick.md",
+          "status": "modified",
+          "additions": 1,
+          "deletions": 1,
+          "changes": 2,
+          "patch": "@@ -1,3 +1,3 @@\n # Überblick\n \n-Alt.\n+Neu."
+        }
+      ]
+    },
+    {
+      "url": "https://api.github.com/repos/acme/widgets/pulls/42/files?per_page=100&page=2",
+      "link": null,
+      "body": [
+        {
+          "filename": "src/moved.js",
+          "previous_filename": "src/orig.js",
+          "status": "renamed",
+          "additions": 1,
+          "deletions": 1,
+          "changes": 2,
+          "patch": "@@ -1 +1 @@\n-a\n+b"
+        },
+        {
+          "filename": "assets/logo.png",
+          "status": "modified",
+          "additions": 0,
+          "deletions": 0,
+          "changes": 0
+        }
+      ]
+    }
+  ],
+  "compareUrl": "https://api.github.com/repos/acme/widgets/compare/ba5eba5eba5eba5eba5eba5eba5eba5eba5eba5e...c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+  "compare": {
+    "status": "ahead",
+    "merge_base_commit": { "sha": "ba5eba5eba5eba5eba5eba5eba5eba5eba5eba5e" }
+  },
+  "advancedCompareUrl": "https://api.github.com/repos/acme/widgets/compare/adadadadadadadadadadadadadadadadadadadad...c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+  "expectedContext": {
+    "owner": "acme",
+    "repo": "widgets",
+    "pullNumber": 42,
+    "reviewedCommit": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+    "pullHead": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+    "currentBaseTip": "ba5eba5eba5eba5eba5eba5eba5eba5eba5eba5e",
+    "diff": {
+      "baseCommit": "ba5eba5eba5eba5eba5eba5eba5eba5eba5eba5e",
+      "headCommit": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+      "files": [
+        {
+          "path": "src/app.js",
+          "patch": "@@ -1,6 +1,7 @@\n 'use strict';\n \n const A = 1;\n+const LIMIT = 5;\n const B = 2;\n \n function f() {\n@@ -8,7 +9,7 @@ function f() {\n }\n \n function g() {\n-  return B;\n+  return B * LIMIT;\n }\n \n module.exports = { f, g };"
+        },
+        {
+          "path": "docs/crlf.txt",
+          "patch": "@@ -1,3 +1,4 @@\n one\r\n-two\r\n-three\n\\ No newline at end of file\n+TWO\r\n+three\r\n+four\n\\ No newline at end of file"
+        },
+        { "path": "src/new.js", "patch": "@@ -0,0 +1 @@\n+export const x = 1;" },
+        { "path": "src/old.js", "patch": "@@ -1 +0,0 @@\n-gone" },
+        { "path": "docs/guide notes/Überblick.md", "patch": "@@ -1,3 +1,3 @@\n # Überblick\n \n-Alt.\n+Neu." },
+        { "path": "src/moved.js", "previousPath": "src/orig.js", "patch": "@@ -1 +1 @@\n-a\n+b" },
+        { "path": "assets/logo.png" }
+      ]
+    },
+    "fileDiagnostics": [{ "path": "assets/logo.png", "reason": "patch-omitted" }]
+  },
+  "contents": [
+    {
+      "commit": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+      "path": "src/app.js",
+      "url": "https://api.github.com/repos/acme/widgets/contents/src/app.js?ref=c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+      "text": "'use strict';\n\nconst A = 1;\nconst LIMIT = 5;\nconst B = 2;\n\nfunction f() {\n  return A;\n}\n\nfunction g() {\n  return B * LIMIT;\n}\n\nmodule.exports = { f, g };\n"
+    },
+    {
+      "commit": "ba5eba5eba5eba5eba5eba5eba5eba5eba5eba5e",
+      "path": "src/app.js",
+      "url": "https://api.github.com/repos/acme/widgets/contents/src/app.js?ref=ba5eba5eba5eba5eba5eba5eba5eba5eba5eba5e",
+      "text": "'use strict';\n\nconst A = 1;\nconst B = 2;\n\nfunction f() {\n  return A;\n}\n\nfunction g() {\n  return B;\n}\n\nmodule.exports = { f, g };\n"
+    },
+    {
+      "commit": "adadadadadadadadadadadadadadadadadadadad",
+      "path": "src/app.js",
+      "url": "https://api.github.com/repos/acme/widgets/contents/src/app.js?ref=adadadadadadadadadadadadadadadadadadadad",
+      "text": "'use strict';\n\nconst A = 1;\nconst B = 3;\n\nfunction f() {\n  return A;\n}\n\nfunction g() {\n  return B;\n}\n\nmodule.exports = { f, g };\n"
+    },
+    {
+      "commit": "ea71ea71ea71ea71ea71ea71ea71ea71ea71ea71",
+      "path": "src/app.js",
+      "url": "https://api.github.com/repos/acme/widgets/contents/src/app.js?ref=ea71ea71ea71ea71ea71ea71ea71ea71ea71ea71",
+      "text": "module.exports = 'historical';\n"
+    },
+    {
+      "commit": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+      "path": "docs/crlf.txt",
+      "url": "https://api.github.com/repos/acme/widgets/contents/docs/crlf.txt?ref=c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+      "text": "one\r\nTWO\r\nthree\r\nfour"
+    },
+    {
+      "commit": "ba5eba5eba5eba5eba5eba5eba5eba5eba5eba5e",
+      "path": "docs/crlf.txt",
+      "url": "https://api.github.com/repos/acme/widgets/contents/docs/crlf.txt?ref=ba5eba5eba5eba5eba5eba5eba5eba5eba5eba5e",
+      "text": "one\r\ntwo\r\nthree"
+    },
+    {
+      "commit": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+      "path": "src/new.js",
+      "url": "https://api.github.com/repos/acme/widgets/contents/src/new.js?ref=c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+      "text": "export const x = 1;\n"
+    },
+    {
+      "commit": "ba5eba5eba5eba5eba5eba5eba5eba5eba5eba5e",
+      "path": "src/new.js",
+      "url": "https://api.github.com/repos/acme/widgets/contents/src/new.js?ref=ba5eba5eba5eba5eba5eba5eba5eba5eba5eba5e",
+      "absent": true
+    },
+    {
+      "commit": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+      "path": "src/old.js",
+      "url": "https://api.github.com/repos/acme/widgets/contents/src/old.js?ref=c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+      "absent": true
+    },
+    {
+      "commit": "ba5eba5eba5eba5eba5eba5eba5eba5eba5eba5e",
+      "path": "src/old.js",
+      "url": "https://api.github.com/repos/acme/widgets/contents/src/old.js?ref=ba5eba5eba5eba5eba5eba5eba5eba5eba5eba5e",
+      "text": "gone\n"
+    },
+    {
+      "commit": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+      "path": "docs/guide notes/Überblick.md",
+      "url": "https://api.github.com/repos/acme/widgets/contents/docs/guide%20notes/%C3%9Cberblick.md?ref=c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+      "text": "# Überblick\n\nNeu.\n"
+    },
+    {
+      "commit": "ba5eba5eba5eba5eba5eba5eba5eba5eba5eba5e",
+      "path": "docs/guide notes/Überblick.md",
+      "url": "https://api.github.com/repos/acme/widgets/contents/docs/guide%20notes/%C3%9Cberblick.md?ref=ba5eba5eba5eba5eba5eba5eba5eba5eba5eba5e",
+      "text": "# Überblick\n\nAlt.\n"
+    },
+    {
+      "commit": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+      "path": "src/same.js",
+      "url": "https://api.github.com/repos/acme/widgets/contents/src/same.js?ref=c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+      "text": "first\nmiddle\nlast"
+    },
+    {
+      "commit": "ba5eba5eba5eba5eba5eba5eba5eba5eba5eba5e",
+      "path": "src/same.js",
+      "url": "https://api.github.com/repos/acme/widgets/contents/src/same.js?ref=ba5eba5eba5eba5eba5eba5eba5eba5eba5eba5e",
+      "text": "first\nmiddle\nlast"
+    },
+    {
+      "commit": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+      "path": "src/bom.txt",
+      "url": "https://api.github.com/repos/acme/widgets/contents/src/bom.txt?ref=c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+      "text": "﻿hello\n"
+    },
+    {
+      "commit": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+      "path": "src/latin1.txt",
+      "url": "https://api.github.com/repos/acme/widgets/contents/src/latin1.txt?ref=c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+      "bytesHex": "636166e90a"
+    },
+    {
+      "commit": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+      "path": "src/big.txt",
+      "url": "https://api.github.com/repos/acme/widgets/contents/src/big.txt?ref=c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+      "text": "0123456789abcdefg"
+    }
+  ],
+  "specialEntries": {
+    "description": "Raw Git tree entries at the head commit whose path kind matters. A symlink's blob content is its target path. `contents` records what the Contents API answers for the requested path: GitHub documents that it dereferences an in-repository symlink to a normal file and returns the target's content, so those answers look like an ordinary file with the target's valid blob id. Only regular files (100644, 100755) are source; every other kind must be refused even when a dereferencing answer is self-consistent.",
+    "entries": [
+      {
+        "commit": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+        "path": "links/app-link.js",
+        "mode": "120000",
+        "target": "../src/app.js",
+        "contents": {
+          "requestedPath": "links/app-link.js",
+          "url": "https://api.github.com/repos/acme/widgets/contents/links/app-link.js?ref=c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+          "servesFileOf": "src/app.js"
+        }
+      },
+      {
+        "commit": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+        "path": "linkdir",
+        "mode": "120000",
+        "target": "src",
+        "contents": {
+          "requestedPath": "linkdir/app.js",
+          "url": "https://api.github.com/repos/acme/widgets/contents/linkdir/app.js?ref=c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+          "servesFileOf": "src/app.js"
+        }
+      },
+      {
+        "commit": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+        "path": "vendor/lib",
+        "mode": "160000",
+        "submoduleCommit": "5ab5ab5ab5ab5ab5ab5ab5ab5ab5ab5ab5ab5ab5",
+        "contents": {
+          "requestedPath": "vendor/lib/index.js",
+          "url": "https://api.github.com/repos/acme/widgets/contents/vendor/lib/index.js?ref=c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+          "notFound": true
+        }
+      },
+      {
+        "commit": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+        "path": "bin/run.sh",
+        "mode": "100755",
+        "text": "#!/bin/sh\necho run\n",
+        "contents": {
+          "requestedPath": "bin/run.sh",
+          "url": "https://api.github.com/repos/acme/widgets/contents/bin/run.sh?ref=c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+          "servesFileOf": "bin/run.sh"
+        }
+      }
+    ]
+  }
+}

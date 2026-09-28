@@ -1,0 +1,11 @@
+{
+  "sarif-native-fidelity/lf.txt": "before\nnew\nafter\n",
+  "sarif-native-fidelity/crlf-lf.txt": "before\r\nnew\r\nafter\r\n",
+  "sarif-native-fidelity/crlf-crlf.txt": "before\r\nnew\r\nafter\r\n",
+  "sarif-native-fidelity/no-final-newline.txt": "before\nnew",
+  "sarif-native-fidelity/delete-last-line.txt": "before\n",
+  "sarif-native-fidelity/blank-last-line.txt": "before\n\n",
+  "sarif-native-fidelity/fences.md": "before\n```js\ncode\n```\ntrailing\nafter\n",
+  "sarif-native-fidelity/delete-no-final-newline.txt": "before\n",
+  "sarif-native-fidelity/multiline.txt": "before\nnew one\nnew two\nafter\n"
+}

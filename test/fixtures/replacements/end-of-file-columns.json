@@ -1,0 +1,367 @@
+{
+  "description": "Explicit column endpoints at the end of the file. SARIF 2.1.0 section 3.30.2 (Example 8) lets a region on the last line end at the end of the file with a column that counts the final newline sequence's characters, so on a last line terminated by a newline, the column one past its content plus the terminator length addresses the end-of-file position. That column works both as an insertion point and as a region end. An omitted endColumn still ends before the terminator. Only the last line, and only when it ends with a newline, gains this column; a column inside a CRLF is not assumed to be meaningful; lines that are not the last keep their columns within their content.",
+  "cases": [
+    {
+      "name": "insertion at the end-of-file column after a terminal LF",
+      "input": {
+        "sourceText": "a\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 3, "endColumn": 3 },
+        "insertedText": "x",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a\nx",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "a\n",
+        "replacementText": "a\nx",
+        "replacementLines": ["a\n", "x"],
+        "endsWithNewline": { "original": true, "edited": false }
+      },
+      "wrongEditedText": {
+        "columnCappedBeforeTerminator": "ax\n"
+      }
+    },
+    {
+      "name": "insertion at the end-of-file column after a terminal LF under code-point columns",
+      "input": {
+        "sourceText": "a\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 3, "endColumn": 3 },
+        "insertedText": "x",
+        "columnKind": "unicodeCodePoints"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a\nx",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "a\n",
+        "replacementText": "a\nx",
+        "replacementLines": ["a\n", "x"],
+        "endsWithNewline": { "original": true, "edited": false }
+      },
+      "wrongEditedText": {
+        "columnCappedBeforeTerminator": "ax\n"
+      }
+    },
+    {
+      "name": "insertion at the end-of-file column after a terminal CRLF counts both terminator characters",
+      "input": {
+        "sourceText": "a\r\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 4, "endColumn": 4 },
+        "insertedText": "x",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a\r\nx",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "a\r\n",
+        "replacementText": "a\r\nx",
+        "replacementLines": ["a\r\n", "x"],
+        "endsWithNewline": { "original": true, "edited": false }
+      },
+      "wrongEditedText": {
+        "crlfCountedAsOneColumn": "a\r\nx\n"
+      }
+    },
+    {
+      "name": "a column inside a terminal CRLF is not assumed to address a position",
+      "input": {
+        "sourceText": "a\r\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 3, "endColumn": 3 },
+        "insertedText": "x",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "unsupported", "reason": "column-within-terminator" }
+    },
+    {
+      "name": "deleting the terminal LF through the end-of-file column",
+      "input": {
+        "sourceText": "a\nb\n",
+        "deletedRegion": { "startLine": 2, "startColumn": 2, "endColumn": 3 },
+        "insertedText": "",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a\nb",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "b\n",
+        "replacementText": "b",
+        "replacementLines": ["b"],
+        "endsWithNewline": { "original": true, "edited": false }
+      },
+      "wrongEditedText": {
+        "columnCappedBeforeTerminator": "a\nb\n"
+      }
+    },
+    {
+      "name": "deleting the whole last line through the end-of-file column is a zero-line replacement",
+      "input": {
+        "sourceText": "a\nb\n",
+        "deletedRegion": { "startLine": 2, "startColumn": 1, "endColumn": 3 },
+        "insertedText": "",
+        "columnKind": "unicodeCodePoints"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a\n",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "b\n",
+        "replacementText": "",
+        "replacementLines": [],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "blankLineLeftBehind": "a\n\n"
+      }
+    },
+    {
+      "name": "deleting the whole last CRLF line through the end-of-file column",
+      "input": {
+        "sourceText": "a\r\nb\r\n",
+        "deletedRegion": { "startLine": 2, "startColumn": 1, "endColumn": 4 },
+        "insertedText": "",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a\r\n",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "b\r\n",
+        "replacementText": "",
+        "replacementLines": [],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "carriageReturnLeftBehind": "a\r\n\r"
+      }
+    },
+    {
+      "name": "region from line 1 to the end-of-file column on the last line",
+      "input": {
+        "sourceText": "a\nb\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 2, "endLine": 2, "endColumn": 3 },
+        "insertedText": "",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a",
+        "startLine": 1,
+        "endLine": 2,
+        "originalText": "a\nb\n",
+        "replacementText": "a",
+        "replacementLines": ["a"],
+        "endsWithNewline": { "original": true, "edited": false }
+      },
+      "wrongEditedText": {
+        "columnCappedBeforeTerminator": "a\n"
+      }
+    },
+    {
+      "name": "end-of-file column after a supplementary-plane character under UTF-16 columns",
+      "input": {
+        "sourceText": "😀\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 4, "endColumn": 4 },
+        "insertedText": "!",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "😀\n!",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "😀\n",
+        "replacementText": "😀\n!",
+        "replacementLines": ["😀\n", "!"],
+        "endsWithNewline": { "original": true, "edited": false }
+      }
+    },
+    {
+      "name": "end-of-file column after a supplementary-plane character under code-point columns",
+      "input": {
+        "sourceText": "😀\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 3, "endColumn": 3 },
+        "insertedText": "!",
+        "columnKind": "unicodeCodePoints"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "😀\n!",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "😀\n",
+        "replacementText": "😀\n!",
+        "replacementLines": ["😀\n", "!"],
+        "endsWithNewline": { "original": true, "edited": false }
+      },
+      "wrongEditedText": {
+        "utf16ColumnsApplied": "😀!\n"
+      }
+    },
+    {
+      "name": "code-point column past the end-of-file column is out of bounds even where UTF-16 would reach it",
+      "input": {
+        "sourceText": "😀\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 4, "endColumn": 4 },
+        "insertedText": "!",
+        "columnKind": "unicodeCodePoints"
+      },
+      "expected": { "kind": "invalid", "reason": "out-of-bounds" }
+    },
+    {
+      "name": "end-of-file column after a byte-order mark under UTF-16 columns",
+      "input": {
+        "sourceText": "﻿a\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 3, "endColumn": 3 },
+        "insertedText": "x",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "﻿a\nx",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "﻿a\n",
+        "replacementText": "﻿a\nx",
+        "replacementLines": ["﻿a\n", "x"],
+        "endsWithNewline": { "original": true, "edited": false }
+      },
+      "wrongEditedText": {
+        "byteOrderMarkCountedAsColumn": "﻿ax\n"
+      }
+    },
+    {
+      "name": "end-of-file column after a byte-order mark and a supplementary-plane character under UTF-16 columns",
+      "input": {
+        "sourceText": "﻿😀\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 4, "endColumn": 4 },
+        "insertedText": "x",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "﻿😀\nx",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "﻿😀\n",
+        "replacementText": "﻿😀\nx",
+        "replacementLines": ["﻿😀\n", "x"],
+        "endsWithNewline": { "original": true, "edited": false }
+      },
+      "wrongEditedText": {
+        "byteOrderMarkCountedAsColumn": "﻿😀x\n"
+      }
+    },
+    {
+      "name": "end-of-file column after a byte-order mark and a supplementary-plane character under code-point columns",
+      "input": {
+        "sourceText": "﻿😀\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 3, "endColumn": 3 },
+        "insertedText": "x",
+        "columnKind": "unicodeCodePoints"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "﻿😀\nx",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "﻿😀\n",
+        "replacementText": "﻿😀\nx",
+        "replacementLines": ["﻿😀\n", "x"],
+        "endsWithNewline": { "original": true, "edited": false }
+      },
+      "wrongEditedText": {
+        "byteOrderMarkCountedAsColumn": "﻿😀x\n"
+      }
+    },
+    {
+      "name": "end-of-file column agrees with the character offset of the end of the file",
+      "input": {
+        "sourceText": "a\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 3, "endColumn": 3, "charOffset": 2, "charLength": 0 },
+        "insertedText": "x",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a\nx",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "a\n",
+        "replacementText": "a\nx",
+        "replacementLines": ["a\n", "x"],
+        "endsWithNewline": { "original": true, "edited": false }
+      }
+    },
+    {
+      "name": "end-of-file column disagrees with an offset before the terminator",
+      "input": {
+        "sourceText": "a\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 3, "endColumn": 3, "charOffset": 1, "charLength": 0 },
+        "insertedText": "x",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "invalid", "reason": "coordinate-disagreement" }
+    },
+    {
+      "name": "omitted endColumn on the last line still ends before its terminator",
+      "input": {
+        "sourceText": "a\nb\n",
+        "deletedRegion": { "startLine": 2, "startColumn": 1 },
+        "insertedText": "B",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a\nB\n",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "b\n",
+        "replacementText": "B\n",
+        "replacementLines": ["B\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "omittedEndColumnConsumesTerminator": "a\nB"
+      }
+    },
+    {
+      "name": "column past the end-of-file column is out of bounds",
+      "input": {
+        "sourceText": "a\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 4, "endColumn": 4 },
+        "insertedText": "x",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "invalid", "reason": "out-of-bounds" }
+    },
+    {
+      "name": "without a terminal newline the last line has no column past its content end",
+      "input": {
+        "sourceText": "a",
+        "deletedRegion": { "startLine": 1, "startColumn": 3, "endColumn": 3 },
+        "insertedText": "x",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "invalid", "reason": "out-of-bounds" }
+    },
+    {
+      "name": "a line that is not the last gains no column over its terminator",
+      "input": {
+        "sourceText": "a\nb\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 3, "endColumn": 3 },
+        "insertedText": "x",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "invalid", "reason": "out-of-bounds" }
+    }
+  ]
+}

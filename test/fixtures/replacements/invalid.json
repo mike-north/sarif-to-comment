@@ -1,0 +1,173 @@
+{
+  "description": "Requests that cannot denote a literal edit of the source (invalid) and possibly valid SARIF outside the verified profile (unsupported). None may be clamped, shifted, or reinterpreted into a nearby valid region.",
+  "cases": [
+    {
+      "name": "absent column kind is not defaulted",
+      "input": {
+        "sourceText": "a\n",
+        "deletedRegion": { "startLine": 1 },
+        "insertedText": "b"
+      },
+      "expected": { "kind": "invalid", "reason": "missing-column-kind" }
+    },
+    {
+      "name": "unknown column kind",
+      "input": {
+        "sourceText": "a\n",
+        "deletedRegion": { "startLine": 1 },
+        "insertedText": "b",
+        "columnKind": "bytes"
+      },
+      "expected": { "kind": "invalid", "reason": "unknown-column-kind" }
+    },
+    {
+      "name": "source text that is not a string",
+      "input": {
+        "sourceText": 42,
+        "deletedRegion": { "startLine": 1 },
+        "insertedText": "b",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "invalid", "reason": "invalid-source-text" }
+    },
+    {
+      "name": "absent inserted text is not treated as deletion",
+      "input": {
+        "sourceText": "a\n",
+        "deletedRegion": { "startLine": 1 },
+        "insertedText": null,
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "invalid", "reason": "invalid-inserted-text" }
+    },
+    {
+      "name": "absent deleted region",
+      "input": {
+        "sourceText": "a\n",
+        "insertedText": "b",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "invalid", "reason": "invalid-region" }
+    },
+    {
+      "name": "region with neither line nor character coordinates",
+      "input": {
+        "sourceText": "a\n",
+        "deletedRegion": {},
+        "insertedText": "b",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "invalid", "reason": "invalid-region" }
+    },
+    {
+      "name": "end line without a start line",
+      "input": {
+        "sourceText": "a\nb\n",
+        "deletedRegion": { "endLine": 2 },
+        "insertedText": "b",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "invalid", "reason": "invalid-region" }
+    },
+    {
+      "name": "line 0 is not a 1-based line",
+      "input": {
+        "sourceText": "a\nb\n",
+        "deletedRegion": { "startLine": 0 },
+        "insertedText": "b",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "invalid", "reason": "invalid-region" }
+    },
+    {
+      "name": "column 0 is not a 1-based column",
+      "input": {
+        "sourceText": "ab\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 0, "endColumn": 2 },
+        "insertedText": "b",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "invalid", "reason": "invalid-region" }
+    },
+    {
+      "name": "fractional line number",
+      "input": {
+        "sourceText": "a\nb\n",
+        "deletedRegion": { "startLine": 1.5 },
+        "insertedText": "b",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "invalid", "reason": "invalid-region" }
+    },
+    {
+      "name": "line past the end of the file",
+      "input": {
+        "sourceText": "a\nb\n",
+        "deletedRegion": { "startLine": 4 },
+        "insertedText": "c",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "invalid", "reason": "out-of-bounds" }
+    },
+    {
+      "name": "start column more than one past the end of its line",
+      "input": {
+        "sourceText": "ab\ncd\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 4, "endColumn": 4 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "invalid", "reason": "out-of-bounds" }
+    },
+    {
+      "name": "end column reaching into the newline is not reinterpreted as consuming it",
+      "input": {
+        "sourceText": "ab\ncd\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 1, "endColumn": 4 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "invalid", "reason": "out-of-bounds" }
+    },
+    {
+      "name": "end line before start line",
+      "input": {
+        "sourceText": "a\nb\nc\n",
+        "deletedRegion": { "startLine": 3, "endLine": 2 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "invalid", "reason": "inverted-region" }
+    },
+    {
+      "name": "end column before start column on one line",
+      "input": {
+        "sourceText": "abc\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 3, "endColumn": 2 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "invalid", "reason": "inverted-region" }
+    },
+    {
+      "name": "byte coordinates are an unsupported representation, not malformed input",
+      "input": {
+        "sourceText": "ab\n",
+        "deletedRegion": { "byteOffset": 0, "byteLength": 1 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "unsupported", "reason": "byte-region" }
+    },
+    {
+      "name": "byte coordinates alongside line coordinates are not ignored",
+      "input": {
+        "sourceText": "ab\n",
+        "deletedRegion": { "startLine": 1, "byteOffset": 0, "byteLength": 2 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "unsupported", "reason": "byte-region" }
+    }
+  ]
+}

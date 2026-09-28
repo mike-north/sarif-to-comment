@@ -1,0 +1,7 @@
+{
+  "startedAt": "2026-09-28T02:21:21.535Z",
+  "outcome": {
+    "status": "blocked",
+    "markdown": "## Review blocked\n\nNothing was published and no publication state was written.\n\n**Review blocked:** 2 problems must be resolved before publication; nothing was published.\n\n- `suggestion-historical-unsupported` at `/runs/0/results/6`: The reviewed commit is not the pull request head, so a native suggestion could not be applied to the reviewed text.\n- `suggestion-historical-unsupported` at `/runs/0/results/7`: The reviewed commit is not the pull request head, so a native suggestion could not be applied to the reviewed text."
+  }
+}

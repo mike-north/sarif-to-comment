@@ -1,0 +1,59 @@
+{
+  "commit": "14d7dbd8adbb8a2d745f0822ec377c665a3b665e",
+  "results": [
+    {
+      "path": "sarif-native-fidelity/lf.txt",
+      "matches": true,
+      "expected": "before\nnew\nafter\n",
+      "actual": "before\nnew\nafter\n"
+    },
+    {
+      "path": "sarif-native-fidelity/crlf-lf.txt",
+      "matches": true,
+      "expected": "before\r\nnew\r\nafter\r\n",
+      "actual": "before\r\nnew\r\nafter\r\n"
+    },
+    {
+      "path": "sarif-native-fidelity/crlf-crlf.txt",
+      "matches": false,
+      "expected": "before\r\nnew\r\nafter\r\n",
+      "actual": "before\r\nnew\r\r\nafter\r\n"
+    },
+    {
+      "path": "sarif-native-fidelity/no-final-newline.txt",
+      "matches": true,
+      "expected": "before\nnew",
+      "actual": "before\nnew"
+    },
+    {
+      "path": "sarif-native-fidelity/delete-last-line.txt",
+      "matches": true,
+      "expected": "before\n",
+      "actual": "before\n"
+    },
+    {
+      "path": "sarif-native-fidelity/blank-last-line.txt",
+      "matches": false,
+      "expected": "before\n\n",
+      "actual": "before\n"
+    },
+    {
+      "path": "sarif-native-fidelity/fences.md",
+      "matches": false,
+      "expected": "before\n```js\ncode\n```\ntrailing\nafter\n",
+      "actual": "before\nafter\n"
+    },
+    {
+      "path": "sarif-native-fidelity/delete-no-final-newline.txt",
+      "matches": false,
+      "expected": "before\n",
+      "actual": "before"
+    },
+    {
+      "path": "sarif-native-fidelity/multiline.txt",
+      "matches": true,
+      "expected": "before\nnew one\nnew two\nafter\n",
+      "actual": "before\nnew one\nnew two\nafter\n"
+    }
+  ]
+}

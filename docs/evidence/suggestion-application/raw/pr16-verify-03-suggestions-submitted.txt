@@ -1,0 +1,24 @@
+PASS  review 5333375577 is readable and authored by mike-north
+PASS  review state is COMMENTED (COMMENTED)
+PASS  review commit is the pinned head
+PASS  publication state receipt names this review
+PASS  read-back body equals the saved create request body byte for byte
+PASS  body ends with its single marker
+PASS  inline-only body is exactly "\n\n" + marker
+PASS  3 REST comments and 3 threads
+PASS  AP001 authored source text matches git show
+PASS  AP001 thread anchored at RIGHT 2
+PASS  AP001 comment carries its message
+PASS  AP001 carries exactly the suggestion "first replacement\nsecond replacement\nthird replacement\n"
+PASS  AP001 read-back comment body equals the saved request comment body byte for byte
+PASS  AP002 authored source text matches git show
+PASS  AP002 thread anchored at RIGHT 2-3
+PASS  AP002 comment carries its message
+PASS  AP002 carries exactly the suggestion "  return 'Goodbye, ' + name;\n"
+PASS  AP002 read-back comment body equals the saved request comment body byte for byte
+PASS  AP003 authored source text matches git show
+PASS  AP003 thread anchored at RIGHT 3
+PASS  AP003 comment carries its message
+PASS  AP003 carries exactly the suggestion ""
+PASS  AP003 read-back comment body equals the saved request comment body byte for byte
+ALL CHECKS PASSED

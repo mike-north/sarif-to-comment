@@ -1,0 +1,124 @@
+{
+  "review_threads": [
+    {
+      "id": "PRRT_kwDOUuyy7s6mgWzS",
+      "is_resolved": false,
+      "is_outdated": false,
+      "path": "sarif-placement-probe.txt",
+      "line": 5,
+      "diff_side": "RIGHT",
+      "start_line": 5,
+      "start_diff_side": null,
+      "original_line": 5,
+      "original_start_line": null,
+      "resolved_by": null,
+      "comments": [
+        {
+          "id": "PRRC_kwDOUuyy7s71b8zZ",
+          "database_id": 4117744857,
+          "body": "Probe: unchanged context keep-middle at head line 5.",
+          "created_at": "2026-09-28T01:08:19Z",
+          "updated_at": "2026-09-28T01:08:19Z",
+          "author": {
+            "login": "mike-north",
+            "name": "mike-north",
+            "email": null,
+            "avatar_url": "https://avatars.githubusercontent.com/u/558005?u=a27f905c8f24e1ad227d32905fa5512fd615153d&v=4",
+            "id": null
+          },
+          "viewer_did_author": true
+        }
+      ]
+    },
+    {
+      "id": "PRRT_kwDOUuyy7s6mgWzU",
+      "is_resolved": false,
+      "is_outdated": false,
+      "path": "sarif-placement-probe.txt",
+      "line": 3,
+      "diff_side": "LEFT",
+      "start_line": 3,
+      "start_diff_side": null,
+      "original_line": 3,
+      "original_start_line": null,
+      "resolved_by": null,
+      "comments": [
+        {
+          "id": "PRRC_kwDOUuyy7s71b8za",
+          "database_id": 4117744858,
+          "body": "Probe: deleted remove-me at base line 3.",
+          "created_at": "2026-09-28T01:08:19Z",
+          "updated_at": "2026-09-28T01:08:19Z",
+          "author": {
+            "login": "mike-north",
+            "name": "mike-north",
+            "email": null,
+            "avatar_url": "https://avatars.githubusercontent.com/u/558005?u=a27f905c8f24e1ad227d32905fa5512fd615153d&v=4",
+            "id": null
+          },
+          "viewer_did_author": true
+        }
+      ]
+    },
+    {
+      "id": "PRRT_kwDOUuyy7s6mgWzW",
+      "is_resolved": false,
+      "is_outdated": false,
+      "path": "sarif-placement-probe.txt",
+      "line": 2,
+      "diff_side": "RIGHT",
+      "start_line": 2,
+      "start_diff_side": null,
+      "original_line": 2,
+      "original_start_line": null,
+      "resolved_by": null,
+      "comments": [
+        {
+          "id": "PRRC_kwDOUuyy7s71b8zd",
+          "database_id": 4117744861,
+          "body": "Probe: added inserted-one at head line 2.",
+          "created_at": "2026-09-28T01:08:20Z",
+          "updated_at": "2026-09-28T01:08:20Z",
+          "author": {
+            "login": "mike-north",
+            "name": "mike-north",
+            "email": null,
+            "avatar_url": "https://avatars.githubusercontent.com/u/558005?u=a27f905c8f24e1ad227d32905fa5512fd615153d&v=4",
+            "id": null
+          },
+          "viewer_did_author": true
+        }
+      ]
+    },
+    {
+      "id": "PRRT_kwDOUuyy7s6mgWzZ",
+      "is_resolved": false,
+      "is_outdated": false,
+      "path": "sarif-placement-probe.txt",
+      "line": 6,
+      "diff_side": "RIGHT",
+      "start_line": 4,
+      "start_diff_side": "RIGHT",
+      "original_line": 6,
+      "original_start_line": 4,
+      "resolved_by": null,
+      "comments": [
+        {
+          "id": "PRRC_kwDOUuyy7s71b8zf",
+          "database_id": 4117744863,
+          "body": "Probe: keep-before, keep-middle, keep-after at head lines 4 through 6.",
+          "created_at": "2026-09-28T01:08:20Z",
+          "updated_at": "2026-09-28T01:08:20Z",
+          "author": {
+            "login": "mike-north",
+            "name": "mike-north",
+            "email": null,
+            "avatar_url": "https://avatars.githubusercontent.com/u/558005?u=a27f905c8f24e1ad227d32905fa5512fd615153d&v=4",
+            "id": null
+          },
+          "viewer_did_author": true
+        }
+      ]
+    }
+  ]
+}

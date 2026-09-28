@@ -1,0 +1,120 @@
+{
+  "readAt": "2026-09-28T02:30:42.372Z",
+  "viewer": {
+    "login": "mike-north",
+    "id": 558005
+  },
+  "pull": {
+    "number": 16,
+    "state": "open",
+    "head": "54cae057bc66ef7b49c3186923e0be0a0a0917ae",
+    "base": "a43efe70bad0b22c31b03db9985abbad89d44d3e",
+    "headRef": "sarif-e2e/apply-head-20260927",
+    "baseRef": "sarif-e2e/apply-base-20260927"
+  },
+  "reviews": [
+    {
+      "id": 5333375577,
+      "userId": 558005,
+      "state": "PENDING",
+      "commit_id": "54cae057bc66ef7b49c3186923e0be0a0a0917ae"
+    }
+  ],
+  "ownedReviews": [
+    {
+      "id": 5333375577,
+      "state": "PENDING",
+      "commit_id": "54cae057bc66ef7b49c3186923e0be0a0a0917ae",
+      "html_url": "https://github.com/mike-north/doc-linter/pull/16#pullrequestreview-5333375577",
+      "body": "\n\n<!-- sarif-to-comment:review:69e623b0-bf6e-43ca-b352-86e9da33496b -->",
+      "restComments": [
+        {
+          "id": 4118039304,
+          "path": "apply-fixture/one-to-three.txt",
+          "position": 2,
+          "original_position": 2,
+          "line": null,
+          "side": null,
+          "start_line": null,
+          "original_line": null,
+          "commit_id": "54cae057bc66ef7b49c3186923e0be0a0a0917ae",
+          "original_commit_id": "54cae057bc66ef7b49c3186923e0be0a0a0917ae",
+          "body": "Expand the placeholder into three lines\n\n**Fix:** Replace one line with three\n\n<sub>— E2EApply 1.0.0 · rule `AP001`</sub>\n\n```suggestion\nfirst replacement\nsecond replacement\nthird replacement\n```"
+        },
+        {
+          "id": 4118039314,
+          "path": "apply-fixture/two-to-one.js",
+          "position": 3,
+          "original_position": 3,
+          "line": null,
+          "side": null,
+          "start_line": null,
+          "original_line": null,
+          "commit_id": "54cae057bc66ef7b49c3186923e0be0a0a0917ae",
+          "original_commit_id": "54cae057bc66ef7b49c3186923e0be0a0a0917ae",
+          "body": "Return the greeting directly\n\n**Fix:** Replace two lines with one\n\n<sub>— E2EApply 1.0.0 · rule `AP002`</sub>\n\n```suggestion\n  return 'Goodbye, ' + name;\n```"
+        },
+        {
+          "id": 4118039316,
+          "path": "apply-fixture/delete-middle.txt",
+          "position": 3,
+          "original_position": 3,
+          "line": null,
+          "side": null,
+          "start_line": null,
+          "original_line": null,
+          "commit_id": "54cae057bc66ef7b49c3186923e0be0a0a0917ae",
+          "original_commit_id": "54cae057bc66ef7b49c3186923e0be0a0a0917ae",
+          "body": "Remove the middle line\n\n**Fix:** Delete line 3 and its newline\n\n<sub>— E2EApply 1.0.0 · rule `AP003`</sub>\n\n```suggestion\n```"
+        }
+      ],
+      "threads": [
+        {
+          "path": "apply-fixture/one-to-three.txt",
+          "subjectType": "LINE",
+          "isOutdated": false,
+          "diffSide": "RIGHT",
+          "startDiffSide": null,
+          "line": 2,
+          "startLine": 2,
+          "originalLine": 2,
+          "originalStartLine": null,
+          "commentIds": [
+            4118039304
+          ],
+          "originalCommit": "54cae057bc66ef7b49c3186923e0be0a0a0917ae"
+        },
+        {
+          "path": "apply-fixture/two-to-one.js",
+          "subjectType": "LINE",
+          "isOutdated": false,
+          "diffSide": "RIGHT",
+          "startDiffSide": "RIGHT",
+          "line": 3,
+          "startLine": 2,
+          "originalLine": 3,
+          "originalStartLine": 2,
+          "commentIds": [
+            4118039314
+          ],
+          "originalCommit": "54cae057bc66ef7b49c3186923e0be0a0a0917ae"
+        },
+        {
+          "path": "apply-fixture/delete-middle.txt",
+          "subjectType": "LINE",
+          "isOutdated": false,
+          "diffSide": "RIGHT",
+          "startDiffSide": null,
+          "line": 3,
+          "startLine": 3,
+          "originalLine": 3,
+          "originalStartLine": null,
+          "commentIds": [
+            4118039316
+          ],
+          "originalCommit": "54cae057bc66ef7b49c3186923e0be0a0a0917ae"
+        }
+      ]
+    }
+  ]
+}

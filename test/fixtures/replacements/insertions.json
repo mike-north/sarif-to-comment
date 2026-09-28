@@ -1,0 +1,113 @@
+{
+  "description": "Insertions: regions whose start and end positions are equal delete nothing and insert text at that position. The candidate is the line containing the insertion point.",
+  "cases": [
+    {
+      "name": "mid-line insertion",
+      "input": {
+        "sourceText": "let x = 1;\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 5, "endColumn": 5 },
+        "insertedText": "mut ",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "let mut x = 1;\n",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "let x = 1;\n",
+        "replacementText": "let mut x = 1;\n",
+        "replacementLines": ["let mut x = 1;\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "endColumnTreatedAsInclusive": "let mut  = 1;\n",
+        "columnsTreatedAsZeroBased": "let xmut  = 1;\n"
+      }
+    },
+    {
+      "name": "insertion at the start of a line",
+      "input": {
+        "sourceText": "a\nb\n",
+        "deletedRegion": { "startLine": 2, "startColumn": 1, "endColumn": 1 },
+        "insertedText": "// c\n",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a\n// c\nb\n",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "b\n",
+        "replacementText": "// c\nb\n",
+        "replacementLines": ["// c\n", "b\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "zeroWidthRegionTreatedAsWholeLine": "a\n// c\n\n"
+      }
+    },
+    {
+      "name": "insertion at the end of a line, one column past its last character",
+      "input": {
+        "sourceText": "foo()\nbar\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 6, "endColumn": 6 },
+        "insertedText": ";",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "foo();\nbar\n",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "foo()\n",
+        "replacementText": "foo();\n",
+        "replacementLines": ["foo();\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "columnsTreatedAsZeroBased": "foo()\n;bar\n"
+      }
+    },
+    {
+      "name": "insertion at the end of a final line without a terminal newline",
+      "input": {
+        "sourceText": "a\nb",
+        "deletedRegion": { "startLine": 2, "startColumn": 2, "endColumn": 2 },
+        "insertedText": ";",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a\nb;",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "b",
+        "replacementText": "b;",
+        "replacementLines": ["b;"],
+        "endsWithNewline": { "original": false, "edited": false }
+      }
+    },
+    {
+      "name": "insertion at the start of the file",
+      "input": {
+        "sourceText": "x\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 1, "endLine": 1, "endColumn": 1 },
+        "insertedText": "#!/bin/sh\n",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "#!/bin/sh\nx\n",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "x\n",
+        "replacementText": "#!/bin/sh\nx\n",
+        "replacementLines": ["#!/bin/sh\n", "x\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "endColumnTreatedAsInclusive": "#!/bin/sh\n\n"
+      }
+    }
+  ]
+}

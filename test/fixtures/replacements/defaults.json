@@ -1,0 +1,167 @@
+{
+  "description": "Explicitly serialized SARIF region defaults. charOffset and byteOffset default to -1 (unset) and charLength and byteLength default to 0, so a producer that writes every default out must get exactly the result of the line/column form alone. An offset form is active only when its offset is at least 0; a non-zero length without an active offset, and any active byte offset, remain diagnosed rather than ignored.",
+  "cases": [
+    {
+      "name": "unset byteOffset leaves a line region unchanged",
+      "input": {
+        "sourceText": "a\nb\nc\n",
+        "deletedRegion": { "startLine": 2, "byteOffset": -1 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a\nX\nc\n",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "b\n",
+        "replacementText": "X\n",
+        "replacementLines": ["X\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      }
+    },
+    {
+      "name": "unset byteOffset with its default zero byteLength leaves a line region unchanged",
+      "input": {
+        "sourceText": "a\nb\nc\n",
+        "deletedRegion": { "startLine": 2, "byteOffset": -1, "byteLength": 0 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a\nX\nc\n",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "b\n",
+        "replacementText": "X\n",
+        "replacementLines": ["X\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      }
+    },
+    {
+      "name": "default zero byteLength with byteOffset omitted leaves a line region unchanged",
+      "input": {
+        "sourceText": "a\nb\nc\n",
+        "deletedRegion": { "startLine": 2, "byteLength": 0 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a\nX\nc\n",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "b\n",
+        "replacementText": "X\n",
+        "replacementLines": ["X\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      }
+    },
+    {
+      "name": "unset charOffset with its default zero charLength leaves a line region unchanged",
+      "input": {
+        "sourceText": "a\nb\nc\n",
+        "deletedRegion": { "startLine": 2, "charOffset": -1, "charLength": 0 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a\nX\nc\n",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "b\n",
+        "replacementText": "X\n",
+        "replacementLines": ["X\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      }
+    },
+    {
+      "name": "a line region with every other property serialized at its default",
+      "input": {
+        "sourceText": "a\nb\nc\n",
+        "deletedRegion": {
+          "startLine": 2,
+          "startColumn": 1,
+          "charOffset": -1,
+          "charLength": 0,
+          "byteOffset": -1,
+          "byteLength": 0
+        },
+        "insertedText": "X",
+        "columnKind": "unicodeCodePoints"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a\nX\nc\n",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "b\n",
+        "replacementText": "X\n",
+        "replacementLines": ["X\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      }
+    },
+    {
+      "name": "a region with only defaults denotes no location",
+      "input": {
+        "sourceText": "a\nb\nc\n",
+        "deletedRegion": { "charOffset": -1, "charLength": 0, "byteOffset": -1, "byteLength": 0 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "invalid", "reason": "invalid-region" }
+    },
+    {
+      "name": "a non-zero byteLength without an active byteOffset is not ignored",
+      "input": {
+        "sourceText": "a\nb\nc\n",
+        "deletedRegion": { "startLine": 2, "byteOffset": -1, "byteLength": 3 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "unsupported", "reason": "byte-region" }
+    },
+    {
+      "name": "an active byteOffset remains an unsupported byte region",
+      "input": {
+        "sourceText": "a\nb\nc\n",
+        "deletedRegion": { "startLine": 2, "byteOffset": 2, "byteLength": 1 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "unsupported", "reason": "byte-region" }
+    },
+    {
+      "name": "a non-zero charLength with an unset charOffset is not ignored",
+      "input": {
+        "sourceText": "a\nb\nc\n",
+        "deletedRegion": { "startLine": 2, "charOffset": -1, "charLength": 2 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "unsupported", "reason": "char-length-without-offset" }
+    },
+    {
+      "name": "a byteOffset below the -1 sentinel is malformed",
+      "input": {
+        "sourceText": "a\nb\nc\n",
+        "deletedRegion": { "startLine": 2, "byteOffset": -2 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "invalid", "reason": "invalid-region" }
+    },
+    {
+      "name": "a negative byteLength is malformed",
+      "input": {
+        "sourceText": "a\nb\nc\n",
+        "deletedRegion": { "startLine": 2, "byteLength": -1 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "invalid", "reason": "invalid-region" }
+    }
+  ]
+}

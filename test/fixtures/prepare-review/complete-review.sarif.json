@@ -1,0 +1,222 @@
+{
+  "$schema": "https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "LintBot",
+          "version": "2.3.1",
+          "globalMessageStrings": {
+            "generic": { "text": "General note: {0}" }
+          },
+          "rules": [
+            { "id": "LB001", "messageStrings": { "limitChanged": { "text": "Limit changed from {0} to {1}." } } },
+            { "id": "LB002" }
+          ]
+        }
+      },
+      "columnKind": "utf16CodeUnits",
+      "versionControlProvenance": [
+        {
+          "repositoryUri": "https://github.com/acme/widgets",
+          "revisionId": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+          "mappedTo": { "uriBaseId": "SRCROOT" }
+        }
+      ],
+      "originalUriBaseIds": {
+        "SRCROOT": { "description": { "text": "Repository root" } },
+        "DOCS": { "uri": "docs/", "uriBaseId": "SRCROOT" }
+      },
+      "artifacts": [
+        { "location": { "uri": "src/app.js", "uriBaseId": "SRCROOT" } }
+      ],
+      "results": [
+        {
+          "ruleId": "LB001",
+          "ruleIndex": 0,
+          "message": { "id": "limitChanged", "arguments": ["10", "25"] },
+          "locations": [
+            { "physicalLocation": { "artifactLocation": { "index": 0 }, "region": { "startLine": 3 } } }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": { "index": 0 },
+                  "replacements": [
+                    {
+                      "deletedRegion": { "startLine": 3, "startColumn": 23, "endColumn": 25 },
+                      "insertedContent": { "text": "20" }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "ruleId": "LB002",
+          "ruleIndex": 1,
+          "message": { "text": "Callers may pass `limit` above MAX_LIMIT." },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "src/app.js", "uriBaseId": "SRCROOT" },
+                "region": { "startLine": 7, "startColumn": 10, "endColumn": 30 }
+              }
+            }
+          ]
+        },
+        {
+          "message": { "id": "generic", "arguments": ["consider a changelog entry"] }
+        },
+        {
+          "ruleId": "LB003",
+          "message": { "text": "Guard against empty input.", "markdown": "Guard against **empty** input." },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "src/app.js", "uriBaseId": "SRCROOT" },
+                "region": { "startLine": 17 }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "LB004",
+          "message": { "text": "average() divides by zero for empty arrays." },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "src/app.js", "uriBaseId": "SRCROOT" },
+                "region": { "startLine": 16, "endLine": 18 }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "description": { "text": "Return 0 for an empty list." },
+              "artifactChanges": [
+                {
+                  "artifactLocation": { "uri": "src/app.js", "uriBaseId": "SRCROOT" },
+                  "replacements": [
+                    {
+                      "deletedRegion": { "startLine": 16, "startColumn": 1, "endLine": 18, "endColumn": 2 },
+                      "insertedContent": { "text": "function average(values) {\n  if (values.length === 0) return 0;\n  return total(values) / values.length;\n}" }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "ruleId": "LB002",
+          "message": { "text": "Export list changed." },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "src/app.js", "uriBaseId": "SRCROOT" },
+                "region": { "startLine": 20 }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "DOC1",
+          "message": { "text": "Describe the new behaviour." },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "guide%20notes/%C3%9Cberblick.md", "uriBaseId": "DOCS" },
+                "region": { "startLine": 3 }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "LB005",
+          "message": { "text": "clamp() ignores NaN inputs." },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "src/util.js", "uriBaseId": "SRCROOT" },
+                "region": { "startLine": 4 }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "DOC2",
+          "message": { "text": "Example should show output." },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "README.md", "uriBaseId": "DOCS" },
+                "region": { "startLine": 3, "endLine": 5 }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "tool": { "driver": { "name": "StyleBot", "semanticVersion": "0.9.0" } },
+      "columnKind": "utf16CodeUnits",
+      "results": [
+        {
+          "ruleId": "SB-7",
+          "message": { "text": "Prefer a named constant for the default limit." },
+          "locations": [
+            { "physicalLocation": { "artifactLocation": { "uri": "src/app.js" }, "region": { "startLine": 3 } } }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": { "uri": "src/app.js" },
+                  "replacements": [
+                    {
+                      "deletedRegion": { "startLine": 3, "startColumn": 23, "endColumn": 25 },
+                      "insertedContent": { "text": "20" }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "tool": { "driver": { "name": "HistoryBot" } },
+      "versionControlProvenance": [
+        {
+          "repositoryUri": "https://github.com/Acme/Widgets.git",
+          "revisionId": "ba5eba5eba5eba5eba5eba5eba5eba5eba5eba5e"
+        }
+      ],
+      "results": [
+        {
+          "message": { "text": "Removed module still referenced by docs." },
+          "locations": [
+            { "physicalLocation": { "artifactLocation": { "uri": "lib/legacy.js" }, "region": { "startLine": 1 } } }
+          ]
+        },
+        {
+          "message": { "text": "Old default was too small." },
+          "locations": [
+            { "physicalLocation": { "artifactLocation": { "uri": "src/app.js" }, "region": { "startLine": 3 } } }
+          ]
+        },
+        {
+          "message": { "text": "total() is unchanged but worth a test." },
+          "locations": [
+            { "physicalLocation": { "artifactLocation": { "uri": "src/app.js" }, "region": { "startLine": 9 } } }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "commit_id": "b5f2a51d3997d4ce5f07d04edb2ba8d2b282b66a",
+  "body": "Synthetic placement probe: invalid-batch\n<!-- sarif-placement-probe-20260927:invalid-batch -->",
+  "comments": [
+    {
+      "path": "sarif-placement-probe.txt",
+      "side": "RIGHT",
+      "line": 5,
+      "body": "Probe valid first comment in deliberately invalid batch."
+    },
+    {
+      "path": "sarif-placement-probe.txt",
+      "side": "RIGHT",
+      "line": 999,
+      "body": "Probe invalid final comment; no partial review should remain."
+    }
+  ]
+}

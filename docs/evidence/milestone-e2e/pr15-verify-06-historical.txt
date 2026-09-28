@@ -1,0 +1,34 @@
+PASS  review 5333341477 is readable and authored by mike-north
+PASS  review state is PENDING (PENDING)
+PASS  review commit is the pinned head c96e4c386527de44b29b507907e2c97d2351d45e
+PASS  body ends with exactly one publication marker
+PASS  authored text of E2E002 equals sarif-e2e-fixture/alpha.txt:1-1 at c96e4c3 (git show)
+PASS  authored text of E2E003 equals sarif-e2e-fixture/alpha.txt:2-2 at c96e4c3 (git show)
+PASS  authored text of E2E004 equals sarif-e2e-fixture/alpha.txt:5-7 at c96e4c3 (git show)
+PASS  authored text of E2E005 equals sarif-e2e-fixture/alpha.txt:21-21 at c96e4c3 (git show)
+PASS  authored text of E2H001 equals sarif-e2e-fixture/alpha.txt:3-3 at 5a5ca13 (git show)
+PASS  authored text of E2E007 equals sarif-e2e-fixture/gamma.js:8-8 at c96e4c3 (git show)
+PASS  authored text of E2E008 equals sarif-e2e-fixture/gamma.js:9-10 at c96e4c3 (git show)
+PASS  authored text of E2E009 equals sarif-e2e-fixture/notes.md:4-4 at c96e4c3 (git show)
+PASS  authored text of E2E006 equals sarif-e2e-fixture/alpha.txt:12 (git show)
+PASS  historical review has no inline comments
+PASS  body links https://github.com/mike-north/doc-linter/blob/c96e4c386527de44b29b507907e2c97d2351d45e/sarif-e2e-fixture/alpha.txt#L1
+PASS  body links https://github.com/mike-north/doc-linter/blob/c96e4c386527de44b29b507907e2c97d2351d45e/sarif-e2e-fixture/alpha.txt#L2
+PASS  body links https://github.com/mike-north/doc-linter/blob/c96e4c386527de44b29b507907e2c97d2351d45e/sarif-e2e-fixture/alpha.txt#L5-L7
+PASS  body links https://github.com/mike-north/doc-linter/blob/c96e4c386527de44b29b507907e2c97d2351d45e/sarif-e2e-fixture/alpha.txt#L21
+PASS  body links https://github.com/mike-north/doc-linter/blob/c96e4c386527de44b29b507907e2c97d2351d45e/sarif-e2e-fixture/alpha.txt#L12
+PASS  body links https://github.com/mike-north/doc-linter/blob/5a5ca130467bb00993c4dc10701bc40f4167796e/sarif-e2e-fixture/alpha.txt#L3
+PASS  body links https://github.com/mike-north/doc-linter/blob/c96e4c386527de44b29b507907e2c97d2351d45e/sarif-e2e-fixture/notes.md#L4
+PASS  body links https://github.com/mike-north/doc-linter/blob/c96e4c386527de44b29b507907e2c97d2351d45e/sarif-e2e-fixture/gamma.js#L8
+PASS  body links https://github.com/mike-north/doc-linter/blob/c96e4c386527de44b29b507907e2c97d2351d45e/sarif-e2e-fixture/gamma.js#L9-L10
+PASS  E2E001 message is in the body
+PASS  E2E002 message is in the body
+PASS  E2E003 message is in the body
+PASS  E2E004 message is in the body
+PASS  E2E005 message is in the body
+PASS  E2E006 message is in the body
+PASS  E2E007 message is in the body
+PASS  E2E008 message is in the body
+PASS  E2E009 message is in the body
+PASS  E2H001 message is in the body
+ALL CHECKS PASSED

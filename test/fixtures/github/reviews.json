@@ -1,0 +1,334 @@
+{
+  "description": "Hand-authored GitHub exchanges for the publication transport: authenticated user, the single create-review POST, review listing, and pending-review comment readback. Pending-review REST comments carry no trustworthy line/side (null or absent, as the host probe observed: REST exposed only diff positions); original anchors come only from GraphQL review threads whose first comment is the REST comment. Expected normalized comments are authored from the threads' original coordinates, never from REST positions or current (shifted) lines.",
+  "commits": {
+    "head": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+    "mergeBase": "ba5eba5eba5eba5eba5eba5eba5eba5eba5eba5e"
+  },
+  "user": {
+    "url": "https://api.github.com/user",
+    "body": { "login": "reviewer-bot", "id": 7001001, "type": "User" },
+    "expected": { "id": 7001001, "login": "reviewer-bot" }
+  },
+  "createReview": {
+    "url": "https://api.github.com/repos/acme/widgets/pulls/42/reviews",
+    "request": {
+      "owner": "acme",
+      "repo": "widgets",
+      "pullNumber": 42,
+      "commitId": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+      "body": "Summary with ü and CRLF\r\nline\n\n<!-- sarif-to-comment:review:0f8fad5b-d9cb-469f-a165-70867728950e -->",
+      "comments": [
+        { "path": "src/app.js", "side": "RIGHT", "line": 4, "body": "Single" },
+        { "path": "src/app.js", "side": "RIGHT", "line": 13, "startSide": "RIGHT", "startLine": 9, "body": "Multi\r\nline" },
+        { "path": "src/old.js", "side": "LEFT", "line": 1, "body": "Deleted file line" }
+      ]
+    },
+    "expectedPostBody": {
+      "commit_id": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+      "body": "Summary with ü and CRLF\r\nline\n\n<!-- sarif-to-comment:review:0f8fad5b-d9cb-469f-a165-70867728950e -->",
+      "comments": [
+        { "path": "src/app.js", "body": "Single", "line": 4, "side": "RIGHT" },
+        { "path": "src/app.js", "body": "Multi\r\nline", "line": 13, "side": "RIGHT", "start_line": 9, "start_side": "RIGHT" },
+        { "path": "src/old.js", "body": "Deleted file line", "line": 1, "side": "LEFT" }
+      ]
+    },
+    "response": {
+      "id": 9001,
+      "node_id": "PRR_kwDOtest9001",
+      "user": { "login": "reviewer-bot", "id": 7001001 },
+      "body": "Summary with ü and CRLF\r\nline\n\n<!-- sarif-to-comment:review:0f8fad5b-d9cb-469f-a165-70867728950e -->",
+      "state": "PENDING",
+      "html_url": "https://github.com/acme/widgets/pull/42#pullrequestreview-9001",
+      "commit_id": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de"
+    },
+    "expected": { "id": 9001, "htmlUrl": "https://github.com/acme/widgets/pull/42#pullrequestreview-9001" }
+  },
+  "reviewPages": [
+    {
+      "url": "https://api.github.com/repos/acme/widgets/pulls/42/reviews?per_page=100&page=1",
+      "link": "<https://api.github.com/repositories/123456/pulls/42/reviews?per_page=100&page=2>; rel=\"next\", <https://api.github.com/repositories/123456/pulls/42/reviews?per_page=100&page=2>; rel=\"last\"",
+      "body": [
+        {
+          "id": 8000,
+          "node_id": "PRR_kwDOtest8000",
+          "user": { "login": "someone", "id": 5 },
+          "body": "Looks fine.",
+          "state": "COMMENTED",
+          "html_url": "https://github.com/acme/widgets/pull/42#pullrequestreview-8000",
+          "commit_id": "ba5eba5eba5eba5eba5eba5eba5eba5eba5eba5e",
+          "submitted_at": "2026-01-01T00:00:00Z"
+        }
+      ],
+      "expected": [
+        {
+          "id": 8000,
+          "htmlUrl": "https://github.com/acme/widgets/pull/42#pullrequestreview-8000",
+          "authorId": 5,
+          "authorLogin": "someone",
+          "commitId": "ba5eba5eba5eba5eba5eba5eba5eba5eba5eba5e",
+          "state": "COMMENTED",
+          "body": "Looks fine."
+        }
+      ]
+    },
+    {
+      "url": "https://api.github.com/repos/acme/widgets/pulls/42/reviews?per_page=100&page=2",
+      "link": null,
+      "body": [
+        {
+          "id": 9001,
+          "node_id": "PRR_kwDOtest9001",
+          "user": { "login": "reviewer-bot", "id": 7001001 },
+          "body": "Summary with ü and CRLF\r\nline\n\n<!-- sarif-to-comment:review:0f8fad5b-d9cb-469f-a165-70867728950e -->",
+          "state": "PENDING",
+          "html_url": "https://github.com/acme/widgets/pull/42#pullrequestreview-9001",
+          "commit_id": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de"
+        }
+      ],
+      "expected": [
+        {
+          "id": 9001,
+          "htmlUrl": "https://github.com/acme/widgets/pull/42#pullrequestreview-9001",
+          "authorId": 7001001,
+          "authorLogin": "reviewer-bot",
+          "commitId": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+          "state": "PENDING",
+          "body": "Summary with ü and CRLF\r\nline\n\n<!-- sarif-to-comment:review:0f8fad5b-d9cb-469f-a165-70867728950e -->"
+        }
+      ]
+    }
+  ],
+  "reviewComments": {
+    "reviewId": 9001,
+    "restPages": [
+      {
+        "url": "https://api.github.com/repos/acme/widgets/pulls/42/reviews/9001/comments?per_page=100&page=1",
+        "link": "<https://api.github.com/repositories/123456/pulls/42/reviews/9001/comments?per_page=100&page=2>; rel=\"next\"",
+        "body": [
+          {
+            "id": 101,
+            "node_id": "PRRC_101",
+            "pull_request_review_id": 9001,
+            "path": "src/app.js",
+            "position": 5,
+            "original_position": 5,
+            "line": null,
+            "side": null,
+            "start_line": null,
+            "start_side": null,
+            "original_line": null,
+            "original_start_line": null,
+            "commit_id": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+            "original_commit_id": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+            "user": { "login": "reviewer-bot", "id": 7001001 },
+            "body": "First\r\nwith ü"
+          },
+          {
+            "id": 102,
+            "node_id": "PRRC_102",
+            "pull_request_review_id": 9001,
+            "path": "src/app.js",
+            "position": 12,
+            "original_position": 12,
+            "line": null,
+            "side": null,
+            "start_line": null,
+            "start_side": null,
+            "original_line": null,
+            "original_start_line": null,
+            "commit_id": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+            "original_commit_id": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+            "user": { "login": "reviewer-bot", "id": 7001001 },
+            "body": "Deleted line comment."
+          }
+        ]
+      },
+      {
+        "url": "https://api.github.com/repos/acme/widgets/pulls/42/reviews/9001/comments?per_page=100&page=2",
+        "link": null,
+        "body": [
+          {
+            "id": 103,
+            "node_id": "PRRC_103",
+            "pull_request_review_id": 9001,
+            "path": "src/app.js",
+            "position": 13,
+            "original_position": 13,
+            "commit_id": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+            "original_commit_id": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+            "user": { "login": "reviewer-bot", "id": 7001001 },
+            "body": "Same text."
+          },
+          {
+            "id": 104,
+            "node_id": "PRRC_104",
+            "pull_request_review_id": 9001,
+            "path": "src/app.js",
+            "position": 13,
+            "original_position": 13,
+            "commit_id": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+            "original_commit_id": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+            "user": { "login": "reviewer-bot", "id": 7001001 },
+            "body": "Same text."
+          },
+          {
+            "id": 105,
+            "node_id": "PRRC_105",
+            "pull_request_review_id": 9001,
+            "path": "src/app.js",
+            "position": 14,
+            "original_position": 14,
+            "line": null,
+            "side": null,
+            "start_line": null,
+            "start_side": null,
+            "original_line": null,
+            "original_start_line": null,
+            "commit_id": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+            "original_commit_id": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de",
+            "user": { "login": "reviewer-bot", "id": 7001001 },
+            "body": "Multi-line."
+          }
+        ]
+      }
+    ],
+    "graphqlUrl": "https://api.github.com/graphql",
+    "graphqlPages": [
+      {
+        "after": null,
+        "response": {
+          "data": {
+            "repository": {
+              "pullRequest": {
+                "reviewThreads": {
+                  "pageInfo": { "hasNextPage": true, "endCursor": "Y3Vyc29yOjM=" },
+                  "nodes": [
+                    {
+                      "path": "src/app.js",
+                      "subjectType": "LINE",
+                      "isOutdated": true,
+                      "diffSide": "RIGHT",
+                      "startDiffSide": null,
+                      "line": 5,
+                      "startLine": null,
+                      "originalLine": 4,
+                      "originalStartLine": null,
+                      "comments": {
+                        "nodes": [
+                          { "databaseId": 101, "pullRequestReview": { "databaseId": 9001 }, "originalCommit": { "oid": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de" } }
+                        ]
+                      }
+                    },
+                    {
+                      "path": "src/app.js",
+                      "subjectType": "LINE",
+                      "isOutdated": false,
+                      "diffSide": "LEFT",
+                      "startDiffSide": null,
+                      "line": 11,
+                      "startLine": null,
+                      "originalLine": 11,
+                      "originalStartLine": null,
+                      "comments": {
+                        "nodes": [
+                          { "databaseId": 102, "pullRequestReview": { "databaseId": 9001 }, "originalCommit": { "oid": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de" } }
+                        ]
+                      }
+                    },
+                    {
+                      "path": "src/app.js",
+                      "subjectType": "LINE",
+                      "isOutdated": false,
+                      "diffSide": "RIGHT",
+                      "startDiffSide": null,
+                      "line": 5,
+                      "startLine": null,
+                      "originalLine": 5,
+                      "originalStartLine": null,
+                      "comments": {
+                        "nodes": [
+                          { "databaseId": 555, "pullRequestReview": { "databaseId": 8000 }, "originalCommit": { "oid": "ba5eba5eba5eba5eba5eba5eba5eba5eba5eba5e" } }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "after": "Y3Vyc29yOjM=",
+        "response": {
+          "data": {
+            "repository": {
+              "pullRequest": {
+                "reviewThreads": {
+                  "pageInfo": { "hasNextPage": false, "endCursor": "Y3Vyc29yOjY=" },
+                  "nodes": [
+                    {
+                      "path": "src/app.js",
+                      "subjectType": "LINE",
+                      "isOutdated": false,
+                      "diffSide": "RIGHT",
+                      "startDiffSide": null,
+                      "line": 12,
+                      "startLine": null,
+                      "originalLine": 12,
+                      "originalStartLine": null,
+                      "comments": {
+                        "nodes": [
+                          { "databaseId": 103, "pullRequestReview": { "databaseId": 9001 }, "originalCommit": { "oid": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de" } }
+                        ]
+                      }
+                    },
+                    {
+                      "path": "src/app.js",
+                      "subjectType": "LINE",
+                      "isOutdated": false,
+                      "diffSide": "RIGHT",
+                      "startDiffSide": null,
+                      "line": 12,
+                      "startLine": null,
+                      "originalLine": 12,
+                      "originalStartLine": null,
+                      "comments": {
+                        "nodes": [
+                          { "databaseId": 104, "pullRequestReview": { "databaseId": 9001 }, "originalCommit": { "oid": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de" } }
+                        ]
+                      }
+                    },
+                    {
+                      "path": "src/app.js",
+                      "subjectType": "LINE",
+                      "isOutdated": false,
+                      "diffSide": "RIGHT",
+                      "startDiffSide": "RIGHT",
+                      "line": 14,
+                      "startLine": 8,
+                      "originalLine": 13,
+                      "originalStartLine": 9,
+                      "comments": {
+                        "nodes": [
+                          { "databaseId": 105, "pullRequestReview": { "databaseId": 9001 }, "originalCommit": { "oid": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de" } }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    ],
+    "expected": [
+      { "path": "src/app.js", "side": "RIGHT", "line": 4, "body": "First\r\nwith ü" },
+      { "path": "src/app.js", "side": "LEFT", "line": 11, "body": "Deleted line comment." },
+      { "path": "src/app.js", "side": "RIGHT", "line": 12, "body": "Same text." },
+      { "path": "src/app.js", "side": "RIGHT", "line": 12, "body": "Same text." },
+      { "path": "src/app.js", "side": "RIGHT", "line": 13, "startSide": "RIGHT", "startLine": 9, "body": "Multi-line." }
+    ]
+  }
+}

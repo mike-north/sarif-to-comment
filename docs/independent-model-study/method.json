@@ -1,0 +1,12 @@
+{
+  "baseline_path": "docs/domain-model-scrutiny.md",
+  "baseline_sha256": "f72ef87b30044ee63942aabd92b8e6a1ac0e17ececfc56a22c9db4bb5d378e6c",
+  "context_inheritance": "none",
+  "agent_access_rule": "No workspace, memory, other-agent or prior-design reads; derive only from supplied brief.",
+  "comparison_rule": "Compare necessary distinctions, behavioral predictions, costs, scope and newly exposed failure cases, not vocabulary agreement.",
+  "limitations": [
+    "Behavioral requirements were extracted by the existing designer, so selection/framing bias remains possible.",
+    "Independent derivation by another agent is corroboration, not proof of optimality or implemented correctness."
+  ],
+  "agent_provenance_report": "The agent reports no tools, files, memories, other agents, prior conversation or external materials were consulted before its answer; it used the supplied brief, visible general instructions and general knowledge."
+}

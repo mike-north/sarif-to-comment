@@ -1,0 +1,23 @@
+{
+  "before": {
+    "baseRefName": "sarif-e2e/apply-base-20260927",
+    "headRefName": "sarif-e2e/apply-head-20260927",
+    "headRefOid": "ee7d1ea18c3e99cbd399194eecdb9c908c190e94",
+    "mergedAt": null,
+    "number": 16,
+    "state": "OPEN",
+    "title": "Experiment: sarif-to-comment native suggestion application (do not merge)",
+    "url": "https://github.com/mike-north/doc-linter/pull/16"
+  },
+  "after": {
+    "baseRefName": "sarif-e2e/apply-base-20260927",
+    "headRefName": "sarif-e2e/apply-head-20260927",
+    "headRefOid": "ee7d1ea18c3e99cbd399194eecdb9c908c190e94",
+    "mergedAt": null,
+    "number": 16,
+    "state": "CLOSED",
+    "title": "Experiment: sarif-to-comment native suggestion application (do not merge)",
+    "url": "https://github.com/mike-north/doc-linter/pull/16"
+  },
+  "submittedReviewRetainedAsEvidence": 5333375577
+}

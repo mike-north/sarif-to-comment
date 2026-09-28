@@ -1,0 +1,221 @@
+{
+  "description": "Edits at the end of the file and in empty files. A terminal newline creates no addressable line, but the position just after it (line count + 1, column 1) is valid. Final-line deletion, appending after the terminal newline, and terminal-newline changes are ordinary candidates anchored on existing lines, with the change of terminal-newline status exposed. Only an empty source has no line to anchor.",
+  "cases": [
+    {
+      "name": "replacing the final line through the end-of-file position stays on that line",
+      "input": {
+        "sourceText": "a\nb\n",
+        "deletedRegion": { "startLine": 2, "startColumn": 1, "endLine": 3, "endColumn": 1 },
+        "insertedText": "B\n",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a\nB\n",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "b\n",
+        "replacementText": "B\n",
+        "replacementLines": ["B\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      }
+    },
+    {
+      "name": "deleting the whole final line is a zero-line replacement anchored on it",
+      "input": {
+        "sourceText": "a\nb\n",
+        "deletedRegion": { "startLine": 2, "startColumn": 1, "endLine": 3, "endColumn": 1 },
+        "insertedText": "",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a\n",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "b\n",
+        "replacementText": "",
+        "replacementLines": [],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "blankLineLeftBehind": "a\n\n"
+      },
+      "wrongReplacementLines": {
+        "zeroLinesConfusedWithBlankLine": ["\n"]
+      }
+    },
+    {
+      "name": "appending after the terminal newline anchors the last existing line",
+      "input": {
+        "sourceText": "a\nb\n",
+        "deletedRegion": { "startLine": 3, "startColumn": 1, "endLine": 3, "endColumn": 1 },
+        "insertedText": "c\n",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a\nb\nc\n",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "b\n",
+        "replacementText": "b\nc\n",
+        "replacementLines": ["b\n", "c\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "appendedBeforeLastLine": "a\nc\nb\n"
+      }
+    },
+    {
+      "name": "appending an unterminated line after the terminal newline removes terminal-newline status",
+      "input": {
+        "sourceText": "a\nb\n",
+        "deletedRegion": { "charOffset": 4, "charLength": 0 },
+        "insertedText": "c",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a\nb\nc",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "b\n",
+        "replacementText": "b\nc",
+        "replacementLines": ["b\n", "c"],
+        "endsWithNewline": { "original": true, "edited": false }
+      },
+      "wrongEditedText": {
+        "terminalNewlineAdded": "a\nb\nc\n"
+      }
+    },
+    {
+      "name": "adding a terminal newline is an exact candidate with changed terminal-newline status",
+      "input": {
+        "sourceText": "x",
+        "deletedRegion": { "startLine": 1, "startColumn": 2, "endColumn": 2 },
+        "insertedText": "\n",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "x\n",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "x",
+        "replacementText": "x\n",
+        "replacementLines": ["x\n"],
+        "endsWithNewline": { "original": false, "edited": true }
+      }
+    },
+    {
+      "name": "removing the terminal newline is an exact candidate with changed terminal-newline status",
+      "input": {
+        "sourceText": "a\nb\n",
+        "deletedRegion": { "startLine": 2, "startColumn": 2, "endLine": 3, "endColumn": 1 },
+        "insertedText": "",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a\nb",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "b\n",
+        "replacementText": "b",
+        "replacementLines": ["b"],
+        "endsWithNewline": { "original": true, "edited": false }
+      },
+      "wrongEditedText": {
+        "newlineRetained": "a\nb\n"
+      }
+    },
+    {
+      "name": "deleting the entire content of a one-line file",
+      "input": {
+        "sourceText": "a\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 1, "endLine": 2, "endColumn": 1 },
+        "insertedText": "",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "a\n",
+        "replacementText": "",
+        "replacementLines": [],
+        "endsWithNewline": { "original": true, "edited": false }
+      }
+    },
+    {
+      "name": "insertion into an empty file by character offset has no line to anchor",
+      "input": {
+        "sourceText": "",
+        "deletedRegion": { "charOffset": 0, "charLength": 0 },
+        "insertedText": "hello\n",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "unanchored",
+        "reason": "empty-source",
+        "editedText": "hello\n"
+      }
+    },
+    {
+      "name": "insertion into an empty file at line 1 column 1 has no line to anchor",
+      "input": {
+        "sourceText": "",
+        "deletedRegion": { "startLine": 1, "startColumn": 1, "endColumn": 1 },
+        "insertedText": "hello",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "unanchored",
+        "reason": "empty-source",
+        "editedText": "hello"
+      }
+    },
+    {
+      "name": "an empty file has no addressable line 1",
+      "input": {
+        "sourceText": "",
+        "deletedRegion": { "startLine": 1 },
+        "insertedText": "hello",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "invalid", "reason": "out-of-bounds" }
+    },
+    {
+      "name": "the line after a terminal newline is not addressable as a line",
+      "input": {
+        "sourceText": "a\nb\n",
+        "deletedRegion": { "startLine": 3 },
+        "insertedText": "c",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "invalid", "reason": "out-of-bounds" }
+    },
+    {
+      "name": "no position follows the last line when the file lacks a terminal newline",
+      "input": {
+        "sourceText": "a\nb",
+        "deletedRegion": { "startLine": 3, "startColumn": 1, "endColumn": 1 },
+        "insertedText": "c",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "invalid", "reason": "out-of-bounds" }
+    },
+    {
+      "name": "the end-of-file position has only column 1",
+      "input": {
+        "sourceText": "a\nb\n",
+        "deletedRegion": { "startLine": 2, "startColumn": 1, "endLine": 3, "endColumn": 2 },
+        "insertedText": "",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "invalid", "reason": "out-of-bounds" }
+    }
+  ]
+}

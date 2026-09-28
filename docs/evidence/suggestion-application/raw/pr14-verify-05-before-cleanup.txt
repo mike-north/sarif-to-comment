@@ -1,0 +1,47 @@
+PASS  review 5333352940 is readable and authored by mike-north
+PASS  review state is PENDING (PENDING)
+PASS  review commit is the pinned head c96e4c386527de44b29b507907e2c97d2351d45e
+PASS  body ends with exactly one publication marker
+PASS  authored text of E2E002 equals sarif-e2e-fixture/alpha.txt:1-1 at c96e4c3 (git show)
+PASS  authored text of E2E003 equals sarif-e2e-fixture/alpha.txt:2-2 at c96e4c3 (git show)
+PASS  authored text of E2E004 equals sarif-e2e-fixture/alpha.txt:5-7 at c96e4c3 (git show)
+PASS  authored text of E2E005 equals sarif-e2e-fixture/alpha.txt:21-21 at c96e4c3 (git show)
+PASS  authored text of E2H001 equals sarif-e2e-fixture/alpha.txt:3-3 at 5a5ca13 (git show)
+PASS  authored text of E2E007 equals sarif-e2e-fixture/gamma.js:8-8 at c96e4c3 (git show)
+PASS  authored text of E2E008 equals sarif-e2e-fixture/gamma.js:9-10 at c96e4c3 (git show)
+PASS  authored text of E2E009 equals sarif-e2e-fixture/notes.md:4-4 at c96e4c3 (git show)
+PASS  authored text of E2E006 equals sarif-e2e-fixture/alpha.txt:12 (git show)
+PASS  REST comment count 8 = 8
+PASS  GraphQL thread count 8 = 8
+PASS  each thread holds exactly one REST comment of this review, one-to-one
+PASS  every thread is a LINE thread on the pinned head
+PASS  original thread anchors equal the expected anchors (multiset)
+PASS  E2E002 comment at RIGHT 1 carries its message
+PASS  E2E002 carries no suggestion
+PASS  E2E003 comment at RIGHT 2 carries its message
+PASS  E2E003 carries no suggestion
+PASS  E2E004 comment at RIGHT 5-7 carries its message
+PASS  E2E004 carries no suggestion
+PASS  E2E005 comment at RIGHT 21 carries its message
+PASS  E2E005 carries no suggestion
+PASS  E2H001 comment at LEFT 3 carries its message
+PASS  E2H001 carries no suggestion
+PASS  E2E007 comment at RIGHT 8 carries its message
+PASS  E2E007 carries exactly the expected suggestion "function farewell(person) {\n"
+PASS  E2E008 comment at RIGHT 9-10 carries its message
+PASS  E2E008 carries exactly the expected suggestion "  return 'Goodbye, ' + name;\n"
+PASS  E2E009 comment at RIGHT 4 carries its message
+PASS  E2E009 carries no suggestion
+PASS  E2E001 message is in the body
+PASS  E2E006 message is in the body
+PASS  E2E006 body section links https://github.com/mike-north/doc-linter/blob/c96e4c386527de44b29b507907e2c97d2351d45e/sarif-e2e-fixture/alpha.txt#L12
+PASS  E2E006 body section shows the literal source text
+PASS  E2E002 is not duplicated into the body
+PASS  E2E003 is not duplicated into the body
+PASS  E2E004 is not duplicated into the body
+PASS  E2E005 is not duplicated into the body
+PASS  E2H001 is not duplicated into the body
+PASS  E2E007 is not duplicated into the body
+PASS  E2E008 is not duplicated into the body
+PASS  E2E009 is not duplicated into the body
+ALL CHECKS PASSED

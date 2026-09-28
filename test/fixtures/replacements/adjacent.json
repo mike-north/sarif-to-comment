@@ -1,0 +1,145 @@
+{
+  "description": "Adjacent edits of the same source, each applied alone to the original text. Every replacement is an independent alternative: none is grouped with, merged into, or applied on top of another, and none widens its lines toward a neighbour.",
+  "groups": [
+    {
+      "name": "edits on consecutive lines",
+      "members": [
+        {
+          "name": "edit on line 1 only",
+          "input": {
+            "sourceText": "one\ntwo\nthree\n",
+            "deletedRegion": { "startLine": 1, "startColumn": 1, "endColumn": 4 },
+            "insertedText": "ONE",
+            "columnKind": "utf16CodeUnits"
+          },
+          "expected": {
+            "kind": "replacement",
+            "editedText": "ONE\ntwo\nthree\n",
+            "startLine": 1,
+            "endLine": 1,
+            "originalText": "one\n",
+            "replacementText": "ONE\n",
+            "replacementLines": ["ONE\n"],
+            "endsWithNewline": { "original": true, "edited": true }
+          }
+        },
+        {
+          "name": "edit on line 2 only",
+          "input": {
+            "sourceText": "one\ntwo\nthree\n",
+            "deletedRegion": { "startLine": 2, "startColumn": 1, "endColumn": 4 },
+            "insertedText": "TWO",
+            "columnKind": "utf16CodeUnits"
+          },
+          "expected": {
+            "kind": "replacement",
+            "editedText": "one\nTWO\nthree\n",
+            "startLine": 2,
+            "endLine": 2,
+            "originalText": "two\n",
+            "replacementText": "TWO\n",
+            "replacementLines": ["TWO\n"],
+            "endsWithNewline": { "original": true, "edited": true }
+          }
+        }
+      ]
+    },
+    {
+      "name": "a whole-line edit ending at the next line start and an edit on that next line",
+      "members": [
+        {
+          "name": "whole line 2 replaced through line 3 column 1",
+          "input": {
+            "sourceText": "a\nb\nc\n",
+            "deletedRegion": { "startLine": 2, "startColumn": 1, "endLine": 3, "endColumn": 1 },
+            "insertedText": "B\n",
+            "columnKind": "utf16CodeUnits"
+          },
+          "expected": {
+            "kind": "replacement",
+            "editedText": "a\nB\nc\n",
+            "startLine": 2,
+            "endLine": 2,
+            "originalText": "b\n",
+            "replacementText": "B\n",
+            "replacementLines": ["B\n"],
+            "endsWithNewline": { "original": true, "edited": true }
+          }
+        },
+        {
+          "name": "line 3 content replaced",
+          "input": {
+            "sourceText": "a\nb\nc\n",
+            "deletedRegion": { "startLine": 3, "startColumn": 1, "endColumn": 2 },
+            "insertedText": "C",
+            "columnKind": "utf16CodeUnits"
+          },
+          "expected": {
+            "kind": "replacement",
+            "editedText": "a\nb\nC\n",
+            "startLine": 3,
+            "endLine": 3,
+            "originalText": "c\n",
+            "replacementText": "C\n",
+            "replacementLines": ["C\n"],
+            "endsWithNewline": { "original": true, "edited": true }
+          },
+          "wrongEditedText": {
+            "neighbourApplied": "a\nB\nC\n"
+          }
+        }
+      ]
+    },
+    {
+      "name": "edits touching at one column of the same line",
+      "members": [
+        {
+          "name": "left edit ends where the right edit starts",
+          "input": {
+            "sourceText": "abcdef\n",
+            "deletedRegion": { "startLine": 1, "startColumn": 1, "endColumn": 3 },
+            "insertedText": "AB",
+            "columnKind": "utf16CodeUnits"
+          },
+          "expected": {
+            "kind": "replacement",
+            "editedText": "ABcdef\n",
+            "startLine": 1,
+            "endLine": 1,
+            "originalText": "abcdef\n",
+            "replacementText": "ABcdef\n",
+            "replacementLines": ["ABcdef\n"],
+            "endsWithNewline": { "original": true, "edited": true }
+          },
+          "wrongEditedText": {
+            "endColumnTreatedAsInclusive": "ABdef\n",
+            "neighbourApplied": "ABCDef\n"
+          }
+        },
+        {
+          "name": "right edit starts where the left edit ends",
+          "input": {
+            "sourceText": "abcdef\n",
+            "deletedRegion": { "startLine": 1, "startColumn": 3, "endColumn": 5 },
+            "insertedText": "CD",
+            "columnKind": "utf16CodeUnits"
+          },
+          "expected": {
+            "kind": "replacement",
+            "editedText": "abCDef\n",
+            "startLine": 1,
+            "endLine": 1,
+            "originalText": "abcdef\n",
+            "replacementText": "abCDef\n",
+            "replacementLines": ["abCDef\n"],
+            "endsWithNewline": { "original": true, "edited": true }
+          },
+          "wrongEditedText": {
+            "endColumnTreatedAsInclusive": "abCDf\n",
+            "neighbourApplied": "ABCDef\n"
+          }
+        }
+      ]
+    }
+  ]
+}

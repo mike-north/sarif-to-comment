@@ -1,0 +1,299 @@
+{
+  "description": "Non-ASCII and supplementary-plane text under both SARIF column kinds. U+1F600 (\\ud83d\\ude00) occupies two UTF-16 code units but one Unicode code point, so identical column numbers denote different text under the two kinds. U+00E9 occupies one unit under both.",
+  "cases": [
+    {
+      "name": "UTF-16 columns after a supplementary-plane character",
+      "input": {
+        "sourceText": "😀 x = 1;\nnext\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 8, "endColumn": 9 },
+        "insertedText": "2",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "😀 x = 2;\nnext\n",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "😀 x = 1;\n",
+        "replacementText": "😀 x = 2;\n",
+        "replacementLines": ["😀 x = 2;\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "codePointColumnsApplied": "😀 x = 12\nnext\n"
+      }
+    },
+    {
+      "name": "code-point columns after a supplementary-plane character",
+      "input": {
+        "sourceText": "😀 x = 1;\nnext\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 7, "endColumn": 8 },
+        "insertedText": "2",
+        "columnKind": "unicodeCodePoints"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "😀 x = 2;\nnext\n",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "😀 x = 1;\n",
+        "replacementText": "😀 x = 2;\n",
+        "replacementLines": ["😀 x = 2;\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "utf16ColumnsApplied": "😀 x =21;\nnext\n"
+      }
+    },
+    {
+      "name": "the same column numbers under UTF-16 denote the preceding space",
+      "input": {
+        "sourceText": "😀 x = 1;\nnext\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 7, "endColumn": 8 },
+        "insertedText": "2",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "😀 x =21;\nnext\n",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "😀 x = 1;\n",
+        "replacementText": "😀 x =21;\n",
+        "replacementLines": ["😀 x =21;\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "codePointColumnsApplied": "😀 x = 2;\nnext\n"
+      }
+    },
+    {
+      "name": "BMP non-ASCII before the edit under UTF-16 columns",
+      "input": {
+        "sourceText": "café = 1\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 8, "endColumn": 9 },
+        "insertedText": "2",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "café = 2\n",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "café = 1\n",
+        "replacementText": "café = 2\n",
+        "replacementLines": ["café = 2\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "utf8ByteColumnsApplied": "café =21\n"
+      }
+    },
+    {
+      "name": "BMP non-ASCII before the edit under code-point columns",
+      "input": {
+        "sourceText": "café = 1\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 8, "endColumn": 9 },
+        "insertedText": "2",
+        "columnKind": "unicodeCodePoints"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "café = 2\n",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "café = 1\n",
+        "replacementText": "café = 2\n",
+        "replacementLines": ["café = 2\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      }
+    },
+    {
+      "name": "replacing a supplementary-plane character under UTF-16 columns",
+      "input": {
+        "sourceText": "a😀b\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 2, "endColumn": 4 },
+        "insertedText": "-",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a-b\n",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "a😀b\n",
+        "replacementText": "a-b\n",
+        "replacementLines": ["a-b\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "codePointColumnsApplied": "a-\n"
+      }
+    },
+    {
+      "name": "replacing a supplementary-plane character under code-point columns",
+      "input": {
+        "sourceText": "a😀b\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 2, "endColumn": 3 },
+        "insertedText": "-",
+        "columnKind": "unicodeCodePoints"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a-b\n",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "a😀b\n",
+        "replacementText": "a-b\n",
+        "replacementLines": ["a-b\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "utf16ColumnsApplied": "a-\ude00b\n"
+      }
+    },
+    {
+      "name": "supplementary-plane characters on an earlier line do not shift later-line columns",
+      "input": {
+        "sourceText": "😀😀\nabc\n",
+        "deletedRegion": { "startLine": 2, "startColumn": 2, "endColumn": 3 },
+        "insertedText": "B",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "😀😀\naBc\n",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "abc\n",
+        "replacementText": "aBc\n",
+        "replacementLines": ["aBc\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      }
+    },
+    {
+      "name": "supplementary-plane inserted text is kept literally",
+      "input": {
+        "sourceText": "x\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 1, "endColumn": 2 },
+        "insertedText": "😀",
+        "columnKind": "unicodeCodePoints"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "😀\n",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "x\n",
+        "replacementText": "😀\n",
+        "replacementLines": ["😀\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      }
+    },
+    {
+      "name": "supplementary-plane character before an edit in a CRLF file under UTF-16 columns",
+      "input": {
+        "sourceText": "😀a\r\nb\r\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 3, "endColumn": 4 },
+        "insertedText": "A",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "😀A\r\nb\r\n",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "😀a\r\n",
+        "replacementText": "😀A\r\n",
+        "replacementLines": ["😀A\r\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "codePointColumnsApplied": "😀aA\nb\r\n"
+      }
+    },
+    {
+      "name": "supplementary-plane character before an edit in a CRLF file under code-point columns",
+      "input": {
+        "sourceText": "😀a\r\nb\r\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 2, "endColumn": 3 },
+        "insertedText": "A",
+        "columnKind": "unicodeCodePoints"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "😀A\r\nb\r\n",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "😀a\r\n",
+        "replacementText": "😀A\r\n",
+        "replacementLines": ["😀A\r\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "utf16ColumnsApplied": "\ud83dAa\r\nb\r\n"
+      }
+    },
+    {
+      "name": "end-of-line insertion after a supplementary-plane character under UTF-16 columns",
+      "input": {
+        "sourceText": "😀\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 3, "endColumn": 3 },
+        "insertedText": "!",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "😀!\n",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "😀\n",
+        "replacementText": "😀!\n",
+        "replacementLines": ["😀!\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      }
+    },
+    {
+      "name": "end-of-line insertion after a supplementary-plane character under code-point columns",
+      "input": {
+        "sourceText": "😀\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 2, "endColumn": 2 },
+        "insertedText": "!",
+        "columnKind": "unicodeCodePoints"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "😀!\n",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "😀\n",
+        "replacementText": "😀!\n",
+        "replacementLines": ["😀!\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "utf16ColumnsApplied": "\ud83d!\ude00\n"
+      }
+    },
+    {
+      "name": "UTF-16 column inside a surrogate pair is invalid",
+      "input": {
+        "sourceText": "a😀b\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 3, "endColumn": 4 },
+        "insertedText": "-",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": { "kind": "invalid", "reason": "splits-surrogate-pair" }
+    },
+    {
+      "name": "code-point column beyond the line is invalid even where the UTF-16 column would be valid",
+      "input": {
+        "sourceText": "😀\nz\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 3, "endColumn": 3 },
+        "insertedText": "!",
+        "columnKind": "unicodeCodePoints"
+      },
+      "expected": { "kind": "invalid", "reason": "out-of-bounds" }
+    }
+  ]
+}

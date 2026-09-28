@@ -1,0 +1,82 @@
+{
+  "description": "Coherent trusted pull-request context for public API and CLI tests. Files are arrays of physical lines with exact terminators; each patch was authored from these snapshots (`diff`: base 1-5 to head 1-6; `advancedDiff`: base 1-5 to advanced 1-7). `advanced` is a later author-branch commit: when the pull request has advanced, the current diff ends at it while the review stays pinned to the reviewed commit, which must never be silently replaced.",
+  "destination": { "owner": "acme", "repo": "gizmos", "pullNumber": 7 },
+  "commits": {
+    "base": "1111111111111111111111111111111111111111",
+    "head": "2222222222222222222222222222222222222222",
+    "advanced": "3333333333333333333333333333333333333333"
+  },
+  "snapshots": {
+    "1111111111111111111111111111111111111111": {
+      "src/app.js": [
+        "'use strict';\n",
+        "\n",
+        "const LIMIT = 10;\n",
+        "\n",
+        "module.exports = { LIMIT };\n"
+      ]
+    },
+    "2222222222222222222222222222222222222222": {
+      "src/app.js": [
+        "'use strict';\n",
+        "\n",
+        "const LIMIT = 25;\n",
+        "const MAX = 100;\n",
+        "\n",
+        "module.exports = { LIMIT, MAX };\n"
+      ]
+    },
+    "3333333333333333333333333333333333333333": {
+      "src/app.js": [
+        "'use strict';\n",
+        "\n",
+        "const LIMIT = 25;\n",
+        "const MAX = 100;\n",
+        "const MIN = 1;\n",
+        "\n",
+        "module.exports = { LIMIT, MAX, MIN };\n"
+      ]
+    }
+  },
+  "advancedDiff": {
+    "baseCommit": "1111111111111111111111111111111111111111",
+    "headCommit": "3333333333333333333333333333333333333333",
+    "files": [
+      {
+        "path": "src/app.js",
+        "patch": [
+          "@@ -1,5 +1,7 @@\n",
+          " 'use strict';\n",
+          " \n",
+          "-const LIMIT = 10;\n",
+          "+const LIMIT = 25;\n",
+          "+const MAX = 100;\n",
+          "+const MIN = 1;\n",
+          " \n",
+          "-module.exports = { LIMIT };\n",
+          "+module.exports = { LIMIT, MAX, MIN };\n"
+        ]
+      }
+    ]
+  },
+  "diff": {
+    "baseCommit": "1111111111111111111111111111111111111111",
+    "headCommit": "2222222222222222222222222222222222222222",
+    "files": [
+      {
+        "path": "src/app.js",
+        "patch": [
+          "@@ -1,5 +1,6 @@\n",
+          " 'use strict';\n",
+          " \n",
+          "-const LIMIT = 10;\n",
+          "+const LIMIT = 25;\n",
+          "+const MAX = 100;\n",
+          " \n",
+          "-module.exports = { LIMIT };\n",
+          "+module.exports = { LIMIT, MAX };\n"
+        ]
+      }
+    ]
+  }
+}

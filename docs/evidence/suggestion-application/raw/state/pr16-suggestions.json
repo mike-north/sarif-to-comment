@@ -1,0 +1,49 @@
+{
+  "format": "sarif-to-comment.publication-state",
+  "version": 1,
+  "phase": "completed",
+  "marker": "<!-- sarif-to-comment:review:69e623b0-bf6e-43ca-b352-86e9da33496b -->",
+  "destination": {
+    "owner": "mike-north",
+    "repo": "doc-linter",
+    "pullNumber": 16
+  },
+  "reviewedCommit": "54cae057bc66ef7b49c3186923e0be0a0a0917ae",
+  "inputFingerprint": "sha256:4279b36a1fdf7fc5bcd80ebfa131fc61eb7dff24438999bd60d5311007de47ef",
+  "authorId": 558005,
+  "request": {
+    "owner": "mike-north",
+    "repo": "doc-linter",
+    "pullNumber": 16,
+    "commitId": "54cae057bc66ef7b49c3186923e0be0a0a0917ae",
+    "body": "\n\n<!-- sarif-to-comment:review:69e623b0-bf6e-43ca-b352-86e9da33496b -->",
+    "comments": [
+      {
+        "path": "apply-fixture/one-to-three.txt",
+        "side": "RIGHT",
+        "line": 2,
+        "body": "Expand the placeholder into three lines\n\n**Fix:** Replace one line with three\n\n<sub>— E2EApply 1.0.0 · rule `AP001`</sub>\n\n```suggestion\nfirst replacement\nsecond replacement\nthird replacement\n```"
+      },
+      {
+        "path": "apply-fixture/two-to-one.js",
+        "side": "RIGHT",
+        "line": 3,
+        "startSide": "RIGHT",
+        "startLine": 2,
+        "body": "Return the greeting directly\n\n**Fix:** Replace two lines with one\n\n<sub>— E2EApply 1.0.0 · rule `AP002`</sub>\n\n```suggestion\n  return 'Goodbye, ' + name;\n```"
+      },
+      {
+        "path": "apply-fixture/delete-middle.txt",
+        "side": "RIGHT",
+        "line": 3,
+        "body": "Remove the middle line\n\n**Fix:** Delete line 3 and its newline\n\n<sub>— E2EApply 1.0.0 · rule `AP003`</sub>\n\n```suggestion\n```"
+      }
+    ]
+  },
+  "requestFingerprint": "sha256:fe7b7fc4155fdb6ac57c97408f594a16d7d6ce7d6423b95b7d88c59a0ed621c2",
+  "receipt": {
+    "reviewId": 5333375577,
+    "htmlUrl": "https://github.com/mike-north/doc-linter/pull/16#pullrequestreview-5333375577",
+    "via": "created"
+  }
+}

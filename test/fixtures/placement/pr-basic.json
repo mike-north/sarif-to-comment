@@ -1,0 +1,506 @@
+{
+  "description": "A synthetic pull request. Every source file is authored as an array of physical lines, each element carrying its own exact terminator (LF, CRLF, or none for a final line without a terminal newline). Patches are authored the same way. Each diff entry also carries a hand-authored `surface`: its hunks as ordered display rows [baseLine, headLine], where [b, null] is a deletion, [null, h] an addition and [b, h] unchanged context. The surface is test oracle data only and is never passed to the mapper. Expected locations in placement-cases.json are written by hand against these arrays, never computed by the mapper under test. `baseCommit` names the verified commit whose text is the diff's LEFT side (for a GitHub pull request, the merge base), not the base branch tip.",
+  "commits": {
+    "base": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0",
+    "head": "4ead4ead4ead4ead4ead4ead4ead4ead4ead4ead",
+    "historical": "0142014201420142014201420142014201420142",
+    "advancedHead": "adadadadadadadadadadadadadadadadadadadad",
+    "advancedBase": "abababababababababababababababababababab"
+  },
+  "snapshots": {
+    "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0": {
+      "src/calc.js": [
+        "'use strict';\n",
+        "\n",
+        "function add(a, b) {\n",
+        "  return a + b;\n",
+        "}\n",
+        "\n",
+        "function sub(a, b) {\n",
+        "  return a - b;\n",
+        "}\n",
+        "\n",
+        "// helpers\n",
+        "function clamp(x) {\n",
+        "  return x;\n",
+        "}\n",
+        "\n",
+        "function noop() {\n",
+        "  return;\n",
+        "}\n",
+        "\n",
+        "function twice(x) {\n",
+        "  return x;\n",
+        "}\n",
+        "\n",
+        "function mul(a, b) {\n",
+        "  return a * b;\n",
+        "}\n",
+        "\n",
+        "module.exports = { add, sub, clamp, noop, twice, mul };\n"
+      ],
+      "docs/notes.md": [
+        "# Notizen — Überblick\n",
+        "\n",
+        "Café ☕ résumé naïve\n",
+        "日本語のテキスト\n",
+        "Ende ohne Zeilenumbruch\n"
+      ],
+      "win/config.ini": [
+        "[core]\r\n",
+        "name = alpha\r\n",
+        "mode = fast\r\n",
+        "[extra]\r\n",
+        "key = 1\r\n"
+      ],
+      "src/old.js": [
+        "module.exports = 1;\n"
+      ],
+      "README.md": [
+        "# Project\n",
+        "\n",
+        "Unchanged readme line.\n"
+      ],
+      "empty.txt": [],
+      "one.txt": [
+        "alpha"
+      ],
+      "tail.txt": [
+        "a\n",
+        "b"
+      ],
+      "zero.txt": [
+        "one\n",
+        "two\n",
+        "three\n",
+        "four\n",
+        "five\n",
+        "six\n"
+      ],
+      "docs/my notes/café.md": [
+        "Grüße aus Köln\n",
+        "zweite Zeile\n"
+      ],
+      "adjacent.txt": [
+        "a\n",
+        "b\n",
+        "c\n",
+        "d\n",
+        "e\n"
+      ]
+    },
+    "4ead4ead4ead4ead4ead4ead4ead4ead4ead4ead": {
+      "src/calc.js": [
+        "'use strict';\n",
+        "\n",
+        "function add(a, b) {\n",
+        "  // add two numbers\n",
+        "  if (typeof a !== 'number') throw new TypeError('a');\n",
+        "  return a + b;\n",
+        "}\n",
+        "\n",
+        "function sub(a, b) {\n",
+        "  return a - b; // subtract\n",
+        "}\n",
+        "\n",
+        "// helpers\n",
+        "function clamp(x) {\n",
+        "  return x;\n",
+        "}\n",
+        "\n",
+        "function noop() {\n",
+        "  return;\n",
+        "}\n",
+        "\n",
+        "function twice(x) {\n",
+        "  return x * 2;\n",
+        "}\n",
+        "\n",
+        "module.exports = { add, sub, clamp, noop, twice };\n"
+      ],
+      "docs/notes.md": [
+        "# Notizen — Übersicht 🎉\n",
+        "\n",
+        "Café ☕ résumé naïve\n",
+        "日本語のテキスト\n",
+        "Ende ✓"
+      ],
+      "win/config.ini": [
+        "[core]\r\n",
+        "name = beta\r\n",
+        "mode = fast\r\n",
+        "[extra]\r\n",
+        "key = 1\r\n"
+      ],
+      "src/new.js": [
+        "export const x = 1;\n",
+        "export const y = 2;\n"
+      ],
+      "README.md": [
+        "# Project\n",
+        "\n",
+        "Unchanged readme line.\n"
+      ],
+      "empty.txt": [
+        "now has content\n"
+      ],
+      "one.txt": [
+        "beta"
+      ],
+      "tail.txt": [
+        "a\n",
+        "b\n"
+      ],
+      "zero.txt": [
+        "one\n",
+        "two\n",
+        "2.5\n",
+        "three\n",
+        "four\n",
+        "six\n"
+      ],
+      "docs/my notes/café.md": [
+        "Grüße aus Köln!\n",
+        "zweite Zeile\n"
+      ],
+      "adjacent.txt": [
+        "A\n",
+        "b\n",
+        "C\n",
+        "D\n",
+        "e\n"
+      ]
+    },
+    "0142014201420142014201420142014201420142": {
+      "src/calc.js": [
+        "'use strict';\n",
+        "\n",
+        "function add(a, b) {\n",
+        "  return a + b;\n",
+        "}\n"
+      ]
+    },
+    "adadadadadadadadadadadadadadadadadadadad": {
+      "src/calc.js": [
+        "// banner\n",
+        "'use strict';\n",
+        "\n",
+        "function add(a, b) {\n",
+        "  // add two numbers\n",
+        "  if (typeof a !== 'number') throw new TypeError('a');\n",
+        "  return a + b;\n",
+        "}\n",
+        "\n",
+        "function sub(a, b) {\n",
+        "  return a - b; // subtract\n",
+        "}\n",
+        "\n",
+        "// helpers\n",
+        "function clamp(x) {\n",
+        "  return x;\n",
+        "}\n",
+        "\n",
+        "function noop() {\n",
+        "  return;\n",
+        "}\n",
+        "\n",
+        "function twice(x) {\n",
+        "  return x * 2;\n",
+        "}\n",
+        "\n",
+        "module.exports = { add, sub, clamp, noop, twice };\n"
+      ]
+    },
+    "abababababababababababababababababababab": {
+      "src/calc.js": [
+        "// base banner\n",
+        "'use strict';\n",
+        "\n",
+        "function add(a, b) {\n",
+        "  return a + b;\n",
+        "}\n",
+        "\n",
+        "function sub(a, b) {\n",
+        "  return a - b;\n",
+        "}\n",
+        "\n",
+        "// helpers\n",
+        "function clamp(x) {\n",
+        "  return x;\n",
+        "}\n",
+        "\n",
+        "function noop() {\n",
+        "  return;\n",
+        "}\n",
+        "\n",
+        "function twice(x) {\n",
+        "  return x;\n",
+        "}\n",
+        "\n",
+        "function mul(a, b) {\n",
+        "  return a * b;\n",
+        "}\n",
+        "\n",
+        "module.exports = { add, sub, clamp, noop, twice, mul };\n"
+      ]
+    }
+  },
+  "diffs": {
+    "primary": {
+      "baseCommit": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0",
+      "headCommit": "4ead4ead4ead4ead4ead4ead4ead4ead4ead4ead",
+      "files": [
+        {
+          "path": "src/calc.js",
+          "patch": [
+            "@@ -1,11 +1,13 @@\n",
+            " 'use strict';\n",
+            " \n",
+            " function add(a, b) {\n",
+            "+  // add two numbers\n",
+            "+  if (typeof a !== 'number') throw new TypeError('a');\n",
+            "   return a + b;\n",
+            " }\n",
+            " \n",
+            " function sub(a, b) {\n",
+            "-  return a - b;\n",
+            "+  return a - b; // subtract\n",
+            " }\n",
+            " \n",
+            " // helpers\n",
+            "@@ -18,11 +20,7 @@ function noop() {\n",
+            " }\n",
+            " \n",
+            " function twice(x) {\n",
+            "-  return x;\n",
+            "-}\n",
+            "-\n",
+            "-function mul(a, b) {\n",
+            "-  return a * b;\n",
+            "+  return x * 2;\n",
+            " }\n",
+            " \n",
+            "-module.exports = { add, sub, clamp, noop, twice, mul };\n",
+            "+module.exports = { add, sub, clamp, noop, twice };\n"
+          ],
+          "surface": [
+            [[1, 1], [2, 2], [3, 3], [null, 4], [null, 5], [4, 6], [5, 7], [6, 8], [7, 9], [8, null], [null, 10], [9, 11], [10, 12], [11, 13]],
+            [[18, 20], [19, 21], [20, 22], [21, null], [22, null], [23, null], [24, null], [25, null], [null, 23], [26, 24], [27, 25], [28, null], [null, 26]]
+          ]
+        },
+        {
+          "path": "docs/notes.md",
+          "patch": [
+            "@@ -1,5 +1,5 @@\n",
+            "-# Notizen — Überblick\n",
+            "+# Notizen — Übersicht 🎉\n",
+            " \n",
+            " Café ☕ résumé naïve\n",
+            " 日本語のテキスト\n",
+            "-Ende ohne Zeilenumbruch\n",
+            "+Ende ✓\n",
+            "\\ No newline at end of file\n"
+          ],
+          "surface": [
+            [[1, null], [null, 1], [2, 2], [3, 3], [4, 4], [5, null], [null, 5]]
+          ]
+        },
+        {
+          "path": "win/config.ini",
+          "patch": [
+            "@@ -1,5 +1,5 @@\n",
+            " [core]\r\n",
+            "-name = alpha\r\n",
+            "+name = beta\r\n",
+            " mode = fast\r\n",
+            " [extra]\r\n",
+            " key = 1\r\n"
+          ],
+          "surface": [
+            [[1, 1], [2, null], [null, 2], [3, 3], [4, 4], [5, 5]]
+          ]
+        },
+        {
+          "path": "src/new.js",
+          "patch": [
+            "diff --git a/src/new.js b/src/new.js\n",
+            "new file mode 100644\n",
+            "index 0000000..1111111\n",
+            "--- /dev/null\n",
+            "+++ b/src/new.js\n",
+            "@@ -0,0 +1,2 @@\n",
+            "+export const x = 1;\n",
+            "+export const y = 2;\n"
+          ],
+          "surface": [
+            [[null, 1], [null, 2]]
+          ]
+        },
+        {
+          "path": "src/old.js",
+          "patch": [
+            "diff --git a/src/old.js b/src/old.js\n",
+            "deleted file mode 100644\n",
+            "index 2222222..0000000\n",
+            "--- a/src/old.js\n",
+            "+++ /dev/null\n",
+            "@@ -1 +0,0 @@\n",
+            "-module.exports = 1;\n"
+          ],
+          "surface": [
+            [[1, null]]
+          ]
+        },
+        {
+          "path": "empty.txt",
+          "patch": [
+            "@@ -0,0 +1 @@\n",
+            "+now has content\n"
+          ],
+          "surface": [
+            [[null, 1]]
+          ]
+        },
+        {
+          "path": "one.txt",
+          "patch": [
+            "@@ -1 +1 @@\n",
+            "-alpha\n",
+            "\\ No newline at end of file\n",
+            "+beta\n",
+            "\\ No newline at end of file\n"
+          ],
+          "surface": [
+            [[1, null], [null, 1]]
+          ]
+        },
+        {
+          "path": "tail.txt",
+          "patch": [
+            "@@ -1,2 +1,2 @@\n",
+            " a\n",
+            "-b\n",
+            "\\ No newline at end of file\n",
+            "+b\n"
+          ],
+          "surface": [
+            [[1, 1], [2, null], [null, 2]]
+          ]
+        },
+        {
+          "path": "zero.txt",
+          "context": 0,
+          "patch": [
+            "@@ -2,0 +3 @@ two\n",
+            "+2.5\n",
+            "@@ -5 +5,0 @@ four\n",
+            "-five\n"
+          ],
+          "surface": [
+            [[null, 3]],
+            [[5, null]]
+          ]
+        },
+        {
+          "path": "docs/my notes/café.md",
+          "patch": [
+            "@@ -1,2 +1,2 @@\n",
+            "-Grüße aus Köln\n",
+            "+Grüße aus Köln!\n",
+            " zweite Zeile\n"
+          ],
+          "surface": [
+            [[1, null], [null, 1], [2, 2]]
+          ]
+        },
+        {
+          "path": "adjacent.txt",
+          "patch": [
+            "@@ -1,5 +1,5 @@\n",
+            "-a\n",
+            "+A\n",
+            " b\n",
+            "-c\n",
+            "-d\n",
+            "+C\n",
+            "+D\n",
+            " e\n"
+          ],
+          "surface": [
+            [[1, null], [null, 1], [2, 2], [3, null], [4, null], [null, 3], [null, 4], [5, 5]]
+          ]
+        }
+      ]
+    },
+    "reorderedAdjacent": {
+      "description": "A valid unified diff of adjacent.txt that interleaves deletions and additions (-c +C -d +D). Git does not emit this ordering, so it is excluded from the git cross-check; the surface regeneration check still verifies it.",
+      "baseCommit": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0",
+      "headCommit": "4ead4ead4ead4ead4ead4ead4ead4ead4ead4ead",
+      "files": [
+        {
+          "path": "adjacent.txt",
+          "gitReproducible": false,
+          "patch": [
+            "@@ -1,5 +1,5 @@\n",
+            "-a\n",
+            "+A\n",
+            " b\n",
+            "-c\n",
+            "+C\n",
+            "-d\n",
+            "+D\n",
+            " e\n"
+          ],
+          "surface": [
+            [[1, null], [null, 1], [2, 2], [3, null], [null, 3], [4, null], [null, 4], [5, 5]]
+          ]
+        }
+      ]
+    },
+    "advancedHead": {
+      "baseCommit": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0",
+      "headCommit": "adadadadadadadadadadadadadadadadadadadad",
+      "files": [
+        {
+          "path": "src/calc.js",
+          "patch": [
+            "@@ -1,11 +1,14 @@\n",
+            "+// banner\n",
+            " 'use strict';\n",
+            " \n",
+            " function add(a, b) {\n",
+            "+  // add two numbers\n",
+            "+  if (typeof a !== 'number') throw new TypeError('a');\n",
+            "   return a + b;\n",
+            " }\n",
+            " \n",
+            " function sub(a, b) {\n",
+            "-  return a - b;\n",
+            "+  return a - b; // subtract\n",
+            " }\n",
+            " \n",
+            " // helpers\n",
+            "@@ -18,11 +21,7 @@ function noop() {\n",
+            " }\n",
+            " \n",
+            " function twice(x) {\n",
+            "-  return x;\n",
+            "-}\n",
+            "-\n",
+            "-function mul(a, b) {\n",
+            "-  return a * b;\n",
+            "+  return x * 2;\n",
+            " }\n",
+            " \n",
+            "-module.exports = { add, sub, clamp, noop, twice, mul };\n",
+            "+module.exports = { add, sub, clamp, noop, twice };\n"
+          ],
+          "surface": [
+            [[null, 1], [1, 2], [2, 3], [3, 4], [null, 5], [null, 6], [4, 7], [5, 8], [6, 9], [7, 10], [8, null], [null, 11], [9, 12], [10, 13], [11, 14]],
+            [[18, 21], [19, 22], [20, 23], [21, null], [22, null], [23, null], [24, null], [25, null], [null, 24], [26, 25], [27, 26], [28, null], [null, 27]]
+          ]
+        }
+      ]
+    }
+  }
+}

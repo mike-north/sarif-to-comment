@@ -1,0 +1,387 @@
+{
+  "description": "Line-only regions, CRLF sources, missing terminal newlines, empty lines, lone CR content and single-line files, under the default SARIF newline sequences (CRLF, LF). Newline sequences are reproduced literally: inserted text is never normalized to the file's convention and a line-only region never consumes its newline. Removing a line (zero replacement lines) and emptying it (one blank line) are distinct.",
+  "cases": [
+    {
+      "name": "line-only region replaces line content and retains its newline",
+      "input": {
+        "sourceText": "a\nb\nc\n",
+        "deletedRegion": { "startLine": 2 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a\nX\nc\n",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "b\n",
+        "replacementText": "X\n",
+        "replacementLines": ["X\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "accidentalNewlineDeletion": "a\nXc\n"
+      }
+    },
+    {
+      "name": "line-only region over two lines retains only the final line's newline",
+      "input": {
+        "sourceText": "a\nb\nc\nd\n",
+        "deletedRegion": { "startLine": 2, "endLine": 3 },
+        "insertedText": "Y",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a\nY\nd\n",
+        "startLine": 2,
+        "endLine": 3,
+        "originalText": "b\nc\n",
+        "replacementText": "Y\n",
+        "replacementLines": ["Y\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "accidentalNewlineDeletion": "a\nYd\n",
+        "onlyStartLineReplaced": "a\nY\nc\nd\n"
+      }
+    },
+    {
+      "name": "line-only region in a CRLF file retains the whole CRLF sequence",
+      "input": {
+        "sourceText": "a\r\nb\r\nc\r\n",
+        "deletedRegion": { "startLine": 2 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a\r\nX\r\nc\r\n",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "b\r\n",
+        "replacementText": "X\r\n",
+        "replacementLines": ["X\r\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "accidentalNewlineDeletion": "a\r\nXc\r\n",
+        "carriageReturnTreatedAsLineContent": "a\r\nX\nc\r\n"
+      }
+    },
+    {
+      "name": "line-only region on a final line without a terminal newline adds no newline",
+      "input": {
+        "sourceText": "a\nb",
+        "deletedRegion": { "startLine": 2 },
+        "insertedText": "B",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a\nB",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "b",
+        "replacementText": "B",
+        "replacementLines": ["B"],
+        "endsWithNewline": { "original": false, "edited": false }
+      },
+      "wrongEditedText": {
+        "terminalNewlineAdded": "a\nB\n"
+      }
+    },
+    {
+      "name": "emptying a line keeps one blank line, distinct from removing the line",
+      "input": {
+        "sourceText": "a\nb\nc\n",
+        "deletedRegion": { "startLine": 2 },
+        "insertedText": "",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a\n\nc\n",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "b\n",
+        "replacementText": "\n",
+        "replacementLines": ["\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "lineRemovedInsteadOfEmptied": "a\nc\n"
+      },
+      "wrongReplacementLines": {
+        "blankLineConfusedWithZeroLines": []
+      }
+    },
+    {
+      "name": "replacing a whole line and its newline with a newline also yields one blank line",
+      "input": {
+        "sourceText": "a\nb\nc\n",
+        "deletedRegion": { "startLine": 2, "startColumn": 1, "endLine": 3, "endColumn": 1 },
+        "insertedText": "\n",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a\n\nc\n",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "b\n",
+        "replacementText": "\n",
+        "replacementLines": ["\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      }
+    },
+    {
+      "name": "CRLF region crossing a line break consumes the whole CRLF sequence",
+      "input": {
+        "sourceText": "one\r\ntwo\r\nthree\r\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 4, "endLine": 2, "endColumn": 4 },
+        "insertedText": " + 2",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "one + 2\r\nthree\r\n",
+        "startLine": 1,
+        "endLine": 2,
+        "originalText": "one\r\ntwo\r\n",
+        "replacementText": "one + 2\r\n",
+        "replacementLines": ["one + 2\r\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "carriageReturnLeftBehind": "one\r + 2\r\nthree\r\n"
+      }
+    },
+    {
+      "name": "LF inserted into a CRLF file is kept literally",
+      "input": {
+        "sourceText": "a\r\nb\r\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 2, "endColumn": 2 },
+        "insertedText": "\nz",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a\nz\r\nb\r\n",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "a\r\n",
+        "replacementText": "a\nz\r\n",
+        "replacementLines": ["a\n", "z\r\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "insertedNewlineNormalizedToCrlf": "a\r\nz\r\nb\r\n"
+      }
+    },
+    {
+      "name": "CRLF whole-line replacement ending at the next line start stays on its own line",
+      "input": {
+        "sourceText": "a\r\nb\r\nc\r\n",
+        "deletedRegion": { "startLine": 2, "startColumn": 1, "endLine": 3, "endColumn": 1 },
+        "insertedText": "B\r\n",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a\r\nB\r\nc\r\n",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "b\r\n",
+        "replacementText": "B\r\n",
+        "replacementLines": ["B\r\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      }
+    },
+    {
+      "name": "LF-terminated replacement of a CRLF line exposes the changed terminator",
+      "input": {
+        "sourceText": "a\r\nb\r\nc\r\n",
+        "deletedRegion": { "startLine": 2, "startColumn": 1, "endLine": 3, "endColumn": 1 },
+        "insertedText": "B\n",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a\r\nB\nc\r\n",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "b\r\n",
+        "replacementText": "B\n",
+        "replacementLines": ["B\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "insertedNewlineNormalizedToCrlf": "a\r\nB\r\nc\r\n"
+      },
+      "wrongReplacementText": {
+        "terminatorNormalizedToSource": "B\r\n"
+      }
+    },
+    {
+      "name": "insertion of a new final line into a file without a terminal newline",
+      "input": {
+        "sourceText": "a\nb",
+        "deletedRegion": { "startLine": 2, "startColumn": 2, "endColumn": 2 },
+        "insertedText": "\nc",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a\nb\nc",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "b",
+        "replacementText": "b\nc",
+        "replacementLines": ["b\n", "c"],
+        "endsWithNewline": { "original": false, "edited": false }
+      },
+      "wrongEditedText": {
+        "terminalNewlineAdded": "a\nb\nc\n"
+      }
+    },
+    {
+      "name": "single-line file without a newline",
+      "input": {
+        "sourceText": "x",
+        "deletedRegion": { "startLine": 1, "startColumn": 1, "endColumn": 2 },
+        "insertedText": "y",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "y",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "x",
+        "replacementText": "y",
+        "replacementLines": ["y"],
+        "endsWithNewline": { "original": false, "edited": false }
+      }
+    },
+    {
+      "name": "single-line file with a newline",
+      "input": {
+        "sourceText": "x\n",
+        "deletedRegion": { "startLine": 1 },
+        "insertedText": "y",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "y\n",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "x\n",
+        "replacementText": "y\n",
+        "replacementLines": ["y\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "accidentalNewlineDeletion": "y"
+      }
+    },
+    {
+      "name": "insertion into an empty line",
+      "input": {
+        "sourceText": "a\n\nb\n",
+        "deletedRegion": { "startLine": 2, "startColumn": 1, "endColumn": 1 },
+        "insertedText": "mid",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a\nmid\nb\n",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "\n",
+        "replacementText": "mid\n",
+        "replacementLines": ["mid\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "emptyLineSkipped": "a\n\nmidb\n"
+      }
+    },
+    {
+      "name": "lone CR is line content under the default newline sequences",
+      "input": {
+        "sourceText": "a\rb\nc\n",
+        "deletedRegion": { "startLine": 1 },
+        "insertedText": "X",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "X\nc\n",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "a\rb\n",
+        "replacementText": "X\n",
+        "replacementLines": ["X\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "loneCrTreatedAsNewline": "X\rb\nc\n"
+      }
+    },
+    {
+      "name": "lone CR occupies one column",
+      "input": {
+        "sourceText": "a\rb\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 3, "endColumn": 4 },
+        "insertedText": "B",
+        "columnKind": "unicodeCodePoints"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a\rB\n",
+        "startLine": 1,
+        "endLine": 1,
+        "originalText": "a\rb\n",
+        "replacementText": "a\rB\n",
+        "replacementLines": ["a\rB\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "loneCrIgnoredForColumns": "a\rbB"
+      }
+    },
+    {
+      "name": "the default newline sequences declared in either order behave identically",
+      "input": {
+        "sourceText": "a\r\nb\r\n",
+        "deletedRegion": { "startLine": 2 },
+        "insertedText": "B",
+        "columnKind": "utf16CodeUnits",
+        "newlineSequences": ["\n", "\r\n"]
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a\r\nB\r\n",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "b\r\n",
+        "replacementText": "B\r\n",
+        "replacementLines": ["B\r\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      }
+    },
+    {
+      "name": "a non-default newline declaration is diagnosed rather than treated as the default",
+      "input": {
+        "sourceText": "a\nb\n",
+        "deletedRegion": { "startLine": 2 },
+        "insertedText": "B",
+        "columnKind": "utf16CodeUnits",
+        "newlineSequences": ["\n"]
+      },
+      "expected": { "kind": "unsupported", "reason": "newline-sequences" }
+    }
+  ]
+}

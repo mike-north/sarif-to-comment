@@ -1,0 +1,10 @@
+{
+  "repository": "mike-north/doc-linter",
+  "publication": "623506cc-b28c-41b5-b9cf-c6e07c95d06e",
+  "suggestion_marker": "<!-- sarif-recovery-experiment:623506cc-b28c-41b5-b9cf-c6e07c95d06e:suggestion-1 -->",
+  "review_marker": "<!-- sarif-recovery-experiment:623506cc-b28c-41b5-b9cf-c6e07c95d06e:review -->",
+  "original_number": 10,
+  "original_branch": "codex/sarif-recovery-original-20260927",
+  "suggestion_branch": "codex/sarif-recovery-suggestion-20260927",
+  "reviewed_commit": "80208b0071131e4348e78832d909cfe5c8724ae2"
+}

@@ -1,0 +1,166 @@
+{
+  "description": "Replacements spanning several source lines, deletions that join lines, and regions ending at column 1 of a later line. That later line joins the candidate only when the replacement content would run into it.",
+  "cases": [
+    {
+      "name": "multi-line replacement keeps prefix on the first line and the terminator of the last",
+      "input": {
+        "sourceText": "if (a) {\n  run();\n}\nnext();\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 4, "endLine": 3, "endColumn": 2 },
+        "insertedText": "(b) {\n  walk();\n}",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "if (b) {\n  walk();\n}\nnext();\n",
+        "startLine": 1,
+        "endLine": 3,
+        "originalText": "if (a) {\n  run();\n}\n",
+        "replacementText": "if (b) {\n  walk();\n}\n",
+        "replacementLines": ["if (b) {\n", "  walk();\n", "}\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "endColumnTreatedAsInclusive": "if (b) {\n  walk();\n}next();\n",
+        "lostPrefix": "(b) {\n  walk();\n}\nnext();\n"
+      }
+    },
+    {
+      "name": "single-line region replaced by several lines shifts later lines",
+      "input": {
+        "sourceText": "alpha\nbeta\ngamma\n",
+        "deletedRegion": { "startLine": 2, "startColumn": 1, "endColumn": 5 },
+        "insertedText": "b1\nb2",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "alpha\nb1\nb2\ngamma\n",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "beta\n",
+        "replacementText": "b1\nb2\n",
+        "replacementLines": ["b1\n", "b2\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "endColumnTreatedAsInclusive": "alpha\nb1\nb2gamma\n"
+      }
+    },
+    {
+      "name": "deletion across a newline joins two lines",
+      "input": {
+        "sourceText": "foo(\n  bar)\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 5, "endLine": 2, "endColumn": 3 },
+        "insertedText": "",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "foo(bar)\n",
+        "startLine": 1,
+        "endLine": 2,
+        "originalText": "foo(\n  bar)\n",
+        "replacementText": "foo(bar)\n",
+        "replacementLines": ["foo(bar)\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "endColumnTreatedAsInclusive": "foo(ar)\n",
+        "newlineRetained": "foo(\nbar)\n"
+      }
+    },
+    {
+      "name": "removing a whole middle line is a zero-line replacement of that line alone",
+      "input": {
+        "sourceText": "a\nb\nc\n",
+        "deletedRegion": { "startLine": 2, "startColumn": 1, "endLine": 3, "endColumn": 1 },
+        "insertedText": "",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a\nc\n",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "b\n",
+        "replacementText": "",
+        "replacementLines": [],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "endColumnTreatedAsInclusive": "a\n\n",
+        "blankLineLeftBehind": "a\n\nc\n"
+      },
+      "wrongReplacementLines": {
+        "zeroLinesConfusedWithBlankLine": ["\n"]
+      }
+    },
+    {
+      "name": "whole-line replacement ending at the next line start stays on its own line",
+      "input": {
+        "sourceText": "a\nb\nc\n",
+        "deletedRegion": { "startLine": 2, "startColumn": 1, "endLine": 3, "endColumn": 1 },
+        "insertedText": "B\n",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a\nB\nc\n",
+        "startLine": 2,
+        "endLine": 2,
+        "originalText": "b\n",
+        "replacementText": "B\n",
+        "replacementLines": ["B\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "endColumnTreatedAsInclusive": "a\nB\n\n"
+      }
+    },
+    {
+      "name": "replacement without a trailing newline joins into the next line, which enters the range",
+      "input": {
+        "sourceText": "a\nb\nc\n",
+        "deletedRegion": { "startLine": 2, "startColumn": 1, "endLine": 3, "endColumn": 1 },
+        "insertedText": "B",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "a\nBc\n",
+        "startLine": 2,
+        "endLine": 3,
+        "originalText": "b\nc\n",
+        "replacementText": "Bc\n",
+        "replacementLines": ["Bc\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "consumedNewlineRestored": "a\nB\nc\n"
+      }
+    },
+    {
+      "name": "deleting through the next line start from mid-line joins the untouched prefix onto that line",
+      "input": {
+        "sourceText": "ab\ncd\n",
+        "deletedRegion": { "startLine": 1, "startColumn": 2, "endLine": 2, "endColumn": 1 },
+        "insertedText": "",
+        "columnKind": "utf16CodeUnits"
+      },
+      "expected": {
+        "kind": "replacement",
+        "editedText": "acd\n",
+        "startLine": 1,
+        "endLine": 2,
+        "originalText": "ab\ncd\n",
+        "replacementText": "acd\n",
+        "replacementLines": ["acd\n"],
+        "endsWithNewline": { "original": true, "edited": true }
+      },
+      "wrongEditedText": {
+        "newlineRetained": "a\ncd\n",
+        "endColumnTreatedAsInclusive": "ad\n"
+      }
+    }
+  ]
+}

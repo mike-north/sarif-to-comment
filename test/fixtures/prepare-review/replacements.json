@@ -1,0 +1,334 @@
+{
+  "description": "Hand-authored responses of the injected replacement boundary (applyReplacement) for fix tests. Each entry names the exact request the preparer must send (source text by commit/path, the SARIF deletedRegion as given, literal inserted text, the run's columnKind) and the response a correct replacement module gives, using its outcome kinds (replacement, invalid, unsupported, unanchored). editedText is authored as lines. originalText/replacementText keep full selected-line terminators; replacementText '' means zero replacement lines. Integration tests separately run the real module and must reach the same expected reviews.",
+  "entries": [
+    {
+      "id": "limit-20",
+      "request": {
+        "source": ["c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de", "src/app.js"],
+        "deletedRegion": { "startLine": 3, "startColumn": 23, "endColumn": 25 },
+        "insertedText": "20",
+        "columnKind": "utf16CodeUnits"
+      },
+      "response": {
+        "kind": "replacement",
+        "editedTextLines": [
+          "'use strict';\n",
+          "\n",
+          "const DEFAULT_LIMIT = 20;\n",
+          "const MAX_LIMIT = 100;\n",
+          "\n",
+          "function fetchAll(items, limit = DEFAULT_LIMIT) {\n",
+          "  return items.slice(0, limit).map((item) => item.id);\n",
+          "}\n",
+          "\n",
+          "function total(values) {\n",
+          "  let sum = 0;\n",
+          "  for (const v of values) sum += v;\n",
+          "  return sum;\n",
+          "}\n",
+          "\n",
+          "function average(values) {\n",
+          "  return total(values) / values.length;\n",
+          "}\n",
+          "\n",
+          "module.exports = { fetchAll, total, average };\n"
+        ],
+        "startLine": 3,
+        "endLine": 3,
+        "originalText": "const DEFAULT_LIMIT = 25;\n",
+        "replacementText": "const DEFAULT_LIMIT = 20;\n"
+      }
+    },
+    {
+      "id": "limit-30",
+      "request": {
+        "source": ["c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de", "src/app.js"],
+        "deletedRegion": { "startLine": 3, "startColumn": 23, "endColumn": 25 },
+        "insertedText": "30",
+        "columnKind": "utf16CodeUnits"
+      },
+      "response": {
+        "kind": "replacement",
+        "editedTextLines": [
+          "'use strict';\n",
+          "\n",
+          "const DEFAULT_LIMIT = 30;\n",
+          "const MAX_LIMIT = 100;\n",
+          "\n",
+          "function fetchAll(items, limit = DEFAULT_LIMIT) {\n",
+          "  return items.slice(0, limit).map((item) => item.id);\n",
+          "}\n",
+          "\n",
+          "function total(values) {\n",
+          "  let sum = 0;\n",
+          "  for (const v of values) sum += v;\n",
+          "  return sum;\n",
+          "}\n",
+          "\n",
+          "function average(values) {\n",
+          "  return total(values) / values.length;\n",
+          "}\n",
+          "\n",
+          "module.exports = { fetchAll, total, average };\n"
+        ],
+        "startLine": 3,
+        "endLine": 3,
+        "originalText": "const DEFAULT_LIMIT = 25;\n",
+        "replacementText": "const DEFAULT_LIMIT = 30;\n"
+      }
+    },
+    {
+      "id": "average-guard",
+      "request": {
+        "source": ["c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de", "src/app.js"],
+        "deletedRegion": { "startLine": 16, "startColumn": 1, "endLine": 18, "endColumn": 2 },
+        "insertedText": "function average(values) {\n  if (values.length === 0) return 0;\n  return total(values) / values.length;\n}",
+        "columnKind": "utf16CodeUnits"
+      },
+      "response": {
+        "kind": "replacement",
+        "editedTextLines": [
+          "'use strict';\n",
+          "\n",
+          "const DEFAULT_LIMIT = 25;\n",
+          "const MAX_LIMIT = 100;\n",
+          "\n",
+          "function fetchAll(items, limit = DEFAULT_LIMIT) {\n",
+          "  return items.slice(0, limit).map((item) => item.id);\n",
+          "}\n",
+          "\n",
+          "function total(values) {\n",
+          "  let sum = 0;\n",
+          "  for (const v of values) sum += v;\n",
+          "  return sum;\n",
+          "}\n",
+          "\n",
+          "function average(values) {\n",
+          "  if (values.length === 0) return 0;\n",
+          "  return total(values) / values.length;\n",
+          "}\n",
+          "\n",
+          "module.exports = { fetchAll, total, average };\n"
+        ],
+        "startLine": 16,
+        "endLine": 18,
+        "originalText": "function average(values) {\n  return total(values) / values.length;\n}\n",
+        "replacementText": "function average(values) {\n  if (values.length === 0) return 0;\n  return total(values) / values.length;\n}\n"
+      }
+    },
+    {
+      "id": "limit-comment-only-line-17",
+      "request": {
+        "source": ["c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de", "src/app.js"],
+        "deletedRegion": { "startLine": 17, "startColumn": 3, "endColumn": 9 },
+        "insertedText": "return (",
+        "columnKind": "utf16CodeUnits"
+      },
+      "response": {
+        "kind": "replacement",
+        "editedTextLines": [
+          "'use strict';\n",
+          "\n",
+          "const DEFAULT_LIMIT = 25;\n",
+          "const MAX_LIMIT = 100;\n",
+          "\n",
+          "function fetchAll(items, limit = DEFAULT_LIMIT) {\n",
+          "  return items.slice(0, limit).map((item) => item.id);\n",
+          "}\n",
+          "\n",
+          "function total(values) {\n",
+          "  let sum = 0;\n",
+          "  for (const v of values) sum += v;\n",
+          "  return sum;\n",
+          "}\n",
+          "\n",
+          "function average(values) {\n",
+          "  return ( total(values) / values.length;\n",
+          "}\n",
+          "\n",
+          "module.exports = { fetchAll, total, average };\n"
+        ],
+        "startLine": 17,
+        "endLine": 17,
+        "originalText": "  return total(values) / values.length;\n",
+        "replacementText": "  return ( total(values) / values.length;\n"
+      }
+    },
+    {
+      "id": "column-out-of-bounds",
+      "request": {
+        "source": ["c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de", "src/app.js"],
+        "deletedRegion": { "startLine": 3, "startColumn": 23, "endColumn": 40 },
+        "insertedText": "20",
+        "columnKind": "utf16CodeUnits"
+      },
+      "response": { "kind": "invalid", "reason": "out-of-bounds", "message": "Column 40 lies beyond the end of line 3 (columns are utf16CodeUnits)." }
+    },
+    {
+      "id": "byte-region",
+      "request": {
+        "source": ["c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de", "src/app.js"],
+        "deletedRegion": { "byteOffset": 60, "byteLength": 2 },
+        "insertedText": "20",
+        "columnKind": "utf16CodeUnits"
+      },
+      "response": { "kind": "unsupported", "reason": "byte-region", "message": "Byte offsets are not supported." }
+    },
+    {
+      "id": "terminal-newline-removed",
+      "request": {
+        "source": ["c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de", "src/app.js"],
+        "deletedRegion": { "startLine": 20, "startColumn": 47, "endLine": 21, "endColumn": 1 },
+        "insertedText": "",
+        "columnKind": "utf16CodeUnits"
+      },
+      "response": {
+        "kind": "replacement",
+        "editedTextLines": [
+          "'use strict';\n",
+          "\n",
+          "const DEFAULT_LIMIT = 25;\n",
+          "const MAX_LIMIT = 100;\n",
+          "\n",
+          "function fetchAll(items, limit = DEFAULT_LIMIT) {\n",
+          "  return items.slice(0, limit).map((item) => item.id);\n",
+          "}\n",
+          "\n",
+          "function total(values) {\n",
+          "  let sum = 0;\n",
+          "  for (const v of values) sum += v;\n",
+          "  return sum;\n",
+          "}\n",
+          "\n",
+          "function average(values) {\n",
+          "  return total(values) / values.length;\n",
+          "}\n",
+          "\n",
+          "module.exports = { fetchAll, total, average };"
+        ],
+        "startLine": 20,
+        "endLine": 20,
+        "originalText": "module.exports = { fetchAll, total, average };\n",
+        "replacementText": "module.exports = { fetchAll, total, average };"
+      }
+    },
+    {
+      "id": "fence-in-replacement",
+      "request": {
+        "source": ["c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de", "src/app.js"],
+        "deletedRegion": { "startLine": 17, "startColumn": 1, "endLine": 17, "endColumn": 40 },
+        "insertedText": "  // ```\n  return total(values) / values.length;",
+        "columnKind": "utf16CodeUnits"
+      },
+      "response": {
+        "kind": "replacement",
+        "editedTextLines": [],
+        "startLine": 17,
+        "endLine": 17,
+        "originalText": "  return total(values) / values.length;\n",
+        "replacementText": "  // ```\n  return total(values) / values.length;\n"
+      }
+    },
+    {
+      "id": "crlf-in-replacement",
+      "request": {
+        "source": ["c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de", "src/app.js"],
+        "deletedRegion": { "startLine": 7, "startColumn": 1, "endLine": 7, "endColumn": 55 },
+        "insertedText": "  // capped\r\n  return items.slice(0, limit).map((item) => item.id);",
+        "columnKind": "utf16CodeUnits"
+      },
+      "response": {
+        "kind": "replacement",
+        "editedTextLines": [
+          "'use strict';\n",
+          "\n",
+          "const DEFAULT_LIMIT = 25;\n",
+          "const MAX_LIMIT = 100;\n",
+          "\n",
+          "function fetchAll(items, limit = DEFAULT_LIMIT) {\n",
+          "  // capped\r\n",
+          "  return items.slice(0, limit).map((item) => item.id);\n",
+          "}\n",
+          "\n",
+          "function total(values) {\n",
+          "  let sum = 0;\n",
+          "  for (const v of values) sum += v;\n",
+          "  return sum;\n",
+          "}\n",
+          "\n",
+          "function average(values) {\n",
+          "  return total(values) / values.length;\n",
+          "}\n",
+          "\n",
+          "module.exports = { fetchAll, total, average };\n"
+        ],
+        "startLine": 7,
+        "endLine": 7,
+        "originalText": "  return items.slice(0, limit).map((item) => item.id);\n",
+        "replacementText": "  // capped\r\n  return items.slice(0, limit).map((item) => item.id);\n"
+      }
+    },
+    {
+      "id": "util-out-of-diff",
+      "request": {
+        "source": ["c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de", "src/util.js"],
+        "deletedRegion": { "startLine": 4, "startColumn": 10, "endColumn": 18 },
+        "insertedText": "Math.max",
+        "columnKind": "utf16CodeUnits"
+      },
+      "response": {
+        "kind": "replacement",
+        "editedTextLines": [
+          "'use strict';\n",
+          "\n",
+          "function clamp(n, lo, hi) {\n",
+          "  return Math.max(Math.max(n, lo), hi);\n",
+          "}\n",
+          "\n",
+          "module.exports = { clamp };\n"
+        ],
+        "startLine": 4,
+        "endLine": 4,
+        "originalText": "  return Math.min(Math.max(n, lo), hi);\n",
+        "replacementText": "  return Math.max(Math.max(n, lo), hi);\n"
+      }
+    },
+    {
+      "id": "delete-line-7",
+      "request": {
+        "source": ["c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de", "src/app.js"],
+        "deletedRegion": { "startLine": 7, "startColumn": 1, "endLine": 8, "endColumn": 1 },
+        "insertedText": "",
+        "columnKind": "utf16CodeUnits"
+      },
+      "response": {
+        "kind": "replacement",
+        "editedTextLines": [
+          "'use strict';\n",
+          "\n",
+          "const DEFAULT_LIMIT = 25;\n",
+          "const MAX_LIMIT = 100;\n",
+          "\n",
+          "function fetchAll(items, limit = DEFAULT_LIMIT) {\n",
+          "}\n",
+          "\n",
+          "function total(values) {\n",
+          "  let sum = 0;\n",
+          "  for (const v of values) sum += v;\n",
+          "  return sum;\n",
+          "}\n",
+          "\n",
+          "function average(values) {\n",
+          "  return total(values) / values.length;\n",
+          "}\n",
+          "\n",
+          "module.exports = { fetchAll, total, average };\n"
+        ],
+        "startLine": 7,
+        "endLine": 7,
+        "originalText": "  return items.slice(0, limit).map((item) => item.id);\n",
+        "replacementText": ""
+      }
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+header line
+first replacement
+second replacement
+third replacement
+footer line

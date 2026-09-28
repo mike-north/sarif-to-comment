@@ -1,0 +1,47 @@
+{
+  "description": "Independently authored expectations for fixture.sarif.json on the isolated doc-linter fixture. Every commit, path, side, line range and literal text was written by hand from the authored fixture files (see README in this directory), before any product run. Anchors are GitHub review-comment coordinates: RIGHT addresses head lines, LEFT addresses base lines. Suggestion replacement text is the exact whole-line content the SARIF edit produces, derived by hand from SARIF region rules.",
+  "repository": "mike-north/doc-linter",
+  "commits": {
+    "base": "5a5ca130467bb00993c4dc10701bc40f4167796e",
+    "head": "c96e4c386527de44b29b507907e2c97d2351d45e"
+  },
+  "inline": [
+    { "rule": "E2E002", "path": "sarif-e2e-fixture/alpha.txt", "side": "RIGHT", "line": 1, "sourceCommit": "head", "text": "alpha one", "why": "first line of the file, unchanged context in hunk 1" },
+    { "rule": "E2E003", "path": "sarif-e2e-fixture/alpha.txt", "side": "RIGHT", "line": 2, "sourceCommit": "head", "text": "inserted first", "why": "added line" },
+    { "rule": "E2E004", "path": "sarif-e2e-fixture/alpha.txt", "side": "RIGHT", "startLine": 5, "line": 7, "sourceCommit": "head", "text": "alpha four\nalpha five\nalpha six", "why": "context shifted +1 (base lines 4-6)" },
+    { "rule": "E2E005", "path": "sarif-e2e-fixture/alpha.txt", "side": "RIGHT", "line": 21, "sourceCommit": "head", "text": "alpha TWENTY", "why": "last line, second hunk" },
+    { "rule": "E2H001", "path": "sarif-e2e-fixture/alpha.txt", "side": "LEFT", "line": 3, "sourceCommit": "base", "text": "remove this line", "why": "deleted base line; base provenance verified via oldSourceCommit" },
+    { "rule": "E2E007", "path": "sarif-e2e-fixture/gamma.js", "side": "RIGHT", "line": 8, "sourceCommit": "head", "text": "function farewell(name) {", "suggestion": "function farewell(person) {\n", "why": "single-line substring suggestion preserving prefix and suffix" },
+    { "rule": "E2E008", "path": "sarif-e2e-fixture/gamma.js", "side": "RIGHT", "startLine": 9, "line": 10, "sourceCommit": "head", "text": "  const message = 'Goodbye, ' + name;\n  return message;", "suggestion": "  return 'Goodbye, ' + name;\n", "why": "ordinary multiline suggestion replacing two lines with one" },
+    { "rule": "E2E009", "path": "sarif-e2e-fixture/notes.md", "side": "RIGHT", "line": 4, "sourceCommit": "head", "text": "Schöne Grüße — ünïcödé ✓", "why": "added non-ASCII line" }
+  ],
+  "general": [
+    { "rule": "E2E001", "message": "General fixture note with no source location" },
+    {
+      "rule": "E2E006",
+      "message": "Unchanged line outside every hunk",
+      "path": "sarif-e2e-fixture/alpha.txt",
+      "line": 12,
+      "text": "alpha eleven",
+      "permalink": "https://github.com/mike-north/doc-linter/blob/c96e4c386527de44b29b507907e2c97d2351d45e/sarif-e2e-fixture/alpha.txt#L12"
+    }
+  ],
+  "historicalAfterHeadAdvance": {
+    "description": "After the head branch advances, a publication still pinned to the original head is historical: every located finding becomes general feedback with a permalink at its own source commit (the original head for head findings; the base commit for the base-provenance finding), and no inline anchor is used. The fix-bearing findings are expected to block instead only if the core requires fixes to target the pull head; either outcome must never anchor inline or retarget to the new head.",
+    "generalPermalinks": [
+      "https://github.com/mike-north/doc-linter/blob/c96e4c386527de44b29b507907e2c97d2351d45e/sarif-e2e-fixture/alpha.txt#L1",
+      "https://github.com/mike-north/doc-linter/blob/c96e4c386527de44b29b507907e2c97d2351d45e/sarif-e2e-fixture/alpha.txt#L2",
+      "https://github.com/mike-north/doc-linter/blob/c96e4c386527de44b29b507907e2c97d2351d45e/sarif-e2e-fixture/alpha.txt#L5-L7",
+      "https://github.com/mike-north/doc-linter/blob/c96e4c386527de44b29b507907e2c97d2351d45e/sarif-e2e-fixture/alpha.txt#L21",
+      "https://github.com/mike-north/doc-linter/blob/c96e4c386527de44b29b507907e2c97d2351d45e/sarif-e2e-fixture/alpha.txt#L12",
+      "https://github.com/mike-north/doc-linter/blob/5a5ca130467bb00993c4dc10701bc40f4167796e/sarif-e2e-fixture/alpha.txt#L3",
+      "https://github.com/mike-north/doc-linter/blob/c96e4c386527de44b29b507907e2c97d2351d45e/sarif-e2e-fixture/notes.md#L4"
+    ],
+    "observedWithFixes": "Run with fixture.sarif.json after the head advance: blocked before any write with two suggestion-historical-unsupported diagnostics (/runs/0/results/6 and /runs/0/results/7). The historical demonstration therefore uses fixture-feedback-only.sarif.json (identical findings, fixes removed), whose E2E007 and E2E008 findings are then expected as general sections linked at the original head: gamma.js#L8 and gamma.js#L9-L10.",
+    "feedbackOnlyExtraPermalinks": [
+      "https://github.com/mike-north/doc-linter/blob/c96e4c386527de44b29b507907e2c97d2351d45e/sarif-e2e-fixture/gamma.js#L8",
+      "https://github.com/mike-north/doc-linter/blob/c96e4c386527de44b29b507907e2c97d2351d45e/sarif-e2e-fixture/gamma.js#L9-L10"
+    ],
+    "reviewedCommit": "c96e4c386527de44b29b507907e2c97d2351d45e"
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "$schema": "https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Illustrative documentation reviewer"
+        }
+      },
+      "artifacts": [
+        {
+          "location": {
+            "uri": "docs/new-feature.md"
+          },
+          "mimeType": "text/markdown",
+          "encoding": "utf-8",
+          "contents": {
+            "text": "# New feature\n\nIllustrative documentation content, not documentation for an implemented feature.\n\n```text\nExample usage goes here.\n```\n"
+          }
+        }
+      ],
+      "results": [
+        {
+          "kind": "review",
+          "level": "note",
+          "message": {
+            "text": "This PR needs documentation for its new functionality. Here is a proposed page to add."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "docs/new-feature.md",
+                  "index": 0
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "properties": {
+            "sarifToComment": {
+              "proposedFileChanges": [
+                {
+                  "operation": "create",
+                  "artifactIndex": 0
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
