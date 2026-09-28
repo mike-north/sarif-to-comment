@@ -39,17 +39,28 @@ const { spawnSync } = require('node:child_process');
 const { ROOT, PKG, npm, packProject, installIntoConsumer } = require('./fixtures/package/installed-package.cjs');
 const { UPSTREAM_SARIF_PATH, createGitWorld } = require('./fixtures/authoring-workflow/git-world.cjs');
 
-/** The package.json `files` whitelist: the intended distribution boundary. */
+/**
+ * The package.json `files` whitelist: the intended distribution boundary.
+ * dist/ is build output; the negations keep build by-products out of the
+ * package: per-module declarations (only the rolled-up public declaration
+ * ships), TypeScript build info, the build-freshness manifest, and the runtime
+ * output of the declaration-only entry (it has no runtime content).
+ */
 const EXPECTED_FILES_FIELD = [
-  'src/',
-  'bin/',
-  'types/',
+  'dist/',
+  '!dist/*.d.cts',
+  '!dist/*.tsbuildinfo',
+  '!dist/.build-inputs.json',
+  '!dist/public-api.cjs',
   'vendor/',
   'docs/getting-started.md',
   'docs/api/',
   'CHANGELOG.md',
   'README.md',
 ];
+
+/** Compiled outputs that exist in dist/ but carry no runtime content, so never ship. */
+const NON_RUNTIME_OUTPUTS = ['dist/public-api.cjs'];
 
 /** Whether a packed path is inside the intended distribution boundary. */
 function distributable(file) {
@@ -58,28 +69,56 @@ function distributable(file) {
     file === 'README.md' ||
     file === 'CHANGELOG.md' ||
     /^LICENSE(\.md|\.txt)?$/.test(file) ||
-    /^src\/[^/]+\.cjs$/.test(file) ||
-    file === 'bin/sarif-to-comment.cjs' ||
-    file === 'types/index.d.ts' ||
+    (/^dist\/[^/]+\.cjs$/.test(file) && !NON_RUNTIME_OUTPUTS.includes(file)) ||
+    file === 'dist/sarif-to-comment.d.ts' ||
     /^vendor\/[^/]+$/.test(file) ||
     file === 'docs/getting-started.md' ||
     /^docs\/api\/[^/]+\.md$/.test(file)
   );
 }
 
-/** Every non-builtin module the shipped sources require, by package name. */
+/** The shipped runtime files: every dist/*.cjs the package includes. */
+function shippedRuntimeFiles() {
+  const dist = path.join(ROOT, 'dist');
+  if (!fs.existsSync(dist)) return [];
+  return fs
+    .readdirSync(dist)
+    .filter((f) => f.endsWith('.cjs'))
+    .map((f) => `dist/${f}`)
+    .filter((f) => !NON_RUNTIME_OUTPUTS.includes(f))
+    .sort();
+}
+
+/**
+ * Every non-builtin package the shipped runtime requires, by package name.
+ * Quote-agnostic, because compiled output uses double quotes where the
+ * hand-written sources used single quotes; a scan matching one style only
+ * would silently come back empty.
+ */
 function requiredPackages() {
   const names = new Set();
-  for (const dir of ['src', 'bin']) {
-    for (const file of fs.readdirSync(path.join(ROOT, dir)).filter((f) => f.endsWith('.cjs'))) {
-      const text = fs.readFileSync(path.join(ROOT, dir, file), 'utf8');
-      for (const [, spec] of text.matchAll(/require\('([^']+)'\)/g)) {
-        if (spec.startsWith('.') || spec.startsWith('node:')) continue;
-        names.add(spec.startsWith('@') ? spec.split('/').slice(0, 2).join('/') : spec.split('/')[0]);
-      }
+  for (const file of shippedRuntimeFiles()) {
+    const text = fs.readFileSync(path.join(ROOT, file), 'utf8');
+    for (const [, , spec] of text.matchAll(/\brequire\(\s*(['"`])([^'"`]+)\1\s*\)/g)) {
+      if (spec.startsWith('.') || spec.startsWith('node:')) continue;
+      names.add(spec.startsWith('@') ? spec.split('/').slice(0, 2).join('/') : spec.split('/')[0]);
     }
   }
   return names;
+}
+
+/**
+ * The packages a consumer must receive for `required` to load: each required
+ * package plus the peer dependencies it declares (ajv-draft-04 builds on a
+ * consumer-supplied `ajv`), read from the installed manifests.
+ */
+function runtimeDependencyClosure(required) {
+  const names = new Set(required);
+  for (const name of required) {
+    const manifest = JSON.parse(fs.readFileSync(require.resolve(`${name}/package.json`, { paths: [ROOT] }), 'utf8'));
+    for (const peer of Object.keys(manifest.peerDependencies || {})) names.add(peer);
+  }
+  return [...names].sort();
 }
 
 describe('manifest', () => {
@@ -107,15 +146,15 @@ describe('manifest', () => {
     assert.deepEqual(PKG.bugs, { url: 'https://github.com/mike-north/sarif-to-comment/issues' });
   });
 
-  test('library entry points resolve to the real public module and its declarations', () => {
-    assert.equal(PKG.main, './src/index.cjs');
-    assert.equal(PKG.types, './types/index.d.ts');
+  test('library entry points resolve to the built public module and its rolled-up declarations', () => {
+    assert.equal(PKG.main, './dist/index.cjs');
+    assert.equal(PKG.types, './dist/sarif-to-comment.d.ts');
     assert.deepEqual(PKG.exports, {
-      '.': { types: './types/index.d.ts', default: './src/index.cjs' },
+      '.': { types: './dist/sarif-to-comment.d.ts', default: './dist/index.cjs' },
       './package.json': './package.json',
     });
     const resolved = require.resolve(path.join(ROOT, PKG.exports['.'].default));
-    assert.equal(resolved, path.join(ROOT, 'src', 'index.cjs'));
+    assert.equal(resolved, path.join(ROOT, 'dist', 'index.cjs'));
     const declared = [...fs.readFileSync(path.join(ROOT, PKG.types), 'utf8').matchAll(/^export declare function (\w+)\(/gm)].map((m) => m[1]);
     assert.deepEqual(declared.sort(), ['addSarifComment', 'addStagedChangesToSarif', 'createSarifDocument', 'inspectSarif', 'publishSarifReview']);
     assert.deepEqual(Object.keys(require(resolved)).sort(), declared, 'the runtime exports exactly the declared API');
@@ -124,7 +163,7 @@ describe('manifest', () => {
   test('the CLI bin points at an executable Node script', () => {
     // Written in npm's normalized form (no leading "./"), so publishing does not
     // rewrite the manifest or warn that the entry was "invalid and removed".
-    assert.deepEqual(PKG.bin, { 'sarif-to-comment': 'bin/sarif-to-comment.cjs' });
+    assert.deepEqual(PKG.bin, { 'sarif-to-comment': 'dist/sarif-to-comment.cjs' });
     const text = fs.readFileSync(path.join(ROOT, PKG.bin['sarif-to-comment']), 'utf8');
     assert.ok(text.startsWith('#!/usr/bin/env node\n'), 'bin must start with a node shebang');
   });
@@ -132,6 +171,18 @@ describe('manifest', () => {
   test('the supported Node range is declared and satisfied by this runtime', () => {
     assert.deepEqual(PKG.engines, { node: '>=22' });
     assert.ok(Number(process.versions.node.split('.')[0]) >= 22, `running Node ${process.versions.node}`);
+  });
+
+  test('development requires Node 22.18.0 or later without narrowing what consumers may run', () => {
+    // The build and test tooling runs TypeScript through Node's native type
+    // stripping, which first works without flags or warnings in 22.18.0 (22.17
+    // cannot load it at all). devEngines applies only to commands run in this
+    // checkout, where npm and pnpm refuse an older Node; the installed package
+    // keeps `engines: >=22` because its compiled JavaScript needs no stripping.
+    assert.deepEqual(PKG.devEngines, { runtime: { name: 'node', version: '>=22.18.0', onFail: 'error' } });
+    assert.deepEqual(PKG.engines, { node: '>=22' }, 'the consumer range is unchanged');
+    const [major, minor] = process.versions.node.split('.').map(Number);
+    assert.ok(major > 22 || (major === 22 && minor >= 18), `developing on Node ${process.versions.node}`);
   });
 
   test('the files whitelist is exactly the intended boundary', () => {
@@ -142,10 +193,15 @@ describe('manifest', () => {
     assert.deepEqual(PKG.files, expected);
   });
 
-  test('every runtime require is a declared dependency; tooling stays a dev dependency', () => {
-    const declared = new Set(Object.keys(PKG.dependencies || {}));
-    for (const name of requiredPackages()) assert.ok(declared.has(name), `${name} is required at runtime but not a dependency`);
-    assert.deepEqual([...declared].sort(), ['ajv', 'ajv-draft-04', 'ajv-formats']);
+  test('the declared dependencies are exactly what the shipped runtime requires; tooling stays a dev dependency', () => {
+    const declared = Object.keys(PKG.dependencies || {}).sort();
+    const required = requiredPackages();
+    assert.ok(shippedRuntimeFiles().length > 0, 'the scan covers the built runtime (run `pnpm run build`)');
+    assert.ok(required.size > 0, 'the scan finds runtime requires; an empty scan would prove nothing');
+    // Both directions: an undeclared require breaks consumers, and a declared
+    // dependency nothing needs is installed by every consumer for no reason.
+    assert.deepEqual(runtimeDependencyClosure(required), declared);
+    assert.deepEqual(declared, ['ajv', 'ajv-draft-04', 'ajv-formats']);
     for (const tool of ['@changesets/cli', '@microsoft/api-extractor', '@microsoft/api-documenter', 'typescript']) {
       assert.ok(Object.hasOwn(PKG.devDependencies, tool), `${tool} is a dev dependency`);
     }
@@ -153,10 +209,12 @@ describe('manifest', () => {
 
   test('scripts are purpose-named and checks are read-only', () => {
     const scripts = PKG.scripts || {};
-    assert.equal(scripts.test, 'node --test test/*.test.cjs');
+    // The suite exercises the built dist/, so it first refuses a missing or stale build.
+    assert.equal(scripts.test, 'npm run check:build && node --test test/*.test.cjs');
+    assert.equal(scripts['check:build'], 'node scripts/build-manifest.mts verify');
     assert.match(scripts['check:lint'] || '', /^eslint\b/);
     assert.ok(scripts.check, 'an aggregate read-only check script exists');
-    assert.ok(scripts.build, 'build regenerates the API report and reference documentation');
+    assert.equal(scripts.build, 'node scripts/build.mts', 'build compiles dist/ and regenerates the API report and reference documentation');
     for (const [name, command] of Object.entries(scripts)) {
       if (name === 'check' || name.startsWith('check:')) {
         assert.doesNotMatch(command, /--fix\b|--write\b|--local\b/, `${name} must not modify files`);
@@ -174,21 +232,60 @@ describe('packed distributable', () => {
     const files = packed.result.files.map((f) => f.path).sort();
     assert.deepEqual(files.filter((f) => !distributable(f)), [], 'unexpected files in the package');
     const apiPages = fs.readdirSync(path.join(ROOT, 'docs', 'api')).map((f) => `docs/api/${f}`);
+    // Every runtime module in src/ ships as dist/<name>.cjs. The module list
+    // comes from the sources (transitional .cjs and TypeScript .cts alike), so
+    // a build that silently drops a module fails here.
+    const runtimeModules = fs
+      .readdirSync(path.join(ROOT, 'src'))
+      .filter((f) => /\.c[jt]s$/.test(f) && !f.endsWith('.d.cts'))
+      .map((f) => `dist/${f.replace(/\.c[jt]s$/, '.cjs')}`)
+      .filter((f) => !NON_RUNTIME_OUTPUTS.includes(f))
+      .sort();
+    assert.ok(runtimeModules.length >= 14, `every runtime module is found (${runtimeModules.length})`);
     for (const required of [
       'package.json',
       'README.md',
       'CHANGELOG.md',
-      'bin/sarif-to-comment.cjs',
-      'types/index.d.ts',
+      'dist/sarif-to-comment.cjs',
+      'dist/index.cjs',
+      'dist/sarif-to-comment.d.ts',
       'vendor/sarif-schema-2.1.0.json',
       'vendor/README.md',
       'docs/getting-started.md',
       ...apiPages,
-      ...fs.readdirSync(path.join(ROOT, 'src')).filter((f) => f.endsWith('.cjs')).map((f) => `src/${f}`),
+      ...runtimeModules,
     ]) {
       assert.ok(files.includes(required), `${required} is missing from the package`);
     }
+    assert.deepEqual(
+      files.filter((f) => f.startsWith('dist/') && f.endsWith('.cjs')),
+      runtimeModules,
+      'every shipped runtime file comes from a runtime source module',
+    );
     assert.ok(apiPages.length >= 3, 'the generated API reference has pages');
+  });
+
+  test('the files negations keep build by-products out of a packed dist/', { skip }, () => {
+    // The checkout's dist/ need not hold every by-product at any given time,
+    // so the boundary is proven on a scratch package that holds all of them.
+    const dir = fs.mkdtempSync(path.join(packed.work, 'negations-'));
+    fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 'negations', version: '1.0.0', files: PKG.files }));
+    fs.mkdirSync(path.join(dir, 'dist'));
+    for (const file of [
+      'index.cjs',
+      'index.d.cts',
+      'public-api.cjs',
+      'public-api.d.cts',
+      'sarif-to-comment.d.ts',
+      'tsconfig.tsbuildinfo',
+      '.build-inputs.json',
+    ]) {
+      fs.writeFileSync(path.join(dir, 'dist', file), '\n');
+    }
+    const run = npm(['pack', '--dry-run', '--json'], { cwd: dir, env: packed.env });
+    assert.equal(run.status, 0, run.stderr);
+    const files = JSON.parse(run.stdout)[0].files.map((f) => f.path).filter((f) => f.startsWith('dist/')).sort();
+    assert.deepEqual(files, ['dist/index.cjs', 'dist/sarif-to-comment.d.ts']);
   });
 
   // npm normalizes manifests when publishing a directory and warns about every

@@ -55,6 +55,7 @@ const GUARD = path.join(ROOT, 'scripts', 'release-guard.cjs');
 const CHANGESET_BIN = path.join(ROOT, 'node_modules', '.bin', 'changeset');
 const PKG = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
 const guard = require('../scripts/release-guard.cjs');
+const MANIFEST_TOOL = path.join(ROOT, 'scripts', 'build-manifest.mts');
 
 const TRUSTED_URL = 'git+https://github.com/mike-north/sarif-to-comment.git';
 
@@ -76,7 +77,7 @@ function publishFacts(overrides = {}) {
     publishedVersions: ['0.0.0'],
     preMode: false,
     npmVersion: '11.5.1',
-    nodeVersion: '22.14.0',
+    nodeVersion: '22.18.0',
     onMain: true,
     ...overrides,
   };
@@ -100,14 +101,15 @@ function packResult(version = '0.1.0', extra = []) {
       'package.json',
       'README.md',
       'CHANGELOG.md',
-      'bin/sarif-to-comment.cjs',
-      'src/github.cjs',
-      'src/index.cjs',
-      'src/placement.cjs',
-      'src/prepare-review.cjs',
-      'src/publication.cjs',
-      'src/replacements.cjs',
-      'types/index.d.ts',
+      'dist/sarif-to-comment.cjs',
+      'dist/cli.cjs',
+      'dist/github.cjs',
+      'dist/index.cjs',
+      'dist/placement.cjs',
+      'dist/prepare-review.cjs',
+      'dist/publication.cjs',
+      'dist/replacements.cjs',
+      'dist/sarif-to-comment.d.ts',
       'vendor/README.md',
       'vendor/sarif-schema-2.1.0.json',
       'docs/getting-started.md',
@@ -131,6 +133,15 @@ describe('the major-version ceiling is an explicit, reviewed constant', () => {
 
   test('the trusted-publishing repository URL is exact', () => {
     assert.equal(guard.EXPECTED_REPOSITORY_URL, TRUSTED_URL);
+  });
+
+  test('publishing needs Node 22.18.0: trusted publishing needs 22.14.0, and the build tooling needs type stripping', () => {
+    // The release runs the TypeScript build tooling by Node's native type
+    // stripping, which first works without flags in 22.18.0; checking for
+    // that version here explains a too-old runner instead of failing later
+    // with a syntax error. It is at least npm's trusted-publishing minimum.
+    assert.equal(guard.MIN_NODE, '22.18.0');
+    assert.equal(guard.MIN_NPM, '11.5.1');
   });
 });
 
@@ -207,7 +218,8 @@ describe('publish decision', () => {
       /repository/i,
     ],
     'npm older than 11.5.1': [{ npmVersion: '11.5.0' }, /npm.*11\.5\.1/],
-    'Node older than 22.14.0': [{ nodeVersion: '22.13.1' }, /Node.*22\.14\.0/],
+    'Node older than 22.18.0': [{ nodeVersion: '22.17.1' }, /Node.*22\.18\.0/],
+    'Node older than the trusted-publishing minimum': [{ nodeVersion: '22.13.1' }, /Node.*22\.18\.0/],
     'a commit not on main': [{ onMain: false }, /main/],
   };
   for (const [label, [change, mention]] of Object.entries(refusals)) {
@@ -252,15 +264,62 @@ describe('the packed tarball is exactly the distribution boundary', () => {
     'a pending changeset': (p) => p.files.push({ path: '.changeset/first-release.md' }),
     'the API report': (p) => p.files.push({ path: 'api-report/sarif-to-comment.api.md' }),
     'a nested source directory': (p) => p.files.push({ path: 'src/internal/x.cjs' }),
-    'a missing entry point': (p) => (p.files = p.files.filter((f) => f.path !== 'src/index.cjs')),
-    'missing type declarations': (p) => (p.files = p.files.filter((f) => f.path !== 'types/index.d.ts')),
-    'a missing CLI': (p) => (p.files = p.files.filter((f) => f.path !== 'bin/sarif-to-comment.cjs')),
+    'a source module': (p) => p.files.push({ path: 'src/index.cjs' }),
+    'a TypeScript source': (p) => p.files.push({ path: 'src/index.cts' }),
+    'a nested build directory': (p) => p.files.push({ path: 'dist/internal/x.cjs' }),
+    'a per-module declaration': (p) => p.files.push({ path: 'dist/index.d.cts' }),
+    'a source map': (p) => p.files.push({ path: 'dist/index.cjs.map' }),
+    'TypeScript build info': (p) => p.files.push({ path: 'dist/tsconfig.tsbuildinfo' }),
+    'the build-freshness manifest': (p) => p.files.push({ path: 'dist/.build-inputs.json' }),
+    'the declaration-only entry output': (p) => p.files.push({ path: 'dist/public-api.cjs' }),
+    'the former hand-written declarations path': (p) => p.files.push({ path: 'types/index.d.ts' }),
+    'the former executable path': (p) => p.files.push({ path: 'bin/sarif-to-comment.cjs' }),
+    'a missing entry point': (p) => (p.files = p.files.filter((f) => f.path !== 'dist/index.cjs')),
+    'missing type declarations': (p) => (p.files = p.files.filter((f) => f.path !== 'dist/sarif-to-comment.d.ts')),
+    'a missing CLI': (p) => (p.files = p.files.filter((f) => f.path !== 'dist/sarif-to-comment.cjs')),
     'a missing getting-started guide': (p) => (p.files = p.files.filter((f) => f.path !== 'docs/getting-started.md')),
     'missing API reference': (p) => (p.files = p.files.filter((f) => f.path !== 'docs/api/index.md')),
     'a missing CHANGELOG': (p) => (p.files = p.files.filter((f) => f.path !== 'CHANGELOG.md')),
     'a missing vendored schema': (p) => (p.files = p.files.filter((f) => f.path !== 'vendor/sarif-schema-2.1.0.json')),
     'a different version': (p) => (p.version = '0.0.9'),
   };
+  test('the boundary admits exactly the flat built runtime, the rolled-up declarations, vendor and docs', () => {
+    for (const file of [
+      'package.json',
+      'README.md',
+      'CHANGELOG.md',
+      'LICENSE',
+      'dist/index.cjs',
+      'dist/sarif-to-comment.cjs',
+      'dist/publish-sarif-review.cjs',
+      'dist/sarif-to-comment.d.ts',
+      'vendor/sarif-schema-2.1.0.json',
+      'docs/getting-started.md',
+      'docs/api/index.md',
+    ]) {
+      assert.equal(guard.isDistributable(file), true, file);
+    }
+    for (const file of [
+      'src/index.cjs',
+      'src/index.cts',
+      'dist/internal/x.cjs',
+      'dist/index.d.cts',
+      'dist/index.d.ts',
+      'dist/index.cjs.map',
+      'dist/tsconfig.tsbuildinfo',
+      'dist/.build-inputs.json',
+      'dist/public-api.cjs',
+      'dist/index.cts',
+      'dist/index.js',
+      'types/index.d.ts',
+      'bin/sarif-to-comment.cjs',
+      'scripts/build.mts',
+      'test/x.test.mts',
+    ]) {
+      assert.equal(guard.isDistributable(file), false, file);
+    }
+  });
+
   for (const [label, breakIt] of Object.entries(bad)) {
     test(`refuses a tarball with ${label}`, () => {
       const pack = packResult();
@@ -701,13 +760,48 @@ describe('guard command line', () => {
     assert.match(bad.stderr, /logs\/secret\.txt/);
   });
 
+  /**
+   * A minimal project at `version` whose dist/ is a complete, fresh build as
+   * the build records it (the build-freshness manifest written last).
+   */
+  function builtProject(version) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'check-version-'));
+    fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify(manifest(version)));
+    fs.mkdirSync(path.join(dir, 'src'));
+    fs.writeFileSync(path.join(dir, 'src', 'index.cjs'), "'use strict';\n");
+    fs.mkdirSync(path.join(dir, 'dist'));
+    fs.writeFileSync(path.join(dir, 'dist', 'index.cjs'), "'use strict';\n");
+    const write = spawnSync(process.execPath, [MANIFEST_TOOL, 'write', dir], { encoding: 'utf8' });
+    assert.equal(write.status, 0, write.stderr);
+    return dir;
+  }
+
   test('check-version (the manual-publish backstop) refuses 1.0.0 and accepts 0.x', () => {
     for (const [version, status] of [['0.1.0', 0], ['1.0.0', 1], ['1.0.0-rc.0', 1]]) {
-      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'check-version-'));
-      fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify(manifest(version)));
+      const dir = builtProject(version);
       const run = spawnSync(process.execPath, [GUARD, 'check-version'], { cwd: dir, encoding: 'utf8' });
       assert.equal(run.status, status, `${version}: ${run.stderr}`);
     }
+  });
+
+  test('check-version refuses a missing or stale build, so a manual publish cannot ship outdated dist/', () => {
+    const run = (dir) => spawnSync(process.execPath, [GUARD, 'check-version'], { cwd: dir, encoding: 'utf8' });
+
+    const fresh = builtProject('0.1.0');
+    assert.equal(run(fresh).status, 0, 'control: a fresh build is accepted');
+
+    const unbuilt = builtProject('0.1.0');
+    fs.rmSync(path.join(unbuilt, 'dist'), { recursive: true });
+    const missing = run(unbuilt);
+    assert.equal(missing.status, 1, 'no build');
+    assert.match(missing.stderr, /pnpm run build/);
+
+    const edited = builtProject('0.1.0');
+    fs.appendFileSync(path.join(edited, 'src', 'index.cjs'), '// edited after the build\n');
+    const stale = run(edited);
+    assert.equal(stale.status, 1, 'a source changed after the build');
+    assert.match(stale.stderr, /src\/index\.cjs/);
+    assert.match(stale.stderr, /pnpm run build/);
   });
 
   test('an unknown command is a usage error', () => {
@@ -775,12 +869,17 @@ describe('publish workflow', () => {
     assert.match(config, /runs-on: ubuntu-latest/);
   });
 
-  test('decides first, then checks, packs, verifies and publishes exactly the verified tarball', () => {
+  test('decides first, then builds, checks, packs, verifies and publishes exactly the verified tarball', () => {
+    // The build comes after the decision (nothing is built for a no-op run)
+    // and before the check, so the check and the tarball both use exactly
+    // the dist/ built from this commit. There is no prepack: what is packed
+    // is what was checked.
     const order = [
       /fetch-depth: 0/,
       /pnpm install --frozen-lockfile/,
       /id: preflight\n\s+run: node scripts\/release-guard\.cjs publish-preflight/,
-      /pnpm run check/,
+      /run: pnpm run build\n/,
+      /run: pnpm run check\n/,
       /npm pack --json/,
       /node scripts\/release-guard\.cjs verify-pack/,
       /npm publish "\$\{\{ steps\.pack\.outputs\.tarball \}\}"/,
@@ -792,6 +891,8 @@ describe('publish workflow', () => {
       at += index;
     }
     assert.equal((config.match(/npm publish/g) || []).length, 1);
+    assert.equal((config.match(/pnpm run build/g) || []).length, 1);
+    assert.equal(Object.hasOwn(PKG.scripts, 'prepack'), false, 'no prepack rebuilds between check and pack');
     assert.doesNotMatch(config, /changeset publish|changesets\/action/);
   });
 
@@ -822,6 +923,15 @@ describe('continuous integration workflow', () => {
     assert.match(text, /pnpm install --frozen-lockfile/);
     assert.match(text, /pnpm run check/);
     assert.doesNotMatch(text, /npm publish|id-token|changeset publish/);
+  });
+
+  test('builds after installing and before checking, since the tests exercise the built dist/', () => {
+    let at = 0;
+    for (const step of [/run: pnpm install --frozen-lockfile\n/, /run: pnpm run build\n/, /run: pnpm run check\n/]) {
+      const index = text.slice(at).search(step);
+      assert.ok(index >= 0, `missing or out of order: ${step}`);
+      at += index;
+    }
   });
 });
 

@@ -482,12 +482,18 @@ describe('release tooling comments are accurate and durable', () => {
   });
 
   test('code comments and test names carry no task-specific review labels', () => {
-    const files = ['scripts', 'test', 'src', 'bin', 'types'].flatMap((dir) =>
+    // Owned sources in every language they are written in, so the scan keeps
+    // covering them as JavaScript is converted to TypeScript.
+    const scanned = ['scripts', 'test', 'src', 'types'].map((dir) => [
+      dir,
       fs
         .readdirSync(path.join(ROOT, dir))
-        .filter((f) => /\.(c?js|d\.ts)$/.test(f))
+        .filter((f) => /\.([cm]?js|[cm]?ts)$/.test(f))
         .map((f) => path.join(dir, f)),
-    );
+    ]);
+    for (const [dir, found] of scanned) assert.ok(found.length > 0, `the scan finds sources in ${dir}/`);
+    const files = scanned.flatMap(([, found]) => found);
+    assert.ok(files.some((f) => /^scripts\/.*\.mts$/.test(f)), 'the scan covers TypeScript tooling');
     // Built from fragments so this file does not contain the labels it forbids.
     const label = new RegExp(['rev' + 'iew V\\d', '\\(V' + '\\d\\)'].join('|'));
     for (const file of files) {
