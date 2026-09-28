@@ -1,10 +1,10 @@
 'use strict';
 
 /**
- * The sarif-to-comment command-line interface (bin/sarif-to-comment.cjs runs
+ * The sarif-to-comment command-line interface (src/sarif-to-comment.cts runs
  * `main`). It is a file-oriented transport over the public library: every
- * SARIF, Git and GitHub interpretation is the library's (src/index.cjs), and
- * this module adds only argument handling, file I/O (src/artifact-files.cjs),
+ * SARIF, Git and GitHub interpretation is the library's (src/index.cts), and
+ * this module adds only argument handling, file I/O (src/artifact-files.cts),
  * credential selection, output formatting and exit statuses.
  *
  * Commands (contract: docs/second-milestone-contract-proposal.md §3, §5, §6):

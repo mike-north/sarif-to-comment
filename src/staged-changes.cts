@@ -8,11 +8,11 @@
  *
  * Responsibilities and invariants:
  *   - Source of truth is one index snapshot and the reviewed commit, read by
- *     immutable blob identity (src/staged-git.cjs). Working-tree bytes never
+ *     immutable blob identity (src/staged-git.cts). Working-tree bytes never
  *     reach the output.
  *   - Every supported changed text file becomes exact SARIF replacements;
  *     independently applying them to the reviewed bytes reproduces the
- *     staged bytes (R2). This module re-checks that with src/replacements.cjs
+ *     staged bytes (R2). This module re-checks that with src/replacements.cts
  *     before returning, so a coordinate defect fails loudly.
  *   - Feedback and edits stay separate facts (D4). A finding receives a
  *     replacement only when its lines lie within the replacement's changed

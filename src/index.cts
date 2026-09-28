@@ -2,7 +2,7 @@
  * Public library entry point.
  *
  * Five operations, each on ordinary in-memory SARIF 2.1.0 values (no files,
- * builders, sessions or private formats); the CLI (src/cli.cjs) is a file
+ * builders, sessions or private formats); the CLI (src/cli.cts) is a file
  * transport over exactly these functions:
  *
  *   createSarifDocument(options?)          optional authoring: a new document
@@ -14,8 +14,8 @@
  * Authoring is optional and freestanding: SARIF from any producer can be
  * inspected, extended and published without it, and nothing downstream
  * depends on how a document was made. Each operation is implemented in its
- * own module (src/sarif-authoring.cjs, src/sarif-inspection.cjs,
- * src/staged-changes.cjs, src/publish-sarif-review.cjs) and re-exported here
+ * own module (src/sarif-authoring.cts, src/sarif-inspection.cts,
+ * src/staged-changes.cts, src/publish-sarif-review.cts) and re-exported here
  * unchanged; their contracts are in those modules, and the public API as a
  * whole is declared by src/public-api.cts.
  *

@@ -2,9 +2,9 @@
  * publishSarifReview: publishes a ready SARIF document as one GitHub draft
  * review (the fifth public operation; the package entry re-exports it).
  *
- * Publication composes private cores: the GitHub client (src/github.cjs),
- * whole-review preparation (src/prepare-review.cjs) and durable initial
- * publication (src/publication.cjs). It adds no rendering, placement or
+ * Publication composes private cores: the GitHub client (src/github.cts),
+ * whole-review preparation (src/prepare-review.cts) and durable initial
+ * publication (src/publication.cts). It adds no rendering, placement or
  * delivery logic of its own; it only validates, captures, sequences and
  * explains.
  *
@@ -73,7 +73,7 @@
  *   createGitHubClient({ token, fetch }) -> client with the publication
  *     transport methods and fetchContext({ destination, reviewedCommit,
  *     oldSourceCommit? }) -> { context, readSource }. Defaults to
- *     src/github.cjs.
+ *     src/github.cts.
  */
 
 import * as crypto from 'node:crypto';
@@ -265,7 +265,7 @@ export type PublishSarifReviewOutcome = IPublishedOutcome | IBlockedOutcome | IU
 
 /**
  * What the publication sequence needs from a GitHub client besides the
- * publication transport (which src/publication.cjs validates itself): the
+ * publication transport (which src/publication.cts validates itself): the
  * review context and its source reader. Both answers are checked where they
  * are used (verifyContext here, the caller boundary of prepareReview), so
  * they are `unknown` until then.
@@ -274,7 +274,7 @@ interface IPublishingClient {
   readonly fetchContext: (request: IFetchContextRequest) => Promise<{ readonly context: unknown; readonly readSource: unknown }>;
 }
 
-/** Creates the GitHub client for one publication; src/github.cjs by default. */
+/** Creates the GitHub client for one publication; src/github.cts by default. */
 type CreatePublishingClient = (options: ICreateGitHubClientOptions) => IPublishingClient;
 
 /**

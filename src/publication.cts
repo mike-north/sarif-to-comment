@@ -60,7 +60,7 @@
  *   inputFingerprint: string  // 'sha256:<64 hex>' identity of the original
  *                             // SARIF artifact plus options, from the caller
  *   statePath:        string  // absolute, caller-chosen durable state file
- *   transport:        see test/fixtures/publication/fake-github.cjs for the
+ *   transport:        see test/fixtures/publication/fake-github.mts for the
  *                     private contract (getAuthenticatedUser -> {id, login?},
  *                     createReview, listReviews, listReviewComments; host
  *                     rejections carry `hostRejected: true` and `status`).
@@ -206,7 +206,7 @@ interface IReviewCommentListQuery extends IReviewListQuery {
 
 /**
  * The private host transport this module calls (the full contract is
- * documented in test/fixtures/publication/fake-github.cjs). Every result is
+ * documented in test/fixtures/publication/fake-github.mts). Every result is
  * `unknown`: host answers are validated here before anything relies on them,
  * and a thrown error is only a definitive refusal when it carries
  * `hostRejected: true` with a refusal status.

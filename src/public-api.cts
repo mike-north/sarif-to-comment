@@ -22,9 +22,10 @@
  *
  * The `sarif-to-comment` command-line interface provides the same operations
  * for files (`init`, `add-comment`, `inspect`, `add-staged-changes`,
- * `publish`). These declarations describe the CommonJS runtime in
- * `src/index.cjs`; they are written by hand, checked by API Extractor and
- * compiled against CommonJS and ES module consumers by the package tests.
+ * `publish`). These declarations describe the package's CommonJS runtime
+ * entry; they are generated from its TypeScript implementation, checked by API
+ * Extractor and compiled against CommonJS and ES module consumers by the
+ * package tests.
  *
  * @packageDocumentation
  */

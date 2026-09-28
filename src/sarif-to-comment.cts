@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * The sarif-to-comment executable. All behavior lives in src/cli.cjs, which
+ * The sarif-to-comment executable. All behavior lives in src/cli.cts, which
  * documents the commands, the flag-only publisher, output formats and exit
  * statuses; this file only connects it to the process.
  *

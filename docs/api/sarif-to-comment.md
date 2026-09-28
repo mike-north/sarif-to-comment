@@ -20,7 +20,7 @@ Five operations work on ordinary in-memory SARIF values:
 
 Authoring is optional: SARIF from any producer can be inspected, extended and published directly, and no operation depends on how a document was made. There is no builder, session or private format; each operation that changes a document returns a new one and leaves its input untouched.
 
-The `sarif-to-comment` command-line interface provides the same operations for files (`init`<!-- -->, `add-comment`<!-- -->, `inspect`<!-- -->, `add-staged-changes`<!-- -->,`publish`<!-- -->). These declarations describe the CommonJS runtime in`src/index.cjs`<!-- -->; they are written by hand, checked by API Extractor and compiled against CommonJS and ES module consumers by the package tests.
+The `sarif-to-comment` command-line interface provides the same operations for files (`init`<!-- -->, `add-comment`<!-- -->, `inspect`<!-- -->, `add-staged-changes`<!-- -->,`publish`<!-- -->). These declarations describe the package's CommonJS runtime entry; they are generated from its TypeScript implementation, checked by API Extractor and compiled against CommonJS and ES module consumers by the package tests.
 
 ## Functions
 

@@ -10,12 +10,12 @@
  *
  * Boundaries:
  * - It performs no I/O and holds no state, and never mutates its arguments.
- * - It reproduces the publisher's semantics (`src/index.cjs` capture;
- *   `src/prepare-review.cjs` schema, URI, identity and message rules) without
+ * - It reproduces the publisher's semantics (`src/index.cts` capture;
+ *   `src/prepare-review.cts` schema, URI, identity and message rules) without
  *   importing or changing the publisher. The publisher is out of this
  *   increment's scope.
  * - Equivalence is enforced by behavioural parity tests in
- *   `test/sarif-common.test.cjs`, run against the unchanged publisher.
+ *   `test/sarif-common.test.mts`, run against the unchanged publisher.
  *   Change both sides together.
  */
 
@@ -332,7 +332,7 @@ function dataValue(object: object, key: string, where: string): unknown {
  * Taken synchronously, before any await, a capture fixes what an operation
  * sees. Later changes to the caller's value cannot alter it, and the result
  * shares no objects with the input. This is the publisher's capture
- * discipline (`src/index.cjs`), with a neutral message prefix.
+ * discipline (`src/index.cts`), with a neutral message prefix.
  */
 export function captureJson(value: unknown, label: string, ancestors: Set<object> = new Set(), depth = 0): JsonValue {
   const where = label;

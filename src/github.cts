@@ -3,11 +3,11 @@
  *
  * Speaks raw HTTP to the GitHub REST and GraphQL APIs through an injected
  * `fetch`, and exposes two narrow boundaries:
- *   - the publication transport consumed by src/publication.cjs
+ *   - the publication transport consumed by src/publication.cts
  *     (getAuthenticatedUser, createReview, listReviews, listReviewComments),
  *     normalizing host readback into that module's private shapes; and
  *   - the trusted review context and source-snapshot boundary consumed by
- *     src/prepare-review.cjs (fetchContext, and the readSource it returns).
+ *     src/prepare-review.cts (fetchContext, and the readSource it returns).
  *
  * It never decides placement, rendering, or delivery; it never retries a
  * write, never submits, edits or deletes a review, and never invents
@@ -66,7 +66,7 @@
  *   TypeError before any request.
  *
  * ---------------------------------------------------------------------------
- * Publication transport (see test/fixtures/publication/fake-github.cjs)
+ * Publication transport (see test/fixtures/publication/fake-github.mts)
  *
  *   getAuthenticatedUser() -> { id, login }          GET /user
  *   createReview({ owner, repo, pullNumber, commitId, body, comments })

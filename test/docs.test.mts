@@ -339,7 +339,7 @@ describe('verified authoring examples run against the installed package in a rea
 
 describe('the published outcome is described as a completed publication', () => {
   // A repeated call on a completed state record returns `published` without
-  // contacting GitHub (test/publication.test.cjs, "a completed receipt is
+  // contacting GitHub (test/publication.test.mts, "a completed receipt is
   // final"). The review may since have been submitted, edited or deleted, so
   // no document may promise that it currently exists or is still a draft.
   // The shipped public declarations, generated from the TypeScript sources.

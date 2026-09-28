@@ -49,7 +49,7 @@
  *
  * internals (private test seam, not caller API):
  *   applyReplacement: replacement-module boundary used for fixes (defaults to
- *     src/replacements.cjs). Source-region coordinates always use the
+ *     src/replacements.cts). Source-region coordinates always use the
  *     production replacement module so feedback and fixes share one reading
  *     of SARIF regions.
  *
@@ -83,11 +83,11 @@
  * Support profile (first milestone)
  *
  * - Results with no location become general body feedback. A result's one
- *   physical location is placed through src/placement.cjs: inline when a
+ *   physical location is placed through src/placement.cts: inline when a
  *   faithful anchor on the reviewed commit exists, otherwise a general body
  *   section with an exact permalink and a literal source fence. A location
  *   without a region is whole-file general feedback.
- * - Regions follow SARIF 3.30 exactly as src/replacements.cjs reads them
+ * - Regions follow SARIF 3.30 exactly as src/replacements.cts reads them
  *   (columns, charOffset, BOM exclusion, coordinate agreement). columnKind has
  *   no default: without it a region is accepted only when both SARIF units
  *   denote the same text. A region snippet must equal the region's text.
@@ -344,7 +344,7 @@ interface ISarifLogView {
 
 /**
  * The trusted review context, as validated at the caller boundary. The
- * identity fields have exactly the review context's shape (src/github.cjs);
+ * identity fields have exactly the review context's shape (src/github.cts);
  * the diff commits are host-supplied there and only become strings here,
  * after validation. Diff files are checked by the placement module.
  */
@@ -361,7 +361,7 @@ interface IPreparationContext extends Pick<IReviewContext, 'owner' | 'repo' | 'p
 /**
  * The trusted snapshot boundary. Its answer is checked where it is used:
  * null or undefined means "no such file", any other non-string is misuse.
- * The review context's ReadSource (src/github.cjs) is one.
+ * The review context's ReadSource (src/github.cts) is one.
  */
 type SnapshotReader = (commit: string, path: string) => unknown;
 
