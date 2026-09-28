@@ -187,6 +187,48 @@ describe('inspectSarif: a complete view of upstream SARIF', () => {
     assert.equal(outcome.view.version, 1);
   });
 
+  test('view fields serialize in a stable order', () => {
+    // The view is printed as-is by `inspect --format json`, so its field
+    // order is user-visible. The outcome, view, summary, run and finding
+    // orders are the contract's (§3.3 SarifInspection); optional fields sit
+    // in their contract position only when present. The nested orders below
+    // (message, location, fix, preview, file proposal) are characterization
+    // of 0.2.0, which the contract does not fix.
+    const outcome = inspect();
+    const { view } = outcome;
+    assert.deepStrictEqual(Object.keys(outcome), ['status', 'view']);
+    assert.deepStrictEqual(Object.keys(view), ['format', 'version', 'summary', 'runs', 'findings', 'diagnostics']);
+    assert.deepStrictEqual(Object.keys(view.summary), ['runs', 'findings', 'fixes', 'fileProposals', 'truncatedPreviews']);
+    assert.deepStrictEqual(Object.keys(view.runs[0]), ['index', 'ref', 'tool', 'source', 'columnKind', 'approval', 'otherContent']);
+    assert.deepStrictEqual(Object.keys(view.runs[1]), ['index', 'ref', 'tool', 'source', 'columnKind', 'otherContent']);
+    assert.deepStrictEqual(Object.keys(view.findings[1]), [
+      'ref', 'runIndex', 'resultIndex', 'ruleId', 'level', 'kind', 'approval',
+      'message', 'locations', 'relatedLocations', 'otherContent', 'fixes', 'fileProposals',
+    ]);
+    assert.deepStrictEqual(Object.keys(view.findings[3]), [
+      'ref', 'runIndex', 'resultIndex', 'message', 'locations', 'relatedLocations', 'otherContent', 'fixes', 'fileProposals',
+    ], 'absent optional fields are omitted, not present as undefined');
+    assert.deepStrictEqual(Object.keys(view.findings[2].message), ['id', 'text', 'markdown', 'resolved']);
+    assert.deepStrictEqual(Object.keys(view.findings[0].locations[0]),
+      ['path', 'artifactLocation', 'uri', 'uriBaseId', 'startLine', 'startColumn', 'endColumn', 'snippet']);
+    assert.deepStrictEqual(Object.keys(view.findings[2].locations[0]),
+      ['path', 'artifactLocation', 'uri', 'startLine', 'endLine', 'message', 'logical']);
+    const [fix] = view.findings[0].fixes;
+    assert.deepStrictEqual(Object.keys(fix), ['ref', 'description', 'changes']);
+    assert.deepStrictEqual(Object.keys(fix.changes[0]), ['path', 'uri', 'artifactLocation', 'replacements']);
+    assert.deepStrictEqual(Object.keys(fix.changes[0].replacements[0]), ['deletedRegion', 'inserted']);
+    assert.deepStrictEqual(Object.keys(fix.changes[0].replacements[0].inserted),
+      ['state', 'text', 'totalLines', 'totalChars', 'shownLines', 'shownChars']);
+    assert.deepStrictEqual(view.findings[4].fileProposals.map((p) => Object.keys(p)), [
+      ['ref', 'operation', 'artifactIndex', 'path', 'fileMode', 'content'],
+      ['ref', 'operation', 'artifactIndex', 'path'],
+      ['ref', 'operation', 'artifactIndex', 'path', 'otherContent'],
+    ]);
+    assert.deepStrictEqual(Object.keys(view.diagnostics[0]), ['severity', 'message', 'pointer']);
+    // The refusal outcome, in contract order (§3.3 InspectOutcome).
+    assert.deepStrictEqual(Object.keys(inspectSarif({ version: '2.1.0', runs: [{ results: [] }] })), ['status', 'problems', 'markdown']);
+  });
+
   test('summary counts every run, finding, fix and file proposal', () => {
     assert.deepStrictEqual(inspect().view.summary, { runs: 2, findings: 7, fixes: 4, fileProposals: 3, truncatedPreviews: 0 });
   });

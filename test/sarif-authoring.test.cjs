@@ -107,6 +107,28 @@ describe('createSarifDocument', () => {
   }
 });
 
+describe('authoring outcome field order', () => {
+  // Contract §3.2 lists the outcome as { status, sarif, finding } with
+  // finding { ref, runIndex, resultIndex, tool }, and the refusal as
+  // { status, problems, markdown }. `add-comment --format json` and any
+  // caller serializing the outcome see this order.
+  test('an added comment and its finding', () => {
+    const outcome = addSarifComment(createSarifDocument(), { file: 'a.js', line: 1, message: 'x' });
+    assert.deepStrictEqual(Object.keys(outcome), ['status', 'sarif', 'finding']);
+    assert.deepStrictEqual(Object.keys(outcome.finding), ['ref', 'runIndex', 'resultIndex', 'tool']);
+  });
+
+  test('both refusals: schema-invalid SARIF and a document without runs', () => {
+    const invalid = addSarifComment({ version: '2.1.0', runs: [{ results: [] }] }, { file: 'a.js', line: 1, message: 'x' });
+    assert.equal(invalid.status, 'invalid');
+    assert.deepStrictEqual(Object.keys(invalid), ['status', 'problems', 'markdown']);
+    const empty = addSarifComment({ version: '2.1.0', runs: [] }, { file: 'a.js', line: 1, message: 'x' });
+    assert.equal(empty.status, 'invalid');
+    assert.deepStrictEqual(Object.keys(empty), ['status', 'problems', 'markdown']);
+    assert.deepStrictEqual(Object.keys(empty.problems[0]), ['message', 'pointer']);
+  });
+});
+
 describe('addSarifComment: the appended result', () => {
   const base = () => createSarifDocument({ tool: { name: 'Review agent' } });
 

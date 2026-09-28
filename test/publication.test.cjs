@@ -1702,3 +1702,44 @@ describe('restart and concurrency use on-disk state and fresh processes', () => 
     assert.equal(readRecord(world.statePath).phase, 'completed');
   }
 });
+
+// ---------------------------------------------------------------------------
+// Runtime shape of PublicationStateError
+//
+// publishSarifReview passes a state error through to its caller unchanged
+// unless it mentions the token, so the error's own properties are observable.
+// These pin facts no type declaration expresses (own keys, cause handling).
+// ---------------------------------------------------------------------------
+
+describe('PublicationStateError runtime shape', () => {
+  test('carries name and code as its only own enumerable keys; cause only when given', () => {
+    const bare = new PublicationStateError('state-corrupt', 'not a valid record');
+    assert.ok(bare instanceof PublicationStateError);
+    assert.ok(bare instanceof Error);
+    assert.equal(bare.name, 'PublicationStateError');
+    assert.equal(bare.message, 'not a valid record');
+    assert.equal(bare.code, 'state-corrupt');
+    // Characterization of 0.2.0 key order (visible through util.inspect/JSON).
+    assert.deepEqual(Object.keys(bare), ['name', 'code']);
+    assert.equal(Object.hasOwn(bare, 'cause'), false);
+
+    const cause = new Error('EIO');
+    const caused = new PublicationStateError('state-io', 'cannot read', { cause });
+    assert.equal(caused.cause, cause);
+    assert.deepEqual(Object.keys(caused), ['name', 'code']);
+  });
+
+  test('a corrupt state file rejects with exactly that shape, keeping the parse error as cause', async () => {
+    const world = makeWorld();
+    fs.writeFileSync(world.statePath, '{"format":', { mode: 0o600 });
+    const err = await recover(world).then(
+      () => assert.fail('expected a state error'),
+      (e) => e,
+    );
+    assert.ok(err instanceof PublicationStateError);
+    assert.equal(err.code, 'state-corrupt');
+    assert.deepEqual(Object.keys(err), ['name', 'code']);
+    assert.ok(err.cause instanceof SyntaxError, 'the JSON parse failure is the cause');
+    assertNoCreateAttempt(world.remote);
+  });
+});

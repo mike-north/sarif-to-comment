@@ -161,3 +161,23 @@ describe('reading SARIF files', () => {
     assert.throws(() => files.readJsonFile(file, 'SARIF file'), /not valid JSON/);
   });
 });
+
+describe('ArtifactError runtime shape', () => {
+  test('a file problem is an ArtifactError with only the standard Error properties', () => {
+    // Characterization of 0.2.0: the class declares no fields and no name of
+    // its own, so it adds no own enumerable property and reports the
+    // inherited name "Error". The CLI branches on instanceof and shows only
+    // the message; a language conversion must not add fields or rename it.
+    const missing = path.join(tempDir(), 'absent.sarif');
+    assert.throws(() => files.readTextFile(missing, 'SARIF file'), (err) => {
+      assert.ok(err instanceof files.ArtifactError);
+      assert.ok(err instanceof Error);
+      assert.equal(err.name, 'Error');
+      assert.equal(Object.hasOwn(err, 'name'), false);
+      assert.deepEqual(Object.keys(err), []);
+      assert.equal(Object.hasOwn(err, 'cause'), false);
+      assert.ok(err.message.startsWith(`cannot read SARIF file ${missing}: `), err.message);
+      return true;
+    });
+  });
+});

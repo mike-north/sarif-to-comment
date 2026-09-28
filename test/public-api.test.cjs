@@ -49,6 +49,7 @@ const path = require('node:path');
 const util = require('node:util');
 
 const { publishSarifReview } = require('../src/index.cjs');
+const { GitHubError } = require('../src/github.cjs');
 const { prepareReview } = require('../src/prepare-review.cjs');
 const { FakeGitHubRemote, DEFAULT_USER } = require('./fixtures/publication/fake-github.cjs');
 const {
@@ -173,10 +174,20 @@ function assertPublicShape(outcome, status) {
     rejected: ['markdown', 'statePath', 'status'],
   }[status];
   assert.deepEqual(Object.keys(outcome).sort(), keys);
+  // Field order is the documented outcome order (src/index.cjs module doc,
+  // contract §3.5): status first, markdown last. It is what JSON.stringify of
+  // an outcome shows a caller, so it must not drift.
+  const ordered = {
+    published: ['status', 'review', 'statePath', 'markdown'],
+    blocked: ['status', 'markdown'],
+    uncertain: ['status', 'statePath', 'markdown'],
+    rejected: ['status', 'statePath', 'markdown'],
+  }[status];
+  assert.deepEqual(Object.keys(outcome), ordered, 'outcome fields in documented order');
   assert.equal(typeof outcome.markdown, 'string');
   assert.ok(outcome.markdown.length > 0);
   if (status === 'published') {
-    assert.deepEqual(Object.keys(outcome.review).sort(), ['id', 'url']);
+    assert.deepEqual(Object.keys(outcome.review), ['id', 'url']);
     assert.ok(outcome.markdown.includes(outcome.review.url), 'published Markdown must link the review');
   }
 }
@@ -553,6 +564,48 @@ describe('a new publication prepares once and publishes once', () => {
       assertStateDirEmpty(world);
     });
   }
+
+  /** The fake client for `world`, except that fetchContext throws `error`. */
+  function contextThrowing(world, error) {
+    return (args) => ({ ...world.createGitHubClient(args), fetchContext: async () => { throw error; } });
+  }
+
+  test('a redacted rejection keeps the error name and carries only the redacted message chain', async () => {
+    // Module doc: an error mentioning the token "is replaced by a redacted
+    // error without cause"; withoutCredential keeps the name and drops cause
+    // and extra properties. The source error here has no status: whether an
+    // absent status is an own undefined key must not change the replacement.
+    const world = makeWorld();
+    const thrown = new GitHubError('network', 'GET /repos/acme/gizmos/pulls/7 failed', { cause: new Error(`bearer ${TOKEN}`) });
+    const err = await publishSarifReview(baseInput(world), { createGitHubClient: contextThrowing(world, thrown) }).then(
+      () => assert.fail('expected a rejection'),
+      (e) => e,
+    );
+    assert.notEqual(err, thrown, 'an error mentioning the token is replaced');
+    assert.ok(err instanceof Error);
+    assert.equal(err instanceof GitHubError, false);
+    assert.equal(err.name, 'GitHubError');
+    assert.equal(err.message, 'GET /repos/acme/gizmos/pulls/7 failed (caused by: bearer [redacted])');
+    assert.equal(Object.hasOwn(err, 'cause'), false, 'no cause survives redaction');
+    // Characterization of 0.2.0: `name` is assigned, so it is the only own
+    // enumerable key; code, status and hostRejected are not carried over.
+    assert.deepEqual(Object.keys(err), ['name']);
+    assert.equal(inspectDeep(err).includes(TOKEN), false);
+    assertStateDirEmpty(world);
+  });
+
+  test('an operational error that never mentions the token rejects as the same error, own keys unchanged', async () => {
+    const world = makeWorld();
+    const thrown = new GitHubError('network', 'GET /repos/acme/gizmos/pulls/7 failed');
+    const err = await publishSarifReview(baseInput(world), { createGitHubClient: contextThrowing(world, thrown) }).then(
+      () => assert.fail('expected a rejection'),
+      (e) => e,
+    );
+    assert.equal(err, thrown, 'a token-free error is passed through, not rebuilt');
+    assert.equal(Object.hasOwn(err, 'status'), false, 'an unknown status stays absent');
+    assert.deepEqual(Object.keys(err), ['name', 'code', 'hostRejected']);
+    assertStateDirEmpty(world);
+  });
 
   test('concurrent calls on one fresh state path send exactly once', async () => {
     const world = makeWorld();

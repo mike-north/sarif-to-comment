@@ -38,7 +38,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-const { prepareReview } = require('../src/prepare-review.cjs');
+const { prepareReview, PRODUCT_LIMITS } = require('../src/prepare-review.cjs');
 
 const FIXTURE_DIR = path.join(__dirname, 'fixtures', 'prepare-review');
 const loadJson = (name) => JSON.parse(fs.readFileSync(path.join(FIXTURE_DIR, name), 'utf8'));
@@ -894,6 +894,19 @@ describe('native suggestions from standard fixes', () => {
       path: 'src/app.js', side: 'RIGHT', line: 7,
       body: `Drop this.\n\n${author('T')}\n\n\`\`\`suggestion\n\`\`\``,
     }]);
+  });
+
+  test('fixes are computed through the injected applyReplacement seam when one is given', async () => {
+    // Private test seam (module doc "internals"): the replacement-module
+    // boundary used for fixes is replaceable. The package's own tests and the
+    // conversion's frozen oracle depend on it being honored, not ignored.
+    const { outcome, replacements } = await prepare(sarifLog([result('Drop this.', at('src/app.js', { startLine: 7 }), {
+      fixes: [fix({ startLine: 7, startColumn: 1, endLine: 8, endColumn: 1 }, '')],
+    })]));
+    assertReady(outcome);
+    assert.equal(replacements.calls.length, 1, 'the injected boundary computed the fix');
+    assert.equal(replacements.calls[0].insertedText, '');
+    assert.deepStrictEqual(replacements.calls[0].deletedRegion, { startLine: 7, startColumn: 1, endLine: 8, endColumn: 1 });
   });
 
   test('different replacements on overlapping lines block', async () => {
@@ -1809,5 +1822,19 @@ describe('SARIF structural validation', () => {
 
   test('SARIF must be supplied as an in-memory object, not serialized text', async () => {
     await assert.rejects(prepare(JSON.stringify(sarifLog([result('x')]))), TypeError);
+  });
+});
+
+describe('product limits', () => {
+  test('the default limits are the documented values and cannot be changed at run time', () => {
+    // Module doc: defaults of 100 inline comments, 60000 UTF-16 units per
+    // body and 1,000,000 bytes of payload. The exported object is frozen, so
+    // no caller can loosen them for every later preparation in the process.
+    assert.deepStrictEqual({ ...PRODUCT_LIMITS }, { maxComments: 100, maxCommentBodyChars: 60000, maxPayloadBytes: 1000000 });
+    assert.equal(Object.isFrozen(PRODUCT_LIMITS), true);
+    assert.throws(() => {
+      PRODUCT_LIMITS.maxComments = 1000;
+    }, TypeError);
+    assert.equal(PRODUCT_LIMITS.maxComments, 100);
   });
 });

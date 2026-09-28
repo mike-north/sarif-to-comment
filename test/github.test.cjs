@@ -1346,3 +1346,61 @@ describe('readSource', () => {
     assertHttpDiscipline(host);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Runtime shape of the adapter's values
+//
+// These pin runtime facts that no type declaration expresses, so a change of
+// implementation language or class-field semantics cannot alter them silently.
+// ---------------------------------------------------------------------------
+
+describe('GitHubError and client object runtime shape', () => {
+  test('a GitHubError without a status has no own status key; code and hostRejected are always present', () => {
+    // src/github.cjs documents `status` as set only when the host answered;
+    // callers (publication, credential redaction) enumerate own properties,
+    // so "absent" must not become an own key holding undefined. The key
+    // order is characterization of 0.2.0 (it is what util.inspect and
+    // JSON.stringify of the error show).
+    const err = new GitHubError('network', 'GET /repos/acme/widgets failed');
+    assert.ok(err instanceof GitHubError);
+    assert.ok(err instanceof Error);
+    assert.equal(err.name, 'GitHubError');
+    assert.equal(err.message, 'GET /repos/acme/widgets failed');
+    assert.equal(err.code, 'network');
+    assert.equal(err.hostRejected, false);
+    assert.equal(Object.hasOwn(err, 'status'), false, 'an unknown status is absent, not undefined');
+    assert.equal(Object.hasOwn(err, 'cause'), false, 'no cause was given');
+    assert.deepEqual(Object.keys(err), ['name', 'code', 'hostRejected']);
+    assert.equal(JSON.stringify(err), '{"name":"GitHubError","code":"network","hostRejected":false}');
+  });
+
+  test('a GitHubError with a status and cause carries them, in 0.2.0 key order', () => {
+    const cause = new Error('socket hang up');
+    const err = new GitHubError('create-refused', 'Unprocessable Entity', { status: 422, hostRejected: true, cause });
+    assert.equal(err.status, 422);
+    assert.equal(err.hostRejected, true);
+    assert.equal(err.cause, cause);
+    // A standard Error cause: own, but not enumerable (ECMAScript InstallErrorCause).
+    assert.equal(Object.getOwnPropertyDescriptor(err, 'cause').enumerable, false);
+    assert.deepEqual(Object.keys(err), ['name', 'code', 'status', 'hostRejected']);
+  });
+
+  test('an explicitly undefined cause installs no cause property', () => {
+    const err = new GitHubError('network', 'failed', { cause: undefined });
+    assert.equal(Object.hasOwn(err, 'cause'), false);
+    assert.equal('cause' in err, false);
+  });
+
+  test('the client object is frozen: callers cannot replace or add transport methods', () => {
+    // createGitHubClient returns Object.freeze(...); a compile-time readonly
+    // type would not stop a JavaScript caller from swapping a method.
+    const c = client(new FakeHost());
+    assert.equal(Object.isFrozen(c), true);
+    assert.throws(() => {
+      c.createReview = async () => ({});
+    }, TypeError);
+    assert.throws(() => {
+      c.extra = 1;
+    }, TypeError);
+  });
+});

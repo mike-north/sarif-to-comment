@@ -22,6 +22,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const { addStagedChangesToSarif } = require('../src/staged-changes.cjs');
+const { MODE } = require('../src/staged-git.cjs');
 const {
   addConflict,
   addIntentToAdd,
@@ -200,6 +201,43 @@ test('selected path: upstream findings gain exactly the staged fixes; unstaged b
   });
   assert.ok(!JSON.stringify(outcome.sarif).includes('UNSTAGED'), 'no unstaged content');
   assertReproduces(outcome.sarif, 'fixture/review.txt', ORACLE.reviewed, ORACLE.staged);
+});
+
+test('selected path: outcome, receipt and SARIF additions keep their field order', async () => {
+  // Outcome and receipt fields follow the contract's order (§3.4:
+  // status, sarif, receipt; reviewedCommit, changes, boundRuns, addedRun,
+  // warnings). For the SARIF itself, the placement of added fields is
+  // characterization of 0.2.0: caller content keeps its own order and what
+  // extraction adds is appended, so the file add-staged-changes writes
+  // differs from its input only by additions.
+  const repo = fixture({
+    before: { [ORACLE.path]: ORACLE.base },
+    reviewed: { [ORACLE.path]: ORACLE.reviewed },
+    staged: { [ORACLE.path]: ORACLE.staged },
+    workTree: { [ORACLE.path]: ORACLE.workingTree },
+  });
+  const outcome = await extract(repo, structuredClone(UPSTREAM));
+  assert.equal(outcome.status, 'added', JSON.stringify(outcome.problems));
+  assert.deepEqual(Object.keys(outcome), ['status', 'sarif', 'receipt']);
+  assert.deepEqual(Object.keys(outcome.receipt), ['reviewedCommit', 'changes', 'boundRuns', 'addedRun', 'warnings']);
+  assert.deepEqual(Object.keys(outcome.receipt.changes[0]), ['path', 'operation', 'replacements']);
+  assert.deepEqual(Object.keys(outcome.receipt.changes[0].replacements[0]), ['startLine', 'endLine', 'associated', 'explainedBy']);
+
+  const [run] = outcome.sarif.runs;
+  assert.deepEqual(Object.keys(run), [...Object.keys(UPSTREAM.runs[0]), 'versionControlProvenance']);
+  assert.deepEqual(Object.keys(run.results[0]), [...Object.keys(UPSTREAM.runs[0].results[0]), 'fixes']);
+  assert.equal(
+    JSON.stringify(run.results[0].fixes),
+    '[{"artifactChanges":[{"artifactLocation":{"uri":"fixture/review.txt"},"replacements":[{"deletedRegion":{"startLine":2,"startColumn":1,"endLine":3,"endColumn":1},"insertedContent":{"text":"corrected two\\n"}}]}]}]',
+  );
+  assert.equal(JSON.stringify(run.versionControlProvenance), `[{"repositoryUri":"${REPOSITORY_URI}","revisionId":"${repo.reviewedCommit}"}]`);
+});
+
+test('a schema-invalid document is refused with fields in contract order', async () => {
+  const repo = fixture({ reviewed: { 'a.txt': 'a\n' }, staged: { 'a.txt': 'b\n' } });
+  const outcome = await extract(repo, { version: '2.1.0', runs: [{ results: [] }] });
+  assert.equal(outcome.status, 'invalid');
+  assert.deepEqual(Object.keys(outcome), ['status', 'problems', 'markdown']);
 });
 
 test('selected path output is accepted by the unchanged publisher preparation as two native suggestions', async () => {
@@ -919,4 +957,15 @@ test('findings on an edited file use reviewed coordinates, never staged ones', a
   assert.equal(outcome.status, 'added', JSON.stringify(outcome.problems));
   assert.deepEqual(outcome.sarif.runs[0].results[0], onReviewedLine3, 'unchanged line 3 is not part of the change');
   assert.deepEqual(outcome.receipt.changes[0].replacements, [{ startLine: 1, endLine: 2, associated: [], explainedBy: 'neutral' }]);
+});
+
+test('the Git file-mode table is frozen with the index-format values', () => {
+  // git index-format: 0100644 regular, 0100755 executable, 0120000 symbolic
+  // link, 0160000 gitlink; 040000 is a tree. Extraction classifies every
+  // change by this shared table, so no caller may alter it at run time.
+  assert.deepStrictEqual({ ...MODE }, { REGULAR: 0o100644, EXECUTABLE: 0o100755, SYMLINK: 0o120000, GITLINK: 0o160000, DIRECTORY: 0o040000 });
+  assert.equal(Object.isFrozen(MODE), true);
+  assert.throws(() => {
+    MODE.REGULAR = 0;
+  }, TypeError);
 });

@@ -519,6 +519,61 @@ export async function main(): Promise<void> { ${workflow} }` },
     ]);
   });
 
+  test('CommonJS and ES module consumers see the same five functions with no __esModule marker', { skip, timeout: 300_000 }, () => {
+    // Interop shape of 0.2.0 (plain `module.exports = { ... }`): require()
+    // yields the five functions in the documented order (src/index.cjs module
+    // doc); import() yields a namespace whose default export is that very
+    // object and whose named exports are exactly those functions. No
+    // __esModule marker exists, so bundlers and esModuleInterop consumers keep
+    // treating the package as plain CommonJS. Node 24 additionally exposes a
+    // 'module.exports' namespace key (Node 22 does not); it is the same object.
+    const { consumer } = installIntoConsumer();
+    const names = ['createSarifDocument', 'addSarifComment', 'inspectSarif', 'addStagedChangesToSarif', 'publishSarifReview'];
+    fs.writeFileSync(
+      path.join(consumer, 'interop-probe.mjs'),
+      [
+        "import { createRequire } from 'node:module';",
+        "import * as ns from 'sarif-to-comment';",
+        'const required = createRequire(import.meta.url)(\'sarif-to-comment\');',
+        'const dynamic = await import(\'sarif-to-comment\');',
+        'process.stdout.write(JSON.stringify({',
+        '  requireKeys: Object.keys(required),',
+        '  requireEsModule: Object.hasOwn(required, \'__esModule\'),',
+        '  namespaceKeys: Object.keys(ns),',
+        '  namespaceEsModule: \'__esModule\' in ns,',
+        '  defaultIsRequire: ns.default === required,',
+        '  dynamicIsStatic: dynamic === ns,',
+        '  moduleExportsIsRequire: !(\'module.exports\' in ns) || ns[\'module.exports\'] === required,',
+        '  namedAreRequire: Object.keys(required).every((k) => ns[k] === required[k]),',
+        '}));',
+      ].join('\n'),
+    );
+    const probe = spawnSync(process.execPath, ['interop-probe.mjs'], { cwd: consumer, encoding: 'utf8' });
+    assert.equal(probe.status, 0, probe.stderr);
+    assert.equal(probe.stderr, '', 'no interop warning');
+    const seen = JSON.parse(probe.stdout);
+    assert.deepEqual(seen.requireKeys, names, 'require() keys in documented order');
+    assert.equal(seen.requireEsModule, false, 'require() result carries no __esModule marker');
+    assert.equal(seen.namespaceEsModule, false, 'the ES namespace has no __esModule key');
+    assert.deepEqual(
+      seen.namespaceKeys.filter((k) => k !== 'default' && k !== 'module.exports'),
+      [...names].sort(),
+      'named exports are exactly the five functions',
+    );
+    assert.ok(seen.namespaceKeys.includes('default'));
+    assert.equal(seen.defaultIsRequire, true, 'the default export is the require() object itself');
+    assert.equal(seen.dynamicIsStatic, true);
+    assert.equal(seen.moduleExportsIsRequire, true);
+    assert.equal(seen.namedAreRequire, true);
+
+    const cjs = spawnSync(process.execPath, ['-e', "process.stdout.write(String(require('sarif-to-comment').__esModule))"], {
+      cwd: consumer,
+      encoding: 'utf8',
+    });
+    assert.equal(cjs.status, 0, cjs.stderr);
+    assert.equal(cjs.stdout, 'undefined');
+  });
+
   test('control: the type checker does reject a genuine misuse', { skip, timeout: 300_000 }, () => {
     const { consumer } = installIntoConsumer();
     const run = typecheck(

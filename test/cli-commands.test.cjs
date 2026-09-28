@@ -191,6 +191,52 @@ describe('command dispatch and help', () => {
   });
 });
 
+describe('JSON documents: the envelope comes first and field order is stable', () => {
+  // Module doc (src/cli.cjs): "The envelope is { command, status, ... }".
+  // The remaining order of each document is the contract's listing where it
+  // gives one (§3.1, §3.2, §3.5) and otherwise characterization of 0.2.0;
+  // JSON output is read by people and diffed by scripts, so it must not
+  // drift with a change of implementation language.
+  test('help, unknown-command and usage-error documents', () => {
+    assert.deepEqual(Object.keys(json(run(['inspect', '--help', '--format', 'json']))), ['command', 'status', 'usage']);
+    assert.deepEqual(Object.keys(json(run(['frobnicate', '--format', 'json']))), ['command', 'status', 'message', 'usage']);
+    assert.deepEqual(Object.keys(json(run(['init', '--format', 'json']))), ['command', 'status', 'message', 'usage']);
+  });
+
+  test('init prints exactly the two-space indented receipt and writes the document in contract order', () => {
+    const dir = tempDir('init-bytes');
+    const output = path.join(dir, 'review.sarif');
+    const result = run(['init', '--output', output, '--format', 'json']);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stderr, '');
+    assert.equal(
+      result.stdout,
+      `{\n  "command": "init",\n  "status": "created",\n  "output": {\n    "path": ${JSON.stringify(output)},\n    "written": true\n  },\n  "runIndex": 0\n}\n`,
+    );
+    // §3.1 document shape, in its order, as two-space JSON with a final newline.
+    const expected = [
+      '{',
+      `  "$schema": "${SCHEMA_URI}",`,
+      '  "version": "2.1.0",',
+      '  "runs": [',
+      '    {',
+      '      "tool": {',
+      '        "driver": {',
+      '          "name": "sarif-to-comment",',
+      `          "version": "${PKG.version}"`,
+      '        }',
+      '      },',
+      '      "columnKind": "utf16CodeUnits",',
+      '      "results": []',
+      '    }',
+      '  ]',
+      '}',
+      '',
+    ].join('\n');
+    assert.equal(fs.readFileSync(output, 'utf8'), expected);
+  });
+});
+
 describe('--format is resolved first and fails as a human usage error', () => {
   const dir = tempDir('format');
   const cases = [
@@ -373,6 +419,24 @@ describe('add-comment edits the SARIF file in place', () => {
     assert.equal(expected.status, 'added');
     assert.deepEqual(after, expected.sarif, 'the CLI writes what the library returns');
     assert.deepEqual(fs.readdirSync(dir), ['review.sarif'], 'no lock or temporary file remains');
+  });
+
+  test('the JSON receipt keeps contract order and the file is the library document, byte for byte', () => {
+    const dir = tempDir('comment-order');
+    const file = initFile(dir, 'review.sarif', ['--tool-name', 'Review agent']);
+    const before = readJson(file);
+    const comment = { file: 'src/parse.js', line: 2, endLine: 3, message: 'Guard it.', ruleId: 'R1', level: 'warning' };
+    const doc = json(run([
+      'add-comment', '--sarif', file, '--file', comment.file, '--line', '2', '--end-line', '3', '--message', comment.message,
+      '--rule-id', comment.ruleId, '--level', comment.level, '--format', 'json',
+    ]));
+    assert.equal(doc.status, 'added', JSON.stringify(doc));
+    // §3.2: { command, status: "added", sarif: { path, written: true }, finding: { ref, path, line, endLine, tool } }
+    assert.deepEqual(Object.keys(doc), ['command', 'status', 'sarif', 'finding']);
+    assert.deepEqual(Object.keys(doc.sarif), ['path', 'written']);
+    assert.deepEqual(Object.keys(doc.finding), ['ref', 'path', 'line', 'endLine', 'tool']);
+    const expected = library.addSarifComment(before, comment);
+    assert.equal(fs.readFileSync(file, 'utf8'), `${JSON.stringify(expected.sarif, null, 2)}\n`);
   });
 
   test('a Markdown range comment with rule and level', () => {
@@ -606,6 +670,20 @@ describe('inspect', () => {
     assert.deepEqual(bytesOf(file), before);
   });
 
+  test('JSON output carries the library view with its field order intact', () => {
+    const dir = tempDir('inspect-order');
+    const { sarif } = inspectionInput();
+    const file = path.join(dir, 'review.sarif');
+    writeJson(file, sarif);
+    const result = run(['inspect', '--sarif', file, '--format', 'json']);
+    assert.equal(result.status, 0, result.stderr);
+    const doc = json(result);
+    assert.deepEqual(Object.keys(doc), ['command', 'status', 'view']);
+    // Field order of the view itself is pinned against the contract in
+    // test/sarif-inspection.test.cjs; here the CLI must not reorder it.
+    assert.equal(JSON.stringify(doc.view), JSON.stringify(library.inspectSarif(sarif).view));
+  });
+
   test('human output renders every finding, location and fix preview with visible truncation', () => {
     const dir = tempDir('inspect-human');
     const { sarif } = inspectionInput();
@@ -767,6 +845,25 @@ describe('add-staged-changes', () => {
     assert.equal(outcome.status, 'added');
     assert.deepEqual(doc.receipt, outcome.receipt);
     assert.deepEqual(enriched, outcome.sarif, 'the CLI writes what the library returns');
+  });
+
+  test('the JSON receipt and the written SARIF keep the library field order', async () => {
+    const world = createGitWorld('staged-order');
+    const output = path.join(tempDir('staged-order-out'), 'enriched.sarif');
+    const result = run([...stagedArgs(world, UPSTREAM_SARIF_PATH, output), '--format', 'json']);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    const doc = json(result);
+    // Characterization of 0.2.0: the receipt envelope order.
+    assert.deepEqual(Object.keys(doc), ['command', 'status', 'output', 'archived', 'receipt']);
+    assert.deepEqual(Object.keys(doc.output), ['path', 'written']);
+    const outcome = await library.addStagedChangesToSarif({
+      sarif: UPSTREAM,
+      worktree: world.dir,
+      reviewedCommit: world.head,
+      repository: { owner: world.repository.destination.owner, repo: world.repository.destination.repo },
+    });
+    assert.equal(JSON.stringify(doc.receipt), JSON.stringify(outcome.receipt));
+    assert.equal(fs.readFileSync(output, 'utf8'), `${JSON.stringify(outcome.sarif, null, 2)}\n`, 'two-space JSON with a final newline');
   });
 
   test('human output reports the written file and each change', () => {
@@ -1016,6 +1113,25 @@ describe('publish', () => {
     const again = json(runPublish(world, ['publish', ...flags(world), '--format', 'json']));
     assert.deepEqual(again.review, doc.review, 'the retry reports the recorded receipt');
     assert.equal(world.remote.calls('createReview').length, 1);
+  });
+
+  test('published, blocked and error documents keep the contract field order', () => {
+    // §3.5: { command: "publish", status, review?: { id, url }, statePath?, message }
+    const published = publishWorld();
+    const doc = json(runPublish(published, ['publish', ...flags(published), '--format', 'json']));
+    assert.equal(doc.status, 'published');
+    assert.deepEqual(Object.keys(doc), ['command', 'status', 'review', 'statePath', 'message']);
+    assert.deepEqual(Object.keys(doc.review), ['id', 'url']);
+
+    const blocked = publishWorld(INVALID_PUBLICATION);
+    const blockedDoc = json(runPublish(blocked, ['publish', ...flags(blocked), '--format', 'json']));
+    assert.equal(blockedDoc.status, 'blocked');
+    assert.deepEqual(Object.keys(blockedDoc), ['command', 'status', 'message']);
+
+    const noToken = publishWorld();
+    const errorDoc = json(runPublish(noToken, ['publish', ...flags(noToken), '--format', 'json'], {}));
+    assert.equal(errorDoc.status, 'error');
+    assert.deepEqual(Object.keys(errorDoc), ['command', 'status', 'message']);
   });
 
   test('the flag-only route accepts --format json too', () => {
