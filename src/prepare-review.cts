@@ -987,6 +987,10 @@ function analyzeRun(run: ISarifRunView, runIndex: number, state: IPreparationSta
     const notes = [...(invocation.toolExecutionNotifications || []), ...(invocation.toolConfigurationNotifications || [])]
       .filter((n) => n.level === 'error').map(notificationText);
     const quoted = notes.length === 0 ? '' : ` Error notifications: ${notes.map((n) => JSON.stringify(n)).join('; ')}.`;
+    // `executionSuccessful` is required by the SARIF 2.1.0 schema
+    // (vendor/sarif-schema-2.1.0.json, invocation.required), and the document
+    // has already been validated against it, so it is always a boolean here
+    // and this is equivalent to the literal `=== false` comparison.
     if (!invocation.executionSuccessful) {
       state.report.error('invocation-failed', `${pointer}/invocations/${String(index)}`,
         `The tool reports that this analysis did not complete successfully, so its results may be partial.${quoted}`);
