@@ -1,5 +1,3 @@
-'use strict';
-
 /**
  * Regression tests: extraction reads the immutable objects its inputs name.
  *
@@ -17,29 +15,66 @@
  * @see https://git-scm.com/book/en/v2/Git-Internals-Git-Objects
  */
 
-const test = require('node:test');
-const assert = require('node:assert/strict');
+import * as assert from 'node:assert/strict';
+import { test } from 'node:test';
 
-const { addStagedChangesToSarif } = require('../dist/staged-changes.cjs');
-const {
+import { addStagedChangesToSarif } from '../dist/staged-changes.cjs';
+import type { AddStagedChangesOutcome } from '../dist/staged-changes.cjs';
+import {
   corruptLooseObject,
   createFixtureRepo,
   objectAt,
   removeFixtureRepo,
   replaceObject,
-} = require('./fixtures/staged-changes/git-fixture.mts');
-const { applyReplacements } = require('./fixtures/staged-changes/apply-oracle.mts');
+} from './fixtures/staged-changes/git-fixture.mts';
+import type { IFixtureRepo } from './fixtures/staged-changes/git-fixture.mts';
+import { applyReplacements } from './fixtures/staged-changes/apply-oracle.mts';
+import { asArray, asRecord, expectType, isNumber, isOptional, isShape } from './support/runtime-types.mts';
 
 const REPOSITORY = { owner: 'acme', repo: 'widgets' };
 const REVIEWED = 'original one\noriginal two\n';
 const STAGED = 'corrected one\noriginal two\n';
 const DECOY = 'DECOY replacement content\n';
 
-const repos = [];
-test.after(() => repos.forEach(removeFixtureRepo));
+const repos: IFixtureRepo[] = [];
+test.after(() => {
+  repos.forEach(removeFixtureRepo);
+});
+
+/** A SARIF region (§3.30) as the R2 oracle reads it. */
+const isRegion = isShape({
+  startLine: isOptional(isNumber),
+  startColumn: isOptional(isNumber),
+  endLine: isOptional(isNumber),
+  endColumn: isOptional(isNumber),
+  charOffset: isOptional(isNumber),
+  charLength: isOptional(isNumber),
+});
+
+/**
+ * Reads a nested value of a JSON document by object keys and array indexes;
+ * a missing container fails with an AssertionError naming where.
+ */
+function at(value: unknown, ...keys: readonly (string | number)[]): unknown {
+  let current = value;
+  for (const [depth, key] of keys.entries()) {
+    const where = `a container at /${keys.slice(0, depth).join('/')}`;
+    current = typeof key === 'number' ? asArray(current, where)[key] : asRecord(current, where)[key];
+  }
+  return current;
+}
+
+/** The problems of a refused outcome, for failure messages. */
+function problemsOf(outcome: AddStagedChangesOutcome): unknown {
+  return 'problems' in outcome ? outcome.problems : undefined;
+}
+
+function isError(value: unknown): value is Error {
+  return value instanceof Error;
+}
 
 /** Reviewed `dir/a.txt` edited in the index; `other.txt` unchanged. */
-function editFixture() {
+function editFixture(): IFixtureRepo {
   const repo = createFixtureRepo({
     reviewed: { 'dir/a.txt': REVIEWED, 'other.txt': 'other\n' },
     staged: { 'dir/a.txt': STAGED, 'other.txt': 'other\n' },
@@ -49,7 +84,7 @@ function editFixture() {
   return repo;
 }
 
-function extract(repo) {
+function extract(repo: IFixtureRepo): Promise<AddStagedChangesOutcome> {
   return addStagedChangesToSarif({
     sarif: { version: '2.1.0', runs: [{ tool: { driver: { name: 'probe' } }, results: [] }] },
     worktree: repo.dir,
@@ -62,18 +97,19 @@ function extract(repo) {
  * The one exact replacement the actual objects imply: line 1 of the reviewed
  * file becomes `corrected one`, carried by a neutral result.
  */
-function assertActualEdit(outcome) {
-  assert.equal(outcome.status, 'added', JSON.stringify(outcome.problems));
+function assertActualEdit(outcome: AddStagedChangesOutcome): void {
+  assert.equal(outcome.status, 'added', JSON.stringify(problemsOf(outcome)));
   assert.deepEqual(outcome.receipt.changes, [
     { path: 'dir/a.txt', operation: 'edit', replacements: [{ startLine: 1, endLine: 1, associated: [], explainedBy: 'neutral' }] },
   ]);
-  const [result] = outcome.sarif.runs[1].results;
-  const [replacement] = result.fixes[0].artifactChanges[0].replacements;
+  const result = at(outcome.sarif, 'runs', 1, 'results', 0);
+  const replacement = at(result, 'fixes', 0, 'artifactChanges', 0, 'replacements', 0);
   assert.deepEqual(replacement, {
     deletedRegion: { startLine: 1, startColumn: 1, endLine: 2, endColumn: 1 },
     insertedContent: { text: 'corrected one\n' },
   });
-  const edited = applyReplacements(REVIEWED, [{ deletedRegion: replacement.deletedRegion, insertedText: 'corrected one\n' }], 'utf16CodeUnits');
+  const deletedRegion = expectType(at(replacement, 'deletedRegion'), isRegion, 'a SARIF region');
+  const edited = applyReplacements(REVIEWED, [{ deletedRegion, insertedText: 'corrected one\n' }], 'utf16CodeUnits');
   assert.equal(edited, STAGED, 'the extracted edit reproduces the actual staged bytes');
   const serialized = JSON.stringify(outcome.sarif);
   assert.ok(!serialized.includes('DECOY'), 'no replacement content appears');
@@ -129,7 +165,7 @@ test('a replacement ref on a created file\'s staged blob does not substitute its
   replaceObject(repo, repo.text(['rev-parse', ':new.md']), decoy);
   const outcome = await extract(repo);
   assert.equal(outcome.status, 'added');
-  assert.deepEqual(outcome.sarif.runs[1].artifacts, [
+  assert.deepEqual(at(outcome.sarif, 'runs', 1, 'artifacts'), [
     { location: { uri: 'new.md' }, contents: { text: 'real page\n' }, encoding: 'utf-8' },
   ]);
 });
@@ -140,7 +176,7 @@ test('a corrupted reviewed blob is an honest failure, never success with other b
   corruptLooseObject(repo, reviewedBlob, 'blob', STAGED);
   await assert.rejects(extract(repo), (err) => {
     assert.ok(!(err instanceof TypeError));
-    assert.match(err.message, new RegExp(reviewedBlob));
+    assert.match(expectType(err, isError, 'an Error').message, new RegExp(reviewedBlob));
     return true;
   });
 });
