@@ -1,5 +1,3 @@
-'use strict';
-
 /**
  * Durable initial publication of one prepared review (private internal module).
  *
@@ -138,9 +136,274 @@
  *   sorted recursively, no insignificant whitespace, UTF-8).
  */
 
-const crypto = require('node:crypto');
-const nodeFs = require('node:fs');
-const path = require('node:path');
+import * as crypto from 'node:crypto';
+import * as nodeFs from 'node:fs';
+import * as path from 'node:path';
+
+// ---------------------------------------------------------------------------
+// Domain types (private to this module; the transport contract is structural
+// so the GitHub adapter can satisfy it without this module depending on it)
+// ---------------------------------------------------------------------------
+
+/** Diff side a GitHub review comment anchors to. */
+type ReviewSide = 'LEFT' | 'RIGHT';
+
+/** The pull request a publication targets. */
+interface IPublicationDestination {
+  readonly owner: string;
+  readonly repo: string;
+  readonly pullNumber: number;
+}
+
+/** A single-line inline comment exactly as sent: no start fields at all. */
+interface ISingleLineRequestComment {
+  readonly path: string;
+  readonly side: ReviewSide;
+  readonly line: number;
+  readonly body: string;
+}
+
+/** A multi-line inline comment: the start fields are present together. */
+interface IMultiLineRequestComment extends ISingleLineRequestComment {
+  readonly startSide: ReviewSide;
+  readonly startLine: number;
+}
+
+/**
+ * One inline comment exactly as sent in the create-review request. The start
+ * fields are present together or omitted, never present as undefined.
+ */
+type ReviewRequestComment = ISingleLineRequestComment | IMultiLineRequestComment;
+
+/** The caller's prepared contribution: review body plus inline comments. */
+interface IPreparedReview {
+  readonly body: string;
+  readonly comments: readonly ReviewRequestComment[];
+}
+
+/** The single create-review request; it never carries an `event` (draft). */
+interface ICreateReviewRequest {
+  readonly owner: string;
+  readonly repo: string;
+  readonly pullNumber: number;
+  readonly commitId: string;
+  readonly body: string;
+  readonly comments: readonly ReviewRequestComment[];
+}
+
+/** Query for one page of the pull request's reviews; `cursor: null` starts. */
+interface IReviewListQuery {
+  readonly owner: string;
+  readonly repo: string;
+  readonly pullNumber: number;
+  readonly cursor: string | null;
+}
+
+/** Query for one page of a review's inline comments; `cursor: null` starts. */
+interface IReviewCommentListQuery extends IReviewListQuery {
+  readonly reviewId: number;
+}
+
+/**
+ * The private host transport this module calls (the full contract is
+ * documented in test/fixtures/publication/fake-github.cjs). Every result is
+ * `unknown`: host answers are validated here before anything relies on them,
+ * and a thrown error is only a definitive refusal when it carries
+ * `hostRejected: true` with a refusal status.
+ */
+interface IPublicationTransport {
+  getAuthenticatedUser(): Promise<unknown>;
+  createReview(request: ICreateReviewRequest): Promise<unknown>;
+  listReviews(query: IReviewListQuery): Promise<unknown>;
+  listReviewComments(query: IReviewCommentListQuery): Promise<unknown>;
+}
+
+/** The identity fields shared by publish and recover, once validated. */
+interface IPublicationIdentity {
+  readonly destination: IPublicationDestination;
+  readonly reviewedCommit: string;
+  readonly inputFingerprint: string;
+  readonly statePath: string;
+  readonly transport: IPublicationTransport;
+}
+
+/**
+ * Exactly the synchronous node:fs functions state-file I/O uses. node:fs
+ * satisfies it; the private test seam substitutes wrappers that record or
+ * fail individual durability steps.
+ */
+interface IPublicationFs {
+  readFileSync(path: string, encoding: 'utf8'): string;
+  openSync(path: string, flags: string, mode?: number): number;
+  writeSync(fd: number, buffer: Buffer, offset: number, length: number): number;
+  fsyncSync(fd: number): void;
+  closeSync(fd: number): void;
+  linkSync(existingPath: string, newPath: string): void;
+  renameSync(oldPath: string, newPath: string): void;
+  unlinkSync(path: string): void;
+}
+
+/** The private test seam (see the module comment); not caller API. */
+interface IPublicationInternals {
+  readonly fs?: IPublicationFs;
+}
+
+/** Codes distinguishing the local refusals a PublicationStateError reports. */
+type PublicationStateErrorCode = 'state-corrupt' | 'state-mismatch' | 'state-io';
+
+/** The phase of a state record; it fixes the record's exact field set. */
+type RecordPhase = 'sending' | 'completed' | 'rejected';
+
+/** How a completed receipt was established. */
+type ReceiptVia = 'created' | 'recovered';
+
+/** The completed receipt of a verified delivery. */
+interface IReceipt {
+  readonly reviewId: number;
+  readonly htmlUrl: string;
+  readonly via: ReceiptVia;
+}
+
+/** A persisted definitive host refusal: only its status and bounded message. */
+interface IRejection {
+  readonly status: number;
+  readonly message: string;
+}
+
+/** Fields every v1 state record carries, whatever its phase. */
+interface IStateRecordBase {
+  readonly format: typeof STATE_FORMAT;
+  readonly version: typeof STATE_VERSION;
+  readonly marker: string;
+  readonly destination: IPublicationDestination;
+  readonly reviewedCommit: string;
+  readonly inputFingerprint: string;
+  readonly authorId: number;
+  readonly request: ICreateReviewRequest;
+  readonly requestFingerprint: string;
+}
+
+/** An intent record: sending may have begun; only investigation may follow. */
+interface ISendingRecord extends IStateRecordBase {
+  readonly phase: 'sending';
+}
+
+/** A terminal record holding the verified receipt. */
+interface ICompletedRecord extends IStateRecordBase {
+  readonly phase: 'completed';
+  readonly receipt: IReceipt;
+}
+
+/** A terminal record holding the host's definitive refusal. */
+interface IRejectedRecord extends IStateRecordBase {
+  readonly phase: 'rejected';
+  readonly rejection: IRejection;
+}
+
+/** A state record that passed every consistency check in recordProblem. */
+type StateRecord = ISendingRecord | ICompletedRecord | IRejectedRecord;
+
+/** A review the host verifiably holds for this publication. */
+interface IReviewRef {
+  readonly id: number;
+  readonly htmlUrl: string;
+}
+
+/**
+ * A review an uncertain outcome points at. Its URL is reported as the host
+ * gave it: only the single verified review has a checked URL.
+ */
+interface ICandidateRef {
+  readonly id: number;
+  readonly htmlUrl: unknown;
+}
+
+/**
+ * A host review summary after the checks investigate relies on (positive
+ * integer id, string body). Other fields are compared, never trusted.
+ */
+interface IHostReviewSummary {
+  readonly id: number;
+  readonly body: string;
+  readonly htmlUrl?: unknown;
+  readonly authorId?: unknown;
+  readonly commitId?: unknown;
+}
+
+/** Why delivery could not be verified (see the module comment). */
+type UncertainReason = 'not-found' | 'lookup-failed' | 'ambiguous' | 'candidate-mismatch' | 'candidate-differs';
+
+/** What an uncertain outcome reports about an unverified delivery. */
+interface IUncertainFinding {
+  readonly reason: UncertainReason;
+  readonly detail: string;
+  readonly cause?: unknown;
+  readonly candidates?: readonly ICandidateRef[];
+}
+
+/** Result of one read-only investigation of the host. */
+type Verdict =
+  | { readonly complete: true; readonly review: IReviewRef }
+  | (IUncertainFinding & { readonly complete: false });
+
+/** Verified delivery; `cause` is present only when the receipt was not saved. */
+interface IPublishedOutcome {
+  readonly status: 'published';
+  readonly via: ReceiptVia | 'receipt';
+  readonly review: IReviewRef;
+  readonly marker: string;
+  readonly statePath: string;
+  readonly receiptPersisted: boolean;
+  readonly cause?: unknown;
+}
+
+/** Delivery that could not be verified; nothing was repaired or resent. */
+interface IUncertainOutcome {
+  readonly status: 'uncertain';
+  readonly reason: UncertainReason;
+  readonly marker: string;
+  readonly statePath: string;
+  readonly detail: string;
+  readonly cause?: unknown;
+  readonly candidates?: readonly ICandidateRef[];
+}
+
+/** The host definitively refused the single create; it is never resent. */
+interface IRejectedOutcome {
+  readonly status: 'rejected';
+  readonly via: 'response' | 'record';
+  readonly httpStatus: number;
+  readonly marker: string;
+  readonly statePath: string;
+  readonly detail: string;
+  readonly rejectionPersisted: boolean;
+  readonly cause?: unknown;
+}
+
+/** Recover only: no record exists at the state path. */
+interface IMissingOutcome {
+  readonly status: 'missing';
+  readonly statePath: string;
+}
+
+/** Every outcome of a publish (and of a recover that found a record). */
+type PublicationOutcome = IPublishedOutcome | IUncertainOutcome | IRejectedOutcome;
+
+/**
+ * A thrown value marking a definitive host refusal of the create request:
+ * `hostRejected: true` with a refusal status. Its message is untrusted text.
+ */
+interface IHostRejection {
+  readonly hostRejected: true;
+  readonly status: number;
+  readonly message?: unknown;
+}
+
+/** A JSON-object-shaped value whose fields are not yet validated. */
+type UnknownObject = Readonly<Record<string, unknown>>;
+
+/** A mutable view used only while an outcome's optional fields are assigned. */
+type Writable<T> = { -readonly [K in keyof T]: T[K] };
 
 /** Identifies a file as this module's publication state (never guessed from content). */
 const STATE_FORMAT = 'sarif-to-comment.publication-state';
@@ -162,25 +425,25 @@ const COMMIT_PATTERN = /^[0-9a-f]{40}$/;
 const FINGERPRINT_PATTERN = /^sha256:[0-9a-f]{64}$/;
 
 /** Diff sides a GitHub review comment can anchor to. */
-const SIDES = new Set(['LEFT', 'RIGHT']);
+const SIDES: ReadonlySet<unknown> = new Set(['LEFT', 'RIGHT']);
 
 /** Every field an inline comment may carry; anything else is refused, never sent. */
-const COMMENT_KEYS = new Set(['path', 'side', 'line', 'startSide', 'startLine', 'body']);
+const COMMENT_KEYS: ReadonlySet<string> = new Set(['path', 'side', 'line', 'startSide', 'startLine', 'body']);
 
 /** Exact field set of the saved create-review request (sorted for comparison). */
-const REQUEST_KEYS = ['body', 'comments', 'commitId', 'owner', 'pullNumber', 'repo'];
+const REQUEST_KEYS: readonly string[] = ['body', 'comments', 'commitId', 'owner', 'pullNumber', 'repo'];
 
 /** Upper bound on the persisted host refusal message; longer text is truncated. */
 const MAX_REJECTION_MESSAGE = 1000;
 
 /** Exact field set of a persisted host refusal: only its status and message. */
-const REJECTION_KEYS = ['message', 'status'];
+const REJECTION_KEYS: readonly string[] = ['message', 'status'];
 
 /**
  * Exact field set of a sending intent (sorted). The completed and rejected
  * phases add exactly one field each, so a record's phase fixes its shape.
  */
-const SENDING_KEYS = [
+const SENDING_KEYS: readonly string[] = [
   'authorId',
   'destination',
   'format',
@@ -192,19 +455,19 @@ const SENDING_KEYS = [
   'reviewedCommit',
   'version',
 ];
-const COMPLETED_KEYS = [...SENDING_KEYS, 'receipt'].sort();
-const REJECTED_KEYS = [...SENDING_KEYS, 'rejection'].sort();
+const COMPLETED_KEYS: readonly string[] = [...SENDING_KEYS, 'receipt'].sort();
+const REJECTED_KEYS: readonly string[] = [...SENDING_KEYS, 'rejection'].sort();
 
 /** Exact field set of a completed receipt. */
-const RECEIPT_KEYS = ['htmlUrl', 'reviewId', 'via'];
+const RECEIPT_KEYS: readonly string[] = ['htmlUrl', 'reviewId', 'via'];
 
 /**
  * Whether `status` is a definitive host refusal of the create request: a 4xx
  * answer other than 408 Request Timeout, which says nothing about whether the
  * request took effect. Anything else is treated as indeterminate.
  */
-function isRefusalStatus(status) {
-  return Number.isInteger(status) && status >= 400 && status <= 499 && status !== 408;
+function isRefusalStatus(status: unknown): status is number {
+  return typeof status === 'number' && Number.isInteger(status) && status >= 400 && status <= 499 && status !== 408;
 }
 
 /**
@@ -219,7 +482,12 @@ const MAX_PAGES = 1000;
  * for uncertain remote delivery, which is a returned outcome instead.
  */
 class PublicationStateError extends Error {
-  constructor(code, message, options) {
+  // `declare` keeps `code` an own property created by the constructor
+  // assignment below, after `name`, so the enumerable keys stay
+  // ['name', 'code'] (a class field would be defined first).
+  declare readonly code: PublicationStateErrorCode;
+
+  constructor(code: PublicationStateErrorCode, message: string, options?: ErrorOptions) {
     super(message, options);
     this.name = 'PublicationStateError';
     this.code = code;
@@ -231,31 +499,57 @@ class PublicationStateError extends Error {
 // ---------------------------------------------------------------------------
 
 /** A non-null, non-array object (JSON object shape). */
-function isPlainObject(value) {
+function isPlainObject(value: unknown): value is UnknownObject {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-function isNonEmptyString(value) {
+/** An array whose items are not yet validated. */
+function isList(value: unknown): value is readonly unknown[] {
+  return Array.isArray(value);
+}
+
+function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
 }
 
 /** A positive integer that JSON round-trips exactly (ids, line numbers, pull numbers). */
-function isPositiveInteger(value) {
-  return Number.isSafeInteger(value) && value > 0;
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
 }
 
 /** Whether `object` has exactly the (sorted) `keys` — no missing and no extra fields. */
-function hasExactKeys(object, keys) {
+function hasExactKeys(object: object, keys: readonly string[]): boolean {
   const actual = Object.keys(object).sort();
   return actual.length === keys.length && actual.every((k, i) => k === keys[i]);
 }
 
+/**
+ * The value of `err.code` for a thrown value of any type, as the property
+ * access `err && err.code` would read it (primitives have no such field).
+ */
+function thrownCode(err: unknown): unknown {
+  return (typeof err === 'object' || typeof err === 'function') && err !== null && 'code' in err
+    ? err.code
+    : undefined;
+}
+
+/**
+ * The value of `err.message` for a thrown value of any type (primitives have
+ * no such field). Only the private fs seam or the host transport can throw a
+ * non-Error; node:fs and this module always throw Error instances.
+ */
+function thrownMessage(err: unknown): unknown {
+  return (typeof err === 'object' || typeof err === 'function') && err !== null && 'message' in err
+    ? err.message
+    : undefined;
+}
+
 /** Why `destination` is not a valid pull-request destination, or null. */
-function destinationProblem(destination) {
+function destinationProblem(destination: unknown): string | null {
   if (!isPlainObject(destination)) return 'destination must be an object';
-  if (!isNonEmptyString(destination.owner)) return 'destination.owner must be a non-empty string';
-  if (!isNonEmptyString(destination.repo)) return 'destination.repo must be a non-empty string';
-  if (!isPositiveInteger(destination.pullNumber)) return 'destination.pullNumber must be a positive integer';
+  if (!isNonEmptyString(destination['owner'])) return 'destination.owner must be a non-empty string';
+  if (!isNonEmptyString(destination['repo'])) return 'destination.repo must be a non-empty string';
+  if (!isPositiveInteger(destination['pullNumber'])) return 'destination.pullNumber must be a positive integer';
   return null;
 }
 
@@ -264,49 +558,60 @@ function destinationProblem(destination) {
  * or null. Placement correctness is the preparing core's responsibility; this
  * only guarantees the request and its readback comparison are well defined.
  */
-function commentProblem(comment) {
+function commentProblem(comment: unknown): string | null {
   if (!isPlainObject(comment)) return 'comment must be an object';
   for (const key of Object.keys(comment)) {
     if (!COMMENT_KEYS.has(key)) return `comment has unsupported field ${key}`;
   }
-  if (!isNonEmptyString(comment.path)) return 'comment.path must be a non-empty string';
-  if (!SIDES.has(comment.side)) return 'comment.side must be LEFT or RIGHT';
-  if (!isPositiveInteger(comment.line)) return 'comment.line must be a positive integer';
-  if (typeof comment.body !== 'string') return 'comment.body must be a string';
+  if (!isNonEmptyString(comment['path'])) return 'comment.path must be a non-empty string';
+  if (!SIDES.has(comment['side'])) return 'comment.side must be LEFT or RIGHT';
+  if (!isPositiveInteger(comment['line'])) return 'comment.line must be a positive integer';
+  if (typeof comment['body'] !== 'string') return 'comment.body must be a string';
   const hasStartSide = Object.hasOwn(comment, 'startSide');
   const hasStartLine = Object.hasOwn(comment, 'startLine');
   if (hasStartSide !== hasStartLine) return 'comment.startSide and comment.startLine go together';
-  if (hasStartSide && !SIDES.has(comment.startSide)) return 'comment.startSide must be LEFT or RIGHT';
-  if (hasStartLine && !isPositiveInteger(comment.startLine)) return 'comment.startLine must be a positive integer';
+  if (hasStartSide && !SIDES.has(comment['startSide'])) return 'comment.startSide must be LEFT or RIGHT';
+  if (hasStartLine && !isPositiveInteger(comment['startLine'])) return 'comment.startLine must be a positive integer';
   return null;
+}
+
+/**
+ * Whether a validated comment carries the start fields. commentProblem
+ * guarantees an own startSide comes with a valid startLine.
+ */
+function hasStartFields(comment: ReviewRequestComment): comment is IMultiLineRequestComment {
+  return Object.hasOwn(comment, 'startSide');
 }
 
 // ---------------------------------------------------------------------------
 // Input validation (TypeError before any I/O)
 // ---------------------------------------------------------------------------
 
-function requireInput(condition, message) {
+function requireInput(condition: boolean, message: string): asserts condition {
   if (!condition) throw new TypeError(`Invalid publication input: ${message}`);
 }
 
-/** Validates the identity fields shared by publish and recover. */
-function validateIdentity(input) {
+/**
+ * Validates the identity fields shared by publish and recover. Fields other
+ * than the identity stay unvalidated (publish checks its preparedReview next).
+ */
+function validateIdentity(input: unknown): asserts input is IPublicationIdentity & UnknownObject {
   requireInput(isPlainObject(input), 'input must be an object');
-  const problem = destinationProblem(input.destination);
-  requireInput(problem === null, problem);
+  const problem = destinationProblem(input['destination']);
+  if (problem !== null) requireInput(false, problem);
   requireInput(
-    typeof input.reviewedCommit === 'string' && COMMIT_PATTERN.test(input.reviewedCommit),
+    typeof input['reviewedCommit'] === 'string' && COMMIT_PATTERN.test(input['reviewedCommit']),
     'reviewedCommit must be a full lowercase 40-hex commit',
   );
   requireInput(
-    typeof input.inputFingerprint === 'string' && FINGERPRINT_PATTERN.test(input.inputFingerprint),
+    typeof input['inputFingerprint'] === 'string' && FINGERPRINT_PATTERN.test(input['inputFingerprint']),
     "inputFingerprint must be 'sha256:' followed by 64 lowercase hex digits",
   );
   requireInput(
-    isNonEmptyString(input.statePath) && path.isAbsolute(input.statePath),
+    isNonEmptyString(input['statePath']) && path.isAbsolute(input['statePath']),
     'statePath must be an absolute path chosen by the caller',
   );
-  const t = input.transport;
+  const t = input['transport'];
   requireInput(
     isPlainObject(t) &&
       ['getAuthenticatedUser', 'createReview', 'listReviews', 'listReviewComments'].every(
@@ -316,13 +621,13 @@ function validateIdentity(input) {
   );
 }
 
-function validatePreparedReview(prepared) {
+function validatePreparedReview(prepared: unknown): asserts prepared is IPreparedReview {
   requireInput(isPlainObject(prepared), 'preparedReview must be an object');
-  requireInput(typeof prepared.body === 'string', 'preparedReview.body must be a string');
-  requireInput(Array.isArray(prepared.comments), 'preparedReview.comments must be an array');
-  prepared.comments.forEach((comment, i) => {
+  requireInput(typeof prepared['body'] === 'string', 'preparedReview.body must be a string');
+  requireInput(isList(prepared['comments']), 'preparedReview.comments must be an array');
+  prepared['comments'].forEach((comment, i) => {
     const problem = commentProblem(comment);
-    requireInput(problem === null, `preparedReview.comments[${i}]: ${problem}`);
+    if (problem !== null) requireInput(false, `preparedReview.comments[${String(i)}]: ${problem}`);
   });
 }
 
@@ -330,25 +635,31 @@ function validatePreparedReview(prepared) {
 // Canonical fingerprint and marker
 // ---------------------------------------------------------------------------
 
-/** JSON with recursively sorted object keys and no insignificant whitespace. */
-function canonicalJson(value) {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+/**
+ * JSON with recursively sorted object keys and no insignificant whitespace.
+ * A JSON object always has a canonical form; only undefined, functions and
+ * symbols have none (JSON.stringify yields undefined for them).
+ */
+function canonicalJson(value: UnknownObject | ICreateReviewRequest): string;
+function canonicalJson(value: unknown): string | undefined;
+function canonicalJson(value: unknown): string | undefined {
+  if (isList(value)) return `[${value.map(canonicalJson).join(',')}]`;
   if (isPlainObject(value)) {
     const keys = Object.keys(value).sort();
-    return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJson(value[k])}`).join(',')}}`;
+    return `{${keys.map((k) => `${JSON.stringify(k)}:${String(canonicalJson(value[k]))}`).join(',')}}`;
   }
   return JSON.stringify(value);
 }
 
-function fingerprintOf(value) {
+function fingerprintOf(value: UnknownObject | ICreateReviewRequest): string {
   return `sha256:${crypto.createHash('sha256').update(canonicalJson(value), 'utf8').digest('hex')}`;
 }
 
-function newMarker() {
+function newMarker(): string {
   return `<!-- sarif-to-comment:review:${crypto.randomUUID()} -->`;
 }
 
-function countOccurrences(haystack, needle) {
+function countOccurrences(haystack: string, needle: string): number {
   let count = 0;
   for (let at = haystack.indexOf(needle); at !== -1; at = haystack.indexOf(needle, at + needle.length)) {
     count += 1;
@@ -357,18 +668,27 @@ function countOccurrences(haystack, needle) {
 }
 
 /** A comment reduced to exactly its request fields (start fields only when present). */
-function copyComment(comment) {
-  const copy = { path: comment.path, side: comment.side, line: comment.line };
-  if (Object.hasOwn(comment, 'startSide')) {
-    copy.startSide = comment.startSide;
-    copy.startLine = comment.startLine;
+function copyComment(comment: ReviewRequestComment): ReviewRequestComment {
+  if (hasStartFields(comment)) {
+    return {
+      path: comment.path,
+      side: comment.side,
+      line: comment.line,
+      startSide: comment.startSide,
+      startLine: comment.startLine,
+      body: comment.body,
+    };
   }
-  copy.body = comment.body;
-  return copy;
+  return { path: comment.path, side: comment.side, line: comment.line, body: comment.body };
 }
 
 /** The single create-review request for a prepared review under `marker`. */
-function buildRequest(destination, reviewedCommit, preparedReview, marker) {
+function buildRequest(
+  destination: IPublicationDestination,
+  reviewedCommit: string,
+  preparedReview: IPreparedReview,
+  marker: string,
+): ICreateReviewRequest {
   return {
     owner: destination.owner,
     repo: destination.repo,
@@ -383,66 +703,93 @@ function buildRequest(destination, reviewedCommit, preparedReview, marker) {
 // State record parsing (fail closed)
 // ---------------------------------------------------------------------------
 
+/** Whether a record's (property-key-coerced) phase names a known phase. */
+function isRecordPhase(phase: string): phase is RecordPhase {
+  return phase === 'sending' || phase === 'completed' || phase === 'rejected';
+}
+
 /** Why a parsed value is not a consistent v1 state record, or null. */
-function recordProblem(record) {
+function recordProblem(record: unknown): string | null {
   if (!isPlainObject(record)) return 'record is not a JSON object';
-  if (record.format !== STATE_FORMAT) return 'unknown record format';
-  if (record.version !== STATE_VERSION) return 'unsupported record version';
-  const keysByPhase = { sending: SENDING_KEYS, completed: COMPLETED_KEYS, rejected: REJECTED_KEYS };
-  if (!Object.hasOwn(keysByPhase, record.phase)) return 'unknown record phase';
-  if (!hasExactKeys(record, keysByPhase[record.phase])) return 'record fields do not match its phase';
-  if (typeof record.marker !== 'string' || !MARKER_PATTERN.test(record.marker)) return 'malformed marker';
-  const destProblem = destinationProblem(record.destination);
+  if (record['format'] !== STATE_FORMAT) return 'unknown record format';
+  if (record['version'] !== STATE_VERSION) return 'unsupported record version';
+  const keysByPhase: Readonly<Record<RecordPhase, readonly string[]>> = {
+    sending: SENDING_KEYS,
+    completed: COMPLETED_KEYS,
+    rejected: REJECTED_KEYS,
+  };
+  // The phase is looked up as a property key, which coerces a parsed JSON
+  // value to its string form.
+  const phaseKey = String(record['phase']);
+  if (!isRecordPhase(phaseKey)) return 'unknown record phase';
+  if (!hasExactKeys(record, keysByPhase[phaseKey])) return 'record fields do not match its phase';
+  const marker = record['marker'];
+  if (typeof marker !== 'string' || !MARKER_PATTERN.test(marker)) return 'malformed marker';
+  const destination = record['destination'];
+  const destProblem = destinationProblem(destination);
   if (destProblem) return destProblem;
-  if (!hasExactKeys(record.destination, ['owner', 'pullNumber', 'repo'])) return 'destination has extra fields';
-  if (typeof record.reviewedCommit !== 'string' || !COMMIT_PATTERN.test(record.reviewedCommit)) {
+  if (!isPlainObject(destination) || !hasExactKeys(destination, ['owner', 'pullNumber', 'repo'])) {
+    return 'destination has extra fields';
+  }
+  const reviewedCommit = record['reviewedCommit'];
+  if (typeof reviewedCommit !== 'string' || !COMMIT_PATTERN.test(reviewedCommit)) {
     return 'malformed reviewedCommit';
   }
-  if (typeof record.inputFingerprint !== 'string' || !FINGERPRINT_PATTERN.test(record.inputFingerprint)) {
+  const inputFingerprint = record['inputFingerprint'];
+  if (typeof inputFingerprint !== 'string' || !FINGERPRINT_PATTERN.test(inputFingerprint)) {
     return 'malformed inputFingerprint';
   }
-  if (!isPositiveInteger(record.authorId)) return 'malformed authorId';
+  if (!isPositiveInteger(record['authorId'])) return 'malformed authorId';
 
-  const request = record.request;
+  const request = record['request'];
   if (!isPlainObject(request) || !hasExactKeys(request, REQUEST_KEYS)) return 'malformed saved request';
   if (
-    request.owner !== record.destination.owner ||
-    request.repo !== record.destination.repo ||
-    request.pullNumber !== record.destination.pullNumber
+    request['owner'] !== destination['owner'] ||
+    request['repo'] !== destination['repo'] ||
+    request['pullNumber'] !== destination['pullNumber']
   ) {
     return 'saved request destination is inconsistent';
   }
-  if (request.commitId !== record.reviewedCommit) return 'saved request commit is inconsistent';
-  if (typeof request.body !== 'string') return 'saved request body is not a string';
-  if (!request.body.endsWith(`\n\n${record.marker}`) || countOccurrences(request.body, record.marker) !== 1) {
+  if (request['commitId'] !== reviewedCommit) return 'saved request commit is inconsistent';
+  const body = request['body'];
+  if (typeof body !== 'string') return 'saved request body is not a string';
+  if (!body.endsWith(`\n\n${marker}`) || countOccurrences(body, marker) !== 1) {
     return 'saved request body does not end with exactly one marker';
   }
-  if (!Array.isArray(request.comments)) return 'saved request comments are not a list';
-  for (const comment of request.comments) {
+  const comments = request['comments'];
+  if (!isList(comments)) return 'saved request comments are not a list';
+  for (const comment of comments) {
     const problem = commentProblem(comment);
     if (problem) return `saved request ${problem}`;
   }
-  if (typeof record.requestFingerprint !== 'string' || !FINGERPRINT_PATTERN.test(record.requestFingerprint)) {
+  const requestFingerprint = record['requestFingerprint'];
+  if (typeof requestFingerprint !== 'string' || !FINGERPRINT_PATTERN.test(requestFingerprint)) {
     return 'malformed requestFingerprint';
   }
-  if (record.requestFingerprint !== fingerprintOf(request)) return 'saved request does not match its fingerprint';
+  if (requestFingerprint !== fingerprintOf(request)) return 'saved request does not match its fingerprint';
 
-  if (record.phase === 'completed') {
-    const receipt = record.receipt;
+  if (record['phase'] === 'completed') {
+    const receipt = record['receipt'];
     if (!isPlainObject(receipt) || !hasExactKeys(receipt, RECEIPT_KEYS)) return 'malformed receipt';
-    if (!isPositiveInteger(receipt.reviewId)) return 'malformed receipt reviewId';
-    if (!isNonEmptyString(receipt.htmlUrl)) return 'malformed receipt htmlUrl';
-    if (receipt.via !== 'created' && receipt.via !== 'recovered') return 'malformed receipt via';
+    if (!isPositiveInteger(receipt['reviewId'])) return 'malformed receipt reviewId';
+    if (!isNonEmptyString(receipt['htmlUrl'])) return 'malformed receipt htmlUrl';
+    if (receipt['via'] !== 'created' && receipt['via'] !== 'recovered') return 'malformed receipt via';
   }
-  if (record.phase === 'rejected') {
-    const rejection = record.rejection;
+  if (record['phase'] === 'rejected') {
+    const rejection = record['rejection'];
     if (!isPlainObject(rejection) || !hasExactKeys(rejection, REJECTION_KEYS)) return 'malformed rejection';
-    if (!isRefusalStatus(rejection.status)) return 'rejection status is not a definitive refusal';
-    if (typeof rejection.message !== 'string' || rejection.message.length > MAX_REJECTION_MESSAGE) {
+    if (!isRefusalStatus(rejection['status'])) return 'rejection status is not a definitive refusal';
+    const message = rejection['message'];
+    if (typeof message !== 'string' || message.length > MAX_REJECTION_MESSAGE) {
       return 'malformed rejection message';
     }
   }
   return null;
+}
+
+/** Whether a parsed value is a consistent v1 state record (see recordProblem). */
+function isStateRecord(record: unknown): record is StateRecord {
+  return recordProblem(record) === null;
 }
 
 /**
@@ -450,15 +797,15 @@ function recordProblem(record) {
  * other condition — empty, truncated, unparsable, inconsistent — is corrupt
  * and must never be mistaken for absence.
  */
-function readState(fs, statePath) {
-  let text;
+function readState(fs: IPublicationFs, statePath: string): StateRecord | null {
+  let text: string;
   try {
     text = fs.readFileSync(statePath, 'utf8');
   } catch (err) {
-    if (err && err.code === 'ENOENT') return null;
+    if (thrownCode(err) === 'ENOENT') return null;
     throw new PublicationStateError('state-io', `Cannot read publication state at ${statePath}.`, { cause: err });
   }
-  let record;
+  let record: unknown;
   try {
     record = JSON.parse(text);
   } catch (err) {
@@ -468,11 +815,10 @@ function readState(fs, statePath) {
       { cause: err },
     );
   }
-  const problem = recordProblem(record);
-  if (problem) {
+  if (!isStateRecord(record)) {
     throw new PublicationStateError(
       'state-corrupt',
-      `Publication state at ${statePath} is not a valid record (${problem}); it is not treated as absent.`,
+      `Publication state at ${statePath} is not a valid record (${String(recordProblem(record))}); it is not treated as absent.`,
     );
   }
   return record;
@@ -483,7 +829,7 @@ function readState(fs, statePath) {
 // ---------------------------------------------------------------------------
 
 /** Makes directory-entry changes (link, rename) in `dir` durable. */
-function flushDirectory(fs, dir) {
+function flushDirectory(fs: IPublicationFs, dir: string): void {
   const fd = fs.openSync(dir, 'r');
   try {
     fs.fsyncSync(fd);
@@ -493,7 +839,7 @@ function flushDirectory(fs, dir) {
 }
 
 /** Best-effort removal of this module's own temp file. */
-function removeQuietly(fs, file) {
+function removeQuietly(fs: IPublicationFs, file: string): void {
   try {
     fs.unlinkSync(file);
   } catch {
@@ -505,7 +851,7 @@ function removeQuietly(fs, file) {
  * Writes `text` to a new owner-only temp file beside `statePath` and flushes
  * it. The temp name is unique, so concurrent writers never share one.
  */
-function writeFlushedSibling(fs, statePath, text) {
+function writeFlushedSibling(fs: IPublicationFs, statePath: string, text: string): string {
   const tmp = path.join(
     path.dirname(statePath),
     `.${path.basename(statePath)}.${crypto.randomUUID()}.tmp`,
@@ -527,7 +873,7 @@ function writeFlushedSibling(fs, statePath, text) {
 }
 
 /** The on-disk text of a record: indented JSON with a terminal newline. */
-function serialize(record) {
+function serialize(record: StateRecord): string {
   return `${JSON.stringify(record, null, 2)}\n`;
 }
 
@@ -539,8 +885,8 @@ function serialize(record) {
  * after the link leaves the record in place: sending may be considered begun,
  * so later invocations only investigate.
  */
-function claimIntent(fs, statePath, record) {
-  let tmp;
+function claimIntent(fs: IPublicationFs, statePath: string, record: ISendingRecord): boolean {
+  let tmp: string;
   try {
     tmp = writeFlushedSibling(fs, statePath, serialize(record));
   } catch (err) {
@@ -552,7 +898,7 @@ function claimIntent(fs, statePath, record) {
     fs.linkSync(tmp, statePath);
   } catch (err) {
     removeQuietly(fs, tmp);
-    if (err && err.code === 'EEXIST') return false;
+    if (thrownCode(err) === 'EEXIST') return false;
     throw new PublicationStateError('state-io', `Cannot publish publication intent at ${statePath}.`, {
       cause: err,
     });
@@ -575,7 +921,7 @@ function claimIntent(fs, statePath, record) {
  * receipt or persisted rejection): flushed sibling, rename, directory flush.
  * A failure leaves the previous record intact.
  */
-function replaceRecord(fs, statePath, nextRecord) {
+function replaceRecord(fs: IPublicationFs, statePath: string, nextRecord: ICompletedRecord | IRejectedRecord): void {
   const tmp = writeFlushedSibling(fs, statePath, serialize(nextRecord));
   try {
     fs.renameSync(tmp, statePath);
@@ -592,7 +938,7 @@ function replaceRecord(fs, statePath, nextRecord) {
 
 /** An incomplete or untrustworthy host read; it proves neither presence nor absence. */
 class LookupFailure extends Error {
-  constructor(message, options) {
+  constructor(message: string, options?: ErrorOptions) {
     super(message, options);
     this.name = 'LookupFailure';
   }
@@ -604,23 +950,26 @@ class LookupFailure extends Error {
  * is a LookupFailure: an incomplete enumeration can prove neither absence nor
  * uniqueness.
  */
-async function readAllPages(fetchPage, itemsKey) {
-  const items = [];
-  const seen = new Set();
-  let cursor = null;
+async function readAllPages(
+  fetchPage: (cursor: string | null) => Promise<unknown>,
+  itemsKey: 'reviews' | 'comments',
+): Promise<unknown[]> {
+  const items: unknown[] = [];
+  const seen = new Set<string>();
+  let cursor: string | null = null;
   for (let pages = 1; ; pages += 1) {
-    if (pages > MAX_PAGES) throw new LookupFailure(`pagination exceeded ${MAX_PAGES} pages`);
-    let page;
+    if (pages > MAX_PAGES) throw new LookupFailure(`pagination exceeded ${String(MAX_PAGES)} pages`);
+    let page: unknown;
     try {
       page = await fetchPage(cursor);
     } catch (err) {
       throw new LookupFailure('a page could not be read', { cause: err });
     }
-    if (!isPlainObject(page) || !Array.isArray(page[itemsKey])) {
+    if (!isPlainObject(page) || !isList(page[itemsKey])) {
       throw new LookupFailure('the host returned a malformed page');
     }
     items.push(...page[itemsKey]);
-    const next = page.nextCursor;
+    const next = page['nextCursor'];
     if (next === null) return items;
     if (!isNonEmptyString(next)) throw new LookupFailure('the host returned a malformed cursor');
     if (seen.has(next)) throw new LookupFailure('the host repeated a pagination cursor');
@@ -630,22 +979,22 @@ async function readAllPages(fetchPage, itemsKey) {
 }
 
 /** Canonical comparison key for a comment's anchor and text. */
-function commentKey(comment) {
+function commentKey(comment: unknown): string {
   if (!isPlainObject(comment)) return 'invalid';
   return canonicalJson({
-    path: comment.path ?? null,
-    side: comment.side ?? null,
-    line: comment.line ?? null,
-    startSide: comment.startSide ?? null,
-    startLine: comment.startLine ?? null,
-    body: comment.body ?? null,
+    path: comment['path'] ?? null,
+    side: comment['side'] ?? null,
+    line: comment['line'] ?? null,
+    startSide: comment['startSide'] ?? null,
+    startLine: comment['startLine'] ?? null,
+    body: comment['body'] ?? null,
   });
 }
 
 /** Whether two comment lists are equal as multisets (cardinality matters). */
-function sameCommentMultiset(expected, actual) {
+function sameCommentMultiset(expected: readonly unknown[], actual: readonly unknown[]): boolean {
   if (expected.length !== actual.length) return false;
-  const counts = new Map();
+  const counts = new Map<string, number>();
   for (const c of expected) counts.set(commentKey(c), (counts.get(commentKey(c)) || 0) + 1);
   for (const c of actual) {
     const key = commentKey(c);
@@ -657,8 +1006,13 @@ function sameCommentMultiset(expected, actual) {
 }
 
 /** The identifiers of a host review that outcomes may expose. */
-function reviewRef(summary) {
+function reviewRef(summary: IHostReviewSummary): ICandidateRef {
   return { id: summary.id, htmlUrl: summary.htmlUrl };
+}
+
+/** Whether a listed review has the fields investigate relies on. */
+function isHostReviewSummary(review: unknown): review is IHostReviewSummary {
+  return isPlainObject(review) && isPositiveInteger(review['id']) && typeof review['body'] === 'string';
 }
 
 /**
@@ -666,9 +1020,9 @@ function reviewRef(summary) {
  * complete initial contribution. Returns { complete: true, review } or
  * { complete: false, reason, detail, cause?, candidates? }.
  */
-async function investigate(transport, record) {
+async function investigate(transport: IPublicationTransport, record: IStateRecordBase): Promise<Verdict> {
   const { owner, repo, pullNumber } = record.destination;
-  let reviews;
+  let reviews: unknown[];
   try {
     reviews = await readAllPages(
       (cursor) => transport.listReviews({ owner, repo, pullNumber, cursor }),
@@ -677,15 +1031,16 @@ async function investigate(transport, record) {
   } catch (err) {
     return lookupFailed(err);
   }
-  const byId = new Map();
+  const byId = new Map<number, IHostReviewSummary>();
   for (const review of reviews) {
-    if (!isPlainObject(review) || !isPositiveInteger(review.id) || typeof review.body !== 'string') {
+    if (!isHostReviewSummary(review)) {
       return lookupFailed(new LookupFailure('the host returned a malformed review summary'));
     }
     if (review.body.includes(record.marker) && !byId.has(review.id)) byId.set(review.id, review);
   }
   const candidates = [...byId.values()];
-  if (candidates.length === 0) {
+  const [candidate] = candidates;
+  if (candidate === undefined) {
     return {
       complete: false,
       reason: 'not-found',
@@ -701,7 +1056,6 @@ async function investigate(transport, record) {
       candidates: candidates.map(reviewRef),
     };
   }
-  const [candidate] = candidates;
   if (candidate.authorId !== record.authorId || candidate.commitId !== record.reviewedCommit) {
     return {
       complete: false,
@@ -713,7 +1067,7 @@ async function investigate(transport, record) {
   if (candidate.body !== record.request.body) {
     return differs(candidate, 'body');
   }
-  let comments;
+  let comments: unknown[];
   try {
     comments = await readAllPages(
       (cursor) => transport.listReviewComments({ owner, repo, pullNumber, reviewId: candidate.id, cursor }),
@@ -723,24 +1077,26 @@ async function investigate(transport, record) {
     return lookupFailed(err);
   }
   if (!sameCommentMultiset(record.request.comments, comments)) return differs(candidate, 'inline comments');
-  if (!isNonEmptyString(candidate.htmlUrl)) {
+  const htmlUrl = candidate.htmlUrl;
+  if (!isNonEmptyString(htmlUrl)) {
     return lookupFailed(new LookupFailure('the matching review has no URL'));
   }
-  return { complete: true, review: reviewRef(candidate) };
+  // Same fields as reviewRef, with the URL now verified.
+  return { complete: true, review: { id: candidate.id, htmlUrl } };
 }
 
 /** Verdict for an enumeration or readback that did not complete. */
-function lookupFailed(err) {
+function lookupFailed(err: unknown): Verdict {
   return {
     complete: false,
     reason: 'lookup-failed',
-    detail: `Could not completely enumerate the destination's reviews or the matching review's comments (${err.message}). Nothing is concluded from a partial lookup.`,
+    detail: `Could not completely enumerate the destination's reviews or the matching review's comments (${String(thrownMessage(err))}). Nothing is concluded from a partial lookup.`,
     cause: err,
   };
 }
 
 /** Verdict for the sole marker candidate whose content is not the initial contribution. */
-function differs(candidate, what) {
+function differs(candidate: IHostReviewSummary, what: string): Verdict {
   return {
     complete: false,
     reason: 'candidate-differs',
@@ -754,8 +1110,15 @@ function differs(candidate, what) {
 // ---------------------------------------------------------------------------
 
 /** A published outcome; `cause` is present only when the receipt could not be saved. */
-function publishedOutcome(record, statePath, review, via, receiptPersisted, cause) {
-  const outcome = {
+function publishedOutcome(
+  record: IStateRecordBase,
+  statePath: string,
+  review: IReviewRef,
+  via: IPublishedOutcome['via'],
+  receiptPersisted: boolean,
+  cause?: unknown,
+): IPublishedOutcome {
+  const outcome: Writable<IPublishedOutcome> = {
     status: 'published',
     via,
     review: { id: review.id, htmlUrl: review.htmlUrl },
@@ -768,8 +1131,13 @@ function publishedOutcome(record, statePath, review, via, receiptPersisted, caus
 }
 
 /** An uncertain outcome; an indeterminate send error takes precedence as its cause. */
-function uncertainOutcome(record, statePath, verdict, sendCause) {
-  const outcome = {
+function uncertainOutcome(
+  record: IStateRecordBase,
+  statePath: string,
+  verdict: IUncertainFinding,
+  sendCause?: unknown,
+): IUncertainOutcome {
+  const outcome: Writable<IUncertainOutcome> = {
     status: 'uncertain',
     reason: verdict.reason,
     marker: record.marker,
@@ -783,18 +1151,18 @@ function uncertainOutcome(record, statePath, verdict, sendCause) {
 }
 
 /** The outcome of a completed receipt, reported without contacting the host. */
-function receiptOutcome(record, statePath) {
+function receiptOutcome(record: ICompletedRecord, statePath: string): IPublishedOutcome {
   const { reviewId, htmlUrl } = record.receipt;
   return publishedOutcome(record, statePath, { id: reviewId, htmlUrl }, 'receipt', true);
 }
 
 /** Explanation of a definitive refusal, quoting the host's (bounded) message. */
-function rejectionDetail(status, message) {
-  return `GitHub refused the create-review request (HTTP ${status}): ${message} It is never resent; this state path now records the refusal. Resolve the cause, then publish under a new state path.`;
+function rejectionDetail(status: number, message: string): string {
+  return `GitHub refused the create-review request (HTTP ${String(status)}): ${message} It is never resent; this state path now records the refusal. Resolve the cause, then publish under a new state path.`;
 }
 
 /** The outcome of a persisted refusal, reported without contacting the host. */
-function knownRejectionOutcome(record, statePath) {
+function knownRejectionOutcome(record: IRejectedRecord, statePath: string): IRejectedOutcome {
   const { status, message } = record.rejection;
   return {
     status: 'rejected',
@@ -807,15 +1175,33 @@ function knownRejectionOutcome(record, statePath) {
   };
 }
 
+/** Whether a thrown create error is the host's definitive refusal (see IHostRejection). */
+function isHostRejection(err: unknown): err is IHostRejection {
+  return (
+    (typeof err === 'object' || typeof err === 'function') &&
+    err !== null &&
+    'hostRejected' in err &&
+    err.hostRejected === true &&
+    'status' in err &&
+    isRefusalStatus(err.status)
+  );
+}
+
 /**
  * Records a definitive host refusal of the single create. Only the status and
  * a bounded message are kept: transport errors may carry request details that
  * must never reach state. If the terminal record cannot be saved, the sending
  * intent remains and later calls investigate conservatively; nothing is resent.
  */
-function settleRejection(fs, statePath, record, err) {
+function settleRejection(
+  fs: IPublicationFs,
+  statePath: string,
+  record: ISendingRecord,
+  err: IHostRejection,
+): IRejectedOutcome {
+  // eslint-disable-next-line @typescript-eslint/no-base-to-string -- the host's refusal message is untrusted text of any type; String() is the deliberate, total coercion before bounding it (an Error's message is already a string)
   const message = String(err.message ?? '').slice(0, MAX_REJECTION_MESSAGE);
-  const rejected = { ...record, phase: 'rejected', rejection: { status: err.status, message } };
+  const rejected: IRejectedRecord = { ...record, phase: 'rejected', rejection: { status: err.status, message } };
   let rejectionPersisted = true;
   try {
     replaceRecord(fs, statePath, rejected);
@@ -830,10 +1216,16 @@ function settleRejection(fs, statePath, record, err) {
     statePath,
     detail: rejectionPersisted
       ? rejectionDetail(err.status, message)
-      : `GitHub refused the create-review request (HTTP ${err.status}): ${message} The refusal could not be saved at ${statePath}; later calls on this state path will report uncertain delivery, and nothing is ever resent.`,
+      : `GitHub refused the create-review request (HTTP ${String(err.status)}): ${message} The refusal could not be saved at ${statePath}; later calls on this state path will report uncertain delivery, and nothing is ever resent.`,
     rejectionPersisted,
     cause: err,
   };
+}
+
+/** What a create attempt contributes to settling: the response's review id or an indeterminate error. */
+interface ISettleContext {
+  readonly responseId?: number | undefined;
+  readonly sendCause?: unknown;
 }
 
 /**
@@ -841,7 +1233,13 @@ function settleRejection(fs, statePath, record, err) {
  * completed receipt. `responseId` is the id a create response named, if any;
  * `sendCause` is an indeterminate create error, if any.
  */
-async function settle(fs, statePath, record, transport, { responseId, sendCause } = {}) {
+async function settle(
+  fs: IPublicationFs,
+  statePath: string,
+  record: ISendingRecord,
+  transport: IPublicationTransport,
+  { responseId, sendCause }: ISettleContext = {},
+): Promise<IPublishedOutcome | IUncertainOutcome> {
   const verdict = await investigate(transport, record);
   if (!verdict.complete) return uncertainOutcome(record, statePath, verdict, sendCause);
   if (responseId !== undefined && responseId !== verdict.review.id) {
@@ -852,7 +1250,7 @@ async function settle(fs, statePath, record, transport, { responseId, sendCause 
     });
   }
   const via = responseId !== undefined ? 'created' : 'recovered';
-  const completed = {
+  const completed: ICompletedRecord = {
     ...record,
     phase: 'completed',
     receipt: { reviewId: verdict.review.id, htmlUrl: verdict.review.htmlUrl, via },
@@ -862,7 +1260,7 @@ async function settle(fs, statePath, record, transport, { responseId, sendCause 
   } catch (err) {
     const cause = new PublicationStateError(
       'state-io',
-      `The review was verified on the host, but its completed receipt could not be saved at ${statePath} (${err.message}). The saved intent remains; a later call will recover it without sending.`,
+      `The review was verified on the host, but its completed receipt could not be saved at ${statePath} (${String(thrownMessage(err))}). The saved intent remains; a later call will recover it without sending.`,
       { cause: err },
     );
     return publishedOutcome(record, statePath, verdict.review, via, false, cause);
@@ -875,16 +1273,16 @@ async function settle(fs, statePath, record, transport, { responseId, sendCause 
 // ---------------------------------------------------------------------------
 
 /** The authenticated user's stable numeric id (login is mutable and unused). */
-async function authenticatedUserId(transport) {
+async function authenticatedUserId(transport: IPublicationTransport): Promise<number> {
   const user = await transport.getAuthenticatedUser();
-  if (!isPlainObject(user) || !isPositiveInteger(user.id)) {
+  if (!isPlainObject(user) || !isPositiveInteger(user['id'])) {
     throw new TypeError('The transport did not report a numeric authenticated user id.');
   }
-  return user.id;
+  return user['id'];
 }
 
 /** Refusal to reuse an existing identity for different input. */
-function mismatch(statePath, what) {
+function mismatch(statePath: string, what: string): PublicationStateError {
   return new PublicationStateError(
     'state-mismatch',
     `Publication state at ${statePath} belongs to a different ${what}. An existing publication identity cannot take changed input; use a new state path for a separate review.`,
@@ -892,7 +1290,7 @@ function mismatch(statePath, what) {
 }
 
 /** Throws state-mismatch unless the record belongs to this destination, commit and original input. */
-function assertSameIdentity(record, input) {
+function assertSameIdentity(record: StateRecord, input: IPublicationIdentity): void {
   const d = input.destination;
   if (
     record.destination.owner !== d.owner ||
@@ -910,7 +1308,11 @@ function assertSameIdentity(record, input) {
  * completed receipt or a persisted refusal returns immediately with no
  * transport call; a sending intent is investigated using its saved request.
  */
-async function continueExisting(fs, record, input) {
+async function continueExisting(
+  fs: IPublicationFs,
+  record: StateRecord,
+  input: IPublicationIdentity,
+): Promise<PublicationOutcome> {
   assertSameIdentity(record, input);
   if (record.phase === 'completed') return receiptOutcome(record, input.statePath);
   if (record.phase === 'rejected') return knownRejectionOutcome(record, input.statePath);
@@ -926,11 +1328,15 @@ async function continueExisting(fs, record, input) {
 /**
  * Publishes a prepared review under a new identity at `statePath`, or — when
  * a record already exists there — continues that identity without sending.
+ * `input` is validated here (TypeError before any I/O), so it is `unknown`.
  */
-async function publishPreparedReview(input, internals = {}) {
+async function publishPreparedReview(
+  input: unknown,
+  internals: IPublicationInternals = {},
+): Promise<PublicationOutcome> {
   validateIdentity(input);
-  validatePreparedReview(input.preparedReview);
-  const fs = internals.fs || nodeFs;
+  validatePreparedReview(input['preparedReview']);
+  const fs: IPublicationFs = internals.fs || nodeFs;
   const { statePath, transport } = input;
 
   const existing = readState(fs, statePath);
@@ -938,8 +1344,8 @@ async function publishPreparedReview(input, internals = {}) {
 
   const authorId = await authenticatedUserId(transport);
   const marker = newMarker();
-  const request = buildRequest(input.destination, input.reviewedCommit, input.preparedReview, marker);
-  const record = {
+  const request = buildRequest(input.destination, input.reviewedCommit, input['preparedReview'], marker);
+  const record: ISendingRecord = {
     format: STATE_FORMAT,
     version: STATE_VERSION,
     phase: 'sending',
@@ -965,16 +1371,16 @@ async function publishPreparedReview(input, internals = {}) {
     return continueExisting(fs, claimed, input);
   }
 
-  let response;
+  let response: unknown;
   try {
     response = await transport.createReview(structuredClone(request));
   } catch (err) {
-    if (err && err.hostRejected === true && isRefusalStatus(err.status)) {
+    if (isHostRejection(err)) {
       return settleRejection(fs, statePath, record, err);
     }
     return settle(fs, statePath, record, transport, { sendCause: err });
   }
-  const responseId = isPlainObject(response) && isPositiveInteger(response.id) ? response.id : undefined;
+  const responseId = isPlainObject(response) && isPositiveInteger(response['id']) ? response['id'] : undefined;
   return settle(fs, statePath, record, transport, { responseId });
 }
 
@@ -982,13 +1388,17 @@ async function publishPreparedReview(input, internals = {}) {
  * Reports an existing publication identity without ever creating: 'missing'
  * when no record exists, otherwise the receipt, a verified recovery, or an
  * uncertain outcome. Safe to call before any branch-dependent preparation.
+ * `input` is validated here (TypeError before any I/O), so it is `unknown`.
  */
-async function recoverPublication(input, internals = {}) {
+async function recoverPublication(
+  input: unknown,
+  internals: IPublicationInternals = {},
+): Promise<PublicationOutcome | IMissingOutcome> {
   validateIdentity(input);
-  const fs = internals.fs || nodeFs;
+  const fs: IPublicationFs = internals.fs || nodeFs;
   const existing = readState(fs, input.statePath);
   if (!existing) return { status: 'missing', statePath: input.statePath };
   return continueExisting(fs, existing, input);
 }
 
-module.exports = { publishPreparedReview, recoverPublication, PublicationStateError };
+export { publishPreparedReview, recoverPublication, PublicationStateError };
