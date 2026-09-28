@@ -4,7 +4,7 @@
  * User-acceptance tests for the thin CLI (bin/sarif-to-comment.cjs).
  *
  * Each test runs the real CLI entry point in a child process through
- * test/fixtures/public-api/cli-with-fake-github.cjs, which injects only the
+ * test/fixtures/public-api/cli-with-fake-github.mts, which injects only the
  * GitHub adapter (a file-backed host double shared with the parent through
  * FAKE_GITHUB_DIR). Parsing, file reading, credential selection, the library
  * call, Markdown output and exit status are the real CLI's. Delegation to the
@@ -33,15 +33,15 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const { publishSarifReview } = require('../dist/index.cjs');
-const { FakeGitHubRemote } = require('./fixtures/publication/fake-github.cjs');
+const { FakeGitHubRemote } = require('./fixtures/publication/fake-github.mts');
 const {
   REPOSITORY,
   createFakeClientFactory,
   setAdapterConfig,
-} = require('./fixtures/public-api/fake-adapter.cjs');
+} = require('./fixtures/public-api/fake-adapter.mts');
 
 const FIXTURE_DIR = path.join(__dirname, 'fixtures', 'public-api');
-const WRAPPER = path.join(FIXTURE_DIR, 'cli-with-fake-github.cjs');
+const WRAPPER = path.join(FIXTURE_DIR, 'cli-with-fake-github.mts');
 const loadSarif = (name) => JSON.parse(fs.readFileSync(path.join(FIXTURE_DIR, name), 'utf8'));
 const READY = loadSarif('ready.sarif.json');
 const HELD = loadSarif('held.sarif.json');

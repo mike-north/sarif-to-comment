@@ -30,15 +30,15 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-const { ROOT, packProject, installIntoConsumer } = require('./fixtures/package/installed-package.cjs');
-const { FakeHttpGitHub, REPOSITORY } = require('./fixtures/composition/fake-http-github.cjs');
-const { createGitWorld } = require('./fixtures/authoring-workflow/git-world.cjs');
+const { ROOT, packProject, installIntoConsumer } = require('./fixtures/package/installed-package.mts');
+const { FakeHttpGitHub, REPOSITORY } = require('./fixtures/composition/fake-http-github.mts');
+const { createGitWorld } = require('./fixtures/authoring-workflow/git-world.mts');
 
 const README = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
 const GUIDE_PATH = path.join(ROOT, 'docs', 'getting-started.md');
 const GUIDE = fs.existsSync(GUIDE_PATH) ? fs.readFileSync(GUIDE_PATH, 'utf8') : '';
 const API_DIR = path.join(ROOT, 'docs', 'api');
-const PRELOAD = path.join(ROOT, 'test', 'fixtures', 'docs', 'fake-fetch-preload.cjs');
+const PRELOAD = path.join(ROOT, 'test', 'fixtures', 'docs', 'fake-fetch-preload.mts');
 const PACKAGE_DOCS_BASE = 'https://unpkg.com/sarif-to-comment/';
 
 /** Every Markdown link target in `text` (inline links; code spans and fences excluded). */

@@ -16,7 +16,7 @@
  *   logs, internal design docs, release tooling, pending changesets, private
  *   evidence or agent configuration.
  * - The tarball is really installed with `npm install` into a clean consumer
- *   (test/fixtures/package/installed-package.cjs). The installed library is
+ *   (test/fixtures/package/installed-package.mts). The installed library is
  *   used in memory, the installed executable is run, and the installed type
  *   declarations are compiled against CommonJS and ES module consumers,
  *   including calls the types must reject.
@@ -36,8 +36,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-const { ROOT, PKG, npm, packProject, installIntoConsumer } = require('./fixtures/package/installed-package.cjs');
-const { UPSTREAM_SARIF_PATH, createGitWorld } = require('./fixtures/authoring-workflow/git-world.cjs');
+const { ROOT, PKG, npm, packProject, installIntoConsumer } = require('./fixtures/package/installed-package.mts');
+const { UPSTREAM_SARIF_PATH, createGitWorld } = require('./fixtures/authoring-workflow/git-world.mts');
 
 /**
  * The package.json `files` whitelist: the intended distribution boundary.
@@ -212,7 +212,7 @@ describe('manifest', () => {
   test('scripts are purpose-named and checks are read-only', () => {
     const scripts = PKG.scripts || {};
     // The suite exercises the built dist/, so it first refuses a missing or stale build.
-    assert.equal(scripts.test, 'npm run check:build && node --test test/*.test.cjs');
+    assert.equal(scripts.test, 'npm run check:build && node --test test/*.test.cjs test/*.test.mts');
     assert.equal(scripts['check:build'], 'node scripts/build-manifest.mts verify');
     assert.match(scripts['check:lint'] || '', /^eslint\b/);
     assert.ok(scripts.check, 'an aggregate read-only check script exists');
@@ -330,8 +330,8 @@ describe('installed package', () => {
       const resolved = fs.realpathSync(require.resolve('sarif-to-comment'));
       assert.ok(resolved.startsWith(fs.realpathSync(${JSON.stringify(packageDir)})), 'resolved outside the install: ' + resolved);
       assert.equal(require('sarif-to-comment/package.json').name, 'sarif-to-comment');
-      const { FakeGitHubRemote } = require(${JSON.stringify(path.join(ROOT, 'test/fixtures/publication/fake-github.cjs'))});
-      const { createFakeClientFactory, REPOSITORY } = require(${JSON.stringify(path.join(ROOT, 'test/fixtures/public-api/fake-adapter.cjs'))});
+      const { FakeGitHubRemote } = require(${JSON.stringify(path.join(ROOT, 'test/fixtures/publication/fake-github.mts'))});
+      const { createFakeClientFactory, REPOSITORY } = require(${JSON.stringify(path.join(ROOT, 'test/fixtures/public-api/fake-adapter.mts'))});
       const sarif = JSON.parse(fs.readFileSync(${JSON.stringify(path.join(ROOT, 'test/fixtures/public-api/ready.sarif.json'))}, 'utf8'));
       (async () => {
         await assert.rejects(publishSarifReview({}), TypeError);

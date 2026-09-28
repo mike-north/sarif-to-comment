@@ -17,7 +17,7 @@
  * final (D29): human changes are neither inspected nor restored.
  *
  * Remote behavior comes from a file-backed double whose persistence is
- * independent of local state (test/fixtures/publication/fake-github.cjs).
+ * independent of local state (test/fixtures/publication/fake-github.mts).
  * Expected request values are hand-authored in prepared-review.json separately
  * from the input, and the record's request fingerprint is recomputed here with
  * an independent canonicalizer. Oracles for "exactly one create", "no other
@@ -52,12 +52,12 @@ const {
   recoverPublication,
   PublicationStateError,
 } = require('../dist/publication.cjs');
-const { FakeGitHubRemote, DEFAULT_USER, SENTINEL_TOKEN } = require('./fixtures/publication/fake-github.cjs');
+const { FakeGitHubRemote, DEFAULT_USER, SENTINEL_TOKEN } = require('./fixtures/publication/fake-github.mts');
 
 const FIXTURE_DIR = path.join(__dirname, 'fixtures', 'publication');
 const FIXTURE = JSON.parse(fs.readFileSync(path.join(FIXTURE_DIR, 'prepared-review.json'), 'utf8'));
 const EXPECTED = FIXTURE.expectedRequest;
-const CHILD = path.join(FIXTURE_DIR, 'child-publish.cjs');
+const CHILD = path.join(FIXTURE_DIR, 'child-publish.mts');
 
 /** Proposed marker form: one hidden HTML comment carrying a v4 UUID. */
 const MARKER_SOURCE =

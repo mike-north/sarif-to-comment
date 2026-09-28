@@ -1,5 +1,3 @@
-'use strict';
-
 /**
  * A real local Git repository built from the parent's independently authored
  * source oracle (docs/evidence/second-milestone/source-oracle.json), plus the
@@ -27,24 +25,140 @@
  * @see https://git-scm.com/docs/git#Documentation/git.txt-codeGITCONFIGGLOBALcode
  */
 
-const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const { spawnSync } = require('node:child_process');
+import * as assert from 'node:assert/strict';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { spawnSync } from 'node:child_process';
 
-const ROOT = path.resolve(__dirname, '..', '..', '..');
-const ORACLE = JSON.parse(
-  fs.readFileSync(path.join(ROOT, 'docs', 'evidence', 'second-milestone', 'source-oracle.json'), 'utf8'),
+import type { IHttpDestination, IHttpRepository } from '../composition/fake-http-github.mts';
+import {
+  expectType,
+  isArrayOf,
+  isNumber,
+  isOptional,
+  isShape,
+  isString,
+  readJson,
+} from '../../support/runtime-types.mts';
+import type { Guard } from '../../support/runtime-types.mts';
+
+/** The four texts of one file a Git world is built from. */
+export interface IGitWorldSpec {
+  readonly path: string;
+  readonly base: string;
+  readonly reviewed: string;
+  readonly staged: string;
+  readonly workingTree: string;
+}
+
+/** One finding of the source oracle: its reviewed lines and the replacement it proposes. */
+export interface IOracleFinding {
+  readonly label: string;
+  readonly line: number;
+  readonly endLine: number;
+  readonly message: string;
+  readonly reviewedSource: string;
+  readonly replacementLines: readonly string[];
+  readonly expectedHostSide: string;
+}
+
+/** The source oracle document (docs/evidence/second-milestone/source-oracle.json). */
+export interface ISourceOracle extends IGitWorldSpec {
+  readonly findings: readonly IOracleFinding[];
+}
+
+/** A built Git world (see createGitWorld). */
+export interface IGitWorld {
+  readonly root: string;
+  readonly dir: string;
+  readonly env: Record<string, string | undefined>;
+  readonly base: string;
+  readonly head: string;
+  readonly file: string;
+  readonly repository: IHttpRepository;
+}
+
+/** A SARIF region as this oracle reads it: one-based line/column coordinates. */
+export interface ISarifRegion {
+  readonly startLine?: number | undefined;
+  readonly startColumn?: number | undefined;
+  readonly endLine?: number | undefined;
+  readonly endColumn?: number | undefined;
+}
+
+/** A SARIF replacement: the region to delete and the content to insert. */
+export interface ISarifReplacement {
+  readonly deletedRegion: ISarifRegion;
+  readonly insertedContent?: { readonly text?: string | undefined } | undefined;
+}
+
+const isSourceOracle: Guard<ISourceOracle> = isShape({
+  path: isString,
+  base: isString,
+  reviewed: isString,
+  staged: isString,
+  workingTree: isString,
+  findings: isArrayOf(
+    isShape({
+      label: isString,
+      line: isNumber,
+      endLine: isNumber,
+      message: isString,
+      reviewedSource: isString,
+      replacementLines: isArrayOf(isString),
+      expectedHostSide: isString,
+    }),
+  ),
+});
+
+const isSarifReplacement: Guard<ISarifReplacement> = isShape({
+  deletedRegion: isShape({
+    startLine: isOptional(isNumber),
+    startColumn: isOptional(isNumber),
+    endLine: isOptional(isNumber),
+    endColumn: isOptional(isNumber),
+  }),
+  insertedContent: isOptional(isShape({ text: isOptional(isString) })),
+});
+
+/** The parts of a SARIF log replacementsFor reads; everything else is ignored. */
+const isSarifWithFixes = isShape({
+  runs: isArrayOf(
+    isShape({
+      results: isOptional(
+        isArrayOf(
+          isShape({
+            fixes: isOptional(
+              isArrayOf(
+                isShape({
+                  artifactChanges: isArrayOf(
+                    isShape({ artifactLocation: isShape({ uri: isString }), replacements: isArrayOf(isSarifReplacement) }),
+                  ),
+                }),
+              ),
+            ),
+          }),
+        ),
+      ),
+    }),
+  ),
+});
+
+const ROOT = path.resolve(import.meta.dirname, '..', '..', '..');
+export const ORACLE: ISourceOracle = expectType(
+  readJson(path.join(ROOT, 'docs', 'evidence', 'second-milestone', 'source-oracle.json')),
+  isSourceOracle,
+  'the second-milestone source oracle',
 );
-const UPSTREAM_SARIF_PATH = path.join(ROOT, 'docs', 'evidence', 'second-milestone', 'upstream-input.sarif.json');
-const DESTINATION = Object.freeze({ owner: 'octo', repo: 'review-fixture', pullNumber: 31 });
-const SENTINEL = 'UNSTAGED SENTINEL';
+export const UPSTREAM_SARIF_PATH = path.join(ROOT, 'docs', 'evidence', 'second-milestone', 'upstream-input.sarif.json');
+export const DESTINATION: IHttpDestination = Object.freeze({ owner: 'octo', repo: 'review-fixture', pullNumber: 31 });
+export const SENTINEL = 'UNSTAGED SENTINEL';
 
 /** Environment for Git that ignores the developer's configuration. */
-function gitEnv(home) {
+function gitEnv(home: string): Record<string, string | undefined> {
   return {
-    PATH: process.env.PATH,
+    PATH: process.env['PATH'],
     HOME: home,
     GIT_CONFIG_GLOBAL: path.join(home, 'empty-gitconfig'),
     GIT_CONFIG_NOSYSTEM: '1',
@@ -58,14 +172,14 @@ function gitEnv(home) {
 }
 
 /** Runs git in `cwd`; returns its exact stdout, failing loudly. */
-function git(cwd, env, args) {
+function git(cwd: string, env: Record<string, string | undefined>, args: readonly string[]): string {
   const run = spawnSync('git', args, { cwd, env, encoding: 'utf8' });
   assert.equal(run.status, 0, `git ${args.join(' ')} failed: ${run.stderr}`);
   return run.stdout;
 }
 
 /** Lines of `text` with terminators kept (the fake host's snapshot format). */
-function physicalLines(text) {
+export function physicalLines(text: string): string[] {
   return text.match(/[^\n]*\n|[^\n]+$/g) ?? [];
 }
 
@@ -74,11 +188,12 @@ function physicalLines(text) {
  * `after`: a valid, if not minimal, diff of the two snapshots (the oracle's B
  * and H share no line). GitHub's `patch` omits the last newline.
  */
-function wholeFilePatch(before, after) {
+function wholeFilePatch(before: string, after: string): string[] {
   const old = physicalLines(before);
   const next = physicalLines(after);
-  const body = [`@@ -1,${old.length} +1,${next.length} @@\n`, ...old.map((l) => `-${l}`), ...next.map((l) => `+${l}`)];
-  body[body.length - 1] = body[body.length - 1].replace(/\n$/, '');
+  const body = [`@@ -1,${String(old.length)} +1,${String(next.length)} @@\n`, ...old.map((l) => `-${l}`), ...next.map((l) => `+${l}`)];
+  // body is never empty: it starts with the hunk header.
+  body[body.length - 1] = (body[body.length - 1] ?? '').replace(/\n$/, '');
   return body;
 }
 
@@ -87,7 +202,11 @@ function wholeFilePatch(before, after) {
  * { root, dir, env, base, head, file, repository } where `repository` is the
  * fake GitHub repository for the same commits.
  */
-function createGitWorld(label = 'git-world', spec = ORACLE, destination = DESTINATION) {
+export function createGitWorld(
+  label = 'git-world',
+  spec: IGitWorldSpec = ORACLE,
+  destination: IHttpDestination = DESTINATION,
+): IGitWorld {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), `${label}-`));
   const home = path.join(root, 'home');
   fs.mkdirSync(home);
@@ -115,7 +234,7 @@ function createGitWorld(label = 'git-world', spec = ORACLE, destination = DESTIN
   assert.equal(git(dir, env, ['show', `:${spec.path}`]), spec.staged);
   assert.equal(fs.readFileSync(file, 'utf8'), spec.workingTree);
 
-  const repository = {
+  const repository: IHttpRepository = {
     description: 'Fake GitHub view of the local oracle repository (commits are the real local commit ids).',
     destination,
     commits: { base, head },
@@ -144,15 +263,18 @@ function createGitWorld(label = 'git-world', spec = ORACLE, destination = DESTIN
  * is the end of endLine including its terminator). Replacements are applied
  * from the end so earlier offsets stay valid. Overlaps are refused.
  */
-function applyReplacements(text, replacements) {
+export function applyReplacements(text: string, replacements: readonly ISarifReplacement[]): string {
   const lineStarts = [0];
   for (let i = 0; i < text.length; i += 1) if (text[i] === '\n') lineStarts.push(i + 1);
-  const lineEnd = (line) => (line < lineStarts.length ? lineStarts[line] : text.length);
-  const offset = (line, column) => lineStarts[line - 1] + column - 1;
+  // Past the last line start, a line ends at the end of the text.
+  const lineEnd = (line: number): number => lineStarts[line] ?? text.length;
+  // A line that does not exist has no offset (NaN, as the index arithmetic gives).
+  const offset = (line: number, column: number): number => (lineStarts[line - 1] ?? NaN) + column - 1;
   const spans = replacements.map(({ deletedRegion: r, insertedContent }) => {
-    assert.ok(Number.isInteger(r.startLine), 'this oracle only reads line/column regions');
-    const endLine = r.endLine ?? r.startLine;
-    const start = offset(r.startLine, r.startColumn ?? 1);
+    const { startLine } = r;
+    assert.ok(startLine !== undefined && Number.isInteger(startLine), 'this oracle only reads line/column regions');
+    const endLine = r.endLine ?? startLine;
+    const start = offset(startLine, r.startColumn ?? 1);
     const end = r.endColumn === undefined ? lineEnd(endLine) : offset(endLine, r.endColumn);
     return { start, end, text: insertedContent?.text ?? '' };
   });
@@ -167,9 +289,14 @@ function applyReplacements(text, replacements) {
   return out;
 }
 
-/** Every replacement of every fix of every result in a SARIF log, for `uri`. */
-function replacementsFor(sarif, uri) {
-  return sarif.runs.flatMap((run) =>
+/**
+ * Every replacement of every fix of every result in a SARIF log, for `uri`.
+ * The log is checked to have the shape read here (it may come from JSON.parse
+ * or from the product).
+ */
+export function replacementsFor(sarif: unknown, uri: string): ISarifReplacement[] {
+  const log = expectType(sarif, isSarifWithFixes, 'a SARIF log with runs[].results[].fixes[].artifactChanges[]');
+  return log.runs.flatMap((run) =>
     (run.results ?? []).flatMap((result) =>
       (result.fixes ?? []).flatMap((fix) =>
         fix.artifactChanges.filter((c) => c.artifactLocation.uri === uri).flatMap((c) => c.replacements),
@@ -179,20 +306,8 @@ function replacementsFor(sarif, uri) {
 }
 
 /** Replacements with identical effect counted once (several findings may share one). */
-function distinctReplacements(replacements) {
-  const seen = new Map();
+export function distinctReplacements(replacements: readonly ISarifReplacement[]): ISarifReplacement[] {
+  const seen = new Map<string, ISarifReplacement>();
   for (const r of replacements) seen.set(JSON.stringify([r.deletedRegion, r.insertedContent]), r);
   return [...seen.values()];
 }
-
-module.exports = {
-  ORACLE,
-  UPSTREAM_SARIF_PATH,
-  DESTINATION,
-  SENTINEL,
-  createGitWorld,
-  applyReplacements,
-  replacementsFor,
-  distinctReplacements,
-  physicalLines,
-};

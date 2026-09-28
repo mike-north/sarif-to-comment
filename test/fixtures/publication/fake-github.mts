@@ -1,5 +1,3 @@
-'use strict';
-
 /**
  * File-backed double of the GitHub pull-request review host, for publication tests.
  *
@@ -31,7 +29,7 @@
  * create): a faulty publisher that tries to repair or maintain a review is
  * observed rather than merely failing to compile.
  *
- * Private transport contract modelled here (what src/publication.cjs may call):
+ * Private transport contract modelled here (what src/publication.cts may call):
  *
  *   getAuthenticatedUser() -> Promise<{ id: number, login?: string }>
  *     The numeric id is the stable author identity; login is mutable.
@@ -60,15 +58,67 @@
  * @see https://docs.github.com/en/rest/users/users#get-the-authenticated-user
  */
 
-const fs = require('node:fs');
-const path = require('node:path');
-const crypto = require('node:crypto');
+import * as crypto from 'node:crypto';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
+import {
+  expectType,
+  isArrayOf,
+  isBoolean,
+  isEither,
+  isNull,
+  isNumber,
+  isOneOf,
+  isOptional,
+  isRecord,
+  isShape,
+  isString,
+  readJson,
+} from '../../support/runtime-types.mts';
+import type { Guard, UnknownRecord } from '../../support/runtime-types.mts';
+
+/** An authenticated reviewer identity: the numeric id is stable, the login mutable. */
+export interface IFakeUser {
+  readonly id: number;
+  readonly login?: string | undefined;
+}
 
 /** Placeholder credential; tests assert it never reaches publication state. */
-const SENTINEL_TOKEN = 'ghs_TESTONLY_SENTINEL_credential_do_not_persist_7f3a';
+export const SENTINEL_TOKEN = 'ghs_TESTONLY_SENTINEL_credential_do_not_persist_7f3a';
 
 /** Numeric identity of the default authenticated reviewer in tests. */
-const DEFAULT_USER = Object.freeze({ id: 7001001, login: 'reviewer-bot' });
+export const DEFAULT_USER: Readonly<{ id: number; login: string }> = Object.freeze({ id: 7001001, login: 'reviewer-bot' });
+
+/** How createReview behaves (see DEFAULT_CONFIG). */
+export type CreateMode =
+  | 'ok'
+  | 'lose-response'
+  | 'malformed-response'
+  | 'fail-before-persist'
+  | 'reject'
+  | 'crash-before-persist'
+  | 'crash-after-persist'
+  | 'wrong-id-response';
+
+/** How list cursors behave: well-formed offsets, or two cursors cycling over the first page. */
+export type CursorMode = 'offset' | 'cycle';
+
+/** Host behavior, persisted in config.json (see DEFAULT_CONFIG for each field). */
+export interface IFakeRemoteConfig {
+  readonly create: CreateMode;
+  readonly singlePendingPerAuthor: boolean;
+  readonly visibilityDelay: number;
+  readonly dropCommentIndexesOnPersist: readonly number[];
+  readonly alterCommentIndexesOnPersist: readonly number[];
+  readonly normalizeLineEndings: boolean;
+  readonly pageSize: number;
+  readonly commentPageSize: number;
+  readonly failListPageAt: number | null;
+  readonly reviewCursorMode: CursorMode;
+  readonly commentCursorMode: CursorMode;
+  readonly malformedReviewPage: boolean;
+}
 
 /**
  * Behaviors controllable per test (persisted in config.json so child
@@ -102,7 +152,7 @@ const DEFAULT_USER = Object.freeze({ id: 7001001, login: 'reviewer-bot' });
  *     (returns the first page forever under two alternating cursors).
  *   malformedReviewPage: listReviews returns a page whose `reviews` is not a list.
  */
-const DEFAULT_CONFIG = Object.freeze({
+export const DEFAULT_CONFIG: Readonly<IFakeRemoteConfig> = Object.freeze({
   create: 'ok',
   singlePendingPerAuthor: true,
   visibilityDelay: 0,
@@ -117,7 +167,8 @@ const DEFAULT_CONFIG = Object.freeze({
   malformedReviewPage: false,
 });
 
-const WRITE_METHODS = Object.freeze([
+/** Transport methods that mutate the host; the publisher may call only createReview. */
+export const WRITE_METHODS: readonly string[] = Object.freeze([
   'createReview',
   'updateReview',
   'submitReview',
@@ -127,29 +178,230 @@ const WRITE_METHODS = Object.freeze([
   'deleteReviewComment',
 ]);
 
+/** One inline comment as requested and as the host stores it. */
+export interface IStoredComment {
+  readonly path: string;
+  readonly side: string;
+  readonly line: number;
+  readonly startSide?: string | undefined;
+  readonly startLine?: number | undefined;
+  readonly body: string;
+}
+
+/** A review as persisted by the host (one JSON file per review). Human changes mutate it. */
+export interface IStoredReview {
+  owner: string;
+  repo: string;
+  pullNumber: number;
+  authorId: number;
+  authorLogin?: string | undefined;
+  commitId: string;
+  body: string;
+  comments: IStoredComment[];
+  state: string;
+  visibilityDelay: number;
+  createdAtEnumeration: number;
+  id: number;
+  htmlUrl: string;
+}
+
+/** The fields of a review to store; the host assigns id and htmlUrl. */
+export interface IReviewFields {
+  readonly owner: string;
+  readonly repo: string;
+  readonly pullNumber: number;
+  readonly authorId: number;
+  readonly authorLogin?: string | undefined;
+  readonly commitId: string;
+  readonly body: string;
+  readonly comments: IStoredComment[];
+  readonly state?: string;
+  readonly visibilityDelay?: number;
+  readonly createdAtEnumeration?: number;
+}
+
+/** A review some other actor created earlier (see seedReview). */
+export interface ISeedReview {
+  readonly owner: string;
+  readonly repo: string;
+  readonly pullNumber: number;
+  readonly authorId: number;
+  readonly authorLogin?: string | undefined;
+  readonly commitId: string;
+  readonly body: string;
+  readonly comments?: IStoredComment[] | undefined;
+  readonly state?: string | undefined;
+}
+
+/** One recorded transport call: method name, calling process and the call's arguments. */
+export interface IRecordedCall {
+  readonly method: string;
+  readonly pid: number;
+  readonly args: UnknownRecord;
+}
+
+/** A pull request the transport addresses. */
+export interface IFakeDestination {
+  readonly owner: string;
+  readonly repo: string;
+  readonly pullNumber: number;
+}
+
+/** createReview's request. `event` must be absent (a draft); a present one is observed, not refused. */
+export interface IFakeCreateReviewRequest extends IFakeDestination {
+  readonly commitId: string;
+  readonly body: string;
+  readonly comments: readonly IStoredComment[];
+  readonly event?: unknown;
+}
+
+/** createReview's result: an identity, or `{}` for 'malformed-response'. */
+export type FakeCreatedReview = { readonly id: number; readonly htmlUrl: string } | Readonly<Record<string, never>>;
+
+/** listReviews' request; `cursor` null or absent starts an enumeration. */
+export interface IFakeListReviewsRequest extends IFakeDestination {
+  readonly cursor?: string | null | undefined;
+}
+
+/** A review as listReviews summarizes it. */
+export interface IFakeReviewSummary {
+  readonly id: number;
+  readonly htmlUrl: string;
+  readonly authorId: number;
+  readonly authorLogin: string | undefined;
+  readonly commitId: string;
+  readonly state: string;
+  readonly body: string;
+}
+
+/** One page of reviews; `reviews` is a string only for 'malformedReviewPage'. */
+export interface IFakeReviewPage {
+  readonly reviews: readonly IFakeReviewSummary[] | string;
+  readonly nextCursor: string | null;
+}
+
+/** listReviewComments' request. */
+export interface IFakeListReviewCommentsRequest extends IFakeDestination {
+  readonly reviewId: number;
+  readonly cursor?: string | null | undefined;
+}
+
+/** One page of a review's comments. */
+export interface IFakeCommentPage {
+  readonly comments: readonly IStoredComment[];
+  readonly nextCursor: string | null;
+}
+
+/** Receives ordering markers ({ op }) from the transport; an array works. */
+export interface ITransportEventSink {
+  push(event: { readonly op: string }): unknown;
+}
+
+/** transport() options: the authenticated user and an optional event sink. */
+export interface ITransportOptions {
+  readonly user?: IFakeUser | undefined;
+  readonly events?: ITransportEventSink | null | undefined;
+}
+
+/**
+ * The transport a publisher receives. Methods are properties so a test can
+ * wrap or replace one on a transport it holds.
+ */
+export interface IFakeTransport {
+  authToken: string;
+  getAuthenticatedUser: () => Promise<IFakeUser>;
+  createReview: (request: IFakeCreateReviewRequest) => Promise<FakeCreatedReview>;
+  listReviews: (request: IFakeListReviewsRequest) => Promise<IFakeReviewPage>;
+  listReviewComments: (request: IFakeListReviewCommentsRequest) => Promise<IFakeCommentPage>;
+  // Writes the publisher must never issue (recorded, no effect).
+  updateReview: (args: UnknownRecord) => Promise<void>;
+  submitReview: (args: UnknownRecord) => Promise<void>;
+  deleteReview: (args: UnknownRecord) => Promise<void>;
+  createReviewComment: (args: UnknownRecord) => Promise<void>;
+  updateReviewComment: (args: UnknownRecord) => Promise<void>;
+  deleteReviewComment: (args: UnknownRecord) => Promise<void>;
+}
+
+const isCursorMode: Guard<CursorMode> = isOneOf('offset', 'cycle');
+
+const isRemoteConfig: Guard<IFakeRemoteConfig> = isShape({
+  create: isOneOf(
+    'ok',
+    'lose-response',
+    'malformed-response',
+    'fail-before-persist',
+    'reject',
+    'crash-before-persist',
+    'crash-after-persist',
+    'wrong-id-response',
+  ),
+  singlePendingPerAuthor: isBoolean,
+  visibilityDelay: isNumber,
+  dropCommentIndexesOnPersist: isArrayOf(isNumber),
+  alterCommentIndexesOnPersist: isArrayOf(isNumber),
+  normalizeLineEndings: isBoolean,
+  pageSize: isNumber,
+  commentPageSize: isNumber,
+  failListPageAt: isEither(isNumber, isNull),
+  reviewCursorMode: isCursorMode,
+  commentCursorMode: isCursorMode,
+  malformedReviewPage: isBoolean,
+});
+
+const isStoredComment: Guard<IStoredComment> = isShape({
+  path: isString,
+  side: isString,
+  line: isNumber,
+  startSide: isOptional(isString),
+  startLine: isOptional(isNumber),
+  body: isString,
+});
+
+const isStoredReview: Guard<IStoredReview> = isShape({
+  owner: isString,
+  repo: isString,
+  pullNumber: isNumber,
+  authorId: isNumber,
+  authorLogin: isOptional(isString),
+  commitId: isString,
+  body: isString,
+  comments: isArrayOf(isStoredComment),
+  state: isString,
+  visibilityDelay: isNumber,
+  createdAtEnumeration: isNumber,
+  id: isNumber,
+  htmlUrl: isString,
+});
+
+const isRecordedCall: Guard<IRecordedCall> = isShape({ method: isString, pid: isNumber, args: isRecord });
+
 /** Per-process sequence for unique file names and in-process call ordering. */
 let sequence = 0;
-function uniqueSuffix() {
+function uniqueSuffix(): string {
   sequence += 1;
   return `${String(process.pid).padStart(8, '0')}-${String(sequence).padStart(10, '0')}-${crypto
     .randomBytes(4)
     .toString('hex')}`;
 }
 
-function readJson(file) {
-  return JSON.parse(fs.readFileSync(file, 'utf8'));
+/** Reads a JSON document this double wrote, checking it has the shape it was written with. */
+function readJsonAs<T>(file: string, guard: Guard<T>, what: string): T {
+  return expectType(readJson(file), guard, `${what} in ${file}`);
 }
 
-class IndeterminateNetworkError extends Error {
-  constructor(message) {
+export class IndeterminateNetworkError extends Error {
+  declare readonly code: string;
+  constructor(message: string) {
     super(message);
     this.name = 'IndeterminateNetworkError';
     this.code = 'ECONNRESET';
   }
 }
 
-class HostRejectedError extends Error {
-  constructor(status, message) {
+export class HostRejectedError extends Error {
+  declare readonly hostRejected: true;
+  declare readonly status: number;
+  constructor(status: number, message: string) {
     super(message);
     this.name = 'HostRejectedError';
     this.hostRejected = true;
@@ -157,9 +409,9 @@ class HostRejectedError extends Error {
   }
 }
 
-class FakeGitHubRemote {
+export class FakeGitHubRemote {
   /** Create a fresh remote rooted at `dir` (which must not already hold one). */
-  static create(dir, config = {}) {
+  static create(dir: string, config: Partial<IFakeRemoteConfig> = {}): FakeGitHubRemote {
     for (const sub of ['reviews', 'ids', 'enumerations', 'calls', 'tmp']) {
       fs.mkdirSync(path.join(dir, sub), { recursive: true });
     }
@@ -168,93 +420,95 @@ class FakeGitHubRemote {
     return remote;
   }
 
+  readonly dir: string;
+
   /** Attach to an existing remote directory (e.g. from a child process). */
-  constructor(dir) {
+  constructor(dir: string) {
     this.dir = dir;
   }
 
   /** Publish a complete JSON document at `file` via temp file + rename. */
-  writeJsonAtomic(file, value) {
+  writeJsonAtomic(file: string, value: unknown): void {
     const tmp = path.join(this.dir, 'tmp', uniqueSuffix());
     fs.writeFileSync(tmp, JSON.stringify(value, null, 2));
     fs.renameSync(tmp, file);
   }
 
-  config() {
-    return readJson(path.join(this.dir, 'config.json'));
+  config(): IFakeRemoteConfig {
+    return readJsonAs(path.join(this.dir, 'config.json'), isRemoteConfig, 'fake remote config');
   }
 
-  setConfig(patch) {
+  setConfig(patch: Partial<IFakeRemoteConfig>): void {
     this.writeJsonAtomic(path.join(this.dir, 'config.json'), { ...this.config(), ...patch });
   }
 
   /** Record one call as its own atomically published file. */
-  logCall(method, args) {
+  logCall(method: string, args: object): void {
     const name = `${String(Date.now()).padStart(15, '0')}-${uniqueSuffix()}.json`;
     this.writeJsonAtomic(path.join(this.dir, 'calls', name), { method, pid: process.pid, args });
   }
 
   /** Every recorded transport call in order, optionally filtered by method. */
-  calls(method) {
+  calls(method?: string): IRecordedCall[] {
     const dir = path.join(this.dir, 'calls');
     const all = fs
       .readdirSync(dir)
       .filter((f) => f.endsWith('.json'))
       .sort()
-      .map((f) => readJson(path.join(dir, f)));
+      .map((f) => readJsonAs(path.join(dir, f), isRecordedCall, 'recorded call'));
     return method ? all.filter((c) => c.method === method) : all;
   }
 
   /** Recorded calls to any method that mutates the host. */
-  writeCalls() {
+  writeCalls(): IRecordedCall[] {
     return this.calls().filter((c) => WRITE_METHODS.includes(c.method));
   }
 
   /** All persisted reviews (visible or not), in id order. */
-  reviews() {
+  reviews(): IStoredReview[] {
     const dir = path.join(this.dir, 'reviews');
     return fs
       .readdirSync(dir)
       .filter((f) => f.endsWith('.json'))
-      .map((f) => readJson(path.join(dir, f)))
+      .map((f) => readJsonAs(path.join(dir, f), isStoredReview, 'stored review'))
       .sort((a, b) => a.id - b.id);
   }
 
-  review(id) {
-    return readJson(this.reviewFile(id));
+  review(id: number): IStoredReview {
+    return readJsonAs(this.reviewFile(id), isStoredReview, 'stored review');
   }
 
-  reviewFile(id) {
+  reviewFile(id: number): string {
     return path.join(this.dir, 'reviews', `${String(id).padStart(8, '0')}.json`);
   }
 
   /** Monotonic count of review enumerations started so far (all processes). */
-  enumerationCount() {
+  enumerationCount(): number {
     return fs.readdirSync(path.join(this.dir, 'enumerations')).length;
   }
 
-  startEnumeration() {
+  startEnumeration(): void {
     fs.closeSync(fs.openSync(path.join(this.dir, 'enumerations', uniqueSuffix()), 'wx'));
   }
 
   /** Store a complete review under a freshly reserved id. */
-  persistReview(fields) {
+  persistReview(fields: IReviewFields): IStoredReview {
     let id = fs.readdirSync(path.join(this.dir, 'ids')).length + 1001;
     for (; ; id += 1) {
       try {
         fs.closeSync(fs.openSync(path.join(this.dir, 'ids', String(id)), 'wx'));
         break;
       } catch (err) {
-        if (err.code !== 'EEXIST') throw err;
+        if (!(err instanceof Error && 'code' in err && err.code === 'EEXIST')) throw err;
       }
     }
-    const review = {
+    const review: IStoredReview = {
       state: 'PENDING',
       visibilityDelay: 0,
       createdAtEnumeration: this.enumerationCount(),
       ...fields,
       id,
-      htmlUrl: `https://github.com/${fields.owner}/${fields.repo}/pull/${fields.pullNumber}#pullrequestreview-${id}`,
+      htmlUrl: `https://github.com/${fields.owner}/${fields.repo}/pull/${String(fields.pullNumber)}#pullrequestreview-${String(id)}`,
     };
     this.writeJsonAtomic(this.reviewFile(id), review);
     return review;
@@ -271,7 +525,7 @@ class FakeGitHubRemote {
     body,
     comments = [],
     state = 'PENDING',
-  }) {
+  }: ISeedReview): IStoredReview {
     return this.persistReview({
       owner,
       repo,
@@ -287,26 +541,26 @@ class FakeGitHubRemote {
   }
 
   /** Apply a human change directly on the host (not via the transport). */
-  humanChange(id, change) {
+  humanChange(id: number, change: (review: IStoredReview) => unknown): void {
     const review = this.review(id);
     change(review);
     this.writeJsonAtomic(this.reviewFile(id), review);
   }
 
-  humanEditBody(id, body) {
+  humanEditBody(id: number, body: string): void {
     this.humanChange(id, (r) => (r.body = body));
   }
 
-  humanDeleteComment(id, index) {
+  humanDeleteComment(id: number, index: number): void {
     this.humanChange(id, (r) => r.comments.splice(index, 1));
   }
 
-  humanSubmit(id) {
+  humanSubmit(id: number): void {
     this.humanChange(id, (r) => (r.state = 'COMMENTED'));
   }
 
   /** A human deletes a pending draft directly on the host. */
-  humanDeleteReview(id) {
+  humanDeleteReview(id: number): void {
     fs.unlinkSync(this.reviewFile(id));
   }
 
@@ -315,21 +569,30 @@ class FakeGitHubRemote {
    * given, receives { op: 'createReview' } / { op: 'createReview:returned' }
    * markers so tests can order remote sends against local file operations.
    */
-  transport({ user = DEFAULT_USER, events = null } = {}) {
+  transport({ user = DEFAULT_USER, events = null }: ITransportOptions = {}): IFakeTransport {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias -- the transport's methods are plain functions a test may detach or replace; they reach the remote through this binding
     const remote = this;
-    const push = (op) => {
+    const push = (op: string): void => {
       if (events) events.push({ op });
     };
-    const destinationReviews = ({ owner, repo, pullNumber }) =>
+    const destinationReviews = ({ owner, repo, pullNumber }: IFakeDestination): IStoredReview[] =>
       remote
         .reviews()
         .filter((r) => r.owner === owner && r.repo === repo && r.pullNumber === pullNumber);
-    const nextOf = (mode, cursor, offset, size, total) => {
+    const nextOf = (
+      mode: CursorMode,
+      cursor: string | null | undefined,
+      offset: number,
+      size: number,
+      total: number,
+    ): string | null => {
       if (mode === 'cycle') return cursor === 'c1' ? 'c2' : 'c1';
       return offset + size < total ? String(offset + size) : null;
     };
-    const offsetOf = (mode, cursor) => (mode === 'cycle' || !cursor ? 0 : Number(cursor));
+    const offsetOf = (mode: CursorMode, cursor: string | null | undefined): number =>
+      mode === 'cycle' || !cursor ? 0 : Number(cursor);
 
+    /* eslint-disable @typescript-eslint/require-await -- every transport method is async by contract: results and failures, including synchronous throws, reach the caller as promises */
     return {
       authToken: SENTINEL_TOKEN,
 
@@ -342,10 +605,10 @@ class FakeGitHubRemote {
         remote.logCall('createReview', request);
         push('createReview');
         const config = remote.config();
-        const persist = () => {
+        const persist = (): IStoredReview => {
           const drop = new Set(config.dropCommentIndexesOnPersist);
           const alter = new Set(config.alterCommentIndexesOnPersist);
-          const text = (s) => (config.normalizeLineEndings ? s.replace(/\r\n/g, '\n') : s);
+          const text = (s: string): string => (config.normalizeLineEndings ? s.replace(/\r\n/g, '\n') : s);
           return remote.persistReview({
             owner: request.owner,
             repo: request.repo,
@@ -361,7 +624,7 @@ class FakeGitHubRemote {
             visibilityDelay: config.visibilityDelay,
           });
         };
-        const persists = ['ok', 'lose-response', 'malformed-response', 'crash-after-persist', 'wrong-id-response'];
+        const persists: readonly CreateMode[] = ['ok', 'lose-response', 'malformed-response', 'crash-after-persist', 'wrong-id-response'];
         const hasPending = destinationReviews(request).some(
           (r) => r.authorId === user.id && r.state === 'PENDING',
         );
@@ -394,13 +657,11 @@ class FakeGitHubRemote {
             throw new HostRejectedError(422, 'Unprocessable Entity: line must be part of the diff');
           case 'crash-before-persist':
             process.kill(process.pid, 'SIGKILL');
-            return new Promise(() => {});
+            return new Promise<never>(() => {});
           case 'crash-after-persist':
             persist();
             process.kill(process.pid, 'SIGKILL');
-            return new Promise(() => {});
-          default:
-            throw new Error(`unknown create mode ${config.create}`);
+            return new Promise<never>(() => {});
         }
       },
 
@@ -413,7 +674,7 @@ class FakeGitHubRemote {
         const offset = offsetOf(config.reviewCursorMode, cursor);
         const pageIndex = Math.floor(offset / config.pageSize);
         if (config.failListPageAt === pageIndex) {
-          throw new IndeterminateNetworkError(`timeout fetching review page ${pageIndex}`);
+          throw new IndeterminateNetworkError(`timeout fetching review page ${String(pageIndex)}`);
         }
         const visible = destinationReviews({ owner, repo, pullNumber }).filter(
           (r) => now - r.createdAtEnumeration > r.visibilityDelay,
@@ -469,14 +730,6 @@ class FakeGitHubRemote {
         remote.logCall('deleteReviewComment', args);
       },
     };
+    /* eslint-enable @typescript-eslint/require-await */
   }
 }
-
-module.exports = {
-  DEFAULT_USER,
-  FakeGitHubRemote,
-  HostRejectedError,
-  IndeterminateNetworkError,
-  SENTINEL_TOKEN,
-  WRITE_METHODS,
-};

@@ -27,8 +27,8 @@ const {
   objectAt,
   removeFixtureRepo,
   replaceObject,
-} = require('./fixtures/staged-changes/git-fixture.cjs');
-const { applyReplacements } = require('./fixtures/staged-changes/apply-oracle.cjs');
+} = require('./fixtures/staged-changes/git-fixture.mts');
+const { applyReplacements } = require('./fixtures/staged-changes/apply-oracle.mts');
 
 const REPOSITORY = { owner: 'acme', repo: 'widgets' };
 const REVIEWED = 'original one\noriginal two\n';

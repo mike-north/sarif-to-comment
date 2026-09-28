@@ -6,9 +6,9 @@
  *
  * Every test runs the real executable (bin/sarif-to-comment.cjs) in a child
  * process. Publication tests run it through the existing wrapper that replaces
- * only the GitHub adapter (test/fixtures/public-api/cli-with-fake-github.cjs).
+ * only the GitHub adapter (test/fixtures/public-api/cli-with-fake-github.mts).
  * Staged-change tests use a real local Git repository built from the parent's
- * independent source oracle (test/fixtures/authoring-workflow/git-world.cjs),
+ * independent source oracle (test/fixtures/authoring-workflow/git-world.mts),
  * whose index and working tree deliberately differ.
  *
  * Expected values come from the accepted contract
@@ -36,8 +36,8 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const library = require('../dist/index.cjs');
-const { FakeGitHubRemote } = require('./fixtures/publication/fake-github.cjs');
-const { REPOSITORY, setAdapterConfig } = require('./fixtures/public-api/fake-adapter.cjs');
+const { FakeGitHubRemote } = require('./fixtures/publication/fake-github.mts');
+const { REPOSITORY, setAdapterConfig } = require('./fixtures/public-api/fake-adapter.mts');
 const {
   ORACLE,
   UPSTREAM_SARIF_PATH,
@@ -46,11 +46,11 @@ const {
   applyReplacements,
   replacementsFor,
   distinctReplacements,
-} = require('./fixtures/authoring-workflow/git-world.cjs');
+} = require('./fixtures/authoring-workflow/git-world.mts');
 
 const ROOT = path.resolve(__dirname, '..');
 const BIN = path.join(ROOT, 'dist', 'sarif-to-comment.cjs');
-const WRAPPER = path.join(ROOT, 'test', 'fixtures', 'public-api', 'cli-with-fake-github.cjs');
+const WRAPPER = path.join(ROOT, 'test', 'fixtures', 'public-api', 'cli-with-fake-github.mts');
 const PKG = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
 const SCHEMA_URI = 'https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json';
 const COMMIT = 'c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de';

@@ -24,7 +24,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { addStagedChangesToSarif } = require('../dist/staged-changes.cjs');
-const { createFixtureRepo, removeFixtureRepo } = require('./fixtures/staged-changes/git-fixture.cjs');
+const { createFixtureRepo, removeFixtureRepo } = require('./fixtures/staged-changes/git-fixture.mts');
 
 const REPOSITORY = { owner: 'acme', repo: 'widgets' };
 const repos = [];

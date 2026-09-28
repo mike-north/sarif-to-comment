@@ -3,7 +3,7 @@
 /**
  * Production-composition tests: the real public library (src/index.cjs) and
  * the real CLI, composed with the real GitHub client (src/github.cjs), talking
- * HTTP to a fake GitHub (test/fixtures/composition/fake-http-github.cjs).
+ * HTTP to a fake GitHub (test/fixtures/composition/fake-http-github.mts).
  * Only `fetch` is replaced. The other API/CLI suites replace the whole client;
  * these tests cover what they cannot: source reads through git objects, patch
  * reverse-verification of old-side source, the create-review wire format,
@@ -39,11 +39,11 @@ const { spawnSync } = require('node:child_process');
 
 const { publishSarifReview } = require('../dist/index.cjs');
 const { createGitHubClient } = require('../dist/github.cjs');
-const { FakeHttpGitHub, REPOSITORY } = require('./fixtures/composition/fake-http-github.cjs');
+const { FakeHttpGitHub, REPOSITORY } = require('./fixtures/composition/fake-http-github.mts');
 
 const FIXTURE_DIR = path.join(__dirname, 'fixtures', 'composition');
 const SARIF = JSON.parse(fs.readFileSync(path.join(FIXTURE_DIR, 'review.sarif.json'), 'utf8'));
-const CLI = path.join(FIXTURE_DIR, 'cli-with-fake-http.cjs');
+const CLI = path.join(FIXTURE_DIR, 'cli-with-fake-http.mts');
 const { base: BASE, head: HEAD } = REPOSITORY.commits;
 const { owner: OWNER, repo: REPO, pullNumber: PULL } = REPOSITORY.destination;
 const TOKEN = 'ghp_COMPOSITION_SENTINEL_0123456789abcdef';
