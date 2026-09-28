@@ -1,0 +1,10 @@
+{
+  "fixCommit": "a058c24ecdcff347f52f9731ed90ec85bf1a6c79",
+  "purpose": "Reject falsely typed optional receipt/rejection fields on historical array-phase records; retain unknown payloads.",
+  "controlLogs": {
+    "07-restored-new-assertions.log": "$ node scripts/check-types.mts\nsrc: types check\ntest: types check\nscripts: types check\ndist/sarif-to-comment.d.ts: compiles alone with types: []\ntypes=0\n",
+    "05-regression-new-assertions.log": "$ node scripts/check-types.mts\nsrc: types check\ntest/publication-state.types.mts(64,8): error TS1360: Type 'true' does not satisfy the expected type 'false'.\ntest/publication-state.types.mts(65,8): error TS1360: Type 'true' does not satisfy the expected type 'false'.\ntest/publication-state.types.mts(84,10): error TS1360: Type 'true' does not satisfy the expected type 'false'.\ntest/publication-state.types.mts(95,10): error TS1360: Type 'true' does not satisfy the expected type 'false'.\ntest: type errors (tsc exit 2)\nscripts: types check\ndist/sarif-to-comment.d.ts: compiles alone with types: []\n[ELIFECYCLE] Command failed with exit code 1.\nnew_types=1\n",
+    "01-new-assertions-unmodified-src.log": "$ node scripts/check-types.mts\nsrc: types check\ntest: types check\nscripts: types check\ndist/sarif-to-comment.d.ts: compiles alone with types: []\n",
+    "04-regression-old-assertions.log": "$ node scripts/check-types.mts\nsrc: types check\ntest: types check\nscripts: types check\ndist/sarif-to-comment.d.ts: compiles alone with types: []\nold_types=0\n"
+  }
+}

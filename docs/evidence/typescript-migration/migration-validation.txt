@@ -1,0 +1,173 @@
+INDEPENDENT VALIDATION — strict-TypeScript migration of sarif-to-comment
+=========================================================================
+Validated revision: f2aa51b (branch typescript-migration-validation, worktree logs/opus/typescript/wt/validation).
+Later docs/changeset commits on the integration branch (e.g. 7c9c8af, 6d868ab, 02df2c8, see docs.txt from another agent) were NOT validated here.
+Tools: Node 24.14.0 (npm 11.18.0, pnpm 11.12.0) default; Node 22.18.0 (npm 10.9.3) and 22.23.3 (npm 10.9.9) from wt/spike/.nodes.
+Scratch copies and harness scripts (not evidence, not product): logs/opus/typescript/valtmp/ (gitignored via logs/):
+  mutate.cjs, run-mutants.sh, run-matrix.sh, probe.mjs, normalize.cjs, run-diff.sh, inventory.cjs, oracle-shim/*.cjs
+Nothing was committed, pushed or published. The main checkout, other worktrees, .claude/, logs/opus/m2/** and
+logs/opus/typescript/baseline-package.json were only read or executed (m2 runner sha256 unchanged: 4-m2-acceptance/runner-hashes-before.txt).
+
+RESULT SUMMARY
+  Behavioral defects found: NONE.   Mutant survivors: NONE (7/7 killed by both suites, each by a behavioral test).
+  Differential vs registry 0.2.0: byte/deep-identical on Node 24.14.0, 22.18.0, 22.23.3 (after normalizing random review-marker UUIDs).
+
+------------------------------------------------------------------------------------------------
+1. FROZEN JS ORACLE (test tree of 803d880) AGAINST THE FINAL dist/
+------------------------------------------------------------------------------------------------
+Setup: rsync of the validation worktree (no .git) to valtmp/oracle with test/ replaced by
+  `git archive 803d880 test | tar -x -C valtmp/oracle`  (final src/, dist/, scripts/, node_modules kept; dist verified fresh
+  by `node scripts/build-manifest.mts verify` = exit 0).
+Run A (pure oracle), Node 24.14.0:  cd valtmp/oracle && node --test test/*.test.cjs      -> 1-oracle-nogit-node24.txt
+  tests 1759, suites 135, pass 1756, fail 3 (+ test/release.test.cjs fails at load, so its 114 tests never register).
+Run B (oracle + 2 validation-only path shims scripts/release-guard.cjs and scripts/api-docs.cjs that load the final
+  .mts tools; oracle test files byte-unchanged; valtmp/oracle-shim/): cd valtmp/oracle-shimmed && node --test test/*.test.cjs
+  Node 24.14.0 -> 1-oracle-shimmed-node24.txt:   tests 1873, suites 148, pass 1867, fail 6
+  Node 22.18.0 -> 1-oracle-shimmed-node22.18.txt: tests 1873, suites 148, pass 1867, fail 6 (same 6)
+  All 1873 oracle tests executed; 1867 pass.
+Failure classification — (a) behavioral: 0.  (b) pins of a deliberately changed layout/script, each listed:
+  - release.test.cjs (file load, run A): require('../scripts/release-guard.cjs') — renamed to .mts in 940d02c, typed in 9d3ad49.
+  - docs.test.cjs:474/478 "release tooling comments are accurate and durable": reads the text of scripts/release-guard.cjs
+    (ENOENT in A; shim text in B) — 940d02c/9d3ad49.
+  - docs.test.cjs:541 "the staleness check passes ... detects an unregenerated declaration change" (A only): spawns
+    scripts/api-docs.cjs — 940d02c/9d3ad49. Passes in B through the shim (i.e. the final api-docs.mts behaves as pinned).
+  - package.test.cjs:212 "scripts are purpose-named and checks are read-only": pins test script
+    'npm run check:build && node --test test/*.test.cjs' — changed in f2aa51b (and release/api script paths in 9d3ad49).
+  - release.test.cjs:528 / :544 (B) "raising the ceiling to 1 ..." / "a raised ceiling of 1 still refuses 2.0.0": rewrite the
+    guard's source text `MAXIMUM_RELEASE_MAJOR = 0` in scripts/release-guard.cjs (absent from the shim) — 940d02c/9d3ad49.
+    The converted equivalents in test/release.test.mts:559/575 run against the .mts guard and pass (3-matrix logs, ok 18/19).
+  - release.test.cjs:828 "versioning goes through the guard ...": pins 'node scripts/release-guard.cjs version' — 9d3ad49.
+  - release.test.cjs:881 "decides first, then builds ...": pins `node scripts/release-guard.cjs publish-preflight` / verify-pack
+    in .github/workflows/publish.yml — workflow re-pathed to .mts in 9d3ad49.
+  Failing locations: 1-oracle-pure-baseline-failing.txt, 1-oracle-shimmed-baseline-failing.txt.
+
+------------------------------------------------------------------------------------------------
+2. NEGATIVE CONTROLS (mutants seeded into built dist/*.cjs of temp copies, never src)
+------------------------------------------------------------------------------------------------
+Command: bash valtmp/run-mutants.sh (mutate.cjs asserts exactly one match per mutant; per-mutant diffs, logs and failing
+lists in 2-mutants/; summary 2-mutants-run.txt). Suites: frozen oracle = valtmp/oracle-shimmed `node --test test/*.test.cjs`;
+final TS = valtmp/final `node --test "test/**/*.test.mts"` (manifest guard bypassed). Unmutated copy baselines:
+oracle 1867/1873 (the 6 layout pins above), TS 1879/1879 (2-ts-unmutated-copy-node24.txt).
+build.test "this checkout is fresh" (freshness guard) fails for every mutant and is NOT counted as a kill below.
+  Mutant                                   Oracle behavioral kills                   TS behavioral kills
+  M1 GitHubError own `status: undefined`   github.test.cjs:1358, public-api:597      github.test.mts:1747, public-api.test.mts:729
+  M2 CLI JSON receipt key order swapped    cli-commands.test.cjs:850                 cli-commands.test.mts:927
+  M3 conditional spread -> undefined key   prepare-review.test.cjs:360               prepare-review.test.mts:463
+     (attribution.version)
+  M4 Object.freeze removed (GitHub client) github.test.cjs:1394                      github.test.mts:1784
+  M5 __esModule marker on dist/index.cjs   package.test.cjs:623 (installed interop)  package.test.mts:684
+  M6 replacement byte dropped              16 locations / 93 tests (replacements,    16 locations / 93 tests
+     (replacements.cjs slice end+1)        prepare-review, composition, staged, docs) (same areas)
+  M7 rendered markdown separator byte      prepare-review.test.cjs:326, :338         prepare-review.test.mts:429, :441
+SURVIVORS: NONE. Every mutant is killed by both suites by at least one behavioral test.
+
+------------------------------------------------------------------------------------------------
+3. FULL FINAL SUITE PER NODE VERSION (validation worktree, bash valtmp/run-matrix.sh)
+------------------------------------------------------------------------------------------------
+Per Node: `pnpm run build` then `pnpm run check` (= check:lint, check:types, check:api, check:release, test with the
+manifest guard `check:build` then node --test "test/**/*.test.mts"); then `git status --short`.
+  Node 24.14.0: build 0, check 0 — tests 1879, suites 149, pass 1879, fail 0, skipped 0   (3-matrix/node-24.14.0.txt)
+  Node 22.18.0: build 0, check 0 — tests 1879, suites 149, pass 1879, fail 0, skipped 0   (3-matrix/node-22.18.0.txt)
+  Node 22.23.3: build 0, check 0 — tests 1879, suites 149, pass 1879, fail 0, skipped 0   (3-matrix/node-22.23.3.txt)
+  git status clean after each (regenerated api-report/ and docs/api/ byte-identical to committed). Dependencies were the
+  already-installed lockfile install; a fresh `pnpm install --frozen-lockfile` was not repeated.
+
+------------------------------------------------------------------------------------------------
+4. INSTALLED DIFFERENTIAL VS REGISTRY 0.2.0
+------------------------------------------------------------------------------------------------
+Baseline consumer (retained, from baseline-package.json) verified first: 246/246 installed files match the JSON sha256s,
+no extra files, version 0.2.0 (4-baseline-consumer-verify.txt).
+New: `pnpm run build` + `npm pack --json --pack-destination valtmp/pack` (5-build-and-pack.txt, 5-pack.json), tarball sha256
+bfc63b121b40a6fbefd3733d6aa2d07927850f1f5aad365df3d54b5904aa7f4b, installed with `npm install <tgz>` into
+/var/folders/r4/j5y28vpj6258k4_0kn5f33s00000gn/T/sarif-ts-final-S89KR7/consumer (4-new-consumer-location.txt).
+Probe (valtmp/probe.mjs; both packages run in the same work dir valtmp/diffwork so absolute paths match), per Node
+24.14.0 / 22.18.0 / 22.23.3, records: CJS Object.keys + getOwnPropertyNames + typeof + fn name/length/ctor, __esModule
+(in / value), ESM namespace keys, default and named import identity, 'module.exports' key; 13 help invocations (bare,
+--help, -h, help, every `<cmd> --help`, unknown command/flag); 76 CLI runs (init x9, add-comment x15 incl. stdin/markdown/
+new-run/invalid/missing, inspect over 9 repository SARIF fixtures x3 modes + error cases, add-staged-changes on a
+deterministic temp git repo incl. failures, publish/original-form over the fake HTTP GitHub via
+test/fixtures/docs/fake-fetch-preload.mts incl. retry, second state, missing token, invalid SARIF, bad args) with
+stdout/stderr/exit; the fake hosts' stored reviews and request logs; library outcome JSON (key order, undefined-valued keys
+marked) or thrown error (ctor, name, message, own keys, cause) for createSarifDocument x7, addSarifComment x10,
+inspectSarif x23, addStagedChangesToSarif x7, publishSarifReview x13 (invalid inputs + real client over fake HTTP), and
+the private second-argument seam x9 (createGitHubClient: ready publish, retry, approval hold blocked/overridden, token-
+bearing error redaction, token-free error passed through by identity, thrown string, `{}` internals); plus a sha256 of every
+file left in the work dir.
+Normalization: random review-marker UUIDs -> first-appearance ordinals; fake-remote file names (time/pid/random) and
+"pid"; publication-state requestFingerprint (a hash over the UUID-bearing request, compared itself) — normalize.cjs, probe.mjs.
+Results (bash valtmp/run-diff.sh; 4-differential/):
+  old vs new, Node 24.14.0: IDENTICAL (diff.node-24.14.0.txt empty)
+  old vs new, Node 22.18.0: IDENTICAL (diff.node-22.18.0.txt empty)
+  old vs new, Node 22.23.3: IDENTICAL (diff.node-22.23.3.txt empty)
+  noise control new vs new (Node 24): IDENTICAL.  Sensitivity control: 0.2.0 on 22.18 vs 24 differs exactly in the ESM
+  'module.exports' namespace key (present on 24 only, for both packages), as the plan §0.6 records.
+  Interop (both): CJS keys [createSarifDocument, addSarifComment, inspectSarif, addStagedChangesToSarif, publishSarifReview],
+  all functions, no __esModule, default import === require(), named imports identical.
+Parent acceptance runners (logs/opus/m2, run unmodified; they locate the package via the consumer dir argument):
+  installed-typescript-acceptance.cjs <newConsumer> <out>: PASSED on Node 24.14.0 and 22.18.0; all 6 output files
+    byte-identical to the parent's 0.2.0 run in evidence/parent-baseline-acceptance (4-m2-acceptance/output-comparison.txt).
+  installed-insertion-acceptance.cjs <snapshot> <out> local (snapshot 4-m2-acceptance/insertion-snapshot-new.json naming the
+    new consumer/tarball): local-passed on Node 24.14.0 and 22.18.0; enriched.sarif.json and extraction.json byte-identical
+    to m2/parent-insertion-final. Publish mode (live GitHub) not run.
+  installed-local-acceptance.cjs: CANNOT target the new install without modification — it hardcodes
+    `<package>/bin/sarif-to-comment.cjs` (0.2.0 layout; the bin is now dist/sarif-to-comment.cjs per package.json#bin).
+    Recorded failure (MODULE_NOT_FOUND at its first CLI step, after its library step passed): local-new-node24.txt. Its
+    layout-agnostic sibling installed-typescript-acceptance.cjs (resolves bin from package.json) passes, above.
+
+------------------------------------------------------------------------------------------------
+5. TARBALL COMPARISON
+------------------------------------------------------------------------------------------------
+0.2.0: 246 files; new: 247 files; 231 common paths.
+Moved (runtime compiled from src/*.cts, shipped from dist/):
+  bin/sarif-to-comment.cjs            -> dist/sarif-to-comment.cjs (package.json bin updated)
+  src/{artifact-files,cli,github,index,placement,prepare-review,publication,replacements,sarif-authoring,sarif-common,
+       sarif-inspection,staged-changes,staged-git}.cjs (13) -> dist/<same>.cjs (main/exports.default = ./dist/index.cjs)
+  types/index.d.ts (hand-written)     -> dist/sarif-to-comment.d.ts (API Extractor rollup; types/exports.types updated)
+New file: dist/publish-sarif-review.cjs — publishSarifReview's implementation split out of index into its own module (the
+  overload-hidden seam, plan §0.6); runtime-empty type-only modules (public-api.cjs, public-types.cjs), *.d.cts,
+  *.tsbuildinfo and .build-inputs.json are excluded by `files` negations.
+Common files with changed content (5-changed-file-diffs.txt):
+  package.json — main/types/exports/bin/files re-pathed to dist/, devEngines (node >=22.18.0, development only), scripts
+    (.mts tooling, check:build), devDependencies (@types/node, typescript-eslint); engines stays >=22; version 0.2.0.
+  README.md — development/build instructions and .cjs->.mts tool paths; Node 22.18.0 floor for development/publishing.
+  docs/api/sarif-to-comment.md — overview sentence now says declarations are generated from the TypeScript implementation.
+  docs/api/ iinspectionrun(.source,.tool), isarifinspection(.log,.summary) — layout only: tsc prints four inline object
+    literal types multi-line / with trailing `;` (plan checkpoint Wave 3: "api-report/docs drift = layout only").
+All other 222 common files byte-identical (incl. vendor/, CHANGELOG.md, docs/getting-started.md, remaining docs/api/).
+`node scripts/release-guard.mts verify-pack evidence/final/5-pack.json` -> "Verified sarif-to-comment-0.2.0.tgz: 247 files,
+  all inside the distribution boundary." exit 0 (5-verify-pack.txt).
+`npm publish --dry-run ./sarif-to-comment-0.2.0.tgz` -> no warnings/auto-corrections; ends with the registry's expected
+  "You cannot publish over the previously published versions: 0.2.0" (exit 1) (5-publish-dry-run.txt). Control: identical
+  contents repacked with only version 0.2.1-validation.0: `npm publish --dry-run --tag validation <tgz>` exit 0, 247 files,
+  no warn/auto-correct lines (5-publish-dry-run-version-control.txt).
+
+------------------------------------------------------------------------------------------------
+6. INVENTORY (6-inventory.txt, 6-inventory.json, 6-javascript-and-any.txt)
+------------------------------------------------------------------------------------------------
+(a) TypeScript-AST walk (valtmp/inventory.cjs; positive control on a synthetic file detects every construct:
+    6-inventory-positive-control.txt) over all 59 owned .cts/.mts files in src/, test/, scripts/:
+    `as T` (excl. as const): 0   <T>x: 0   non-null x!: 0   AnyKeyword: 0.
+    Enforced by eslint.config.cjs (no-explicit-any, no-non-null-assertion, consistent-type-assertions: never,
+    ban-ts-comment with ts-ignore banned) and test/source-policy.test.mts (reason required on every eslint-disable).
+    94 suppression directives, every one with a written reason (3 prose mentions excluded); none in scripts/:
+      src eslint-disable (18): no-base-to-string 4, no-unnecessary-condition 4 (durable fallbacks kept), no-unsafe-assignment
+        4 + no-require-imports 2 (untyped require of ajv plugins / vendored schema), restrict-template-expressions 2
+        (preserve template-literal coercion), no-unnecessary-type-parameters 1 (exact-type-equality idiom), no-dynamic-delete 1.
+      test eslint-disable (22): require-await 13 (10 next-line, 2 block with matching eslint-enable, 1 line), no-unused-vars 4,
+        no-dynamic-delete 2, only-throw-error 1, no-this-alias 1, unbound-method 1.
+      test @ts-expect-error (54): deliberately invalid inputs proving runtime validation 35; private publishSarifReview seam 4;
+        runtime freezing of readonly-typed values 4; other 2 (github.test.mts:1768 non-GitHubErrorCode kept as authored,
+        prepare-review.test.mts:251 partial boundary outcomes); 9 inside embedded consumer type-test sources in
+        package.test.mts (installed-package negative type controls, not suppressions of owned code).
+    No @ts-ignore / @ts-nocheck anywhere.
+(b) `git ls-files '*.js' '*.cjs' '*.mjs'`: 6 files — eslint.config.cjs (config glue, deliberately JS per plan §2);
+    docs/evidence/suggestion-application/expected-after-apply/two-to-one.js (data: expected file bytes);
+    docs/evidence/suggestion-application/raw/{host,library-run,verify-apply,wire-recorder}.cjs (historical evidence scripts
+    from dfaebb0 that produced committed live-GitHub evidence; not built/tested/shipped). None under src/ test/ scripts/ vendor/.
+(c) No `any` in owned TS: 0 AnyKeyword nodes; grep for `: any|<any>|as any|any[]` matches only prose in comments/test names.
+
+NOT VERIFIED / LIMITS
+  - Live GitHub publication (insertion runner publish mode, remote acceptance) — out of scope, fake HTTP host only.
+  - installed-local-acceptance.cjs against the new layout (hardcoded bin/ path; see item 4).
+  - The probe's own sensitivity was not mutant-tested; its sensitivity is shown by the Node-version ESM-key difference it detects.
+  - Commits after f2aa51b on the integration branch; a fresh `pnpm install --frozen-lockfile` clean checkout.

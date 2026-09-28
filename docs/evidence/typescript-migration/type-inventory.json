@@ -1,0 +1,694 @@
+{
+  "files": [
+    "scripts/api-docs.mts",
+    "scripts/build-manifest.mts",
+    "scripts/build.mts",
+    "scripts/check-types.mts",
+    "scripts/release-guard.mts",
+    "src/artifact-files.cts",
+    "src/cli.cts",
+    "src/github.cts",
+    "src/index.cts",
+    "src/placement.cts",
+    "src/prepare-review.cts",
+    "src/public-api.cts",
+    "src/public-types.cts",
+    "src/publication.cts",
+    "src/publish-sarif-review.cts",
+    "src/replacements.cts",
+    "src/sarif-authoring.cts",
+    "src/sarif-common.cts",
+    "src/sarif-inspection.cts",
+    "src/sarif-to-comment.cts",
+    "src/staged-changes.cts",
+    "src/staged-git.cts",
+    "test/artifact-files.test.mts",
+    "test/build.test.mts",
+    "test/cli-commands.test.mts",
+    "test/cli.test.mts",
+    "test/composition.test.mts",
+    "test/docs.test.mts",
+    "test/fixtures/authoring-workflow/git-world.mts",
+    "test/fixtures/composition/cli-with-fake-http.mts",
+    "test/fixtures/composition/fake-http-github.mts",
+    "test/fixtures/docs/fake-fetch-preload.mts",
+    "test/fixtures/package/installed-package.mts",
+    "test/fixtures/public-api/cli-with-fake-github.mts",
+    "test/fixtures/public-api/fake-adapter.mts",
+    "test/fixtures/publication/child-publish.mts",
+    "test/fixtures/publication/fake-github.mts",
+    "test/fixtures/staged-changes/apply-oracle.mts",
+    "test/fixtures/staged-changes/git-fixture.mts",
+    "test/github.test.mts",
+    "test/installed-workflow.test.mts",
+    "test/package-harness.test.mts",
+    "test/package.test.mts",
+    "test/placement.test.mts",
+    "test/prepare-review.test.mts",
+    "test/public-api.test.mts",
+    "test/publication-state.types.mts",
+    "test/publication.test.mts",
+    "test/release.test.mts",
+    "test/replacements.test.mts",
+    "test/runtime-types.test.mts",
+    "test/sarif-authoring.test.mts",
+    "test/sarif-common.test.mts",
+    "test/sarif-inspection.test.mts",
+    "test/source-policy.test.mts",
+    "test/staged-changes-identity.test.mts",
+    "test/staged-changes-integration.test.mts",
+    "test/staged-changes-supplied-fixes.test.mts",
+    "test/staged-changes.test.mts",
+    "test/support/runtime-types.mts"
+  ],
+  "asAssertions": [],
+  "angleAssertions": [],
+  "nonNull": [],
+  "anyKeyword": [],
+  "suppressions": [
+    {
+      "loc": "src/cli.cts:482",
+      "directive": "eslint-disable-next-line",
+      "text": "// eslint-disable-next-line @typescript-eslint/no-base-to-string -- a thrown value of any type is shown by its message, else by String(), the deliberate total coercion",
+      "nextLine": "lines.push(lines.length === 0 ? String(message) : `  caused by: ${String(message)}`);"
+    },
+    {
+      "loc": "src/cli.cts:535",
+      "directive": "eslint-disable-next-line",
+      "text": "// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- every command has help text; the top-level fallback is kept as the durable guard it always was",
+      "nextLine": "doc: { command, status: 'usage-error', message, usage: USAGE[command ?? 'top'] ?? USAGE.top },"
+    },
+    {
+      "loc": "src/cli.cts:1058",
+      "directive": "eslint-disable-next-line",
+      "text": "// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- every publication status has an exit status; the operational-error fallback is kept as the durable guard it always was",
+      "nextLine": "exit: PUBLISH_EXIT[outcome.status] ?? EXIT.error,"
+    },
+    {
+      "loc": "src/github.cts:654",
+      "directive": "eslint-disable-next-line",
+      "text": "// eslint-disable-next-line @typescript-eslint/no-base-to-string -- deliberately the ToString RegExp#test applies; an object's '[object Object]' form can never match FULL_SHA",
+      "nextLine": "return FULL_SHA.test(String(value ?? ''));"
+    },
+    {
+      "loc": "src/index.cts:43",
+      "directive": "eslint-disable-next-line",
+      "text": "// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- the exact-type-equality idiom needs each T once per side; that is what makes the comparison exact",
+      "nextLine": "type Equals<X, Y> = (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2 ? true : false;"
+    },
+    {
+      "loc": "src/placement.cts:315",
+      "directive": "eslint-disable-next-line",
+      "text": "// eslint-disable-next-line @typescript-eslint/restrict-template-expressions -- reproduces template-literal string conversion of an arbitrary caller-supplied value in a diagnostic message; String() would differ for symbols",
+      "nextLine": "return `${value}`;"
+    },
+    {
+      "loc": "src/prepare-review.cts:184",
+      "directive": "eslint-disable-next-line",
+      "text": "// eslint-disable-next-line @typescript-eslint/no-require-imports -- the vendored JSON schema is data outside the compiled program; require() resolves it one directory above the compiled module, exactly as before",
+      "nextLine": "const SARIF_SCHEMA: unknown = require('../vendor/sarif-schema-2.1.0.json');"
+    },
+    {
+      "loc": "src/prepare-review.cts:767",
+      "directive": "eslint-disable-next-line",
+      "text": "// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- require() is untyped; ajv-draft-04's CommonJS export is the Ajv class, also exposed as `default` (the declarations imported type-only above)",
+      "nextLine": "const AjvDraft04: CommonJsModule<AjvDraft04> = require('ajv-draft-04');"
+    },
+    {
+      "loc": "src/prepare-review.cts:769",
+      "directive": "eslint-disable-next-line",
+      "text": "// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- require() is untyped; ajv-formats' CommonJS export is the formats plugin, also exposed as `default` (the declarations imported type-only above)",
+      "nextLine": "const formats: CommonJsModule<AddFormats> = require('ajv-formats');"
+    },
+    {
+      "loc": "src/prepare-review.cts:1048",
+      "directive": "eslint-disable-next-line",
+      "text": "// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- the schema requires message; the fallback is kept as the durable guard it always was",
+      "nextLine": "const m: ISarifMessage = notification.message || {};"
+    },
+    {
+      "loc": "src/prepare-review.cts:1211",
+      "directive": "eslint-disable-next-line",
+      "text": "// eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- OWNED_NAMESPACE is a module constant, not caller data; deleting it from the copy keeps the other properties' order exactly",
+      "nextLine": "delete uninterpreted[OWNED_NAMESPACE];"
+    },
+    {
+      "loc": "src/publication.cts:1263",
+      "directive": "eslint-disable-next-line",
+      "text": "// eslint-disable-next-line @typescript-eslint/no-base-to-string -- the host's refusal message is untrusted text of any type; String() is the deliberate, total coercion before bounding it (an Error's message is already a string)",
+      "nextLine": "const message = String(err.message ?? '').slice(0, MAX_REJECTION_MESSAGE);"
+    },
+    {
+      "loc": "src/publish-sarif-review.cts:367",
+      "directive": "eslint-disable-next-line",
+      "text": "// eslint-disable-next-line @typescript-eslint/restrict-template-expressions -- reproduces template-literal string conversion of an arbitrary host-supplied value in an error message; String() would differ for symbols",
+      "nextLine": "return `${value}`;"
+    },
+    {
+      "loc": "src/publish-sarif-review.cts:605",
+      "directive": "eslint-disable-next-line",
+      "text": "// eslint-disable-next-line @typescript-eslint/no-base-to-string -- a thrown non-Error of any type is described by String(), the deliberate total coercion",
+      "nextLine": "parts.push(String(current));"
+    },
+    {
+      "loc": "src/publish-sarif-review.cts:783",
+      "directive": "eslint-disable-next-line",
+      "text": "// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- the typed core returns only 'ready' here; the status test is kept as the durable refusal to publish any other outcome",
+      "nextLine": "if (prepared.status !== 'ready' || prepared.review.commitId !== captured.reviewedCommit) {"
+    },
+    {
+      "loc": "src/sarif-common.cts:32",
+      "directive": "eslint-disable-next-line",
+      "text": "// eslint-disable-next-line @typescript-eslint/no-require-imports -- the vendored JSON schema is data outside the compiled program; require() resolves it one directory above the compiled module, exactly as before",
+      "nextLine": "const SARIF_SCHEMA: unknown = require('../vendor/sarif-schema-2.1.0.json');"
+    },
+    {
+      "loc": "src/sarif-common.cts:410",
+      "directive": "eslint-disable-next-line",
+      "text": "// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- require() is untyped; ajv-draft-04's CommonJS export is the Ajv class, also exposed as `default` (the declarations imported type-only above)",
+      "nextLine": "const AjvDraft04: CommonJsModule<AjvDraft04> = require('ajv-draft-04');"
+    },
+    {
+      "loc": "src/sarif-common.cts:412",
+      "directive": "eslint-disable-next-line",
+      "text": "// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- require() is untyped; ajv-formats' CommonJS export is the formats plugin, also exposed as `default` (the declarations imported type-only above)",
+      "nextLine": "const formats: CommonJsModule<AddFormats> = require('ajv-formats');"
+    },
+    {
+      "loc": "test/composition.test.mts:164",
+      "directive": "eslint-disable-next-line",
+      "text": "// eslint-disable-next-line @typescript-eslint/no-unused-vars -- the rest copy omits the body; the omitted binding is intentionally unused",
+      "nextLine": "const { body: _body, ...anchor } = comment;"
+    },
+    {
+      "loc": "test/composition.test.mts:205",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- the private internals seam is deliberately absent from the public declaration; this suite drives the public entry and injects the HTTP-backed real client through the seam it honours at runtime",
+      "nextLine": "internals,"
+    },
+    {
+      "loc": "test/fixtures/composition/fake-http-github.mts:349",
+      "directive": "eslint-disable-next-line",
+      "text": "// eslint-disable-next-line @typescript-eslint/require-await -- fetch is async by contract: a failure, including a synchronous throw, reaches the client as a rejection",
+      "nextLine": "async receive(input: string | URL | Request, init: RequestInit = {}): Promise<Response> {"
+    },
+    {
+      "loc": "test/fixtures/package/installed-package.mts:260",
+      "directive": "eslint-disable-next-line",
+      "text": "// eslint-disable-next-line @typescript-eslint/only-throw-error -- rethrows exactly the value the first install attempt threw",
+      "nextLine": "if (installFailure) throw installFailure;"
+    },
+    {
+      "loc": "test/fixtures/public-api/fake-adapter.mts:240",
+      "directive": "eslint-disable-next-line",
+      "text": "// eslint-disable-next-line @typescript-eslint/require-await -- async by contract: an unknown commit is a rejection, not a synchronous throw",
+      "nextLine": "export async function readSource(commit: string, filePath: string): Promise<string | null> {"
+    },
+    {
+      "loc": "test/fixtures/public-api/fake-adapter.mts:259",
+      "directive": "eslint-disable",
+      "text": "/* eslint-disable @typescript-eslint/require-await -- client methods are async by contract: failures, including synchronous throws, reach the caller as rejections */",
+      "nextLine": "/** A transport method during an outage: records the attempt, then fails as DNS resolution would. */"
+    },
+    {
+      "loc": "test/fixtures/publication/fake-github.mts:573",
+      "directive": "eslint-disable-next-line",
+      "text": "// eslint-disable-next-line @typescript-eslint/no-this-alias -- the transport's methods are plain functions a test may detach or replace; they reach the remote through this binding",
+      "nextLine": "const remote = this;"
+    },
+    {
+      "loc": "test/fixtures/publication/fake-github.mts:595",
+      "directive": "eslint-disable",
+      "text": "/* eslint-disable @typescript-eslint/require-await -- every transport method is async by contract: results and failures, including synchronous throws, reach the caller as promises */",
+      "nextLine": "return {"
+    },
+    {
+      "loc": "test/fixtures/staged-changes/git-fixture.mts:84",
+      "directive": "eslint-disable-next-line",
+      "text": "// eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- removes every inherited GIT_* variable by name",
+      "nextLine": "if (key.startsWith('GIT_')) delete env[key];"
+    },
+    {
+      "loc": "test/github.test.mts:320",
+      "directive": "eslint-disable-next-line",
+      "text": "// eslint-disable-next-line @typescript-eslint/require-await -- fetch is async by contract: a failure, including a synchronous throw, reaches the client as a rejection",
+      "nextLine": "async receive(input: string | URL | Request, init: RequestInit = {}): Promise<Response> {"
+    },
+    {
+      "loc": "test/github.test.mts:871",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- deliberately invalid: proves runtime validation of the API origin (only https://api.github.com is typed or accepted)",
+      "nextLine": "assert.throws(() => createGitHubClient({ token: TOKEN, fetch: host.fetch, apiOrigin }), TypeError, apiOrigin);"
+    },
+    {
+      "loc": "test/github.test.mts:879",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- deliberately invalid: proves runtime validation of a missing token",
+      "nextLine": "assert.throws(() => createGitHubClient({ fetch: host.fetch }), TypeError);"
+    },
+    {
+      "loc": "test/github.test.mts:882",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- deliberately invalid: proves runtime validation that fetch is a function",
+      "nextLine": "assert.throws(() => createGitHubClient({ token: TOKEN, fetch: 'https://api.github.com' }), TypeError);"
+    },
+    {
+      "loc": "test/github.test.mts:911",
+      "directive": "eslint-disable-next-line",
+      "text": "// eslint-disable-next-line @typescript-eslint/unbound-method -- the original methods are only kept to be restored verbatim, never called detached",
+      "nextLine": "const saved = names.map((n) => console[n]);"
+    },
+    {
+      "loc": "test/github.test.mts:1083",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- deliberately invalid: proves runtime refusal of a submission event on a create-review request",
+      "nextLine": "await assert.rejects(client(host).createReview({ ...structuredClone(request), event: 'COMMENT' }), TypeError);"
+    },
+    {
+      "loc": "test/github.test.mts:1086",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- deliberately invalid: proves runtime refusal of an unknown comment field (position)",
+      "nextLine": "at(withPosition.comments, 0, 'comments').position = 5;"
+    },
+    {
+      "loc": "test/github.test.mts:1308",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- deliberately invalid: proves runtime refusal of a continuation cursor (readback accepts only null)",
+      "nextLine": "client(host).listReviewComments({ ...DESTINATION, reviewId: 9001, cursor: '2' }),"
+    },
+    {
+      "loc": "test/github.test.mts:1768",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- 'create-refused' is not a GitHubErrorCode; kept as authored, since this test asserts only status, hostRejected, cause and key order, which the constructor sets independently of the code",
+      "nextLine": "const err = new GitHubError('create-refused', 'Unprocessable Entity', { status: 422, hostRejected: true, cause });"
+    },
+    {
+      "loc": "test/github.test.mts:1790",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- deliberately invalid: proves the frozen client refuses a replaced method at runtime (the property is readonly in the type)",
+      "nextLine": "c.createReview = async () => ({}); // eslint-disable-line @typescript-eslint/require-await -- the replacement is never called: the assignment itself must throw"
+    },
+    {
+      "loc": "test/github.test.mts:1791",
+      "directive": "eslint-disable-line",
+      "text": "c.createReview = async () => ({}); // eslint-disable-line @typescript-eslint/require-await -- the replacement is never called: the assignment itself must throw",
+      "nextLine": "}, TypeError);"
+    },
+    {
+      "loc": "test/github.test.mts:1794",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- deliberately invalid: proves the frozen client refuses a new property at runtime",
+      "nextLine": "c.extra = 1;"
+    },
+    {
+      "loc": "test/package.test.mts:420",
+      "directive": "@ts-expect-error",
+      "text": "* carry `@ts-expect-error`, which itself errors if the line compiles).",
+      "nextLine": "*/"
+    },
+    {
+      "loc": "test/package.test.mts:463",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error destination.pullNumber must be a number",
+      "nextLine": "void publishSarifReview({ sarif: {}, destination: { owner: 'a', repo: 'b', pullNumber: '1' }, reviewedCommit: 'x', statePath: '/s', token: 't' });"
+    },
+    {
+      "loc": "test/package.test.mts:465",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error token is required",
+      "nextLine": "void publishSarifReview({ sarif: {}, destination: { owner: 'a', repo: 'b', pullNumber: 1 }, reviewedCommit: 'x', statePath: '/s' });"
+    },
+    {
+      "loc": "test/package.test.mts:467",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error unknown options are rejected",
+      "nextLine": "void publishSarifReview({ sarif: {}, destination: { owner: 'a', repo: 'b', pullNumber: 1 }, reviewedCommit: 'x', statePath: '/s', token: 't', options: { force: true } });"
+    },
+    {
+      "loc": "test/package.test.mts:469",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error a blocked outcome has no review",
+      "nextLine": "if (outcome.status === 'blocked') void outcome.review;"
+    },
+    {
+      "loc": "test/package.test.mts:523",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error line must be a number",
+      "nextLine": "void addSarifComment(sarif, { file: 'a', line: '2', message: 'm' });"
+    },
+    {
+      "loc": "test/package.test.mts:525",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error the message is required",
+      "nextLine": "void addSarifComment(sarif, { file: 'a', line: 2 });"
+    },
+    {
+      "loc": "test/package.test.mts:527",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error levels are SARIF levels",
+      "nextLine": "void addSarifComment(sarif, { file: 'a', line: 2, message: 'm', level: 'fatal' });"
+    },
+    {
+      "loc": "test/package.test.mts:529",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error the repository is required",
+      "nextLine": "void addStagedChangesToSarif({ sarif, worktree: '/w', reviewedCommit: 'c' });"
+    },
+    {
+      "loc": "test/package.test.mts:531",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error a failed extraction has no SARIF",
+      "nextLine": "if (staged.status === 'failed') void staged.sarif;"
+    },
+    {
+      "loc": "test/prepare-review.test.mts:251",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- the authored boundary answers with partial outcomes: only the fields preparation reads (replacements.json)",
+      "nextLine": "const outcome = await prepareReview(input, internals);"
+    },
+    {
+      "loc": "test/prepare-review.test.mts:1944",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- deliberately invalid: proves the exported limits are frozen at run time",
+      "nextLine": "PRODUCT_LIMITS.maxComments = 1000;"
+    },
+    {
+      "loc": "test/public-api.test.mts:223",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- the private internals seam is deliberately absent from the public declaration; this suite proves the public entry honours it at runtime",
+      "nextLine": "internals,"
+    },
+    {
+      "loc": "test/public-api.test.mts:393",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- deliberately invalid: proves runtime validation of a missing sarif",
+      "nextLine": "'missing sarif': (i) => delete i.sarif,"
+    },
+    {
+      "loc": "test/public-api.test.mts:395",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- deliberately invalid: proves runtime validation of a null sarif",
+      "nextLine": "'null sarif': (i) => (i.sarif = null),"
+    },
+    {
+      "loc": "test/public-api.test.mts:397",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- deliberately invalid: proves runtime validation of an array sarif",
+      "nextLine": "'array sarif': (i) => (i.sarif = [READY]),"
+    },
+    {
+      "loc": "test/public-api.test.mts:399",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- deliberately invalid: proves runtime validation of unparsed SARIF text",
+      "nextLine": "'string sarif (not parsed)': (i) => (i.sarif = JSON.stringify(READY)),"
+    },
+    {
+      "loc": "test/public-api.test.mts:415",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- deliberately invalid: proves runtime validation of a missing destination",
+      "nextLine": "'missing destination': (i) => delete i.destination,"
+    },
+    {
+      "loc": "test/public-api.test.mts:419",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- deliberately invalid: proves runtime validation of a string pull number",
+      "nextLine": "'string pull number': (i) => (i.destination.pullNumber = '7'),"
+    },
+    {
+      "loc": "test/public-api.test.mts:424",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- deliberately invalid: proves runtime validation of a non-string old-source commit",
+      "nextLine": "'non-string old-source commit': (i) => (i.oldSourceCommit = 1234),"
+    },
+    {
+      "loc": "test/public-api.test.mts:426",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- deliberately invalid: proves runtime validation of a missing state path",
+      "nextLine": "'missing state path': (i) => delete i.statePath,"
+    },
+    {
+      "loc": "test/public-api.test.mts:429",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- deliberately invalid: proves runtime validation of a missing token",
+      "nextLine": "'missing token': (i) => delete i.token,"
+    },
+    {
+      "loc": "test/public-api.test.mts:432",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- deliberately invalid: proves runtime validation of a non-string token",
+      "nextLine": "'non-string token': (i) => (i.token = 12345),"
+    },
+    {
+      "loc": "test/public-api.test.mts:437",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- deliberately invalid: proves runtime validation of an unknown option",
+      "nextLine": "'unknown option': (i) => (i.options = { ignoreApprovalHolds: true }),"
+    },
+    {
+      "loc": "test/public-api.test.mts:439",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- deliberately invalid: proves runtime validation of a non-boolean override",
+      "nextLine": "'non-boolean override': (i) => (i.options = { ignoreApprovalHold: 'yes' }),"
+    },
+    {
+      "loc": "test/public-api.test.mts:441",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- deliberately invalid: proves runtime validation of array options",
+      "nextLine": "'array options': (i) => (i.options = []),"
+    },
+    {
+      "loc": "test/public-api.test.mts:443",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- deliberately invalid: proves runtime validation of an unknown top-level field",
+      "nextLine": "'unknown top-level field': (i) => (i.reviewCommit = HEAD),"
+    },
+    {
+      "loc": "test/public-api.test.mts:697",
+      "directive": "eslint-disable-next-line",
+      "text": "// eslint-disable-next-line @typescript-eslint/require-await -- fetchContext is async by contract: its failure reaches the caller as a rejection",
+      "nextLine": "return (args) => ({ ...world.createGitHubClient(args), fetchContext: async () => { throw error; } });"
+    },
+    {
+      "loc": "test/public-api.test.mts:710",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- the private internals seam is deliberately absent from the public declaration; this test proves the public entry honours it at runtime",
+      "nextLine": "{ createGitHubClient: contextThrowing(world, thrown) },"
+    },
+    {
+      "loc": "test/public-api.test.mts:734",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- the private internals seam is deliberately absent from the public declaration; this test proves the public entry honours it at runtime",
+      "nextLine": "{ createGitHubClient: contextThrowing(world, thrown) },"
+    },
+    {
+      "loc": "test/publication-state.types.mts:14",
+      "directive": "@ts-expect-error",
+      "text": "* Each `@ts-expect-error` below fails the check if the declared type becomes",
+      "nextLine": "* narrower than what validation accepts. A `@ts-expect-error` accepts any"
+    },
+    {
+      "loc": "test/publication-state.types.mts:15",
+      "directive": "@ts-expect-error",
+      "text": "* narrower than what validation accepts. A `@ts-expect-error` accepts any",
+      "nextLine": "* error, so the IsUnknown assertions below also pin that a coerced-phase"
+    },
+    {
+      "loc": "test/publication-state.types.mts:85",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- a record whose phase is ['completed'] passes both exclusions with an unvalidated receipt",
+      "nextLine": "return record.receipt.reviewId;"
+    },
+    {
+      "loc": "test/publication-state.types.mts:96",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- a record whose phase is ['rejected'] passes both exclusions with an unvalidated refusal",
+      "nextLine": "return record.rejection.status;"
+    },
+    {
+      "loc": "test/publication-state.types.mts:105",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- array-valued phases of every name reach the investigation branch",
+      "nextLine": "const phase: 'sending' = record.phase;"
+    },
+    {
+      "loc": "test/publication-state.types.mts:115",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- only a 'completed' record is known to hold a receipt",
+      "nextLine": "record.receipt,"
+    },
+    {
+      "loc": "test/publication-state.types.mts:117",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- only a 'rejected' record is known to hold a refusal",
+      "nextLine": "record.rejection,"
+    },
+    {
+      "loc": "test/publication.test.mts:257",
+      "directive": "eslint-disable-next-line",
+      "text": "// eslint-disable-next-line @typescript-eslint/no-unused-vars -- the rest-sibling binding only drops preparedReview from the copy",
+      "nextLine": "const { preparedReview: _unused, ...input } = makeInput(world, options);"
+    },
+    {
+      "loc": "test/publication.test.mts:879",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- deliberately invalid: proves runtime validation of a missing statePath",
+      "nextLine": "(i) => delete i.statePath,"
+    },
+    {
+      "loc": "test/publication.test.mts:883",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- deliberately invalid: proves runtime validation of a missing inputFingerprint",
+      "nextLine": "(i) => delete i.inputFingerprint,"
+    },
+    {
+      "loc": "test/publication.test.mts:886",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- deliberately invalid: proves runtime validation of a prepared review without comments",
+      "nextLine": "(i) => (i.preparedReview = { body: 'x' }),"
+    },
+    {
+      "loc": "test/publication.test.mts:890",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- deliberately invalid: proves runtime validation of a destination without pullNumber",
+      "nextLine": "(i) => (i.destination = { owner: 'octo-org', repo: 'widgets' }),"
+    },
+    {
+      "loc": "test/publication.test.mts:898",
+      "directive": "eslint-disable-next-line",
+      "text": "// eslint-disable-next-line @typescript-eslint/no-unused-vars -- the rest-sibling binding only drops preparedReview from the copy",
+      "nextLine": "const { preparedReview: _p, ...recovery } = makeInput(world);"
+    },
+    {
+      "loc": "test/publication.test.mts:900",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- deliberately invalid: proves runtime validation of a recovery identity without inputFingerprint",
+      "nextLine": "delete recovery.inputFingerprint;"
+    },
+    {
+      "loc": "test/publication.test.mts:960",
+      "directive": "eslint-disable-next-line",
+      "text": "// eslint-disable-next-line @typescript-eslint/require-await -- async like the transport method it replaces: the failure must reach the publisher as a rejection",
+      "nextLine": "input.transport.getAuthenticatedUser = async () => {"
+    },
+    {
+      "loc": "test/publication.test.mts:973",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- deliberately invalid: proves runtime validation of an authenticated user without a numeric id",
+      "nextLine": "// eslint-disable-next-line @typescript-eslint/require-await -- async like the transport method it replaces"
+    },
+    {
+      "loc": "test/publication.test.mts:974",
+      "directive": "eslint-disable-next-line",
+      "text": "// eslint-disable-next-line @typescript-eslint/require-await -- async like the transport method it replaces",
+      "nextLine": "input.transport.getAuthenticatedUser = async () => {"
+    },
+    {
+      "loc": "test/publication.test.mts:1185",
+      "directive": "eslint-disable-next-line",
+      "text": "// eslint-disable-next-line @typescript-eslint/require-await -- async like the transport method it replaces: the refusal must reach the publisher as a rejection",
+      "nextLine": "input.transport.createReview = async () => {"
+    },
+    {
+      "loc": "test/publication.test.mts:1216",
+      "directive": "eslint-disable-next-line",
+      "text": "// eslint-disable-next-line @typescript-eslint/require-await -- async like the transport method it replaces: the refusal must reach the publisher as a rejection",
+      "nextLine": "input.transport.createReview = async () => {"
+    },
+    {
+      "loc": "test/publication.test.mts:1807",
+      "directive": "eslint-disable-next-line",
+      "text": "// eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- builds a record missing exactly the named field",
+      "nextLine": "delete copy[key];"
+    },
+    {
+      "loc": "test/sarif-authoring.test.mts:130",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- deliberately invalid: proves runtime validation of createSarifDocument options",
+      "nextLine": "assert.throws(() => createSarifDocument(options), TypeError);"
+    },
+    {
+      "loc": "test/sarif-authoring.test.mts:237",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- deliberately invalid: proves runtime validation of the run selection",
+      "nextLine": "assert.throws(() => addSarifComment(twoRuns(), { ...comment, run }), TypeError);"
+    },
+    {
+      "loc": "test/sarif-authoring.test.mts:273",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- deliberately invalid: proves runtime validation of the run selection",
+      "nextLine": "assert.throws(() => addSarifComment(twoRuns(), { ...comment, run }), TypeError);"
+    },
+    {
+      "loc": "test/sarif-authoring.test.mts:298",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- deliberately invalid: proves runtime validation of the SARIF argument",
+      "nextLine": "assert.throws(() => addSarifComment(sarif, { file: 'a.js', line: 1, message: 'x' }), TypeError);"
+    },
+    {
+      "loc": "test/sarif-authoring.test.mts:323",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- deliberately invalid: proves runtime validation of the comment",
+      "nextLine": "assert.throws(() => addSarifComment(createSarifDocument(), comment), TypeError);"
+    },
+    {
+      "loc": "test/sarif-inspection.test.mts:385",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- deliberately invalid: proves runtime validation of inspectSarif options",
+      "nextLine": "assert.throws(() => inspectSarif(withInserted('x'), options), TypeError);"
+    },
+    {
+      "loc": "test/sarif-inspection.test.mts:400",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- deliberately invalid: proves runtime validation of a non-object SARIF argument",
+      "nextLine": "assert.throws(() => inspectSarif('{}'), TypeError);"
+    },
+    {
+      "loc": "test/sarif-inspection.test.mts:402",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- deliberately invalid: proves runtime validation of a null SARIF argument",
+      "nextLine": "assert.throws(() => inspectSarif(null), TypeError);"
+    },
+    {
+      "loc": "test/source-policy.test.mts:7",
+      "directive": "eslint-disable",
+      "text": "* comment; this test requires one on every `eslint-disable`,",
+      "nextLine": "* `eslint-disable-line` and `eslint-disable-next-line` in the JavaScript and"
+    },
+    {
+      "loc": "test/source-policy.test.mts:8",
+      "directive": "eslint-disable-line",
+      "text": "* `eslint-disable-line` and `eslint-disable-next-line` in the JavaScript and",
+      "nextLine": "* TypeScript this repository owns. (Directives that no longer suppress"
+    },
+    {
+      "loc": "test/staged-changes-integration.test.mts:116",
+      "directive": "eslint-disable-next-line",
+      "text": "// eslint-disable-next-line @typescript-eslint/require-await -- readSource is async by contract; the Git read is synchronous",
+      "nextLine": "readSource: async (commit: string, p: string) => {"
+    },
+    {
+      "loc": "test/staged-changes.test.mts:369",
+      "directive": "eslint-disable-next-line",
+      "text": "// eslint-disable-next-line @typescript-eslint/require-await -- readSource is async by contract; the Git read is synchronous",
+      "nextLine": "readSource: async (commit: string, p: string) => {"
+    },
+    {
+      "loc": "test/staged-changes.test.mts:896",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- deliberately invalid: proves runtime validation of every input field",
+      "nextLine": "await assert.rejects(addStagedChangesToSarif(bad), TypeError, JSON.stringify(Object.keys(bad)));"
+    },
+    {
+      "loc": "test/staged-changes.test.mts:1084",
+      "directive": "@ts-expect-error",
+      "text": "// @ts-expect-error -- deliberately invalid: proves the table is frozen at run time, not only read-only in its type",
+      "nextLine": "MODE.REGULAR = 0;"
+    },
+    {
+      "loc": "test/support/runtime-types.mts:65",
+      "directive": "eslint-disable-next-line",
+      "text": "// eslint-disable-next-line @typescript-eslint/no-unused-vars -- the parameter exists to be named by the type predicate; every value passes",
+      "nextLine": "export function isUnknown(_value: unknown): _value is unknown {"
+    }
+  ]
+}

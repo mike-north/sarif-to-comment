@@ -1,0 +1,34 @@
+{
+  "sourceCommit": "c19faab6e8071bdd82f3f6571b49562193cde2a5",
+  "workflowSourceCommit": "a1733ef031cf82c8d2b2470af2a5b4711cbf4b0e",
+  "command": "test -z \"$(git status --porcelain -- api-report docs/api | tee /dev/stderr)\"",
+  "status": "passed",
+  "cases": [
+    {
+      "case": "clean outputs",
+      "exit": 0,
+      "reportedPaths": ""
+    },
+    {
+      "case": "changed tracked output",
+      "exit": 1,
+      "reportedPaths": "M docs/api/example.md"
+    },
+    {
+      "case": "deleted tracked output",
+      "exit": 1,
+      "reportedPaths": "D docs/api/example.md"
+    },
+    {
+      "case": "newly generated untracked output",
+      "exit": 1,
+      "reportedPaths": "?? docs/api/new.md"
+    },
+    {
+      "case": "unrelated untracked file",
+      "exit": 0,
+      "reportedPaths": ""
+    }
+  ],
+  "scratch": "/private/tmp/api-freshness-outcomes-b08bcuxo"
+}

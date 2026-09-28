@@ -1,0 +1,51 @@
+{
+  "testedCommit": "a058c24ecdcff347f52f9731ed90ec85bf1a6c79",
+  "acceptedCommit": "dc5dfeed61f7ef5c0a774fa0d2256887d2193ef2",
+  "checkpointOnlyChange": "docs/typescript-migration-plan.md",
+  "gates": [
+    {
+      "node": "24.14.0",
+      "tests": 1917,
+      "suites": 150,
+      "passed": 1917,
+      "failed": 0,
+      "skipped": 0,
+      "operations": [
+        "fresh checkout",
+        "pnpm install --frozen-lockfile",
+        "pnpm run build",
+        "committed API artifact freshness",
+        "pnpm run check"
+      ],
+      "rawLog": "logs/opus/typescript/evidence/final-bound/02-node24.log",
+      "rawLogSha256": "b4afde3bfd861e0ede57990a0b3123289eb41be441c35af0db9f14c32e42b1f1"
+    },
+    {
+      "node": "22.18.0",
+      "tests": 1917,
+      "suites": 150,
+      "passed": 1917,
+      "failed": 0,
+      "skipped": 0,
+      "operations": [
+        "fresh checkout",
+        "pnpm install --frozen-lockfile",
+        "pnpm run build",
+        "committed API artifact freshness",
+        "pnpm run check"
+      ],
+      "rawLog": "logs/opus/typescript/evidence/final-bound/02-node22.log",
+      "rawLogSha256": "49d150dd324d007e4d552a261b463f87e11f72a6459e411249572f85dfd03918"
+    }
+  ],
+  "independentParentChecks": [
+    "source/input hashes unchanged",
+    "installed files identical to independently packed tarball",
+    "original library/CLI source-edit acceptance on Node 24 and 22.18",
+    "original insertion acceptance on Node 24 and 22.18",
+    "generated private state type compile probe",
+    "five committed-artifact gate outcomes",
+    "fresh AST assertion/suppression inventory",
+    "release plan 0.2.0 -> 0.2.1 patch"
+  ]
+}
