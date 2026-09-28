@@ -1,8 +1,6 @@
-'use strict';
-
 /**
  * Contract tests for complete, read-only SARIF inspection
- * (src/sarif-inspection.cjs).
+ * (src/sarif-inspection.cts).
  *
  * Inspection simplifies structure without discarding evidence:
  * - every finding, its full message, every location and every included fix
@@ -20,22 +18,52 @@
  * @see https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/sarif-v2.1.0-errata01-os-complete.html
  */
 
-const test = require('node:test');
-const { describe } = test;
-const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
+import { describe, test } from 'node:test';
+import { AssertionError } from 'node:assert';
+import * as assert from 'node:assert/strict';
+import * as path from 'node:path';
 
-const { inspectSarif, renderInspectionText } = require('../dist/sarif-inspection.cjs');
-const { createSarifDocument, addSarifComment } = require('../dist/sarif-authoring.cjs');
-const { prepareReview } = require('../dist/prepare-review.cjs');
+import { inspectSarif, renderInspectionText } from '../dist/sarif-inspection.cjs';
+import type { IInspectedOutcome, IInspectSarifOptions, ISarifInspection, InspectSarifOutcome } from '../dist/sarif-inspection.cjs';
+import { createSarifDocument, addSarifComment } from '../dist/sarif-authoring.cjs';
+import type { AddSarifCommentOutcome, IAddedSarifCommentOutcome } from '../dist/sarif-authoring.cjs';
+import { prepareReview } from '../dist/prepare-review.cjs';
+import { asArray, asRecord, parseJson, readJson } from './support/runtime-types.mts';
 
-const UPSTREAM = path.join(__dirname, 'fixtures', 'sarif-inspection', 'upstream.sarif.json');
-const loadUpstream = () => JSON.parse(fs.readFileSync(UPSTREAM, 'utf8'));
+const UPSTREAM = path.join(import.meta.dirname, 'fixtures', 'sarif-inspection', 'upstream.sarif.json');
+const loadUpstream = () => asRecord(readJson(UPSTREAM), 'the upstream SARIF fixture');
 const HEAD = 'c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de';
 const ROOT = 'file:///work/app/';
 
-function deepFreeze(value) {
+/**
+ * The value reached from `value` through `keys` (numbers index arrays, strings
+ * index objects). Each step is runtime-checked; only the last may be absent.
+ */
+function dig(value: unknown, ...keys: readonly (string | number)[]): unknown {
+  let current = value;
+  for (const key of keys) current = typeof key === 'number' ? asArray(current)[key] : asRecord(current)[key];
+  return current;
+}
+
+/** A value that must be present (an AssertionError naming `what` otherwise). */
+function defined<T>(value: T | undefined, what: string): T {
+  if (value === undefined) throw new AssertionError({ message: `expected ${what}, got undefined` });
+  return value;
+}
+
+/** The outcome of an inspection that must have succeeded (an AssertionError naming the refusal otherwise). */
+function inspected(outcome: InspectSarifOutcome): IInspectedOutcome {
+  if (outcome.status !== 'inspected') throw new AssertionError({ message: `SARIF refused: ${outcome.markdown}` });
+  return outcome;
+}
+
+/** The outcome of a comment that must have been added (an AssertionError naming the refusal otherwise). */
+function added(outcome: AddSarifCommentOutcome): IAddedSarifCommentOutcome {
+  if (outcome.status !== 'added') throw new AssertionError({ message: `comment refused: ${outcome.markdown}` });
+  return outcome;
+}
+
+function deepFreeze<T>(value: T): T {
   if (value && typeof value === 'object') {
     Object.values(value).forEach(deepFreeze);
     Object.freeze(value);
@@ -44,14 +72,14 @@ function deepFreeze(value) {
 }
 
 /** A complete preview of a text: every line and character shown. */
-function complete(text, lines) {
+function complete(text: string, lines: number) {
   return { state: 'complete', text, totalLines: lines, totalChars: text.length, shownLines: lines, shownChars: text.length };
 }
 
 /** The run's evidence other than the named fields, as the contract requires it be retained. */
-function runOther(run) {
-  const { results, columnKind, versionControlProvenance, ...rest } = run;
-  return rest;
+function runOther(run: unknown): Record<string, unknown> {
+  const named = ['results', 'columnKind', 'versionControlProvenance'];
+  return Object.fromEntries(Object.entries(asRecord(run)).filter(([key]) => !named.includes(key)));
 }
 
 const upstream = loadUpstream();
@@ -86,7 +114,7 @@ const EXPECTED_FINDINGS = [
     relatedLocations: [],
     otherContent: { properties: { sarifToComment: { approval: 'awaiting-approval' } } },
     fixes: ['===', '!=='].map((text, k) => ({
-      ref: `/runs/0/results/1/fixes/${k}`,
+      ref: `/runs/0/results/1/fixes/${String(k)}`,
       changes: [{
         path: 'lib/util.js', uri: 'lib/util.js', artifactLocation: { index: 0 },
         replacements: [{ deletedRegion: { startLine: 5, startColumn: 9, endColumn: 11 }, inserted: complete(text, 1) }],
@@ -109,7 +137,7 @@ const EXPECTED_FINDINGS = [
     ],
     otherContent: {
       rule: { id: 'SEC1', toolComponent: { index: 0 } },
-      codeFlows: upstream.runs[0].results[2].codeFlows,
+      codeFlows: dig(upstream, 'runs', 0, 'results', 2, 'codeFlows'),
       suppressions: [{ kind: 'inSource' }],
     },
     fixes: [],
@@ -137,7 +165,7 @@ const EXPECTED_FINDINGS = [
     message: { text: 'Add docs page and drop old file.', resolved: true },
     locations: [],
     relatedLocations: [],
-    otherContent: { properties: upstream.runs[0].results[4].properties },
+    otherContent: { properties: dig(upstream, 'runs', 0, 'results', 4, 'properties') },
     fixes: [],
     fileProposals: [
       { ref: '/runs/0/results/4/properties/sarifToComment/proposedFileChanges/0', operation: 'create', artifactIndex: 1,
@@ -169,10 +197,10 @@ const EXPECTED_FINDINGS = [
 
 const EXPECTED_RUNS = [
   { index: 0, ref: '/runs/0', tool: { name: 'ESLint', version: '9.1.0' }, source: { state: 'unbound', provenance: [] },
-    columnKind: 'utf16CodeUnits', approval: 'ready', otherContent: runOther(upstream.runs[0]) },
+    columnKind: 'utf16CodeUnits', approval: 'ready', otherContent: runOther(dig(upstream, 'runs', 0)) },
   { index: 1, ref: '/runs/1', tool: { name: 'Review agent' },
-    source: { state: 'declared', provenance: upstream.runs[1].versionControlProvenance },
-    columnKind: 'utf16CodeUnits', otherContent: runOther(upstream.runs[1]) },
+    source: { state: 'declared', provenance: dig(upstream, 'runs', 1, 'versionControlProvenance') },
+    columnKind: 'utf16CodeUnits', otherContent: runOther(dig(upstream, 'runs', 1)) },
 ];
 
 describe('inspectSarif: a complete view of upstream SARIF', () => {
@@ -182,9 +210,9 @@ describe('inspectSarif: a complete view of upstream SARIF', () => {
     const outcome = inspect();
     assert.equal(outcome.status, 'inspected');
     assert.deepStrictEqual(Object.keys(outcome).sort(), ['status', 'view']);
-    assert.deepStrictEqual(Object.keys(outcome.view).sort(), ['diagnostics', 'findings', 'format', 'runs', 'summary', 'version']);
-    assert.equal(outcome.view.format, 'sarif-to-comment.inspection');
-    assert.equal(outcome.view.version, 1);
+    assert.deepStrictEqual(Object.keys(inspected(outcome).view).sort(), ['diagnostics', 'findings', 'format', 'runs', 'summary', 'version']);
+    assert.equal(inspected(outcome).view.format, 'sarif-to-comment.inspection');
+    assert.equal(inspected(outcome).view.version, 1);
   });
 
   test('view fields serialize in a stable order', () => {
@@ -195,56 +223,58 @@ describe('inspectSarif: a complete view of upstream SARIF', () => {
     // (message, location, fix, preview, file proposal) are characterization
     // of 0.2.0, which the contract does not fix.
     const outcome = inspect();
-    const { view } = outcome;
+    const { view } = inspected(outcome);
     assert.deepStrictEqual(Object.keys(outcome), ['status', 'view']);
     assert.deepStrictEqual(Object.keys(view), ['format', 'version', 'summary', 'runs', 'findings', 'diagnostics']);
     assert.deepStrictEqual(Object.keys(view.summary), ['runs', 'findings', 'fixes', 'fileProposals', 'truncatedPreviews']);
-    assert.deepStrictEqual(Object.keys(view.runs[0]), ['index', 'ref', 'tool', 'source', 'columnKind', 'approval', 'otherContent']);
-    assert.deepStrictEqual(Object.keys(view.runs[1]), ['index', 'ref', 'tool', 'source', 'columnKind', 'otherContent']);
-    assert.deepStrictEqual(Object.keys(view.findings[1]), [
+    assert.deepStrictEqual(Object.keys(defined(view.runs[0], 'run 0')), ['index', 'ref', 'tool', 'source', 'columnKind', 'approval', 'otherContent']);
+    assert.deepStrictEqual(Object.keys(defined(view.runs[1], 'run 1')), ['index', 'ref', 'tool', 'source', 'columnKind', 'otherContent']);
+    assert.deepStrictEqual(Object.keys(defined(view.findings[1], 'finding 1')), [
       'ref', 'runIndex', 'resultIndex', 'ruleId', 'level', 'kind', 'approval',
       'message', 'locations', 'relatedLocations', 'otherContent', 'fixes', 'fileProposals',
     ]);
-    assert.deepStrictEqual(Object.keys(view.findings[3]), [
+    assert.deepStrictEqual(Object.keys(defined(view.findings[3], 'finding 3')), [
       'ref', 'runIndex', 'resultIndex', 'message', 'locations', 'relatedLocations', 'otherContent', 'fixes', 'fileProposals',
     ], 'absent optional fields are omitted, not present as undefined');
-    assert.deepStrictEqual(Object.keys(view.findings[2].message), ['id', 'text', 'markdown', 'resolved']);
-    assert.deepStrictEqual(Object.keys(view.findings[0].locations[0]),
+    assert.deepStrictEqual(Object.keys(defined(view.findings[2], 'finding 2').message), ['id', 'text', 'markdown', 'resolved']);
+    assert.deepStrictEqual(Object.keys(defined(view.findings[0]?.locations[0], 'location 0 of finding 0')),
       ['path', 'artifactLocation', 'uri', 'uriBaseId', 'startLine', 'startColumn', 'endColumn', 'snippet']);
-    assert.deepStrictEqual(Object.keys(view.findings[2].locations[0]),
+    assert.deepStrictEqual(Object.keys(defined(view.findings[2]?.locations[0], 'location 0 of finding 2')),
       ['path', 'artifactLocation', 'uri', 'startLine', 'endLine', 'message', 'logical']);
-    const [fix] = view.findings[0].fixes;
+    const fix = defined(view.findings[0]?.fixes[0], 'fix 0 of finding 0');
+    const change = defined(fix.changes[0], 'change 0 of the fix');
+    const replacement = defined(change.replacements[0], 'replacement 0 of the change');
     assert.deepStrictEqual(Object.keys(fix), ['ref', 'description', 'changes']);
-    assert.deepStrictEqual(Object.keys(fix.changes[0]), ['path', 'uri', 'artifactLocation', 'replacements']);
-    assert.deepStrictEqual(Object.keys(fix.changes[0].replacements[0]), ['deletedRegion', 'inserted']);
-    assert.deepStrictEqual(Object.keys(fix.changes[0].replacements[0].inserted),
+    assert.deepStrictEqual(Object.keys(change), ['path', 'uri', 'artifactLocation', 'replacements']);
+    assert.deepStrictEqual(Object.keys(replacement), ['deletedRegion', 'inserted']);
+    assert.deepStrictEqual(Object.keys(replacement.inserted),
       ['state', 'text', 'totalLines', 'totalChars', 'shownLines', 'shownChars']);
-    assert.deepStrictEqual(view.findings[4].fileProposals.map((p) => Object.keys(p)), [
+    assert.deepStrictEqual(view.findings[4]?.fileProposals.map((p) => Object.keys(p)), [
       ['ref', 'operation', 'artifactIndex', 'path', 'fileMode', 'content'],
       ['ref', 'operation', 'artifactIndex', 'path'],
       ['ref', 'operation', 'artifactIndex', 'path', 'otherContent'],
     ]);
-    assert.deepStrictEqual(Object.keys(view.diagnostics[0]), ['severity', 'message', 'pointer']);
+    assert.deepStrictEqual(Object.keys(defined(view.diagnostics[0], 'diagnostic 0')), ['severity', 'message', 'pointer']);
     // The refusal outcome, in contract order (§3.3 InspectOutcome).
     assert.deepStrictEqual(Object.keys(inspectSarif({ version: '2.1.0', runs: [{ results: [] }] })), ['status', 'problems', 'markdown']);
   });
 
   test('summary counts every run, finding, fix and file proposal', () => {
-    assert.deepStrictEqual(inspect().view.summary, { runs: 2, findings: 7, fixes: 4, fileProposals: 3, truncatedPreviews: 0 });
+    assert.deepStrictEqual(inspected(inspect()).view.summary, { runs: 2, findings: 7, fixes: 4, fileProposals: 3, truncatedPreviews: 0 });
   });
 
   test('runs report tool, declared provenance facts, column kind, approval and all other run content', () => {
-    assert.deepStrictEqual(inspect().view.runs, EXPECTED_RUNS);
+    assert.deepStrictEqual(inspected(inspect()).view.runs, EXPECTED_RUNS);
   });
 
   EXPECTED_FINDINGS.forEach((expected, i) => {
     test(`finding ${expected.ref} is complete`, () => {
-      assert.deepStrictEqual(inspect().view.findings[i], expected);
+      assert.deepStrictEqual(inspected(inspect()).view.findings[i], expected);
     });
   });
 
   test('unresolvable messages and paths and unknown owned operations are warnings with pointers', () => {
-    const { diagnostics } = inspect().view;
+    const { diagnostics } = inspected(inspect()).view;
     for (const d of diagnostics) {
       assert.equal(d.severity, 'warning');
       assert.ok(typeof d.message === 'string' && d.message.length > 0);
@@ -257,10 +287,10 @@ describe('inspectSarif: a complete view of upstream SARIF', () => {
   });
 
   test('without a source root, root-relative references stay unresolved but are kept whole', () => {
-    const { view } = inspectSarif(loadUpstream());
-    assert.deepStrictEqual(view.findings[0].locations[0],
+    const { view } = inspected(inspectSarif(loadUpstream()));
+    assert.deepStrictEqual(view.findings[0]?.locations[0],
       { path: null, artifactLocation: { uri: 'app.js', uriBaseId: 'SRC' }, uri: 'app.js', uriBaseId: 'SRC', startLine: 3, startColumn: 7, endColumn: 8, snippet: 'x' });
-    assert.equal(view.findings[0].fixes[0].changes[0].path, null);
+    assert.equal(view.findings[0].fixes[0]?.changes[0]?.path, null);
     assert.ok(view.diagnostics.some((d) => d.pointer === '/runs/0/results/0/locations/0'));
     assert.ok(view.diagnostics.some((d) => d.pointer === '/runs/0/results/0/fixes/0/artifactChanges/0'));
   });
@@ -268,14 +298,14 @@ describe('inspectSarif: a complete view of upstream SARIF', () => {
   test('the input SARIF is untouched and the view is plain JSON', () => {
     const input = deepFreeze(loadUpstream());
     const before = JSON.stringify(input);
-    const { view } = inspectSarif(input, { sourceRootUri: ROOT });
+    const { view } = inspected(inspectSarif(input, { sourceRootUri: ROOT }));
     assert.equal(JSON.stringify(input), before);
-    assert.deepStrictEqual(JSON.parse(JSON.stringify(view)), view);
+    assert.deepStrictEqual(parseJson(JSON.stringify(view)), view);
   });
 
   test('the view makes no readiness or publication claim of its own (producer content aside)', () => {
-    const keys = new Set();
-    const walk = (value) => {
+    const keys = new Set<string>();
+    const walk = (value: unknown): void => {
       if (!value || typeof value !== 'object') return;
       for (const [key, child] of Object.entries(value)) {
         if (Array.isArray(value)) { walk(child); continue; }
@@ -283,19 +313,20 @@ describe('inspectSarif: a complete view of upstream SARIF', () => {
         if (key !== 'otherContent' && key !== 'provenance' && key !== 'deletedRegion') walk(child);
       }
     };
-    walk(inspect().view);
+    walk(inspected(inspect()).view);
     for (const key of keys) assert.ok(!/ready|publish|blocked|eligible|status|valid/i.test(key), `view key ${key}`);
   });
 });
 
 describe('inspectSarif: previews shorten only fix content, visibly', () => {
-  const thirtyLines = Array.from({ length: 30 }, (_, i) => `line ${i + 1}\n`).join('');
-  const withInserted = (text) => ({
+  const thirtyLines = Array.from({ length: 30 }, (_, i) => `line ${String(i + 1)}\n`).join('');
+  const withInserted = (text: string) => ({
     version: '2.1.0',
     runs: [{ tool: { driver: { name: 'T' } }, results: [{ message: { text: 'm' }, fixes: [{ artifactChanges: [{
       artifactLocation: { uri: 'a.txt' }, replacements: [{ deletedRegion: { startLine: 1 }, insertedContent: { text } }] }] }] }] }],
   });
-  const preview = (text, options) => inspectSarif(withInserted(text), options).view.findings[0].fixes[0].changes[0].replacements[0].inserted;
+  const preview = (text: string, options?: IInspectSarifOptions) =>
+    inspected(inspectSarif(withInserted(text), options)).view.findings[0]?.fixes[0]?.changes[0]?.replacements[0]?.inserted;
 
   test('the default 20-line limit shows whole lines and exact counts', () => {
     const shown = thirtyLines.split('\n').slice(0, 20).join('\n') + '\n';
@@ -305,9 +336,9 @@ describe('inspectSarif: previews shorten only fix content, visibly', () => {
 
   test('a truncated preview is counted in the summary, and the SARIF keeps the full text', () => {
     const sarif = deepFreeze(withInserted(thirtyLines));
-    const { view } = inspectSarif(sarif);
+    const { view } = inspected(inspectSarif(sarif));
     assert.equal(view.summary.truncatedPreviews, 1);
-    assert.equal(sarif.runs[0].results[0].fixes[0].artifactChanges[0].replacements[0].insertedContent.text, thirtyLines);
+    assert.equal(sarif.runs[0]?.results[0]?.fixes[0]?.artifactChanges[0]?.replacements[0]?.insertedContent.text, thirtyLines);
   });
 
   test('null limits show everything', () => {
@@ -335,15 +366,15 @@ describe('inspectSarif: previews shorten only fix content, visibly', () => {
   test('messages are never shortened, however long', () => {
     const long = 'word '.repeat(5000);
     const sarif = { version: '2.1.0', runs: [{ tool: { driver: { name: 'T' } }, results: [{ message: { text: long } }] }] };
-    assert.equal(inspectSarif(sarif, { previewChars: 10 }).view.findings[0].message.text, long);
+    assert.equal(inspected(inspectSarif(sarif, { previewChars: 10 })).view.findings[0]?.message.text, long);
   });
 
   test('file-proposal content previews follow the same limits', () => {
     const sarif = { version: '2.1.0', runs: [{ tool: { driver: { name: 'T' } },
       artifacts: [{ location: { uri: 'new.txt' }, contents: { text: thirtyLines } }],
       results: [{ message: { text: 'm' }, properties: { sarifToComment: { proposedFileChanges: [{ operation: 'create', artifactIndex: 0 }] } } }] }] };
-    const { view } = inspectSarif(sarif, { previewLines: 5 });
-    assert.equal(view.findings[0].fileProposals[0].content.state, 'truncated');
+    const { view } = inspected(inspectSarif(sarif, { previewLines: 5 }));
+    assert.equal(view.findings[0]?.fileProposals[0]?.content?.state, 'truncated');
     assert.equal(view.findings[0].fileProposals[0].content.shownLines, 5);
     assert.equal(view.summary.truncatedPreviews, 1);
   });
@@ -351,6 +382,7 @@ describe('inspectSarif: previews shorten only fix content, visibly', () => {
   for (const options of [{ previewLines: 0 }, { previewLines: -1 }, { previewLines: 1.5 }, { previewLines: 'all' }, { previewChars: 0 },
     { sourceRootUri: 'work/app/' }, { sourceRootUri: 'file:///work/app' }, { depth: 2 }, 'x']) {
     test(`malformed options are a TypeError: ${JSON.stringify(options)}`, () => {
+      // @ts-expect-error -- deliberately invalid: proves runtime validation of inspectSarif options
       assert.throws(() => inspectSarif(withInserted('x'), options), TypeError);
     });
   }
@@ -361,14 +393,16 @@ describe('inspectSarif: refusals', () => {
     const outcome = inspectSarif({ version: '2.1.0', runs: [{ tool: { driver: { name: 'T' } }, results: [{ ruleId: 'R' }] }] });
     assert.equal(outcome.status, 'invalid');
     assert.ok(outcome.problems.length > 0 && typeof outcome.markdown === 'string');
-    assert.equal(outcome.view, undefined);
+    assert.equal(asRecord(outcome)['view'], undefined);
   });
 
   test('non-object or non-JSON SARIF is a TypeError', () => {
+    // @ts-expect-error -- deliberately invalid: proves runtime validation of a non-object SARIF argument
     assert.throws(() => inspectSarif('{}'), TypeError);
+    // @ts-expect-error -- deliberately invalid: proves runtime validation of a null SARIF argument
     assert.throws(() => inspectSarif(null), TypeError);
-    const cyclic = { version: '2.1.0', runs: [] };
-    cyclic.self = cyclic;
+    const cyclic: Record<string, unknown> = { version: '2.1.0', runs: [] };
+    cyclic['self'] = cyclic;
     assert.throws(() => inspectSarif(cyclic), TypeError);
   });
 });
@@ -376,14 +410,14 @@ describe('inspectSarif: refusals', () => {
 describe('inspectSarif: authored and upstream SARIF alike', () => {
   test('an authored single-line and range comment round-trip with full text', () => {
     let doc = createSarifDocument({ tool: { name: 'Review agent' }, source: { owner: 'acme', repo: 'widgets', commit: HEAD } });
-    doc = addSarifComment(doc, { file: 'docs/guide notes/Überblick.md', line: 2, message: 'First.' }).sarif;
-    doc = addSarifComment(doc, { file: 'src/app.js', line: 16, endLine: 18, message: 'Use **bold**.', messageFormat: 'markdown', level: 'note' }).sarif;
-    const { view } = inspectSarif(doc);
+    doc = added(addSarifComment(doc, { file: 'docs/guide notes/Überblick.md', line: 2, message: 'First.' })).sarif;
+    doc = added(addSarifComment(doc, { file: 'src/app.js', line: 16, endLine: 18, message: 'Use **bold**.', messageFormat: 'markdown', level: 'note' })).sarif;
+    const { view } = inspected(inspectSarif(doc));
     assert.deepStrictEqual(view.findings.map((f) => ({ message: f.message, locations: f.locations.map((l) => [l.path, l.startLine, l.endLine]), level: f.level })), [
       { message: { text: 'First.', resolved: true }, locations: [['docs/guide notes/Überblick.md', 2, undefined]], level: undefined },
       { message: { text: 'Use **bold**.', markdown: 'Use **bold**.', resolved: true }, locations: [['src/app.js', 16, 18]], level: 'note' },
     ]);
-    assert.deepStrictEqual(view.runs[0].source, { state: 'declared', provenance: [{ repositoryUri: 'https://github.com/acme/widgets', revisionId: HEAD }] });
+    assert.deepStrictEqual(view.runs[0]?.source, { state: 'declared', provenance: [{ repositoryUri: 'https://github.com/acme/widgets', revisionId: HEAD }] });
   });
 
   test('located paths agree with where the publisher reads source', async () => {
@@ -400,27 +434,27 @@ describe('inspectSarif: authored and upstream SARIF alike', () => {
         ],
       }],
     };
-    const reads = [];
+    const reads: string[] = [];
     const outcome = await prepareReview({
       sarif,
       context: { owner: 'acme', repo: 'widgets', pullNumber: 1, reviewedCommit: HEAD, sourceRootUri: ROOT,
         diff: { baseCommit: 'ba5eba5eba5eba5eba5eba5eba5eba5eba5eba5e', headCommit: HEAD, files: [] } },
-      readSource: async (commit, p) => { reads.push(p); return 'one\ntwo\n'; },
+      readSource: (_commit: string, p: string) => { reads.push(p); return Promise.resolve('one\ntwo\n'); },
     });
-    assert.equal(outcome.status, 'ready', JSON.stringify(outcome.diagnostics));
-    const { view } = inspectSarif(sarif, { sourceRootUri: ROOT });
-    assert.deepStrictEqual(view.findings.map((f) => f.locations[0].path), reads);
-    assert.deepStrictEqual(outcome.evidence.map((e) => [e.source.path, e.source.startLine]),
-      view.findings.map((f) => [f.locations[0].path, f.locations[0].startLine]));
+    assert.equal(outcome.status, 'ready', JSON.stringify(asRecord(outcome)['diagnostics']));
+    const { view } = inspected(inspectSarif(sarif, { sourceRootUri: ROOT }));
+    assert.deepStrictEqual(view.findings.map((f) => f.locations[0]?.path), reads);
+    assert.deepStrictEqual(outcome.evidence.map((e) => [e.source?.path, e.source?.startLine]),
+      view.findings.map((f) => [f.locations[0]?.path, f.locations[0]?.startLine]));
   });
 });
 
 describe('renderInspectionText: one human rendering of the same view', () => {
   test('shows full text, tool, locations or "general", and grouped fixes with explicit truncation markers', () => {
-    const long = Array.from({ length: 30 }, (_, i) => `line ${i + 1}`).join('\n') + '\n';
+    const long = Array.from({ length: 30 }, (_, i) => `line ${String(i + 1)}`).join('\n') + '\n';
     const sarif = loadUpstream();
-    sarif.runs[0].results[3].fixes[0].artifactChanges[0].replacements[0].insertedContent.text = long;
-    const { view } = inspectSarif(sarif, { sourceRootUri: ROOT });
+    asRecord(dig(sarif, 'runs', 0, 'results', 3, 'fixes', 0, 'artifactChanges', 0, 'replacements', 0, 'insertedContent'))['text'] = long;
+    const { view } = inspected(inspectSarif(sarif, { sourceRootUri: ROOT }));
     const text = renderInspectionText(view);
     assert.equal(typeof text, 'string');
     for (const expected of [
@@ -447,11 +481,11 @@ describe('renderInspectionText: one human rendering of the same view', () => {
 // Evidence-fidelity regressions: no message alternative, argument, metadata
 // or nested evidence may be lost from the JSON view or the human rendering.
 
-const EVIDENCE = path.join(__dirname, 'fixtures', 'sarif-inspection', 'evidence.sarif.json');
-const loadEvidence = () => JSON.parse(fs.readFileSync(EVIDENCE, 'utf8'));
+const EVIDENCE = path.join(import.meta.dirname, 'fixtures', 'sarif-inspection', 'evidence.sarif.json');
+const loadEvidence = () => asRecord(readJson(EVIDENCE), 'the evidence SARIF fixture');
 
 /** Every string leaf of a value, with the pointer where it occurs. */
-function stringLeaves(value, pointer = '', into = []) {
+function stringLeaves(value: unknown, pointer = '', into: [string, string][] = []): [string, string][] {
   if (typeof value === 'string') into.push([pointer, value]);
   else if (value && typeof value === 'object') {
     for (const [key, child] of Object.entries(value)) stringLeaves(child, `${pointer}/${key}`, into);
@@ -463,7 +497,7 @@ function stringLeaves(value, pointer = '', into = []) {
  * Whether the human text shows a string: verbatim, JSON-escaped (inside a
  * rendered JSON block), or line by line (inside a prefixed preview or block).
  */
-function shows(text, value) {
+function shows(text: string, value: string): boolean {
   if (text.includes(value) || text.includes(JSON.stringify(value).slice(1, -1))) return true;
   const lines = value.split('\n').filter((line) => line.trim() !== '');
   return lines.length > 0 && lines.every((line) => text.includes(line));
@@ -472,7 +506,7 @@ function shows(text, value) {
 /** View fields that are rendering vocabulary rather than SARIF evidence. */
 const VOCABULARY = new Set(['/format', 'state', 'severity']);
 
-function assertHumanShowsEveryString(view) {
+function assertHumanShowsEveryString(view: ISarifInspection): string {
   const text = renderInspectionText(view);
   const missing = stringLeaves(view).filter(([pointer, value]) => {
     const key = pointer.slice(pointer.lastIndexOf('/') + 1);
@@ -484,50 +518,50 @@ function assertHumanShowsEveryString(view) {
 }
 
 describe('regression: message alternatives, arguments and metadata are never discarded', () => {
-  const inspect = () => inspectSarif(loadEvidence()).view;
+  const inspect = () => inspected(inspectSarif(loadEvidence())).view;
 
   test('a location message keeps its string and gains its Markdown alternative', () => {
-    const location = inspect().findings[0].locations[0];
-    assert.equal(location.message, 'short label');
+    const location = inspect().findings[0]?.locations[0];
+    assert.equal(location?.message, 'short label');
     assert.deepStrictEqual(location.messageContent,
       { text: 'short label', markdown: 'Read **critical alternate explanation**', resolved: true });
   });
 
   test('a fix description keeps its string and gains its Markdown alternative', () => {
-    const fix = inspect().findings[0].fixes[0];
-    assert.equal(fix.description, 'short fix');
+    const fix = inspect().findings[0]?.fixes[0];
+    assert.equal(fix?.description, 'short fix');
     assert.deepStrictEqual(fix.descriptionContent,
       { text: 'short fix', markdown: 'Retain **critical alternative rationale**', resolved: true });
   });
 
   test('a plain resolved location message adds no redundant content object', () => {
-    const { view } = inspectSarif(loadUpstream(), { sourceRootUri: ROOT });
-    assert.equal(view.findings[2].locations[0].message, 'sink');
+    const { view } = inspected(inspectSarif(loadUpstream(), { sourceRootUri: ROOT }));
+    assert.equal(view.findings[2]?.locations[0]?.message, 'sink');
     assert.equal(view.findings[2].locations[0].messageContent, undefined);
   });
 
   test('an unresolved message id keeps its arguments', () => {
-    assert.deepStrictEqual(inspect().findings[1].message, { id: 'nope', arguments: ['arg-alpha', 'arg-beta'], resolved: false });
+    assert.deepStrictEqual(inspect().findings[1]?.message, { id: 'nope', arguments: ['arg-alpha', 'arg-beta'], resolved: false });
   });
 
   test('an unresolved location message id keeps its id and arguments', () => {
-    const location = inspect().findings[1].locations[0];
+    const location = defined(inspect().findings[1]?.locations[0], 'location 0 of finding 1');
     assert.equal(location.message, undefined);
     assert.deepStrictEqual(location.messageContent, { id: 'location-nope', arguments: ['loc-arg'], resolved: false });
   });
 
   test('a message with a missing argument keeps its template and the supplied arguments', () => {
-    assert.deepStrictEqual(inspect().findings[2].message,
+    assert.deepStrictEqual(inspect().findings[2]?.message,
       { text: 'Needs only-one and {1}', arguments: ['only-one'], resolved: false });
   });
 
   test('message metadata is retained', () => {
-    assert.deepStrictEqual(inspect().findings[3].message,
+    assert.deepStrictEqual(inspect().findings[3]?.message,
       { text: 'Message with metadata.', resolved: true, otherContent: { properties: { 'acme/tag': 'message-property-value' } } });
   });
 
   test('an unknown owned operation keeps every detail', () => {
-    assert.deepStrictEqual(inspect().findings[4].fileProposals, [{
+    assert.deepStrictEqual(inspect().findings[4]?.fileProposals, [{
       ref: '/runs/0/results/4/properties/sarifToComment/proposedFileChanges/0', operation: 'rename', artifactIndex: 0,
       path: 'lib/old.js', otherContent: { targetUri: 'new/place.js', reason: 'moved-for-layering' },
     }]);
@@ -536,7 +570,7 @@ describe('regression: message alternatives, arguments and metadata are never dis
 
 describe('regression: the human rendering shows the same evidence as the JSON view', () => {
   test('every string in the evidence fixture\'s view appears in the human text', () => {
-    const text = assertHumanShowsEveryString(inspectSarif(loadEvidence()).view);
+    const text = assertHumanShowsEveryString(inspected(inspectSarif(loadEvidence())).view);
     for (const expected of [
       'Read **critical alternate explanation**', 'Retain **critical alternative rationale**',
       '?run@util@@YAXXZ', 'kind: function', 'context snippet text', 'flow step message', 'fingerprint-value',
@@ -549,12 +583,12 @@ describe('regression: the human rendering shows the same evidence as the JSON vi
   });
 
   test('every string in the upstream fixture\'s view appears in the human text', () => {
-    assertHumanShowsEveryString(inspectSarif(loadUpstream(), { sourceRootUri: ROOT }).view);
-    assertHumanShowsEveryString(inspectSarif(loadUpstream()).view);
+    assertHumanShowsEveryString(inspected(inspectSarif(loadUpstream(), { sourceRootUri: ROOT })).view);
+    assertHumanShowsEveryString(inspected(inspectSarif(loadUpstream())).view);
   });
 
   test('the human rendering never dumps whole runs or findings as raw SARIF', () => {
-    const text = renderInspectionText(inspectSarif(loadEvidence()).view);
+    const text = renderInspectionText(inspected(inspectSarif(loadEvidence())).view);
     // Nested evidence such as code flows legitimately contains locations, so
     // only markers of a whole result or run being dumped are forbidden.
     for (const raw of ['"results"', '"ruleId"', '"fixes"', '"artifactChanges"']) {
@@ -564,7 +598,7 @@ describe('regression: the human rendering shows the same evidence as the JSON vi
 });
 
 test('regression: an unknown operation\'s details are shown with its proposal, not only in raw properties', () => {
-  const text = renderInspectionText(inspectSarif(loadEvidence()).view);
+  const text = renderInspectionText(inspected(inspectSarif(loadEvidence())).view);
   const proposal = text.indexOf('File proposal (/runs/0/results/4/properties/sarifToComment/proposedFileChanges/0): rename lib/old.js');
   assert.ok(proposal !== -1, text);
   const block = text.slice(proposal, text.indexOf('Other finding evidence', proposal));
@@ -575,18 +609,18 @@ test('regression: an unknown operation\'s details are shown with its proposal, n
 // Log-level and content-level evidence must remain visible without inventing
 // relationships between embedded properties and the normalized findings.
 
-const LOG_EVIDENCE = path.join(__dirname, 'fixtures', 'sarif-inspection', 'log-evidence.sarif.json');
-const loadLogEvidence = () => JSON.parse(fs.readFileSync(LOG_EVIDENCE, 'utf8'));
+const LOG_EVIDENCE = path.join(import.meta.dirname, 'fixtures', 'sarif-inspection', 'log-evidence.sarif.json');
+const loadLogEvidence = () => asRecord(readJson(LOG_EVIDENCE), 'the log-evidence SARIF fixture');
 
 describe('regression: log-level evidence is retained', () => {
-  const inspect = () => inspectSarif(loadLogEvidence()).view;
+  const inspect = () => inspected(inspectSarif(loadLogEvidence())).view;
 
   test('log properties appear in the view', () => {
     assert.deepStrictEqual(inspect().log, { otherContent: { properties: { producerRunId: 'ci-42', note: 'log-level metadata' } } });
   });
 
   test('inline external properties are kept verbatim, without inventing a run association', () => {
-    const source = loadLogEvidence().inlineExternalProperties;
+    const source = asArray(loadLogEvidence()['inlineExternalProperties']);
     assert.deepStrictEqual(inspect().externalProperties, [
       { ref: '/inlineExternalProperties/0', results: 2, content: source[0] },
       { ref: '/inlineExternalProperties/1', results: 0, content: source[1] },
@@ -607,19 +641,19 @@ describe('regression: log-level evidence is retained', () => {
   test('a declared external run association is preserved without claiming it is absent', () => {
     const source = loadLogEvidence();
     const runGuid = '12345678-1234-4234-8234-123456789abc';
-    source.runs[0].automationDetails = { guid: runGuid };
-    source.inlineExternalProperties[0].runGuid = runGuid;
+    asRecord(dig(source, 'runs', 0))['automationDetails'] = { guid: runGuid };
+    asRecord(dig(source, 'inlineExternalProperties', 0))['runGuid'] = runGuid;
     const outcome = inspectSarif(source);
     assert.equal(outcome.status, 'inspected');
-    assert.equal(outcome.view.externalProperties[0].content.runGuid, runGuid);
-    const diagnostic = outcome.view.diagnostics.find((item) => item.pointer === '/inlineExternalProperties/0');
+    assert.equal(outcome.view.externalProperties?.[0]?.content['runGuid'], runGuid);
+    const diagnostic = defined(outcome.view.diagnostics.find((item) => item.pointer === '/inlineExternalProperties/0'), 'the external-properties diagnostic');
     assert.doesNotMatch(diagnostic.message, /no run association|belong to no run/);
     assert.match(diagnostic.message, /does not merge/);
     assert.ok(renderInspectionText(outcome.view).includes(runGuid));
   });
 
   test('a log with no log-level evidence gains no new fields', () => {
-    const { view } = inspectSarif(loadUpstream(), { sourceRootUri: ROOT });
+    const { view } = inspected(inspectSarif(loadUpstream(), { sourceRootUri: ROOT }));
     assert.equal(view.log, undefined);
     assert.equal(view.externalProperties, undefined);
     assert.equal(view.summary.externalFindings, undefined);
@@ -627,33 +661,33 @@ describe('regression: log-level evidence is retained', () => {
 });
 
 describe('regression: artifact-content metadata is retained', () => {
-  const replacements = () => inspectSarif(loadLogEvidence()).view.findings[0].fixes[0].changes[0].replacements;
+  const replacements = () => inspected(inspectSarif(loadLogEvidence())).view.findings[0]?.fixes[0]?.changes[0]?.replacements;
 
   test('insertedContent properties and rendered form accompany the text preview', () => {
-    assert.deepStrictEqual(replacements()[0].inserted, {
+    assert.deepStrictEqual(replacements()?.[0]?.inserted, {
       state: 'complete', text: 'new\n', totalLines: 1, totalChars: 4, shownLines: 1, shownChars: 4,
       otherContent: { properties: { rationale: 'kept?' }, rendered: { text: 'rendered form' } },
     });
   });
 
   test('a binary alternative is kept when the text is previewed', () => {
-    assert.deepStrictEqual(replacements()[1].inserted.otherContent, { binary: 'Ym90aAo=' });
+    assert.deepStrictEqual(replacements()?.[1]?.inserted.otherContent, { binary: 'Ym90aAo=' });
   });
 
   test('proposed file content keeps its rendered form', () => {
-    const [proposal] = inspectSarif(loadLogEvidence()).view.findings[1].fileProposals;
-    assert.deepStrictEqual(proposal.content.otherContent, { rendered: { text: 'rendered artifact form' } });
+    const proposal = inspected(inspectSarif(loadLogEvidence())).view.findings[1]?.fileProposals[0];
+    assert.deepStrictEqual(proposal?.content?.otherContent, { rendered: { text: 'rendered artifact form' } });
   });
 
   test('plain text content gains no otherContent', () => {
-    const { view } = inspectSarif(loadUpstream(), { sourceRootUri: ROOT });
-    assert.equal(view.findings[1].fixes[0].changes[0].replacements[0].inserted.otherContent, undefined);
+    const { view } = inspected(inspectSarif(loadUpstream(), { sourceRootUri: ROOT }));
+    assert.equal(view.findings[1]?.fixes[0]?.changes[0]?.replacements[0]?.inserted.otherContent, undefined);
   });
 });
 
 describe('regression: the human rendering shows log-level and content evidence', () => {
   test('every string in the view appears in the human text, and embedded findings are called out', () => {
-    const text = assertHumanShowsEveryString(inspectSarif(loadLogEvidence()).view);
+    const text = assertHumanShowsEveryString(inspected(inspectSarif(loadLogEvidence())).view);
     for (const expected of ['ci-42', 'log-level metadata', 'a finding kept in external properties', 'a second embedded finding',
       'kept?', 'rendered form', 'rendered artifact form', 'Ym90aAo=', 'results.sarif-external-properties.json']) {
       assert.ok(text.includes(expected), `human rendering lacks ${JSON.stringify(expected)}`);

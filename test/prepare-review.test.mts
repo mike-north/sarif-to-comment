@@ -1,7 +1,5 @@
-'use strict';
-
 /**
- * Contract tests for whole-review preparation (src/prepare-review.cjs).
+ * Contract tests for whole-review preparation (src/prepare-review.cts).
  *
  * Preparation turns a ready SARIF document into the complete body and inline
  * comments of one draft review, or blocks the whole review before any write.
@@ -30,58 +28,151 @@
  * @see https://www.rfc-editor.org/rfc/rfc6901
  */
 
-const test = require('node:test');
-const { describe } = test;
-const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const { spawnSync } = require('node:child_process');
+import { describe, test } from 'node:test';
+import * as assert from 'node:assert/strict';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { spawnSync } from 'node:child_process';
 
-const { prepareReview, PRODUCT_LIMITS } = require('../dist/prepare-review.cjs');
+import { prepareReview, PRODUCT_LIMITS } from '../dist/prepare-review.cjs';
+import type { Evidence, IBlockedOutcome, IDiagnostic, IReadyOutcome, PrepareReviewOutcome } from '../dist/prepare-review.cjs';
+import { applyReplacement } from '../dist/replacements.cjs';
+import type { IReplacementRequest } from '../dist/replacements.cjs';
+import {
+  asArray,
+  asRecord,
+  expectType,
+  isArray,
+  isArrayOf,
+  isBoolean,
+  isNumber,
+  isOptional,
+  isRecordOf,
+  isShape,
+  isString,
+  isUnknown,
+  readJson,
+} from './support/runtime-types.mts';
+import type { Guard } from './support/runtime-types.mts';
 
-const FIXTURE_DIR = path.join(__dirname, 'fixtures', 'prepare-review');
-const loadJson = (name) => JSON.parse(fs.readFileSync(path.join(FIXTURE_DIR, name), 'utf8'));
+const FIXTURE_DIR = path.join(import.meta.dirname, 'fixtures', 'prepare-review');
+const loadJson = (name: string): unknown => readJson(path.join(FIXTURE_DIR, name));
 
-const repository = loadJson('repository.json');
-const replacementTable = loadJson('replacements.json');
-const completeExpected = loadJson('complete-review.expected.json');
+/** A [commit, path] pair naming one authored snapshot file. */
+const isSourceRef: Guard<[string, string]> = (value): value is [string, string] =>
+  isArray(value) && value.length === 2 && value.every(isString);
+
+const repository = expectType(loadJson('repository.json'), isShape({
+  commits: isShape({ base: isString, head: isString, earlierHead: isString, otherRepository: isString }),
+  destination: isShape({ owner: isString, repo: isString, pullNumber: isNumber }),
+  snapshots: isRecordOf(isRecordOf(isArrayOf(isString))),
+  diff: isShape({ baseCommit: isString, headCommit: isString, files: isArrayOf(isShape({ path: isString, patch: isArrayOf(isString) })) }),
+}), 'the prepare-review repository fixture');
+const replacementTable = expectType(loadJson('replacements.json'), isShape({
+  entries: isArrayOf(isShape({
+    id: isString,
+    request: isShape({ source: isSourceRef, deletedRegion: isUnknown, insertedText: isUnknown }),
+    response: isShape({
+      kind: isString,
+      startLine: isOptional(isNumber),
+      endLine: isOptional(isNumber),
+      originalText: isOptional(isString),
+      replacementText: isOptional(isString),
+      editedTextLines: isOptional(isArrayOf(isString)),
+    }),
+  })),
+}), 'the authored replacement boundary');
+const isExpectedSource = isShape({ commit: isString, path: isString, startLine: isNumber, endLine: isNumber, text: isString });
+const completeExpected = expectType(loadJson('complete-review.expected.json'), isShape({
+  comments: isArrayOf(isShape({
+    path: isString, side: isString, line: isNumber, startLine: isOptional(isNumber), startSide: isOptional(isString), hostText: isString,
+  })),
+  bodySections: isArrayOf(isString),
+  evidence: isArrayOf(isShape({
+    pointer: isString,
+    source: isOptional(isExpectedSource),
+    replacement: isOptional(isShape({ startLine: isNumber, endLine: isNumber, originalText: isString, replacementText: isString })),
+  })),
+  readSourceCalls: isArray,
+}), 'the complete review expectation');
 
 const { base: BASE, head: HEAD, earlierHead: EARLIER, otherRepository: OTHER } = repository.commits;
 const { owner: OWNER, repo: REPO, pullNumber: PULL } = repository.destination;
 const SEP = '\n\n---\n\n';
 
-const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
+const hasOwn = (object: object, key: string): boolean => Object.prototype.hasOwnProperty.call(object, key);
+
+/** A value the test data guarantees (a TypeError otherwise, as dereferencing the missing value would be). */
+function present<T>(value: T | null | undefined, what: string): T {
+  if (value === undefined || value === null) throw new TypeError(`${what} is missing`);
+  return value;
+}
+
+/**
+ * The value reached from `value` through `keys` (numbers index arrays, strings
+ * index objects), whatever variant of a union each step is. Each step is
+ * runtime-checked; only the last may be absent.
+ */
+function dig(value: unknown, ...keys: readonly (string | number)[]): unknown {
+  let current = value;
+  for (const key of keys) current = typeof key === 'number' ? asArray(current)[key] : asRecord(current)[key];
+  return current;
+}
+
+/** A copy of a plain object without one property (what `({ key, ...rest }) => rest` produces). */
+function omit(value: object, key: string): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(value).filter(([name]) => name !== key));
+}
+
+/** A snapshot reader as preparation calls it, with the calls it recorded. */
+interface IReader {
+  readonly calls: unknown[];
+  readonly readSource: (commit: string, filePath: string) => Promise<string | null>;
+}
+
+/** A SARIF fix as these tests author it (a description is added by some). */
+interface ISarifFix {
+  description?: object;
+  artifactChanges: { artifactLocation: { uri: string }; replacements: { deletedRegion: object; insertedContent: { text: string } }[] }[];
+}
+
+/** A SARIF log as these tests author and then deliberately alter it. */
+interface ISarifLog {
+  version: string;
+  runs: Record<string, unknown>[];
+  [property: string]: unknown;
+}
 
 /** Authored physical lines of a file at a commit, or undefined when absent. */
-function authoredLines(commit, filePath) {
+function authoredLines(commit: string, filePath: string): string[] | undefined {
   const snapshot = repository.snapshots[commit];
   return snapshot && hasOwn(snapshot, filePath) ? snapshot[filePath] : undefined;
 }
 
-function snapshotText(commit, filePath) {
+function snapshotText(commit: string, filePath: string): string {
   const lines = authoredLines(commit, filePath);
   assert.ok(lines, `fixture has no ${filePath} at ${commit}`);
   return lines.join('');
 }
 
 /** Oracle: literal text of an inclusive authored line range, final terminator excluded. */
-function oracleText(commit, filePath, start, end) {
+function oracleText(commit: string, filePath: string, start: number, end: number): string {
   const lines = authoredLines(commit, filePath);
   if (!lines || start < 1 || end > lines.length || start > end) {
-    throw new assert.AssertionError({ message: `no lines ${start}-${end} of ${filePath} at ${commit}` });
+    throw new assert.AssertionError({ message: `no lines ${String(start)}-${String(end)} of ${filePath} at ${commit}` });
   }
   return lines.slice(start - 1, end).join('').replace(/\r?\n$/, '');
 }
 
 /** Oracle: an expected inline comment's host-side text is exactly its stated text. */
-function verifyExpectedComment(comment) {
+function verifyExpectedComment(comment: (typeof completeExpected.comments)[number]): void {
   const commit = comment.side === 'LEFT' ? BASE : comment.side === 'RIGHT' ? HEAD : undefined;
   assert.ok(commit, `unknown side ${comment.side}`);
   if (comment.startLine !== undefined) assert.equal(comment.startSide, comment.side);
   const start = comment.startLine === undefined ? comment.line : comment.startLine;
   assert.equal(oracleText(commit, comment.path, start, comment.line), comment.hostText,
-    `${comment.path} ${comment.side} ${start}-${comment.line} is not the stated host text`);
+    `${comment.path} ${comment.side} ${String(start)}-${String(comment.line)} is not the stated host text`);
 }
 
 /** The trusted diff context, as a transport would supply it. */
@@ -93,18 +184,18 @@ function trustedDiff() {
   };
 }
 
-function reviewContext(overrides = {}) {
+function reviewContext(overrides: Readonly<Record<string, unknown>> = {}) {
   return { owner: OWNER, repo: REPO, pullNumber: PULL, reviewedCommit: HEAD, diff: trustedDiff(), ...overrides };
 }
 
 /** A trusted snapshot reader over the authored repository that records every call. */
 function snapshotReader() {
-  const calls = [];
-  const readSource = async (commit, filePath) => {
+  const calls: [string, string][] = [];
+  const readSource = (commit: string, filePath: string): Promise<string | null> => {
     calls.push([commit, filePath]);
-    if (!hasOwn(repository.snapshots, commit)) throw new Error(`unknown commit ${commit}`);
+    if (!hasOwn(repository.snapshots, commit)) return Promise.reject(new Error(`unknown commit ${commit}`));
     const lines = authoredLines(commit, filePath);
-    return lines === undefined ? null : lines.join('');
+    return Promise.resolve(lines === undefined ? null : lines.join(''));
   };
   return { readSource, calls };
 }
@@ -114,22 +205,23 @@ function snapshotReader() {
  * authored in replacements.json and fails the test on any other request.
  */
 function replacementBoundary() {
-  const calls = [];
+  const calls: IReplacementRequest[] = [];
   const entries = replacementTable.entries.map((entry) => {
-    const request = {
+    const request: Record<string, unknown> = {
       sourceText: snapshotText(...entry.request.source),
       deletedRegion: entry.request.deletedRegion,
       insertedText: entry.request.insertedText,
     };
-    if (hasOwn(entry.request, 'columnKind')) request.columnKind = entry.request.columnKind;
-    const { editedTextLines, ...response } = entry.response;
-    if (editedTextLines !== undefined) response.editedText = editedTextLines.join('');
+    if (hasOwn(entry.request, 'columnKind')) request['columnKind'] = asRecord(entry.request)['columnKind'];
+    const response = omit(entry.response, 'editedTextLines');
+    const { editedTextLines } = entry.response;
+    if (editedTextLines !== undefined) response['editedText'] = editedTextLines.join('');
     return { id: entry.id, request, response };
   });
-  const applyReplacement = (request) => {
+  const applyReplacement = (request: IReplacementRequest): unknown => {
     calls.push(request);
-    const normalized = { ...request };
-    if (normalized.columnKind === undefined) delete normalized.columnKind;
+    const normalized: Record<string, unknown> = { ...request };
+    if (normalized['columnKind'] === undefined) delete normalized['columnKind'];
     const match = entries.find((entry) => {
       try {
         assert.deepStrictEqual(normalized, entry.request);
@@ -148,38 +240,41 @@ function replacementBoundary() {
  * Runs preparation with the authored repository. Fixes use the authored
  * replacement boundary unless `realReplacement` selects the production module.
  */
-async function prepare(sarif, {
+async function prepare(sarif: unknown, {
   context = reviewContext(), options, reader = snapshotReader(), replacements = replacementBoundary(), realReplacement = false,
+}: {
+  context?: object; options?: object; reader?: IReader; replacements?: ReturnType<typeof replacementBoundary>; realReplacement?: boolean;
 } = {}) {
-  const input = { sarif, context, readSource: reader.readSource };
-  if (options !== undefined) input.options = options;
+  const input: Record<string, unknown> = { sarif, context, readSource: reader.readSource };
+  if (options !== undefined) input['options'] = options;
   const internals = realReplacement ? undefined : { applyReplacement: replacements.applyReplacement };
+  // @ts-expect-error -- the authored boundary answers with partial outcomes: only the fields preparation reads (replacements.json)
   const outcome = await prepareReview(input, internals);
   return { outcome, reader, replacements };
 }
 
 /** A minimal SARIF log with one run; run properties given as undefined are omitted. */
-function sarifLog(results, run = {}) {
-  const merged = { tool: { driver: { name: 'T' } }, columnKind: 'utf16CodeUnits', ...run, results };
-  for (const key of Object.keys(merged)) if (merged[key] === undefined) delete merged[key];
+function sarifLog(results: readonly unknown[], run: Readonly<Record<string, unknown>> = {}): ISarifLog {
+  const merged: Record<string, unknown> = { tool: { driver: { name: 'T' } }, columnKind: 'utf16CodeUnits', ...run, results };
+  for (const key of Object.keys(merged)) if (merged[key] === undefined) Reflect.deleteProperty(merged, key);
   return { version: '2.1.0', runs: [merged] };
 }
 
 /** A physical location on a repository-relative URI. */
-function at(uri, region, artifactExtras = {}) {
-  const physicalLocation = { artifactLocation: { uri, ...artifactExtras } };
+function at(uri: string, region?: object, artifactExtras: object = {}) {
+  const physicalLocation: { artifactLocation: object; region?: object } = { artifactLocation: { uri, ...artifactExtras } };
   if (region !== undefined) physicalLocation.region = region;
   return [{ physicalLocation }];
 }
 
-function result(text, locations, extras = {}) {
-  const r = { message: { text }, ...extras };
-  if (locations !== undefined) r.locations = locations;
+function result(text: string, locations?: readonly unknown[], extras: object = {}) {
+  const r: Record<string, unknown> = { message: { text }, ...extras };
+  if (locations !== undefined) r['locations'] = locations;
   return r;
 }
 
 /** A fix with one replacement on the authored head of src/app.js. */
-function fix(deletedRegion, insertedText, uri = 'src/app.js') {
+function fix(deletedRegion: object, insertedText: string, uri = 'src/app.js'): ISarifFix {
   return {
     artifactChanges: [{
       artifactLocation: { uri },
@@ -188,12 +283,12 @@ function fix(deletedRegion, insertedText, uri = 'src/app.js') {
   };
 }
 
-const author = (tool, rule) => `<sub>— ${tool}${rule ? ` · rule \`${rule}\`` : ''}</sub>`;
+const author = (tool: string, rule?: string) => `<sub>— ${tool}${rule ? ` · rule \`${rule}\`` : ''}</sub>`;
 
-function assertReady(outcome, commitId = HEAD) {
+function assertReady(outcome: PrepareReviewOutcome, commitId = HEAD): asserts outcome is IReadyOutcome {
   assert.equal(outcome.status, 'ready',
-    `expected ready, got ${outcome.status}: ${JSON.stringify(outcome.diagnostics || outcome)}`);
-  assert.ok(outcome.review && typeof outcome.review.body === 'string' && Array.isArray(outcome.review.comments));
+    `expected ready, got ${outcome.status}: ${JSON.stringify(dig(outcome, 'diagnostics') || outcome)}`);
+  assert.ok(isShape({ body: isString, comments: isArray })(outcome.review));
   assert.equal(outcome.review.commitId, commitId);
 }
 
@@ -202,10 +297,13 @@ function assertReady(outcome, commitId = HEAD) {
  * diagnosed (at the expected pointer when given), each diagnostic is
  * actionable, and the Markdown report names each diagnostic's pointer.
  */
-function assertBlocked(outcome, expected) {
+function assertBlocked(
+  outcome: PrepareReviewOutcome,
+  expected: readonly (string | readonly [string, string])[],
+): asserts outcome is IBlockedOutcome {
   assert.equal(outcome.status, 'blocked', `expected blocked, got ${JSON.stringify(outcome)}`);
-  assert.equal(outcome.review, undefined, 'a blocked outcome must not carry a review');
-  assert.ok(Array.isArray(outcome.diagnostics) && outcome.diagnostics.length > 0);
+  assert.equal(dig(outcome, 'review'), undefined, 'a blocked outcome must not carry a review');
+  assert.ok(isArray(outcome.diagnostics) && outcome.diagnostics.length > 0);
   for (const d of outcome.diagnostics) {
     assert.equal(typeof d.code, 'string');
     assert.ok(typeof d.message === 'string' && d.message.length > 0, `diagnostic ${d.code} has no message`);
@@ -214,15 +312,15 @@ function assertBlocked(outcome, expected) {
     if (d.pointer !== undefined) assert.ok(outcome.markdown.includes(d.pointer), `markdown report omits ${d.pointer}`);
   }
   for (const e of expected) {
-    const [code, pointer] = Array.isArray(e) ? e : [e];
+    const [code, pointer] = typeof e === 'string' ? [e] : e;
     assert.ok(outcome.diagnostics.some((d) => d.code === code && (pointer === undefined || d.pointer === pointer)),
       `missing diagnostic ${code}${pointer ? ` at ${pointer}` : ''}: ${JSON.stringify(outcome.diagnostics)}`);
   }
 }
 
-const codes = (list) => (list || []).map((d) => d.code);
+const codes = (list: readonly IDiagnostic[] | undefined) => (list || []).map((d) => d.code);
 
-function deepFreeze(value) {
+function deepFreeze<T>(value: T): T {
   if (value && typeof value === 'object') {
     Object.values(value).forEach(deepFreeze);
     Object.freeze(value);
@@ -230,67 +328,71 @@ function deepFreeze(value) {
   return value;
 }
 
-const permalink = (commit, filePath, start, end) => `https://github.com/acme/widgets/blob/${commit}/${
-  filePath.split('/').map(encodeURIComponent).join('/')}${start === undefined ? '' : `#L${start}${end && end !== start ? `-L${end}` : ''}`}`;
+const permalink = (commit: string, filePath: string, start?: number, end?: number) => `https://github.com/acme/widgets/blob/${commit}/${
+  filePath.split('/').map(encodeURIComponent).join('/')}${start === undefined ? '' : `#L${String(start)}${end && end !== start ? `-L${String(end)}` : ''}`}`;
 
 // ---------------------------------------------------------------------------
 
 describe('fixture oracle', () => {
   for (const [i, comment] of completeExpected.comments.entries()) {
-    test(`expected comment ${i} names its authored host text`, () => {
+    test(`expected comment ${String(i)} names its authored host text`, () => {
       verifyExpectedComment(comment);
     });
   }
 
   for (const item of completeExpected.evidence.filter((e) => e.source)) {
     test(`expected evidence source for ${item.pointer} is authored text`, () => {
-      const { commit, path: p, startLine, endLine, text } = item.source;
+      const { commit, path: p, startLine, endLine, text } = present(item.source, `${item.pointer} source`);
       assert.equal(oracleText(commit, p, startLine, endLine), text);
     });
   }
 
   test('expected replacement evidence restates the authored replacement boundary exactly', () => {
     for (const item of completeExpected.evidence.filter((e) => e.replacement)) {
-      const entry = replacementTable.entries.find((x) => x.response.startLine === item.replacement.startLine
-        && x.response.replacementText === item.replacement.replacementText);
+      const replacement = present(item.replacement, `${item.pointer} replacement`);
+      const entry = replacementTable.entries.find((x) => x.response.startLine === replacement.startLine
+        && x.response.replacementText === replacement.replacementText);
       assert.ok(entry, `no authored replacement for ${item.pointer}`);
-      assert.equal(item.replacement.originalText,
-        authoredLines(HEAD, 'src/app.js').slice(item.replacement.startLine - 1, item.replacement.endLine).join(''));
+      assert.equal(replacement.originalText,
+        present(authoredLines(HEAD, 'src/app.js'), 'src/app.js at HEAD').slice(replacement.startLine - 1, replacement.endLine).join(''));
     }
   });
 
   test('authored replacement edits change only their stated lines', () => {
     for (const entry of replacementTable.entries.filter((x) => x.response.kind === 'replacement'
-      && x.response.editedTextLines.length > 0)) {
-      const original = authoredLines(...entry.request.source).join('');
-      const { startLine, endLine, originalText, replacementText, editedTextLines } = entry.response;
-      const lines = authoredLines(...entry.request.source);
+      && present(x.response.editedTextLines, `${x.id} editedTextLines`).length > 0)) {
+      const original = present(authoredLines(...entry.request.source), entry.id).join('');
+      const { endLine, replacementText, editedTextLines } = entry.response;
+      const startLine = present(entry.response.startLine, `${entry.id} startLine`);
+      const originalText = present(entry.response.originalText, `${entry.id} originalText`);
+      const lines = present(authoredLines(...entry.request.source), entry.id);
       assert.equal(lines.slice(startLine - 1, endLine).join(''), originalText, entry.id);
       const prefix = lines.slice(0, startLine - 1).join('');
-      assert.equal(editedTextLines.join(''), prefix + replacementText + original.slice(prefix.length + originalText.length), entry.id);
+      assert.equal(present(editedTextLines, 'editedTextLines').join(''),
+        prefix + String(replacementText) + original.slice(prefix.length + originalText.length), entry.id);
     }
   });
 
   test('negative control: a shifted line is detected', () => {
-    const c = completeExpected.comments[1];
-    assert.throws(() => verifyExpectedComment({ ...c, line: c.line + 1 }), assert.AssertionError);
+    const c = present(completeExpected.comments[1], 'expected comment 1');
+    assert.throws(() => { verifyExpectedComment({ ...c, line: c.line + 1 }); }, assert.AssertionError);
   });
 
   test('negative control: the wrong side is detected', () => {
-    const left = completeExpected.comments.find((c) => c.side === 'LEFT' && c.path === 'src/app.js');
-    assert.throws(() => verifyExpectedComment({ ...left, side: 'RIGHT' }), assert.AssertionError);
+    const left = present(completeExpected.comments.find((c) => c.side === 'LEFT' && c.path === 'src/app.js'), 'a LEFT comment');
+    assert.throws(() => { verifyExpectedComment({ ...left, side: 'RIGHT' }); }, assert.AssertionError);
   });
 
   test('negative control: the wrong file is detected', () => {
-    const c = completeExpected.comments[5];
-    assert.throws(() => verifyExpectedComment({ ...c, path: 'src/app.js' }), assert.AssertionError);
+    const c = present(completeExpected.comments[5], 'expected comment 5');
+    assert.throws(() => { verifyExpectedComment({ ...c, path: 'src/app.js' }); }, assert.AssertionError);
   });
 });
 
 describe('authored patches agree with git diff', () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'prepare-git-home-'));
   const env = {
-    PATH: process.env.PATH, HOME: home, XDG_CONFIG_HOME: home,
+    PATH: process.env['PATH'], HOME: home, XDG_CONFIG_HOME: home,
     GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', LC_ALL: 'C',
   };
   const probe = spawnSync('git', ['--version'], { env, encoding: 'utf8' });
@@ -301,22 +403,23 @@ describe('authored patches agree with git diff', () => {
         return;
       }
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'prepare-diff-'));
-      const sides = {};
-      for (const [side, commit] of [['base', BASE], ['head', HEAD]]) {
+      const sides: Partial<Record<'base' | 'head', string>> = {};
+      for (const [side, commit] of [['base', BASE], ['head', HEAD]] as const) {
         const lines = authoredLines(commit, entry.path);
         if (lines === undefined) {
           sides[side] = '/dev/null';
         } else {
-          sides[side] = path.join(dir, side, path.basename(entry.path));
-          fs.mkdirSync(path.dirname(sides[side]), { recursive: true });
-          fs.writeFileSync(sides[side], lines.join(''));
+          const file = path.join(dir, side, path.basename(entry.path));
+          sides[side] = file;
+          fs.mkdirSync(path.dirname(file), { recursive: true });
+          fs.writeFileSync(file, lines.join(''));
         }
       }
       const run = spawnSync('git', ['-c', 'core.quotepath=false', 'diff', '--no-index', '--no-color', '--no-ext-diff',
-        '--no-textconv', '-U3', '--diff-algorithm=myers', '--indent-heuristic', sides.base, sides.head],
+        '--no-textconv', '-U3', '--diff-algorithm=myers', '--indent-heuristic', present(sides.base, 'base side'), present(sides.head, 'head side')],
       { env, cwd: dir, encoding: 'utf8' });
       assert.equal(run.status, 1, run.stderr);
-      const hunks = (p) => p.slice(p.indexOf('@@'));
+      const hunks = (p: string) => p.slice(p.indexOf('@@'));
       assert.equal(hunks(entry.patch.join('')), hunks(run.stdout));
     });
   }
@@ -326,7 +429,7 @@ describe('complete review from several runs', () => {
   test('prepares one review: body plus every inline comment, exactly as authored', async () => {
     const { outcome, reader } = await prepare(loadJson('complete-review.sarif.json'));
     assertReady(outcome);
-    const expectedComments = completeExpected.comments.map(({ hostText, ...comment }) => comment);
+    const expectedComments = completeExpected.comments.map((comment) => omit(comment, 'hostText'));
     assert.deepStrictEqual(outcome.review.comments, expectedComments);
     assert.equal(outcome.review.body, completeExpected.bodySections.join(SEP));
     assert.deepStrictEqual(outcome.warnings, []);
@@ -338,10 +441,10 @@ describe('complete review from several runs', () => {
   test('integration: the production replacement module yields the same authored review', async () => {
     const { outcome } = await prepare(loadJson('complete-review.sarif.json'), { realReplacement: true });
     assertReady(outcome);
-    assert.deepStrictEqual(outcome.review.comments, completeExpected.comments.map(({ hostText, ...comment }) => comment));
+    assert.deepStrictEqual(outcome.review.comments, completeExpected.comments.map((comment) => omit(comment, 'hostText')));
     assert.equal(outcome.review.body, completeExpected.bodySections.join(SEP));
     for (const expected of completeExpected.evidence.filter((e) => e.replacement)) {
-      assert.deepStrictEqual(outcome.evidence.find((e) => e.pointer === expected.pointer).replacement, expected.replacement);
+      assert.deepStrictEqual(dig(outcome.evidence.find((e) => e.pointer === expected.pointer), 'replacement'), expected.replacement);
     }
   });
 
@@ -350,9 +453,9 @@ describe('complete review from several runs', () => {
     assertReady(outcome);
     assert.deepStrictEqual(outcome.evidence.map((e) => e.pointer), completeExpected.evidence.map((e) => e.pointer));
     for (const expected of completeExpected.evidence) {
-      const actual = outcome.evidence.find((e) => e.pointer === expected.pointer);
+      const actual: Evidence | undefined = outcome.evidence.find((e) => e.pointer === expected.pointer);
       for (const key of ['treatment', 'commentIndex', 'bodySectionIndex', 'source', 'replacement']) {
-        assert.deepStrictEqual(actual[key], expected[key], `${expected.pointer} ${key}`);
+        assert.deepStrictEqual(dig(actual, key), dig(expected, key), `${expected.pointer} ${key}`);
       }
     }
   });
@@ -360,7 +463,7 @@ describe('complete review from several runs', () => {
   test('evidence retains driver identity, version and rule attribution per run', async () => {
     const { outcome } = await prepare(loadJson('complete-review.sarif.json'));
     assertReady(outcome);
-    const byPointer = (p) => outcome.evidence.find((e) => e.pointer === p).attribution;
+    const byPointer = (p: string) => present(outcome.evidence.find((e) => e.pointer === p), p).attribution;
     assert.deepStrictEqual(byPointer('/runs/0/results/0'), { tool: 'LintBot', version: '2.3.1', ruleId: 'LB001' });
     assert.deepStrictEqual(byPointer('/runs/0/results/2'), { tool: 'LintBot', version: '2.3.1' });
     assert.deepStrictEqual(byPointer('/runs/1/results/0'), { tool: 'StyleBot', version: '0.9.0', ruleId: 'SB-7' });
@@ -387,7 +490,7 @@ describe('ordinary feedback-only SARIF', () => {
       { path: 'src/app.js', side: 'RIGHT', line: 7, body: `Looks off.\n\n${author('Plain')}` },
     ]);
     assert.equal(outcome.review.body, '');
-    assert.equal(outcome.evidence[0].approval, 'none');
+    assert.equal(outcome.evidence[0]?.approval, 'none');
   });
 
   test('a result without locations becomes general body feedback', async () => {
@@ -407,14 +510,14 @@ describe('ordinary feedback-only SARIF', () => {
   test('a region ending at column 1 excludes that later line', async () => {
     const { outcome } = await prepare(sarifLog([result('Span.', at('src/app.js', { startLine: 6, endLine: 8, endColumn: 1 }))]));
     assertReady(outcome);
-    assert.deepStrictEqual(outcome.review.comments.map(({ body, ...c }) => c), [
+    assert.deepStrictEqual(outcome.review.comments.map((c) => omit(c, 'body')), [
       { path: 'src/app.js', side: 'RIGHT', startSide: 'RIGHT', startLine: 6, line: 7 },
     ]);
   });
 });
 
 describe('message resolution and literal rendering', () => {
-  const bodyOf = async (sarif) => {
+  const bodyOf = async (sarif: unknown) => {
     const { outcome } = await prepare(sarif);
     assertReady(outcome);
     return outcome.review.body;
@@ -491,14 +594,14 @@ describe('message resolution and literal rendering', () => {
 });
 
 describe('artifact locations and URI resolution', () => {
-  const inlinePath = async (sarif, context) => {
+  const inlinePath = async (sarif: unknown, context?: object) => {
     const { outcome } = await prepare(sarif, context ? { context } : undefined);
     assertReady(outcome);
     assert.equal(outcome.review.comments.length, 1);
-    return outcome.review.comments[0];
+    return present(outcome.review.comments[0], 'the inline comment');
   };
 
-  const blockedWithoutReads = async (sarif, code, context) => {
+  const blockedWithoutReads = async (sarif: unknown, code: string, context?: object) => {
     const reader = snapshotReader();
     const { outcome } = await prepare(sarif, { reader, ...(context ? { context } : {}) });
     assertBlocked(outcome, [[code, '/runs/0/results/0']]);
@@ -664,7 +767,7 @@ describe('source revision binding', () => {
       versionControlProvenance: [{ repositoryUri: 'ssh://git@github.com/acme/widgets.git', revisionId: HEAD }],
     }));
     assertReady(outcome);
-    assert.equal(outcome.review.comments[0].line, 7);
+    assert.equal(outcome.review.comments[0]?.line, 7);
   });
 
   test('an earlier reviewed revision after branch advance becomes pinned general feedback, never retargeted', async () => {
@@ -676,7 +779,7 @@ describe('source revision binding', () => {
     assert.deepStrictEqual(outcome.review.comments, []);
     assert.equal(outcome.review.body, `**Source:** [src/app.js line 7 at ea71ea7](${permalink(EARLIER, 'src/app.js', 7)})`
       + `\n\n\`\`\`\n  return items.slice(0, limit).map((item) => item.id);\n\`\`\`\n\nStill capped?\n\n${author('T')}`);
-    assert.deepStrictEqual(outcome.evidence[0].source,
+    assert.deepStrictEqual(outcome.evidence[0]?.source,
       { commit: EARLIER, path: 'src/app.js', startLine: 7, endLine: 7, text: '  return items.slice(0, limit).map((item) => item.id);' });
     assert.ok(reader.calls.every(([commit]) => commit === EARLIER));
   });
@@ -724,7 +827,7 @@ describe('source revision binding', () => {
     }), { context: earlierReview() });
     assertReady(outcome, EARLIER);
     assert.deepStrictEqual(outcome.review.comments, []);
-    assert.equal(outcome.evidence[0].treatment, 'general');
+    assert.equal(outcome.evidence[0]?.treatment, 'general');
     assert.deepStrictEqual(outcome.evidence[0].source,
       { commit: BASE, path: 'lib/legacy.js', startLine: 1, endLine: 1, text: "module.exports = 'legacy';" });
   });
@@ -788,10 +891,10 @@ describe('source region coordinates (SARIF 3.30, shared with the replacement mod
   // Its column 10 is "i" of "items"; lines 1-6 hold 115 UTF-16 code units, so
   // line 7 column 10 is charOffset 124, and "items.slice(0, limit)" is 21 units.
   const LINE_7_SPAN = 'items.slice(0, limit)';
-  const readyLines = async (sarif, expected) => {
+  const readyLines = async (sarif: unknown, expected: object) => {
     const { outcome } = await prepare(sarif);
     assertReady(outcome);
-    assert.deepStrictEqual(outcome.review.comments.map(({ body, ...c }) => c), [expected]);
+    assert.deepStrictEqual(outcome.review.comments.map((c) => omit(c, 'body')), [expected]);
   };
   const line7 = { path: 'src/app.js', side: 'RIGHT', line: 7 };
 
@@ -827,7 +930,7 @@ describe('source region coordinates (SARIF 3.30, shared with the replacement mod
     ['an end line before the start line', { startLine: 7, endLine: 6 }],
     ['an end column before the start column', { startLine: 7, startColumn: 20, endColumn: 10 }],
     ['an offset beyond the file', { charOffset: 5000, charLength: 1 }],
-  ]) {
+  ] as const) {
     test(`${name} blocks`, async () => {
       const { outcome } = await prepare(sarifLog([result('x', at('src/app.js', region))]));
       assertBlocked(outcome, [['source-range-invalid', '/runs/0/results/0']]);
@@ -850,7 +953,7 @@ describe('source region coordinates (SARIF 3.30, shared with the replacement mod
     { path: 'src/labels.js', side: 'RIGHT', line: 2 });
   });
 
-  for (const [columnKind, startColumn] of [['utf16CodeUnits', 26], ['unicodeCodePoints', 25]]) {
+  for (const [columnKind, startColumn] of [['utf16CodeUnits', 26], ['unicodeCodePoints', 25]] as const) {
     test(`an explicit ${columnKind} column after a non-BMP character selects the stated text`, async () => {
       await readyLines(sarifLog([result('x', at('src/labels.js', {
         startLine: 2, startColumn, endColumn: startColumn + 5, snippet: { text: 'party' } }))], { columnKind }),
@@ -878,7 +981,7 @@ describe('source region coordinates (SARIF 3.30, shared with the replacement mod
 
   test('an operational snapshot failure propagates with its cause instead of becoming a diagnostic', async () => {
     const failure = new Error('snapshot store unavailable');
-    const reader = { calls: [], readSource: async () => { throw failure; } };
+    const reader = { calls: [], readSource: () => Promise.reject(failure) };
     await assert.rejects(prepare(sarifLog([result('x', at('src/app.js', { startLine: 7 }))]), { reader }),
       (error) => error === failure);
   });
@@ -905,7 +1008,7 @@ describe('native suggestions from standard fixes', () => {
     })]));
     assertReady(outcome);
     assert.equal(replacements.calls.length, 1, 'the injected boundary computed the fix');
-    assert.equal(replacements.calls[0].insertedText, '');
+    assert.equal(replacements.calls[0]?.insertedText, '');
     assert.deepStrictEqual(replacements.calls[0].deletedRegion, { startLine: 7, startColumn: 1, endLine: 8, endColumn: 1 });
   });
 
@@ -930,10 +1033,12 @@ describe('native suggestions from standard fixes', () => {
     assertBlocked(outcome, [['overlapping-replacements', '/runs/0/results/1']]);
   });
 
-  const blockedFix = (name, fixes, code, run) => test(name, async () => {
-    const { outcome } = await prepare(sarifLog([result('x', at('src/app.js', { startLine: 3 }), { fixes })], run));
-    assertBlocked(outcome, [[code, '/runs/0/results/0']]);
-  });
+  const blockedFix = (name: string, fixes: readonly unknown[], code: string, run?: Readonly<Record<string, unknown>>) => {
+    test(name, async () => {
+      const { outcome } = await prepare(sarifLog([result('x', at('src/app.js', { startLine: 3 }), { fixes })], run));
+      assertBlocked(outcome, [[code, '/runs/0/results/0']]);
+    });
+  };
 
   const limitFix = fix({ startLine: 3, startColumn: 23, endColumn: 25 }, '20');
 
@@ -941,11 +1046,11 @@ describe('native suggestions from standard fixes', () => {
   blockedFix('alternative fixes are not silently chosen between',
     [limitFix, fix({ startLine: 3, startColumn: 23, endColumn: 25 }, '30')], 'fix-alternatives-unsupported');
   blockedFix('a fix changing several files is unsupported', [{ artifactChanges: [
-    limitFix.artifactChanges[0], { ...limitFix.artifactChanges[0], artifactLocation: { uri: 'src/util.js' } },
+    limitFix.artifactChanges[0], { ...present(limitFix.artifactChanges[0], 'the change'), artifactLocation: { uri: 'src/util.js' } },
   ] }], 'fix-multiple-files-unsupported');
   blockedFix('a fix with several replacements is unsupported', [{ artifactChanges: [{
     artifactLocation: { uri: 'src/app.js' },
-    replacements: [limitFix.artifactChanges[0].replacements[0], {
+    replacements: [limitFix.artifactChanges[0]?.replacements[0], {
       deletedRegion: { startLine: 17, startColumn: 3, endColumn: 9 }, insertedContent: { text: 'return (' } }],
   }] }], 'fix-multiple-replacements-unsupported');
   blockedFix('a binary replacement is unsupported', [{ artifactChanges: [{
@@ -971,7 +1076,7 @@ describe('native suggestions from standard fixes', () => {
     const { outcome } = await prepare(sarifLog([result('x', at('src/app.js', { startLine: 3 }), {
       fixes: [fix({ startLine: 3, startColumn: 23, endColumn: 40 }, '20')] })]));
     assertBlocked(outcome, ['replacement-invalid']);
-    assert.ok(outcome.diagnostics.find((d) => d.code === 'replacement-invalid').message.includes('out-of-bounds'));
+    assert.ok(outcome.diagnostics.find((d) => d.code === 'replacement-invalid')?.message.includes('out-of-bounds'));
   });
 
   test('integration: without columnKind a BMP-unambiguous fix is prepared by the production module', async () => {
@@ -1005,7 +1110,7 @@ describe('native suggestions from standard fixes', () => {
 
 describe('proposed file operations and artifacts (D23)', () => {
   test('a proposed file creation is explicitly unsupported in this milestone', async () => {
-    const sarif = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'docs', 'examples', 'proposed-documentation.sarif.json'), 'utf8'));
+    const sarif = readJson(path.join(import.meta.dirname, '..', 'docs', 'examples', 'proposed-documentation.sarif.json'));
     const { outcome } = await prepare(sarif);
     assertBlocked(outcome, [['file-operation-unsupported', '/runs/0/results/0']]);
   });
@@ -1035,7 +1140,7 @@ describe('proposed file operations and artifacts (D23)', () => {
 });
 
 describe('approval convention', () => {
-  const held = (where) => {
+  const held = (where: 'run' | 'result') => {
     const property = { sarifToComment: { approval: 'awaiting-approval' } };
     return where === 'run'
       ? sarifLog([result('x', at('src/app.js', { startLine: 7 }))], { properties: property })
@@ -1056,12 +1161,12 @@ describe('approval convention', () => {
     const { outcome } = await prepare(held('result'), { options: { ignoreApprovalHold: true } });
     assertReady(outcome);
     assert.ok(codes(outcome.warnings).includes('approval-hold-overridden'));
-    assert.equal(outcome.evidence[0].approval, 'hold-overridden');
+    assert.equal(outcome.evidence[0]?.approval, 'hold-overridden');
   });
 
   test('the override never bypasses a mechanical error', async () => {
     const sarif = held('result');
-    sarif.runs[0].results.push(result('beyond', at('src/app.js', { startLine: 99 })));
+    asArray(dig(sarif, 'runs', 0, 'results')).push(result('beyond', at('src/app.js', { startLine: 99 })));
     const { outcome } = await prepare(sarif, { options: { ignoreApprovalHold: true } });
     assertBlocked(outcome, [['source-range-invalid', '/runs/0/results/1']]);
     assert.ok(!codes(outcome.diagnostics).includes('approval-hold'));
@@ -1069,7 +1174,7 @@ describe('approval convention', () => {
 
   test('without the override a hold and a mechanical error are both reported', async () => {
     const sarif = held('result');
-    sarif.runs[0].results.push(result('beyond', at('src/app.js', { startLine: 99 })));
+    asArray(dig(sarif, 'runs', 0, 'results')).push(result('beyond', at('src/app.js', { startLine: 99 })));
     const { outcome } = await prepare(sarif);
     assertBlocked(outcome, [['approval-hold', '/runs/0/results/0'], ['source-range-invalid', '/runs/0/results/1']]);
   });
@@ -1079,7 +1184,7 @@ describe('approval convention', () => {
       properties: { sarifToComment: { approval: 'ready' } },
     })]));
     assertReady(outcome);
-    assert.equal(outcome.evidence[0].approval, 'declared-ready');
+    assert.equal(outcome.evidence[0]?.approval, 'declared-ready');
   });
 
   for (const value of ['approved', 42, null]) {
@@ -1107,13 +1212,13 @@ describe('approval convention', () => {
     const properties = { tags: ['security'], 'acme/score': 3 };
     const { outcome } = await prepare(sarifLog([result('x', at('src/app.js', { startLine: 7 }), { properties })]));
     assertReady(outcome);
-    assert.deepStrictEqual(outcome.evidence[0].uninterpretedProperties, properties);
+    assert.deepStrictEqual(outcome.evidence[0]?.uninterpretedProperties, properties);
   });
 });
 
 describe('meaningful SARIF features outside the profile are diagnosed, never omitted', () => {
   const located = at('src/app.js', { startLine: 7 });
-  const unsupported = {
+  const unsupported: Record<string, object> = {
     'code-flows-unsupported': { codeFlows: [{ threadFlows: [{ locations: [{ location: located[0] }] }] }] },
     'related-locations-unsupported': { relatedLocations: [{ id: 1, ...located[0] }] },
     'graphs-unsupported': { graphs: [{ nodes: [{ id: 'n' }] }] },
@@ -1122,7 +1227,7 @@ describe('meaningful SARIF features outside the profile are diagnosed, never omi
     'suppressed-result-unsupported': { suppressions: [{ kind: 'inSource' }] },
   };
   for (const [code, extras] of Object.entries(unsupported)) {
-    test(`${code}`, async () => {
+    test(code, async () => {
       const { outcome } = await prepare(sarifLog([result('x', located, extras)]));
       assertBlocked(outcome, [[code, '/runs/0/results/0']]);
     });
@@ -1167,7 +1272,7 @@ describe('regression: a fix never moves its result\'s own feedback or source (D3
     const { outcome } = await prepare(sarifLog([result('Feedback refers to util line 4.',
       at('src/util.js', { startLine: 4 }), { fixes: [limit20()] })]));
     assertBlocked(outcome, [['fix-association-unsupported', '/runs/0/results/0']]);
-    const diagnostic = outcome.diagnostics.find((item) => item.code === 'fix-association-unsupported');
+    const diagnostic = present(outcome.diagnostics.find((item) => item.code === 'fix-association-unsupported'), 'the diagnostic');
     assert.match(diagnostic.message, /Keep the correct result location/);
     assert.doesNotMatch(diagnostic.message, /Place the result inside/);
   });
@@ -1188,13 +1293,13 @@ describe('regression: a fix never moves its result\'s own feedback or source (D3
     const { outcome } = await prepare(sarifLog([result('Divides by zero here.',
       at('src/app.js', { startLine: 17 }), { fixes: [averageGuard()] })]));
     assertReady(outcome);
-    assert.deepStrictEqual(outcome.review.comments.map(({ body, ...c }) => c),
+    assert.deepStrictEqual(outcome.review.comments.map((c) => omit(c, 'body')),
       [{ path: 'src/app.js', side: 'RIGHT', startSide: 'RIGHT', startLine: 16, line: 18 }]);
-    assert.ok(outcome.review.comments[0].body.startsWith(`Divides by zero here.\n\n${author('T')}\n\n\`\`\`suggestion\n`));
-    assert.deepStrictEqual(outcome.evidence[0].source,
+    assert.ok(outcome.review.comments[0]?.body.startsWith(`Divides by zero here.\n\n${author('T')}\n\n\`\`\`suggestion\n`));
+    assert.deepStrictEqual(outcome.evidence[0]?.source,
       { commit: HEAD, path: 'src/app.js', startLine: 17, endLine: 17, text: '  return total(values) / values.length;' });
-    assert.equal(outcome.evidence[0].replacement.startLine, 16);
-    assert.equal(outcome.evidence[0].replacement.endLine, 18);
+    assert.equal(dig(outcome.evidence, 0, 'replacement', 'startLine'), 16);
+    assert.equal(dig(outcome.evidence, 0, 'replacement', 'endLine'), 18);
   });
 
   test('a result without a location explains its fix without inventing a source', async () => {
@@ -1202,12 +1307,12 @@ describe('regression: a fix never moves its result\'s own feedback or source (D3
     assertReady(outcome);
     assert.deepStrictEqual(outcome.review.comments, [{ path: 'src/app.js', side: 'RIGHT', line: 3,
       body: `Tighter default.\n\n${author('T')}\n\n\`\`\`suggestion\nconst DEFAULT_LIMIT = 20;\n\`\`\`` }]);
-    assert.equal(outcome.evidence[0].source, undefined);
+    assert.equal(outcome.evidence[0]?.source, undefined);
   });
 });
 
 describe('regression: producer Markdown can never create an executable suggestion', () => {
-  const blockedAt = async (sarif, code) => {
+  const blockedAt = async (sarif: unknown, code: string) => {
     const { outcome } = await prepare(sarif);
     assertBlocked(outcome, [[code, '/runs/0/results/0']]);
   };
@@ -1266,14 +1371,14 @@ describe('regression: producer Markdown can never create an executable suggestio
         return;
       }
       assertReady(outcome);
-      assert.equal(outcome.review.comments[0].body, `${markdown}\n\n${author('T')}`);
+      assert.equal(outcome.review.comments[0]?.body, `${markdown}\n\n${author('T')}`);
     });
   }
 
   test('fence-shaped plain text stays inert', async () => {
     const { outcome } = await prepare(sarifLog([result('```suggestion\ninjected\n```', at('src/app.js', { startLine: 7 }))]));
     assertReady(outcome);
-    assert.doesNotMatch(outcome.review.comments[0].body, EXECUTABLE_FENCE);
+    assert.doesNotMatch(present(outcome.review.comments[0], 'the comment').body, EXECUTABLE_FENCE);
   });
 
   test('fence-shaped arguments inserted into templates stay inert', async () => {
@@ -1289,7 +1394,7 @@ describe('regression: producer Markdown can never create an executable suggestio
 });
 
 describe('regression: direct messages substitute their arguments (SARIF 3.11.5, 3.11.11)', () => {
-  const bodyOf = async (message) => {
+  const bodyOf = async (message: object) => {
     const { outcome } = await prepare(sarifLog([{ message }]));
     assertReady(outcome);
     return outcome.review.body;
@@ -1319,7 +1424,7 @@ describe('regression: direct messages substitute their arguments (SARIF 3.11.5, 
     f.description = { text: 'Use {0}.', arguments: ['20'] };
     const { outcome } = await prepare(sarifLog([result('Tighter default.', at('src/app.js', { startLine: 3 }), { fixes: [f] })]));
     assertReady(outcome);
-    assert.ok(outcome.review.comments[0].body.includes('**Fix:** Use 20.'));
+    assert.ok(outcome.review.comments[0]?.body.includes('**Fix:** Use 20.'));
   });
 });
 
@@ -1328,13 +1433,15 @@ describe('regression: native suggestions are emitted only where the observed hos
   // The probe records payloads, intended files and applied files; the head
   // files below are reconstructed with an "old" placeholder in the replaced
   // lines, which the observed application does not depend on.
-  const probeDir = path.join(__dirname, '..', 'docs', 'evidence', 'native-fidelity-probe');
-  const probeRequest = JSON.parse(fs.readFileSync(path.join(probeDir, 'request.json'), 'utf8'));
-  const probeApplied = JSON.parse(fs.readFileSync(path.join(probeDir, 'applied-files.json'), 'utf8')).results;
+  const probeDir = path.join(import.meta.dirname, '..', 'docs', 'evidence', 'native-fidelity-probe');
+  const probeRequest = expectType(readJson(path.join(probeDir, 'request.json')),
+    isShape({ comments: isArrayOf(isShape({ path: isString, body: isString })) }), 'the probe request');
+  const probeApplied = expectType(readJson(path.join(probeDir, 'applied-files.json')),
+    isShape({ results: isArrayOf(isShape({ path: isString, expected: isUnknown, matches: isBoolean })) }), 'the probe results').results;
   const probeDirName = 'sarif-native-fidelity';
   const PROBE_HEAD = '9e0d9e0d9e0d9e0d9e0d9e0d9e0d9e0d9e0d9e0d';
   const PROBE_BASE = '9ba59ba59ba59ba59ba59ba59ba59ba59ba59ba5';
-  const heads = {
+  const heads: Record<string, string> = {
     'lf.txt': 'before\nold\nafter\n',
     'crlf-lf.txt': 'before\r\nold\r\nafter\r\n',
     'no-final-newline.txt': 'before\nold',
@@ -1346,9 +1453,9 @@ describe('regression: native suggestions are emitted only where the observed hos
     'crlf-mixed.txt': 'before\r\nold\r\nafter\r\n',
   };
   /** A creation patch for a head text: every line is an addition. */
-  const creationPatch = (p, text) => {
-    const lines = text.match(/[^\n]*\n|[^\n]+$/g);
-    return `--- /dev/null\n+++ b/${p}\n@@ -0,0 +1,${lines.length} @@\n${lines
+  const creationPatch = (p: string, text: string) => {
+    const lines = present(text.match(/[^\n]*\n|[^\n]+$/g), 'lines');
+    return `--- /dev/null\n+++ b/${p}\n@@ -0,0 +1,${String(lines.length)} @@\n${lines
       .map((l) => (l.endsWith('\n') ? `+${l}` : `+${l}\n\\ No newline at end of file\n`)).join('')}`;
   };
   const probeContext = () => ({
@@ -1356,10 +1463,12 @@ describe('regression: native suggestions are emitted only where the observed hos
     diff: { baseCommit: PROBE_BASE, headCommit: PROBE_HEAD,
       files: Object.entries(heads).map(([name, text]) => ({ path: `${probeDirName}/${name}`, patch: creationPatch(`${probeDirName}/${name}`, text) })) },
   });
-  const probeReader = () => ({ calls: [], readSource: async (commit, p) => (commit === PROBE_HEAD && p.startsWith(`${probeDirName}/`)
+  const probeReader = () => ({ calls: [], readSource: (commit: string, p: string) => Promise.resolve(commit === PROBE_HEAD && p.startsWith(`${probeDirName}/`)
     ? heads[p.slice(probeDirName.length + 1)] ?? null : null) });
 
-  const cases = [
+  /** A SARIF region as these probe cases state it. */
+  type Region = { startLine: number; startColumn?: number; endLine?: number; endColumn?: number };
+  const cases: [string, Region, string, string][] = [
     ['lf.txt', { startLine: 2 }, 'new', 'ready'],
     ['crlf-lf.txt', { startLine: 2 }, 'new', 'ready'],
     ['no-final-newline.txt', { startLine: 2 }, 'new', 'ready'],
@@ -1373,10 +1482,9 @@ describe('regression: native suggestions are emitted only where the observed hos
   for (const [name, region, inserted, expected] of cases) {
     test(`${name}: ${expected}`, async () => {
       const p = `${probeDirName}/${name}`;
-      const probe = probeApplied.find((r) => r.path === p);
-      const { applyReplacement } = require('../dist/replacements.cjs');
+      const probe = present(probeApplied.find((r) => r.path === p), `probe result for ${p}`);
       const intended = applyReplacement({ sourceText: heads[name], deletedRegion: region, insertedText: inserted, columnKind: 'utf16CodeUnits' });
-      assert.equal(intended.editedText, probe.expected, 'the fixture edit must intend the probe\'s expected file');
+      assert.equal(dig(intended, 'editedText'), probe.expected, 'the fixture edit must intend the probe\'s expected file');
 
       const lines = { startLine: region.startLine, ...(region.endLine && region.endColumn === undefined ? { endLine: region.endLine } : {}) };
       const sarif = sarifLog([result('probe', at(p, lines), { fixes: [fix(region, inserted, p)] })]);
@@ -1388,17 +1496,17 @@ describe('regression: native suggestions are emitted only where the observed hos
       }
       assertReady(outcome, PROBE_HEAD);
       assert.equal(probe.matches, true, 'emitted only where the host was observed to apply exactly');
-      const body = outcome.review.comments[0].body;
-      const probeBody = probeRequest.comments.find((c) => c.path === p).body;
+      const body = present(outcome.review.comments[0], 'the comment').body;
+      const probeBody = present(probeRequest.comments.find((c) => c.path === p), `probe comment for ${p}`).body;
       assert.equal(body.slice(body.indexOf('```suggestion')), probeBody.slice(probeBody.indexOf('```suggestion')));
       assert.ok(!body.includes('\r'), 'a raw CR is never emitted');
     });
   }
 
   test('the observed CRLF payload doubled its CR, so a CR payload is never emitted', () => {
-    const crlf = probeRequest.comments.find((c) => c.path === `${probeDirName}/crlf-crlf.txt`);
+    const crlf = present(probeRequest.comments.find((c) => c.path === `${probeDirName}/crlf-crlf.txt`), 'the CRLF probe comment');
     assert.ok(crlf.body.includes('\r'));
-    assert.equal(probeApplied.find((r) => r.path === crlf.path).matches, false);
+    assert.equal(probeApplied.find((r) => r.path === crlf.path)?.matches, false);
   });
 
   test('a replacement mixing LF into a CRLF source is not emitted', async () => {
@@ -1414,11 +1522,11 @@ describe('regression: the source-region bridge needs no source-dependent sentine
     let privateUse = '';
     for (let code = 0xe000; code <= 0xf8ff; code += 1) privateUse += String.fromCharCode(code);
     const text = `${privateUse}\ntarget line\n`;
-    const reader = { calls: [], readSource: async (commit, p) => (p === 'docs/private.txt' ? text : snapshotReader().readSource(commit, p)) };
+    const reader = { calls: [], readSource: (commit: string, p: string) => (p === 'docs/private.txt' ? Promise.resolve(text) : snapshotReader().readSource(commit, p)) };
     const { outcome } = await prepare(sarifLog([result('x', at('docs/private.txt', {
       startLine: 2, startColumn: 1, endColumn: 7, snippet: { text: 'target' } }))]), { reader });
     assertReady(outcome);
-    assert.deepStrictEqual(outcome.evidence[0].source,
+    assert.deepStrictEqual(outcome.evidence[0]?.source,
       { commit: HEAD, path: 'docs/private.txt', startLine: 2, endLine: 2, text: 'target line' });
   });
 });
@@ -1429,7 +1537,7 @@ describe('regression: the source-region bridge needs no source-dependent sentine
 // logs/opus/profile-boundary-red.txt.
 
 describe('regression: declared newline sequences (SARIF 3.14.20) never change the source association', () => {
-  const located = (run) => sarifLog([result('x', at('src/app.js', { startLine: 7 }))], run);
+  const located = (run: Readonly<Record<string, unknown>>) => sarifLog([result('x', at('src/app.js', { startLine: 7 }))], run);
 
   test('a non-default newline sequence blocks located feedback instead of reading lines as CRLF/LF', async () => {
     const reader = snapshotReader();
@@ -1453,7 +1561,7 @@ describe('regression: declared newline sequences (SARIF 3.14.20) never change th
     test(`the default newline set is accepted in any order: ${JSON.stringify(newlineSequences)}`, async () => {
       const { outcome } = await prepare(located({ newlineSequences }));
       assertReady(outcome);
-      assert.deepStrictEqual(outcome.review.comments.map(({ body, ...c }) => c), [{ path: 'src/app.js', side: 'RIGHT', line: 7 }]);
+      assert.deepStrictEqual(outcome.review.comments.map((c) => omit(c, 'body')), [{ path: 'src/app.js', side: 'RIGHT', line: 7 }]);
     });
   }
 
@@ -1484,7 +1592,7 @@ describe('regression: findings held in external property files are never lost', 
 
   test('log-level inline external properties block', async () => {
     const sarif = sarifLog([result('inline')]);
-    sarif.inlineExternalProperties = [{ results: [{ message: { text: 'hidden' } }] }];
+    sarif['inlineExternalProperties'] = [{ results: [{ message: { text: 'hidden' } }] }];
     const { outcome } = await prepare(sarif);
     assertBlocked(outcome, [['external-properties-unsupported', '/inlineExternalProperties']]);
   });
@@ -1499,9 +1607,9 @@ describe('regression: rules in tool extensions keep their component identity (SA
       rules: [{ id: 'EXT1', messageStrings: { m: { text: 'Extension says {0}' } } }] }],
   };
   const extensionAuthor = '<sub>— CoreAnalyzer 5.0.0 · ext-pack 1.2.0 · rule `EXT1`</sub>';
-  const run = (r) => sarifLog([r], { tool });
+  const run = (r: object) => sarifLog([r], { tool });
 
-  const ready = async (r) => {
+  const ready = async (r: object) => {
     const { outcome } = await prepare(run(r));
     assertReady(outcome);
     return outcome;
@@ -1510,7 +1618,7 @@ describe('regression: rules in tool extensions keep their component identity (SA
   test('rule.toolComponent.index names the extension; its rule, message strings and identity are kept', async () => {
     const outcome = await ready({ rule: { id: 'EXT1', index: 0, toolComponent: { index: 0 } }, message: { id: 'm', arguments: ['hi'] } });
     assert.equal(outcome.review.body, `Extension says hi\n\n${extensionAuthor}`);
-    assert.deepStrictEqual(outcome.evidence[0].attribution,
+    assert.deepStrictEqual(outcome.evidence[0]?.attribution,
       { tool: 'CoreAnalyzer', version: '5.0.0', component: { name: 'ext-pack', version: '1.2.0' }, ruleId: 'EXT1' });
   });
 
@@ -1537,11 +1645,11 @@ describe('regression: rules in tool extensions keep their component identity (SA
   test('a driver rule without a component reference keeps driver attribution', async () => {
     const outcome = await ready({ ruleId: 'CORE1', message: { id: 'm', arguments: ['d'] } });
     assert.equal(outcome.review.body, 'Core says d\n\n<sub>— CoreAnalyzer 5.0.0 · rule `CORE1`</sub>');
-    assert.deepStrictEqual(outcome.evidence[0].attribution, { tool: 'CoreAnalyzer', version: '5.0.0', ruleId: 'CORE1' });
+    assert.deepStrictEqual(outcome.evidence[0]?.attribution, { tool: 'CoreAnalyzer', version: '5.0.0', ruleId: 'CORE1' });
   });
 
   for (const [name, toolComponent] of [['an extension index out of range', { index: 3 }],
-    ['an unknown component guid', { guid: '1b3c1c2e-4d5f-4a6b-8c7d-0e1f2a3b4c5d' }], ['an unknown component name', { name: 'nope' }]]) {
+    ['an unknown component guid', { guid: '1b3c1c2e-4d5f-4a6b-8c7d-0e1f2a3b4c5d' }], ['an unknown component name', { name: 'nope' }]] as const) {
     test(`${name} blocks instead of falling back to the driver`, async () => {
       const { outcome } = await prepare(run({ rule: { id: 'EXT1', toolComponent }, message: { text: 'x' } }));
       assertBlocked(outcome, [['rule-component-unresolved', '/runs/0/results/0']]);
@@ -1561,7 +1669,7 @@ describe('regression: rules in tool extensions keep their component identity (SA
   test('result taxa referencing components are reported rather than silently dropped', async () => {
     const outcome = await ready({ ruleId: 'CORE1', message: { text: 'x' }, taxa: [{ id: 'CWE-89', toolComponent: { name: 'CWE' } }] });
     assert.ok(codes(outcome.warnings).includes('taxa-uninterpreted'));
-    assert.deepStrictEqual(outcome.evidence[0].taxa, [{ id: 'CWE-89', toolComponent: { name: 'CWE' } }]);
+    assert.deepStrictEqual(outcome.evidence[0]?.taxa, [{ id: 'CWE-89', toolComponent: { name: 'CWE' } }]);
   });
 });
 
@@ -1570,10 +1678,10 @@ describe('regression: rules in tool extensions keep their component identity (SA
 // Written before repair; see logs/opus/fidelity-red.txt.
 
 describe('regression: result classification is rendered, never discarded (SARIF 3.27.9-3.27.10, 3.27.24)', () => {
-  const inlineBody = async (r, run) => {
+  const inlineBody = async (r: object, run?: Readonly<Record<string, unknown>>) => {
     const { outcome } = await prepare(sarifLog([{ locations: at('src/app.js', { startLine: 7 }), ...r }], run));
     assertReady(outcome);
-    return outcome.review.comments[0].body;
+    return outcome.review.comments[0]?.body;
   };
 
   test('explicit error and note levels render differently', async () => {
@@ -1606,7 +1714,7 @@ describe('regression: result classification is rendered, never discarded (SARIF 
   test('classification is kept in evidence', async () => {
     const { outcome } = await prepare(sarifLog([{ kind: 'review', level: 'warning', baselineState: 'new', message: { text: 'x' } }]));
     assertReady(outcome);
-    assert.deepStrictEqual(outcome.evidence[0].classification, { kind: 'review', level: 'warning', baselineState: 'new' });
+    assert.deepStrictEqual(outcome.evidence[0]?.classification, { kind: 'review', level: 'warning', baselineState: 'new' });
   });
 });
 
@@ -1615,9 +1723,9 @@ describe('regression: a location\'s own message is rendered (SARIF 3.28.5)', () 
     const { outcome } = await prepare(sarifLog([{ message: { text: 'SQL injection.' }, locations: [{
       message: { text: 'tainted value reaches the query here' }, physicalLocation: { artifactLocation: { uri: 'src/app.js' }, region: { startLine: 7 } } }] }]));
     assertReady(outcome);
-    assert.equal(outcome.review.comments[0].body,
+    assert.equal(outcome.review.comments[0]?.body,
       `SQL injection.\n\n**At this location:** tainted value reaches the query here\n\n${author('T')}`);
-    assert.equal(outcome.evidence[0].locationMessage, 'tainted value reaches the query here');
+    assert.equal(outcome.evidence[0]?.locationMessage, 'tainted value reaches the query here');
   });
 
   test('a location message is subject to the producer suggestion-fence guard', async () => {
@@ -1639,7 +1747,7 @@ describe('regression: a failed analysis is never presented as a complete review 
     const { outcome } = await prepare(sarifLog([result('partial')], { invocations: [{ executionSuccessful: false,
       toolExecutionNotifications: [{ level: 'error', message: { text: 'analyzer crashed on 40 files' } }] }] }));
     assertBlocked(outcome, [['invocation-failed', '/runs/0/invocations/0']]);
-    assert.ok(outcome.diagnostics.find((d) => d.code === 'invocation-failed').message.includes('analyzer crashed on 40 files'));
+    assert.ok(outcome.diagnostics.find((d) => d.code === 'invocation-failed')?.message.includes('analyzer crashed on 40 files'));
   });
 
   test('error notifications in a successful invocation are reported as warnings', async () => {
@@ -1658,7 +1766,7 @@ describe('regression: a failed analysis is never presented as a complete review 
 });
 
 describe('regression: producer HTML can never hide later content', () => {
-  const md = (markdown, locations) => ({ message: { text: 'x', markdown }, ...(locations ? { locations } : {}) });
+  const md = (markdown: string, locations?: readonly unknown[]) => ({ message: { text: 'x', markdown }, ...(locations ? { locations } : {}) });
 
   test('an unterminated HTML comment in the body blocks instead of hiding the next finding', async () => {
     const { outcome } = await prepare(sarifLog([md('First finding <!-- unterminated'), result('Second finding: SQL injection')]));
@@ -1703,7 +1811,7 @@ describe('regression: producer HTML can never hide later content', () => {
 });
 
 describe('regression: plain-text @mentions are rendered literally, not as notifications', () => {
-  const bodyOf = async (sarif) => {
+  const bodyOf = async (sarif: unknown) => {
     const { outcome } = await prepare(sarif);
     assertReady(outcome);
     return outcome.review.body;
@@ -1777,10 +1885,10 @@ describe('complete payload bounds', () => {
   // Default product limits (not claims about GitHub maxima): 100 inline
   // comments, 60000 UTF-16 code units per comment body or review body, and
   // 1,000,000 bytes of UTF-8 JSON for { body, comments }.
-  const onLine7 = (text) => result(text, at('src/app.js', { startLine: 7 }));
+  const onLine7 = (text: string) => result(text, at('src/app.js', { startLine: 7 }));
 
   test('default: 100 inline comments are accepted and 101 block', async () => {
-    const hundred = Array.from({ length: 100 }, (_, i) => onLine7(`note ${i}`));
+    const hundred = Array.from({ length: 100 }, (_, i) => onLine7(`note ${String(i)}`));
     assertReady((await prepare(sarifLog(hundred))).outcome);
     const { outcome } = await prepare(sarifLog([...hundred, onLine7('one more')]));
     assertBlocked(outcome, ['too-many-comments']);
@@ -1800,7 +1908,7 @@ describe('complete payload bounds', () => {
   });
 
   test('default: a payload over 1,000,000 bytes blocks without truncation or splitting', async () => {
-    const { outcome } = await prepare(sarifLog(Array.from({ length: 20 }, (_, i) => onLine7(`${i}${'z'.repeat(59000)}`))));
+    const { outcome } = await prepare(sarifLog(Array.from({ length: 20 }, (_, i) => onLine7(`${String(i)}${'z'.repeat(59000)}`))));
     assertBlocked(outcome, ['payload-too-large']);
   });
 });
@@ -1833,6 +1941,7 @@ describe('product limits', () => {
     assert.deepStrictEqual({ ...PRODUCT_LIMITS }, { maxComments: 100, maxCommentBodyChars: 60000, maxPayloadBytes: 1000000 });
     assert.equal(Object.isFrozen(PRODUCT_LIMITS), true);
     assert.throws(() => {
+      // @ts-expect-error -- deliberately invalid: proves the exported limits are frozen at run time
       PRODUCT_LIMITS.maxComments = 1000;
     }, TypeError);
     assert.equal(PRODUCT_LIMITS.maxComments, 100);
