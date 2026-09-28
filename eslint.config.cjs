@@ -49,7 +49,7 @@ const NODE_GLOBALS = Object.fromEntries(
 
 module.exports = [
   {
-    ignores: ['node_modules/', 'logs/', 'docs/', 'vendor/', '.claude/', 'scratch/', 'scratch*'],
+    ignores: ['node_modules/', 'logs/', 'docs/', 'vendor/', '.claude/', 'scratch/', 'scratch*', 'temp/'],
   },
   {
     files: ['**/*.cjs', '**/*.js'],

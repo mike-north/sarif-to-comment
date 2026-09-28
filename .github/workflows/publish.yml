@@ -1,0 +1,88 @@
+# Publishes sarif-to-comment to npm through trusted publishing (OIDC).
+#
+# Versions are produced by Changesets (`pnpm run release:version`, which runs
+# the release guard and `changeset version`) and merged to main. A push to
+# main that changes package.json runs this workflow; it publishes only when
+# package.json holds a version that is not yet on npm. Nothing else runs it,
+# and nothing here holds an npm token: npm trusts this exact workflow file
+# (mike-north/sarif-to-comment, publish.yml, no environment) and exchanges the
+# job's OIDC token for a short-lived publish credential. See README.md,
+# "Releasing".
+#
+# The release guard (scripts/release-guard.cjs publish-preflight) decides
+# first: an already-published version is a no-op; otherwise it refuses a
+# version of 1.0.0 or higher (MAXIMUM_RELEASE_MAJOR), a prerelease, a version
+# without a Changesets CHANGELOG entry, pre mode, unpublishable metadata, a
+# commit not on main, and npm or Node too old for trusted publishing. Every
+# later step runs only when it says publish: the full check, then the exact
+# tarball that was packed and verified is published.
+#
+# Provenance: npm generates it automatically only for public repositories.
+# This repository is private, so no provenance is produced; do not add
+# --provenance (it fails for private repositories).
+name: Publish to npm
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - package.json
+
+permissions:
+  contents: read
+  id-token: write
+
+# One release at a time; a publish in progress is never cancelled.
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out the pushed commit with history (to confirm it is on main)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11.12.0
+
+      - name: Set up Node 24 (bundled npm supports trusted publishing)
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Install exactly the locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Decide whether this version must be published (release guard)
+        id: preflight
+        run: node scripts/release-guard.cjs publish-preflight
+
+      - name: Lint, type-check, API/docs freshness, release plan and tests
+        if: steps.preflight.outputs.publish == 'true'
+        run: pnpm run check
+
+      - name: Pack the release tarball
+        if: steps.preflight.outputs.publish == 'true'
+        id: pack
+        run: |
+          mkdir -p "$RUNNER_TEMP/release"
+          npm pack --json --pack-destination "$RUNNER_TEMP/release" > "$RUNNER_TEMP/pack.json"
+          filename=$(node -p "require(process.argv[1])[0].filename" "$RUNNER_TEMP/pack.json")
+          echo "tarball=$RUNNER_TEMP/release/$filename" >> "$GITHUB_OUTPUT"
+
+      - name: Verify the tarball is exactly the distribution boundary
+        if: steps.preflight.outputs.publish == 'true'
+        run: node scripts/release-guard.cjs verify-pack "$RUNNER_TEMP/pack.json"
+
+      - name: Publish the verified tarball
+        if: steps.preflight.outputs.publish == 'true'
+        run: npm publish "${{ steps.pack.outputs.tarball }}"

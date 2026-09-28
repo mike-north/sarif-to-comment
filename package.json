@@ -1,7 +1,6 @@
 {
   "name": "sarif-to-comment",
-  "version": "0.1.0",
-  "private": true,
+  "version": "0.0.0",
   "description": "Publish a ready SARIF 2.1.0 document as one GitHub draft pull request review, with durable, never-duplicating delivery.",
   "keywords": [
     "sarif",
@@ -9,34 +8,64 @@
     "code-review",
     "pull-request"
   ],
+  "homepage": "https://github.com/mike-north/sarif-to-comment#readme",
+  "bugs": {
+    "url": "https://github.com/mike-north/sarif-to-comment/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mike-north/sarif-to-comment.git"
+  },
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "main": "./src/index.cjs",
+  "types": "./types/index.d.ts",
   "exports": {
-    ".": "./src/index.cjs",
+    ".": {
+      "types": "./types/index.d.ts",
+      "default": "./src/index.cjs"
+    },
     "./package.json": "./package.json"
   },
   "bin": {
-    "sarif-to-comment": "./bin/sarif-to-comment.cjs"
+    "sarif-to-comment": "bin/sarif-to-comment.cjs"
   },
   "files": [
     "src/",
     "bin/",
+    "types/",
     "vendor/",
+    "docs/getting-started.md",
+    "docs/api/",
+    "CHANGELOG.md",
     "README.md"
   ],
   "engines": {
     "node": ">=22"
   },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "scripts": {
-    "test": "node --test test/*.test.cjs",
+    "build": "node scripts/api-docs.cjs build",
+    "check": "npm run check:lint && npm run check:types && npm run check:api && npm run check:release && npm test",
     "check:lint": "eslint .",
-    "check": "npm run check:lint && npm test"
+    "check:types": "tsc -p tsconfig.json",
+    "check:api": "node scripts/api-docs.cjs check",
+    "check:release": "node scripts/release-guard.cjs plan",
+    "test": "node --test test/*.test.cjs",
+    "release:version": "node scripts/release-guard.cjs version",
+    "prepublishOnly": "node scripts/release-guard.cjs check-version"
   },
   "devDependencies": {
+    "@changesets/cli": "^3.0.3",
+    "@microsoft/api-documenter": "^7.30.16",
+    "@microsoft/api-extractor": "^7.59.2",
     "eslint": "^10.11.0",
-    "prettier": "^3.9.9"
+    "prettier": "^3.9.9",
+    "typescript": "~5.9.3"
   },
   "dependencies": {
     "ajv": "^8.20.0",

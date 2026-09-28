@@ -1,0 +1,28 @@
+KILLED   publish on every main push (no package.json filter): pass 90, fail 1
+KILLED   adds a manual trigger: pass 90, fail 1
+KILLED   drops the OIDC permission: pass 90, fail 1
+KILLED   uses a long-lived npm token: pass 90, fail 1
+KILLED   cancels a publish in progress: pass 90, fail 1
+KILLED   publish step not gated by the decision: pass 90, fail 1
+KILLED   publishes the working tree, not the verified tarball: pass 90, fail 1
+KILLED   skips the release guard decision: pass 90, fail 1
+KILLED   publishes with `changeset publish`: pass 90, fail 1
+KILLED   forces provenance: pass 89, fail 2
+KILLED   uses a floating action tag: pass 90, fail 1
+KILLED   ceiling raised to 1: pass 74, fail 17
+KILLED   a major crossing the ceiling is silently tolerated: pass 79, fail 12
+KILLED   V2 reintroduced: a major is refused by type whatever the ceiling: pass 89, fail 2
+KILLED   V2 reintroduced: publish decision ignores a raised ceiling: pass 90, fail 1
+KILLED   V1 reintroduced: no sandbox run when no changeset parses as unquoted: pass 85, fail 6
+KILLED   unconsumed changesets ignored: pass 90, fail 1
+KILLED   applied bump never reported as major: pass 83, fail 8
+KILLED   prereleases allowed: pass 89, fail 2
+KILLED   major computed from the minor component: pass 70, fail 21
+KILLED   pre mode ignored: pass 89, fail 2
+KILLED   no Changesets CHANGELOG requirement: pass 89, fail 2
+KILLED   already-published versions skip the ceiling: pass 90, fail 1
+KILLED   registry failure read as "unpublished": pass 90, fail 1
+KILLED   files outside the boundary accepted: pass 82, fail 9
+KILLED   versioning runs before the plan is checked: pass 83, fail 8
+KILLED   commit not required to be on main: pass 90, fail 1
+mutants 27, survivors 0
