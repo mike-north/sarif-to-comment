@@ -20,6 +20,8 @@ Status: **approved by Astra with corrections (§0); execution in progress.** Bas
    - *Lint*: root ESLint config ignores `dist/`; the strict type-aware configuration needs three documented rule settings (recorded in `evidence/p0-spike/files/eslint.config.cjs`). Dev deps: `typescript-eslint@8.70.1`, `@types/node@22.20.4`.
    - *ajv*: ajv, ajv-draft-04, ajv-formats and `@types/node@22` type-check with zero diagnostics under all strict flags without `skipLibCheck`.
 
+7. **Accepted conversion divergences (unreachable or internal only)**: internal (non-entry) module `Object.keys` order and the non-enumerable `__esModule` marker on internal modules (not reachable through `exports`); caught-error message extraction on non-Error thrown values; `packageVersion()` throws rather than returning `undefined` for a package.json without a string version; hostile-Proxy handling in `captureJson`; "Internal error" instead of a TypeError on unreachable index reads. Existing validation looseness (one-element SHA arrays, array-valued state `phase`, unknown tree modes) is preserved deliberately, not tightened.
+
 ## Checkpoints
 
 | Checkpoint | State | Evidence |
@@ -28,7 +30,9 @@ Status: **approved by Astra with corrections (§0); execution in progress.** Bas
 | Baseline `pnpm run check` in integration worktree (Node 24.14.0): 1806 tests / 138 suites pass | done | `logs/opus/typescript/evidence/baseline-check.txt` |
 | P0 toolchain spike: commit `63ec325` on `typescript-migration-spike` (`wt/spike`); Node 24.14.0, 22.23.3, 22.18.0 | accepted with caveats (§0.6) | `evidence/p0-spike/worker-handback.md`, `evidence/p0-spike/files/` |
 | P1a characterization tests: commit `5086ab2`; 1830 tests / 144 suites pass on unchanged JS; 25 mutation red proofs; runtime identical to `2829530` | accepted | `evidence/p1a/NOTES.md`, `evidence/p1a/red/` |
-| P1b new-layout red tests + P2 build infrastructure | next | — |
+| P1b red layout tests `8b6a724`; P2 infrastructure `aa605b9`, re-path `83296a1` (specifier-only, script-verified), fixes `db3efe1`, `2af2c03`; lead re-ran gate: 1873/148 pass | accepted | `evidence/p2/INDEX.txt`, `evidence/p2/lead-gate.txt` |
+| Wave 1 converted: sarif-common, artifact-files, github, placement, replacements, staged-git, publication (merges `29ba530`..`b761357`); explicit `esModuleInterop:false` + duplicate-module test decoupled `73a314d`; full check 1873 pass, api-report/docs unchanged | accepted | `evidence/p3/w1-*.txt`, `evidence/p3/w1-merge-gate.txt` |
+| Wave 2: sarif-authoring, sarif-inspection, staged-changes, prepare-review | running | `evidence/p3/w2-*.txt` |
 
 ## 1. Context and outcome
 
