@@ -1,5 +1,3 @@
-'use strict';
-
 /**
  * End-to-end acceptance of the complete workflow through the *installed*
  * package: the tarball `npm pack` produces, installed by npm into a clean
@@ -31,16 +29,15 @@
  * @see https://docs.npmjs.com/cli/v11/commands/npm-install
  */
 
-const test = require('node:test');
-const { describe } = test;
-const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
-const { spawnSync } = require('node:child_process');
+import { AssertionError } from 'node:assert';
+import * as assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import type { SpawnSyncOptionsWithStringEncoding, SpawnSyncReturns } from 'node:child_process';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { describe, test } from 'node:test';
 
-const { ROOT, packProject, installIntoConsumer } = require('./fixtures/package/installed-package.mts');
-const { FakeHttpGitHub } = require('./fixtures/composition/fake-http-github.mts');
-const {
+import {
   ORACLE,
   UPSTREAM_SARIF_PATH,
   SENTINEL,
@@ -48,15 +45,57 @@ const {
   applyReplacements,
   replacementsFor,
   distinctReplacements,
-} = require('./fixtures/authoring-workflow/git-world.mts');
+} from './fixtures/authoring-workflow/git-world.mts';
+import type { IGitWorld } from './fixtures/authoring-workflow/git-world.mts';
+import { FakeHttpGitHub } from './fixtures/composition/fake-http-github.mts';
+import { ROOT, packProject, installIntoConsumer } from './fixtures/package/installed-package.mts';
+import {
+  asArray,
+  asRecord,
+  expectType,
+  isArrayOf,
+  isOptional,
+  isRecord,
+  isShape,
+  isString,
+  isUnknown,
+  parseJson,
+  readJson,
+} from './support/runtime-types.mts';
+
+/** `value`, which the assertions before it establish is present; fails naming `what` otherwise. */
+function present<T>(value: T | undefined, what: string): T {
+  if (value === undefined) throw new AssertionError({ message: `expected ${what}`, actual: value, operator: 'present' });
+  return value;
+}
 
 const PRELOAD = path.join(ROOT, 'test', 'fixtures', 'docs', 'fake-fetch-preload.mts');
 const TOKEN = 'ghp_WORKFLOW_token_for_installed_tests_0123456789';
-const UPSTREAM = JSON.parse(fs.readFileSync(UPSTREAM_SARIF_PATH, 'utf8'));
-const [FINDING_A, FINDING_B] = ORACLE.findings;
+const UPSTREAM = readJson(UPSTREAM_SARIF_PATH);
+const FINDING_A = present(ORACLE.findings[0], 'oracle finding A');
+const FINDING_B = present(ORACLE.findings[1], 'oracle finding B');
+
+/** A Git world with its fake GitHub and the environment and flags for installed commands. */
+interface IWorkflowWorld extends IGitWorld {
+  readonly host: FakeHttpGitHub;
+  readonly env: NodeJS.ProcessEnv;
+  readonly repoFlag: string;
+  readonly pull: string;
+}
+
+/** A CLI outcome: its status and, when it failed, the Markdown explaining why. */
+const isOutcome = isShape({ status: isUnknown, message: isOptional(isString), markdown: isOptional(isString) });
+
+/** An inspection view as the assertions read it; the compared values stay `unknown`. */
+const isInspection = isShape({
+  view: isShape({
+    summary: isShape({ fixes: isUnknown, findings: isUnknown }),
+    findings: isArrayOf(isShape({ message: isShape({ text: isUnknown }) })),
+  }),
+});
 
 /** A Git world plus a fake GitHub serving its commits, and the environment for installed commands. */
-function world(label) {
+function world(label: string): IWorkflowWorld {
   const git = createGitWorld(label);
   const hostDir = path.join(git.root, 'host');
   FakeHttpGitHub.create(hostDir, {}, git.repository);
@@ -71,19 +110,24 @@ function world(label) {
   return { ...git, host, env, repoFlag: `${owner}/${repo}`, pull: String(pullNumber) };
 }
 
-const createPosts = (host) => host.log().filter((r) => r.method === 'POST' && r.path.endsWith('/reviews')).length;
+const createPosts = (host: FakeHttpGitHub): number => host.log().filter((r) => r.method === 'POST' && r.path.endsWith('/reviews')).length;
 
 /** The exact inline comments a faithful publication of findings A and B creates (from the oracle). */
-function assertOracleReview(host, w, { messages = [FINDING_A.message, FINDING_B.message] } = {}) {
+function assertOracleReview(
+  host: FakeHttpGitHub,
+  w: IWorkflowWorld,
+  { messages = [FINDING_A.message, FINDING_B.message] }: { messages?: readonly [string, string] } = {},
+): void {
   const reviews = host.reviews();
   assert.equal(reviews.length, 1, 'exactly one review');
-  const [stored] = reviews;
+  const stored = present(reviews[0], 'the review');
   assert.equal(stored.state, 'PENDING', 'a draft');
   assert.equal(Object.hasOwn(stored.request, 'event'), false, 'never submitted');
   assert.equal(stored.request.commit_id, w.head);
   const comments = [...stored.request.comments].sort((x, y) => x.line - y.line);
   assert.equal(comments.length, 2, JSON.stringify(stored.request.comments, null, 2));
-  const [a, b] = comments;
+  const a = present(comments[0], 'the comment on finding A');
+  const b = present(comments[1], 'the comment on finding B');
   assert.equal(a.path, ORACLE.path);
   assert.equal(a.side, 'RIGHT');
   assert.equal(a.line, FINDING_A.line);
@@ -102,9 +146,9 @@ function assertOracleReview(host, w, { messages = [FINDING_A.message, FINDING_B.
 }
 
 /** The enriched SARIF reproduces T from H and contains no unstaged content. */
-function assertStagedFidelity(sarifText) {
+function assertStagedFidelity(sarifText: string): void {
   assert.ok(!sarifText.includes(SENTINEL), 'unstaged working-tree content never enters the SARIF');
-  const edits = distinctReplacements(replacementsFor(JSON.parse(sarifText), ORACLE.path));
+  const edits = distinctReplacements(replacementsFor(parseJson(sarifText), ORACLE.path));
   assert.equal(applyReplacements(ORACLE.reviewed, edits), ORACLE.staged);
 }
 
@@ -117,28 +161,55 @@ describe('the installed package runs the complete workflow', () => {
     const work = fs.mkdtempSync(path.join(w.root, 'artifacts-'));
     const authored = path.join(work, 'review.sarif');
     const enriched = path.join(work, 'enriched.sarif');
-    const cli = (args, extra = {}) => {
+    const cli = (args: readonly string[], extra: Partial<SpawnSyncOptionsWithStringEncoding> = {}): SpawnSyncReturns<string> => {
       const result = spawnSync(bin, args, { cwd: consumer, env: w.env, encoding: 'utf8', timeout: 120_000, ...extra });
       for (const text of [result.stdout, result.stderr]) assert.ok(!text.includes(TOKEN), 'the token never appears');
       return result;
     };
-    const jsonCli = (args, expectedExit = 0) => {
+    const jsonCli = (args: readonly string[], expectedExit = 0): unknown => {
       const result = cli([...args, '--format', 'json']);
       assert.equal(result.status, expectedExit, result.stdout + result.stderr);
       assert.equal(result.stderr, '');
-      return JSON.parse(result.stdout);
+      return parseJson(result.stdout);
     };
 
-    const created = jsonCli(['init', '--output', authored, '--tool-name', 'Review agent', '--repo', w.repoFlag, '--commit', w.head]);
+    const created = expectType(
+      jsonCli(['init', '--output', authored, '--tool-name', 'Review agent', '--repo', w.repoFlag, '--commit', w.head]),
+      isOutcome,
+      'the init outcome',
+    );
     assert.equal(created.status, 'created');
-    const a = jsonCli(['add-comment', '--sarif', authored, '--file', ORACLE.path, '--line', String(FINDING_A.line), '--message', FINDING_A.message]);
-    const b = jsonCli([
-      'add-comment', '--sarif', authored, '--file', ORACLE.path, '--line', String(FINDING_B.line),
-      '--end-line', String(FINDING_B.endLine), '--message', FINDING_B.message,
-    ]);
+    const isAdded = isShape({ finding: isShape({ ref: isUnknown }) });
+    const a = expectType(
+      jsonCli(['add-comment', '--sarif', authored, '--file', ORACLE.path, '--line', String(FINDING_A.line), '--message', FINDING_A.message]),
+      isAdded,
+      'an added comment',
+    );
+    const b = expectType(
+      jsonCli([
+        'add-comment', '--sarif', authored, '--file', ORACLE.path, '--line', String(FINDING_B.line),
+        '--end-line', String(FINDING_B.endLine), '--message', FINDING_B.message,
+      ]),
+      isAdded,
+      'an added comment',
+    );
     assert.deepEqual([a.finding.ref, b.finding.ref], ['/runs/0/results/0', '/runs/0/results/1']);
 
-    const before = jsonCli(['inspect', '--sarif', authored]);
+    const before = expectType(
+      jsonCli(['inspect', '--sarif', authored]),
+      isShape({
+        view: isShape({
+          summary: isShape({ fixes: isUnknown }),
+          findings: isArrayOf(
+            isShape({
+              message: isShape({ text: isUnknown }),
+              locations: isArrayOf(isShape({ path: isUnknown, startLine: isUnknown, endLine: isUnknown })),
+            }),
+          ),
+        }),
+      }),
+      'an inspection with locations',
+    );
     assert.deepEqual(
       before.view.findings.map((f) => [f.message.text, f.locations.map((l) => [l.path, l.startLine, l.endLine ?? l.startLine])]),
       [
@@ -148,13 +219,30 @@ describe('the installed package runs the complete workflow', () => {
     );
     assert.equal(before.view.summary.fixes, 0);
 
-    const staged = jsonCli([
-      'add-staged-changes', '--sarif', authored, '--output', enriched, '--worktree', w.dir, '--repo', w.repoFlag, '--commit', w.head,
-    ]);
+    const staged = expectType(
+      jsonCli([
+        'add-staged-changes', '--sarif', authored, '--output', enriched, '--worktree', w.dir, '--repo', w.repoFlag, '--commit', w.head,
+      ]),
+      isShape({ status: isUnknown, output: isUnknown, receipt: isUnknown }),
+      'the staged-changes outcome',
+    );
     assert.equal(staged.status, 'added');
     assert.deepEqual(staged.output, { path: enriched, written: true });
+    const { receipt } = expectType(
+      staged,
+      isShape({
+        receipt: isShape({
+          changes: isArrayOf(
+            isShape({
+              replacements: isArrayOf(isShape({ startLine: isUnknown, endLine: isUnknown, associated: isUnknown, explainedBy: isUnknown })),
+            }),
+          ),
+        }),
+      }),
+      'a staged-changes receipt',
+    );
     assert.deepEqual(
-      staged.receipt.changes[0].replacements.map((r) => [r.startLine, r.endLine, r.associated, r.explainedBy]),
+      present(receipt.changes[0], 'the receipt change').replacements.map((r) => [r.startLine, r.endLine, r.associated, r.explainedBy]),
       [
         [FINDING_A.line, FINDING_A.endLine, ['/runs/0/results/0'], 'finding'],
         [FINDING_B.line, FINDING_B.endLine, ['/runs/0/results/1'], 'finding'],
@@ -162,11 +250,20 @@ describe('the installed package runs the complete workflow', () => {
     );
     assertStagedFidelity(fs.readFileSync(enriched, 'utf8'));
 
-    const after = jsonCli(['inspect', '--sarif', enriched, '--preview-lines', 'all']);
+    const after = expectType(jsonCli(['inspect', '--sarif', enriched, '--preview-lines', 'all']), isInspection, 'an inspection');
     assert.equal(after.view.summary.findings, 2, 'no finding added or lost');
     assert.deepEqual(after.view.findings.map((f) => f.message.text), [FINDING_A.message, FINDING_B.message]);
+    const withFixes = expectType(
+      after.view.findings,
+      isArrayOf(
+        isShape({
+          fixes: isArrayOf(isShape({ changes: isArrayOf(isShape({ replacements: isArrayOf(isShape({ inserted: isShape({ text: isUnknown }) })) })) })),
+        }),
+      ),
+      'findings with fix previews',
+    );
     assert.deepEqual(
-      after.view.findings.map((f) => f.fixes.map((x) => x.changes[0].replacements.map((r) => r.inserted.text))),
+      withFixes.map((f) => f.fixes.map((x) => present(x.changes[0], 'a fix change').replacements.map((r) => r.inserted.text))),
       [[[`${FINDING_A.replacementLines.join('\n')}\n`]], [[`${FINDING_B.replacementLines.join('\n')}\n`]]],
     );
     const human = cli(['inspect', '--sarif', enriched]);
@@ -175,13 +272,14 @@ describe('the installed package runs the complete workflow', () => {
 
     const statePath = path.join(work, 'publication.json');
     const publishArgs = ['publish', '--sarif', enriched, '--repo', w.repoFlag, '--pull', w.pull, '--commit', w.head, '--state', statePath];
-    const published = jsonCli(publishArgs);
+    const published = expectType(jsonCli(publishArgs), isShape({ status: isUnknown, message: isOptional(isString), statePath: isUnknown, review: isUnknown }), 'the publish outcome');
     assert.equal(published.status, 'published', published.message);
     assert.equal(published.statePath, statePath);
     assertOracleReview(w.host, w);
-    assert.ok(published.review.url.endsWith(`#pullrequestreview-${w.host.reviews()[0].id}`));
+    const review = expectType(published.review, isShape({ url: isString }), 'the published review');
+    assert.ok(review.url.endsWith(`#pullrequestreview-${String(present(w.host.reviews()[0], 'the stored review').id)}`));
 
-    const again = jsonCli(publishArgs);
+    const again = expectType(jsonCli(publishArgs), isShape({ review: isUnknown }), 'the repeated publish outcome');
     assert.deepEqual(again.review, published.review);
     assert.equal(createPosts(w.host), 1, 'a retry with the same state file sends nothing');
   });
@@ -242,7 +340,11 @@ describe('the installed package runs the complete workflow', () => {
     };
     const result = spawnSync(process.execPath, [file], { cwd: consumer, env, encoding: 'utf8', timeout: 120_000 });
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    const { enriched, receipt, review } = JSON.parse(result.stdout);
+    const { enriched, receipt, review } = expectType(
+      parseJson(result.stdout),
+      isShape({ enriched: isUnknown, receipt: isShape({ boundRuns: isUnknown }), review: isShape({ id: isUnknown }) }),
+      'the library workflow report',
+    );
     assertStagedFidelity(JSON.stringify(enriched));
     assert.deepEqual(receipt.boundRuns, [], 'the authored run was already bound');
     assertOracleReview(w.host, w);
@@ -254,39 +356,54 @@ describe('the installed package runs the complete workflow', () => {
     const w = world('installed-upstream');
     const work = fs.mkdtempSync(path.join(w.root, 'artifacts-'));
     const enriched = path.join(work, 'enriched.sarif');
-    const jsonCli = (args) => {
+    const jsonCli = (args: readonly string[]): unknown => {
       const result = spawnSync(bin, [...args, '--format', 'json'], { cwd: consumer, env: w.env, encoding: 'utf8', timeout: 120_000 });
       assert.equal(result.status, 0, result.stdout + result.stderr);
-      return JSON.parse(result.stdout);
+      return parseJson(result.stdout);
     };
 
-    const inspected = jsonCli(['inspect', '--sarif', UPSTREAM_SARIF_PATH]);
+    const inspected = expectType(
+      jsonCli(['inspect', '--sarif', UPSTREAM_SARIF_PATH]),
+      isShape({ view: isShape({ runs: isArrayOf(isShape({ tool: isShape({ name: isUnknown }), source: isShape({ state: isUnknown }) })) }) }),
+      'an inspection of runs',
+    );
     assert.deepEqual(inspected.view.runs.map((r) => [r.tool.name, r.source.state]), [['Independent fixture producer', 'unbound']]);
 
-    const staged = jsonCli([
-      'add-staged-changes', '--sarif', UPSTREAM_SARIF_PATH, '--output', enriched, '--worktree', w.dir, '--repo', w.repoFlag, '--commit', w.head,
-    ]);
+    const staged = expectType(
+      jsonCli([
+        'add-staged-changes', '--sarif', UPSTREAM_SARIF_PATH, '--output', enriched, '--worktree', w.dir, '--repo', w.repoFlag, '--commit', w.head,
+      ]),
+      isShape({ receipt: isShape({ boundRuns: isUnknown }) }),
+      'a staged-changes receipt',
+    );
     assert.deepEqual(staged.receipt.boundRuns, [0]);
     const text = fs.readFileSync(enriched, 'utf8');
     assertStagedFidelity(text);
 
     // Only documented additions: fixes on the two findings and the run's source binding.
-    const output = JSON.parse(text);
-    const strip = (sarif) => {
+    const output = parseJson(text);
+    const firstRun = (sarif: unknown): Record<string, unknown> =>
+      asRecord(present(asArray(asRecord(sarif, 'a SARIF log')['runs'], 'its runs')[0], 'its first run'), 'a run');
+    const strip = (sarif: unknown): unknown => {
       const copy = structuredClone(sarif);
-      delete copy.runs[0].versionControlProvenance;
-      for (const result of copy.runs[0].results) delete result.fixes;
+      const run = firstRun(copy);
+      delete run['versionControlProvenance'];
+      for (const result of expectType(run['results'], isArrayOf(isRecord), 'the run results')) delete result['fixes'];
       return copy;
     };
     assert.deepEqual(strip(output), UPSTREAM, 'producer content, attribution and metadata are preserved');
-    assert.deepEqual(output.runs[0].versionControlProvenance, [{ repositoryUri: `https://github.com/${w.repoFlag}`, revisionId: w.head }]);
+    assert.deepEqual(firstRun(output)['versionControlProvenance'], [{ repositoryUri: `https://github.com/${w.repoFlag}`, revisionId: w.head }]);
 
-    const published = jsonCli([
-      'publish', '--sarif', enriched, '--repo', w.repoFlag, '--pull', w.pull, '--commit', w.head, '--state', path.join(work, 'state.json'),
-    ]);
+    const published = expectType(
+      jsonCli([
+        'publish', '--sarif', enriched, '--repo', w.repoFlag, '--pull', w.pull, '--commit', w.head, '--state', path.join(work, 'state.json'),
+      ]),
+      isOutcome,
+      'the publish outcome',
+    );
     assert.equal(published.status, 'published', published.message);
     assertOracleReview(w.host, w);
-    for (const comment of w.host.reviews()[0].request.comments) {
+    for (const comment of present(w.host.reviews()[0], 'the stored review').request.comments) {
       assert.ok(comment.body.includes('Independent fixture producer'), 'the upstream tool is credited');
     }
   });
@@ -294,9 +411,13 @@ describe('the installed package runs the complete workflow', () => {
   test('ready upstream SARIF publishes directly, with no authoring or staged step', { skip, timeout: 300_000 }, () => {
     const { consumer, bin } = installIntoConsumer();
     const w = world('installed-direct');
-    const ready = structuredClone(UPSTREAM);
-    const [a, b] = ready.runs[0].results;
-    const fix = (line, endLine, text) => [
+    const ready = expectType(
+      structuredClone(UPSTREAM),
+      isShape({ runs: isArrayOf(isShape({ results: isArrayOf(isRecord) })) }),
+      'upstream SARIF with results',
+    );
+    const [a, b] = present(ready.runs[0], 'the upstream run').results;
+    const fix = (line: number, endLine: number, text: string): unknown[] => [
       {
         artifactChanges: [
           {
@@ -307,8 +428,8 @@ describe('the installed package runs the complete workflow', () => {
       },
     ];
     // Written by hand from the oracle: each finding's intended replacement of its own lines.
-    a.fixes = fix(FINDING_A.line, FINDING_A.endLine, `${FINDING_A.replacementLines.join('\n')}\n`);
-    b.fixes = fix(FINDING_B.line, FINDING_B.endLine, `${FINDING_B.replacementLines.join('\n')}\n`);
+    present(a, 'upstream finding A')['fixes'] = fix(FINDING_A.line, FINDING_A.endLine, `${FINDING_A.replacementLines.join('\n')}\n`);
+    present(b, 'upstream finding B')['fixes'] = fix(FINDING_B.line, FINDING_B.endLine, `${FINDING_B.replacementLines.join('\n')}\n`);
     const file = path.join(w.root, 'ready.sarif');
     fs.writeFileSync(file, JSON.stringify(ready));
     const result = spawnSync(

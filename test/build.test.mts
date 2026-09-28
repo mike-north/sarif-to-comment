@@ -1,5 +1,3 @@
-'use strict';
-
 /**
  * Build tests: dist/ is what the tests exercise and the package ships, so it
  * must be a complete build of exactly the current sources.
@@ -17,26 +15,28 @@
  * @see https://nodejs.org/api/typescript.html#type-stripping
  */
 
-const test = require('node:test');
-const { describe } = test;
-const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const { spawnSync } = require('node:child_process');
+import * as assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import type { SpawnSyncReturns } from 'node:child_process';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { describe, test } from 'node:test';
 
-const ROOT = path.resolve(__dirname, '..');
+import { expectType, isNumber, isRecordOf, isShape, isString, readJson } from './support/runtime-types.mts';
+
+const ROOT = path.resolve(import.meta.dirname, '..');
 const MANIFEST_TOOL = path.join(ROOT, 'scripts', 'build-manifest.mts');
 
 /** Runs the freshness tool on `dir` (`write` or `verify`). */
-function manifestTool(command, dir) {
+function manifestTool(command: 'write' | 'verify', dir: string): SpawnSyncReturns<string> {
   return spawnSync(process.execPath, [MANIFEST_TOOL, command, dir], { encoding: 'utf8' });
 }
 
 /** A minimal project whose dist/ is a fresh, complete build as recorded by the build. */
-function builtProject() {
+function builtProject(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'build-manifest-'));
-  const files = {
+  const files: Readonly<Record<string, string>> = {
     'package.json': '{"name":"probe","version":"1.0.0"}\n',
     'tsconfig.base.json': '{"compilerOptions":{"strict":true}}\n',
     'src/tsconfig.json': '{"extends":"../tsconfig.base.json"}\n',
@@ -64,7 +64,11 @@ describe('the build-freshness guard', () => {
 
   test('the manifest records every input and output by content hash, sorted', () => {
     const dir = builtProject();
-    const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'dist', '.build-inputs.json'), 'utf8'));
+    const manifest = expectType(
+      readJson(path.join(dir, 'dist', '.build-inputs.json')),
+      isShape({ version: isNumber, inputs: isRecordOf(isString), outputs: isRecordOf(isString) }),
+      'a build-freshness manifest',
+    );
     assert.equal(manifest.version, 1);
     assert.deepEqual(Object.keys(manifest.inputs), [
       'package.json',
@@ -77,35 +81,35 @@ describe('the build-freshness guard', () => {
     for (const hash of [...Object.values(manifest.inputs), ...Object.values(manifest.outputs)]) assert.match(hash, /^[0-9a-f]{64}$/);
   });
 
-  const stale = {
-    'an edited source': [(dir) => fs.appendFileSync(path.join(dir, 'src', 'index.cts'), '// edit\n'), /input changed since the build: src\/index\.cts/],
-    'an added source': [(dir) => fs.writeFileSync(path.join(dir, 'src', 'extra.cts'), '\n'), /input added since the build: src\/extra\.cts/],
-    'a removed source': [(dir) => fs.rmSync(path.join(dir, 'src', 'helper.cts')), /input removed since the build: src\/helper\.cts/],
+  const stale: Readonly<Record<string, readonly [(dir: string) => void, RegExp]>> = {
+    'an edited source': [(dir) => { fs.appendFileSync(path.join(dir, 'src', 'index.cts'), '// edit\n'); }, /input changed since the build: src\/index\.cts/],
+    'an added source': [(dir) => { fs.writeFileSync(path.join(dir, 'src', 'extra.cts'), '\n'); }, /input added since the build: src\/extra\.cts/],
+    'a removed source': [(dir) => { fs.rmSync(path.join(dir, 'src', 'helper.cts')); }, /input removed since the build: src\/helper\.cts/],
     'a changed compiler configuration': [
-      (dir) => fs.writeFileSync(path.join(dir, 'tsconfig.base.json'), '{}\n'),
+      (dir) => { fs.writeFileSync(path.join(dir, 'tsconfig.base.json'), '{}\n'); },
       /input changed since the build: tsconfig\.base\.json/,
     ],
     'an added compiler configuration': [
-      (dir) => fs.writeFileSync(path.join(dir, 'tsconfig.json'), '{}\n'),
+      (dir) => { fs.writeFileSync(path.join(dir, 'tsconfig.json'), '{}\n'); },
       /input added since the build: tsconfig\.json/,
     ],
     'a changed manifest': [
-      (dir) => fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"probe","version":"1.0.1"}\n'),
+      (dir) => { fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"probe","version":"1.0.1"}\n'); },
       /input changed since the build: package\.json/,
     ],
-    'no build at all': [(dir) => fs.rmSync(path.join(dir, 'dist'), { recursive: true }), /missing or unreadable/],
+    'no build at all': [(dir) => { fs.rmSync(path.join(dir, 'dist'), { recursive: true }); }, /missing or unreadable/],
     'an unfinished build (outputs without a manifest)': [
-      (dir) => fs.rmSync(path.join(dir, 'dist', '.build-inputs.json')),
+      (dir) => { fs.rmSync(path.join(dir, 'dist', '.build-inputs.json')); },
       /missing or unreadable/,
     ],
-    'an unreadable manifest': [(dir) => fs.writeFileSync(path.join(dir, 'dist', '.build-inputs.json'), '{"version":1,'), /missing or unreadable/],
+    'an unreadable manifest': [(dir) => { fs.writeFileSync(path.join(dir, 'dist', '.build-inputs.json'), '{"version":1,'); }, /missing or unreadable/],
     'a manifest of another format': [
-      (dir) => fs.writeFileSync(path.join(dir, 'dist', '.build-inputs.json'), '{"version":2,"inputs":{},"outputs":{}}'),
+      (dir) => { fs.writeFileSync(path.join(dir, 'dist', '.build-inputs.json'), '{"version":2,"inputs":{},"outputs":{}}'); },
       /missing or unreadable/,
     ],
-    'an orphaned output': [(dir) => fs.writeFileSync(path.join(dir, 'dist', 'removed-module.cjs'), '\n'), /output added since the build: dist\/removed-module\.cjs/],
-    'a removed output': [(dir) => fs.rmSync(path.join(dir, 'dist', 'helper.cjs')), /output removed since the build: dist\/helper\.cjs/],
-    'a tampered output': [(dir) => fs.appendFileSync(path.join(dir, 'dist', 'index.cjs'), '// patched\n'), /output changed since the build: dist\/index\.cjs/],
+    'an orphaned output': [(dir) => { fs.writeFileSync(path.join(dir, 'dist', 'removed-module.cjs'), '\n'); }, /output added since the build: dist\/removed-module\.cjs/],
+    'a removed output': [(dir) => { fs.rmSync(path.join(dir, 'dist', 'helper.cjs')); }, /output removed since the build: dist\/helper\.cjs/],
+    'a tampered output': [(dir) => { fs.appendFileSync(path.join(dir, 'dist', 'index.cjs'), '// patched\n'); }, /output changed since the build: dist\/index\.cjs/],
   };
   for (const [label, [change, reason]] of Object.entries(stale)) {
     test(`refuses ${label}, naming the cause and the fix`, () => {

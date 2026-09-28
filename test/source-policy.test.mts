@@ -1,5 +1,3 @@
-'use strict';
-
 /**
  * Repository policy for owned sources: every ESLint suppression states why.
  *
@@ -15,20 +13,19 @@
  * @see https://eslint.org/docs/latest/use/configure/rules#disabling-rules
  */
 
-const test = require('node:test');
-const { describe } = test;
-const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
+import * as assert from 'node:assert/strict';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { describe, test } from 'node:test';
 
-const ROOT = path.resolve(__dirname, '..');
+const ROOT = path.resolve(import.meta.dirname, '..');
 
 /** Owned source locations; generated output (dist/) and third-party code are not owned. */
-const OWNED_DIRS = ['src', 'scripts', 'test', 'types'];
+const OWNED_DIRS: readonly string[] = ['src', 'scripts', 'test', 'types'];
 const SOURCE_FILE = /\.([cm]?js|[cm]?ts)$/;
 
 /** Project-relative paths of every owned JavaScript or TypeScript file. */
-function ownedSources() {
+function ownedSources(): string[] {
   const files = fs.readdirSync(ROOT).filter((f) => SOURCE_FILE.test(f) && fs.statSync(path.join(ROOT, f)).isFile());
   for (const dir of OWNED_DIRS) {
     if (!fs.existsSync(path.join(ROOT, dir))) continue;
@@ -44,14 +41,14 @@ const KEYWORD = ['eslint', 'disable'].join('-');
 const DIRECTIVE = new RegExp(`(?:\\/\\/|\\/\\*)\\s*(${KEYWORD}(?:-next-line|-line)?)(?![\\w-])([^\\n]*)`, 'g');
 
 /** Directives in `text` that carry no ` -- reason`, as "line: comment". */
-function unexplainedDirectives(text) {
-  const problems = [];
+function unexplainedDirectives(text: string): string[] {
+  const problems: string[] = [];
   for (const match of text.matchAll(DIRECTIVE)) {
-    const rest = match[2].replace(/\*\/.*$/, '');
+    const rest = (match[2] ?? '').replace(/\*\/.*$/, '');
     const reason = /\s--\s+(\S.*)$/.exec(rest);
     if (!reason) {
       const line = text.slice(0, match.index).split('\n').length;
-      problems.push(`${line}: ${match[0].trim()}`);
+      problems.push(`${String(line)}: ${match[0].trim()}`);
     }
   }
   return problems;

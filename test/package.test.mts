@@ -1,5 +1,3 @@
-'use strict';
-
 /**
  * Package acceptance tests: the package a consumer installs is the product.
  *
@@ -8,8 +6,8 @@
  *   metadata that exactly names the trusted-publishing repository, keeps the
  *   version below 1.0.0, pins the supported Node range and lists every runtime
  *   dependency the shipped sources require. (Changesets, the release guard
- *   and the workflows are covered by test/release.test.cjs; documentation by
- *   test/docs.test.cjs.)
+ *   and the workflows are covered by test/release.test.mts; documentation by
+ *   test/docs.test.mts.)
  * - `npm pack` produces exactly the intended distribution: runtime sources,
  *   CLI, type declarations, vendored schema, README, CHANGELOG, the
  *   getting-started guide and the generated API reference — never tests,
@@ -29,15 +27,47 @@
  * @see https://www.typescriptlang.org/docs/handbook/modules/reference.html#packagejson-exports
  */
 
-const test = require('node:test');
-const { describe } = test;
-const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
-const { spawnSync } = require('node:child_process');
+import { AssertionError } from 'node:assert';
+import * as assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import type { SpawnSyncReturns } from 'node:child_process';
+import * as fs from 'node:fs';
+import { createRequire } from 'node:module';
+import * as path from 'node:path';
+import { describe, test } from 'node:test';
 
-const { ROOT, PKG, npm, packProject, installIntoConsumer } = require('./fixtures/package/installed-package.mts');
-const { UPSTREAM_SARIF_PATH, createGitWorld } = require('./fixtures/authoring-workflow/git-world.mts');
+import { UPSTREAM_SARIF_PATH, createGitWorld } from './fixtures/authoring-workflow/git-world.mts';
+import { PKG, ROOT, installIntoConsumer, npm, packProject, requirePackedProject } from './fixtures/package/installed-package.mts';
+import {
+  asRecord,
+  asString,
+  expectType,
+  isArrayOf,
+  isOptional,
+  isRecordOf,
+  isShape,
+  isString,
+  isUnknown,
+  parseJson,
+  readJson,
+} from './support/runtime-types.mts';
+
+/**
+ * CommonJS `require` from this checkout: the built package is CommonJS, and
+ * the entry-point test loads it exactly as a CommonJS consumer does.
+ * require.resolve's `paths` option also resolves the runtime dependencies
+ * from the project root.
+ */
+const require = createRequire(import.meta.url);
+
+/** package.json `scripts`. */
+const SCRIPTS = expectType(PKG['scripts'] ?? {}, isRecordOf(isString), 'package.json scripts');
+
+/** `value`, which the assertions before it establish is present; fails naming `what` otherwise. */
+function present<T>(value: T | undefined, what: string): T {
+  if (value === undefined) throw new AssertionError({ message: `expected ${what}`, actual: value, operator: 'present' });
+  return value;
+}
 
 /**
  * The package.json `files` whitelist: the intended distribution boundary.
@@ -62,10 +92,10 @@ const EXPECTED_FILES_FIELD = [
 ];
 
 /** Compiled outputs that exist in dist/ but carry no runtime content, so never ship. */
-const NON_RUNTIME_OUTPUTS = ['dist/public-api.cjs', 'dist/public-types.cjs'];
+const NON_RUNTIME_OUTPUTS: readonly string[] = ['dist/public-api.cjs', 'dist/public-types.cjs'];
 
 /** Whether a packed path is inside the intended distribution boundary. */
-function distributable(file) {
+function distributable(file: string): boolean {
   return (
     file === 'package.json' ||
     file === 'README.md' ||
@@ -80,7 +110,7 @@ function distributable(file) {
 }
 
 /** The shipped runtime files: every dist/*.cjs the package includes. */
-function shippedRuntimeFiles() {
+function shippedRuntimeFiles(): string[] {
   const dist = path.join(ROOT, 'dist');
   if (!fs.existsSync(dist)) return [];
   return fs
@@ -97,13 +127,13 @@ function shippedRuntimeFiles() {
  * hand-written sources used single quotes; a scan matching one style only
  * would silently come back empty.
  */
-function requiredPackages() {
-  const names = new Set();
+function requiredPackages(): Set<string> {
+  const names = new Set<string>();
   for (const file of shippedRuntimeFiles()) {
     const text = fs.readFileSync(path.join(ROOT, file), 'utf8');
-    for (const [, , spec] of text.matchAll(/\brequire\(\s*(['"`])([^'"`]+)\1\s*\)/g)) {
+    for (const [, , spec = ''] of text.matchAll(/\brequire\(\s*(['"`])([^'"`]+)\1\s*\)/g)) {
       if (spec.startsWith('.') || spec.startsWith('node:')) continue;
-      names.add(spec.startsWith('@') ? spec.split('/').slice(0, 2).join('/') : spec.split('/')[0]);
+      names.add(spec.startsWith('@') ? spec.split('/').slice(0, 2).join('/') : (spec.split('/')[0] ?? spec));
     }
   }
   return names;
@@ -114,11 +144,15 @@ function requiredPackages() {
  * package plus the peer dependencies it declares (ajv-draft-04 builds on a
  * consumer-supplied `ajv`), read from the installed manifests.
  */
-function runtimeDependencyClosure(required) {
+function runtimeDependencyClosure(required: ReadonlySet<string>): string[] {
   const names = new Set(required);
   for (const name of required) {
-    const manifest = JSON.parse(fs.readFileSync(require.resolve(`${name}/package.json`, { paths: [ROOT] }), 'utf8'));
-    for (const peer of Object.keys(manifest.peerDependencies || {})) names.add(peer);
+    const manifest = expectType(
+      readJson(require.resolve(`${name}/package.json`, { paths: [ROOT] })),
+      isShape({ peerDependencies: isOptional(isRecordOf(isString)) }),
+      `${name}/package.json`,
+    );
+    for (const peer of Object.keys(manifest.peerDependencies ?? {})) names.add(peer);
   }
   return [...names].sort();
 }
@@ -128,50 +162,55 @@ describe('manifest', () => {
     assert.equal(PKG.name, 'sarif-to-comment');
     assert.match(PKG.version, /^0\.\d+\.\d+$/, 'a stable 0.x version (the release guard enforces the ceiling)');
     assert.equal(Object.hasOwn(PKG, 'private'), false, 'the package is released to npm through trusted publishing');
-    assert.deepEqual(PKG.publishConfig, { access: 'public', registry: 'https://registry.npmjs.org/' });
-    assert.equal(PKG.type, 'commonjs');
+    assert.deepEqual(PKG['publishConfig'], { access: 'public', registry: 'https://registry.npmjs.org/' });
+    assert.equal(PKG['type'], 'commonjs');
   });
 
   test('the npm description names the optional authoring and inspection as well as publication', () => {
     // The registry listing is how users discover the package; it must not describe only publication.
-    assert.match(PKG.description, /\bwrite\b/i, 'optional authoring');
-    assert.match(PKG.description, /\binspect\b/i, 'inspection');
-    assert.match(PKG.description, /draft pull request review/, 'publication as one draft review');
-    assert.match(PKG.description, /never-duplicating/, 'durable delivery');
+    const description = asString(PKG['description'], 'the package description');
+    assert.match(description, /\bwrite\b/i, 'optional authoring');
+    assert.match(description, /\binspect\b/i, 'inspection');
+    assert.match(description, /draft pull request review/, 'publication as one draft review');
+    assert.match(description, /never-duplicating/, 'durable delivery');
   });
 
   test('repository metadata names exactly the trusted-publishing repository', () => {
     // npm trusted publishing requires repository.url to match the GitHub
     // repository the OIDC token names (https://docs.npmjs.com/trusted-publishers/).
-    assert.deepEqual(PKG.repository, { type: 'git', url: 'git+https://github.com/mike-north/sarif-to-comment.git' });
-    assert.equal(PKG.homepage, 'https://github.com/mike-north/sarif-to-comment#readme');
-    assert.deepEqual(PKG.bugs, { url: 'https://github.com/mike-north/sarif-to-comment/issues' });
+    assert.deepEqual(PKG['repository'], { type: 'git', url: 'git+https://github.com/mike-north/sarif-to-comment.git' });
+    assert.equal(PKG['homepage'], 'https://github.com/mike-north/sarif-to-comment#readme');
+    assert.deepEqual(PKG['bugs'], { url: 'https://github.com/mike-north/sarif-to-comment/issues' });
   });
 
   test('library entry points resolve to the built public module and its rolled-up declarations', () => {
-    assert.equal(PKG.main, './dist/index.cjs');
-    assert.equal(PKG.types, './dist/sarif-to-comment.d.ts');
-    assert.deepEqual(PKG.exports, {
+    assert.equal(PKG['main'], './dist/index.cjs');
+    assert.equal(PKG['types'], './dist/sarif-to-comment.d.ts');
+    assert.deepEqual(PKG['exports'], {
       '.': { types: './dist/sarif-to-comment.d.ts', default: './dist/index.cjs' },
       './package.json': './package.json',
     });
-    const resolved = require.resolve(path.join(ROOT, PKG.exports['.'].default));
+    const exportsField = expectType(PKG['exports'], isShape({ '.': isShape({ default: isString }) }), 'package.json exports');
+    const resolved = require.resolve(path.join(ROOT, exportsField['.'].default));
     assert.equal(resolved, path.join(ROOT, 'dist', 'index.cjs'));
-    const declared = [...fs.readFileSync(path.join(ROOT, PKG.types), 'utf8').matchAll(/^export declare function (\w+)\(/gm)].map((m) => m[1]);
+    const declarations = fs.readFileSync(path.join(ROOT, asString(PKG['types'], 'package.json types')), 'utf8');
+    const declared = [...declarations.matchAll(/^export declare function (\w+)\(/gm)].map((m) => m[1] ?? '');
     assert.deepEqual(declared.sort(), ['addSarifComment', 'addStagedChangesToSarif', 'createSarifDocument', 'inspectSarif', 'publishSarifReview']);
-    assert.deepEqual(Object.keys(require(resolved)).sort(), declared, 'the runtime exports exactly the declared API');
+    const loaded: unknown = require(resolved);
+    assert.deepEqual(Object.keys(asRecord(loaded, 'the module.exports object')).sort(), declared, 'the runtime exports exactly the declared API');
   });
 
   test('the CLI bin points at an executable Node script', () => {
     // Written in npm's normalized form (no leading "./"), so publishing does not
     // rewrite the manifest or warn that the entry was "invalid and removed".
-    assert.deepEqual(PKG.bin, { 'sarif-to-comment': 'dist/sarif-to-comment.cjs' });
-    const text = fs.readFileSync(path.join(ROOT, PKG.bin['sarif-to-comment']), 'utf8');
+    assert.deepEqual(PKG['bin'], { 'sarif-to-comment': 'dist/sarif-to-comment.cjs' });
+    const bin = expectType(PKG['bin'], isShape({ 'sarif-to-comment': isString }), 'package.json bin');
+    const text = fs.readFileSync(path.join(ROOT, bin['sarif-to-comment']), 'utf8');
     assert.ok(text.startsWith('#!/usr/bin/env node\n'), 'bin must start with a node shebang');
   });
 
   test('the supported Node range is declared and satisfied by this runtime', () => {
-    assert.deepEqual(PKG.engines, { node: '>=22' });
+    assert.deepEqual(PKG['engines'], { node: '>=22' });
     assert.ok(Number(process.versions.node.split('.')[0]) >= 22, `running Node ${process.versions.node}`);
   });
 
@@ -181,9 +220,9 @@ describe('manifest', () => {
     // cannot load it at all). devEngines applies only to commands run in this
     // checkout, where npm and pnpm refuse an older Node; the installed package
     // keeps `engines: >=22` because its compiled JavaScript needs no stripping.
-    assert.deepEqual(PKG.devEngines, { runtime: { name: 'node', version: '>=22.18.0', onFail: 'error' } });
-    assert.deepEqual(PKG.engines, { node: '>=22' }, 'the consumer range is unchanged');
-    const [major, minor] = process.versions.node.split('.').map(Number);
+    assert.deepEqual(PKG['devEngines'], { runtime: { name: 'node', version: '>=22.18.0', onFail: 'error' } });
+    assert.deepEqual(PKG['engines'], { node: '>=22' }, 'the consumer range is unchanged');
+    const [major = 0, minor = 0] = process.versions.node.split('.').map(Number);
     assert.ok(major > 22 || (major === 22 && minor >= 18), `developing on Node ${process.versions.node}`);
   });
 
@@ -192,11 +231,11 @@ describe('manifest', () => {
     for (const license of ['LICENSE', 'LICENSE.md', 'LICENSE.txt']) {
       if (fs.existsSync(path.join(ROOT, license))) expected.push(license);
     }
-    assert.deepEqual(PKG.files, expected);
+    assert.deepEqual(PKG['files'], expected);
   });
 
   test('the declared dependencies are exactly what the shipped runtime requires; tooling stays a dev dependency', () => {
-    const declared = Object.keys(PKG.dependencies || {}).sort();
+    const declared = Object.keys(PKG.dependencies ?? {}).sort();
     const required = requiredPackages();
     assert.ok(shippedRuntimeFiles().length > 0, 'the scan covers the built runtime (run `pnpm run build`)');
     assert.ok(required.size > 0, 'the scan finds runtime requires; an empty scan would prove nothing');
@@ -205,18 +244,18 @@ describe('manifest', () => {
     assert.deepEqual(runtimeDependencyClosure(required), declared);
     assert.deepEqual(declared, ['ajv', 'ajv-draft-04', 'ajv-formats']);
     for (const tool of ['@changesets/cli', '@microsoft/api-extractor', '@microsoft/api-documenter', 'typescript']) {
-      assert.ok(Object.hasOwn(PKG.devDependencies, tool), `${tool} is a dev dependency`);
+      assert.ok(Object.hasOwn(asRecord(PKG['devDependencies'], 'package.json devDependencies'), tool), `${tool} is a dev dependency`);
     }
   });
 
   test('scripts are purpose-named and checks are read-only', () => {
-    const scripts = PKG.scripts || {};
+    const scripts = SCRIPTS;
     // The suite exercises the built dist/, so it first refuses a missing or stale build.
-    assert.equal(scripts.test, 'npm run check:build && node --test test/*.test.cjs test/*.test.mts');
+    assert.equal(scripts['test'], 'npm run check:build && node --test test/*.test.cjs test/*.test.mts');
     assert.equal(scripts['check:build'], 'node scripts/build-manifest.mts verify');
     assert.match(scripts['check:lint'] || '', /^eslint\b/);
-    assert.ok(scripts.check, 'an aggregate read-only check script exists');
-    assert.equal(scripts.build, 'node scripts/build.mts', 'build compiles dist/ and regenerates the API report and reference documentation');
+    assert.ok(scripts['check'], 'an aggregate read-only check script exists');
+    assert.equal(scripts['build'], 'node scripts/build.mts', 'build compiles dist/ and regenerates the API report and reference documentation');
     for (const [name, command] of Object.entries(scripts)) {
       if (name === 'check' || name.startsWith('check:')) {
         assert.doesNotMatch(command, /--fix\b|--write\b|--local\b/, `${name} must not modify files`);
@@ -231,7 +270,7 @@ describe('packed distributable', () => {
   const skip = packed.error || false;
 
   test('contains exactly the intended distribution', { skip }, () => {
-    const files = packed.result.files.map((f) => f.path).sort();
+    const files = requirePackedProject().result.files.map((f) => f.path).sort();
     assert.deepEqual(files.filter((f) => !distributable(f)), [], 'unexpected files in the package');
     const apiPages = fs.readdirSync(path.join(ROOT, 'docs', 'api')).map((f) => `docs/api/${f}`);
     // Every runtime module in src/ ships as dist/<name>.cjs. The module list
@@ -243,7 +282,7 @@ describe('packed distributable', () => {
       .map((f) => `dist/${f.replace(/\.c[jt]s$/, '.cjs')}`)
       .filter((f) => !NON_RUNTIME_OUTPUTS.includes(f))
       .sort();
-    assert.ok(runtimeModules.length >= 14, `every runtime module is found (${runtimeModules.length})`);
+    assert.ok(runtimeModules.length >= 14, `every runtime module is found (${String(runtimeModules.length)})`);
     for (const required of [
       'package.json',
       'README.md',
@@ -270,8 +309,9 @@ describe('packed distributable', () => {
   test('the files negations keep build by-products out of a packed dist/', { skip }, () => {
     // The checkout's dist/ need not hold every by-product at any given time,
     // so the boundary is proven on a scratch package that holds all of them.
-    const dir = fs.mkdtempSync(path.join(packed.work, 'negations-'));
-    fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 'negations', version: '1.0.0', files: PKG.files }));
+    const { work, env } = requirePackedProject();
+    const dir = fs.mkdtempSync(path.join(work, 'negations-'));
+    fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 'negations', version: '1.0.0', files: PKG['files'] }));
     fs.mkdirSync(path.join(dir, 'dist'));
     for (const file of [
       'index.cjs',
@@ -286,9 +326,14 @@ describe('packed distributable', () => {
     ]) {
       fs.writeFileSync(path.join(dir, 'dist', file), '\n');
     }
-    const run = npm(['pack', '--dry-run', '--json'], { cwd: dir, env: packed.env });
+    const run = npm(['pack', '--dry-run', '--json'], { cwd: dir, env });
     assert.equal(run.status, 0, run.stderr);
-    const files = JSON.parse(run.stdout)[0].files.map((f) => f.path).filter((f) => f.startsWith('dist/')).sort();
+    const [pack] = expectType(
+      parseJson(run.stdout),
+      isArrayOf(isShape({ files: isArrayOf(isShape({ path: isString })) })),
+      'npm pack --json output',
+    );
+    const files = present(pack, 'the packed tarball').files.map((f) => f.path).filter((f) => f.startsWith('dist/')).sort();
     assert.deepEqual(files, ['dist/index.cjs', 'dist/sarif-to-comment.d.ts']);
   });
 
@@ -298,11 +343,11 @@ describe('packed distributable', () => {
   // must also be clean for a directory publish so no form of publishing
   // rewrites what consumers receive.
   for (const [form, args, cwd] of [
-    ['the verified tarball', () => ['publish', '--dry-run', packed.tarball], () => packed.work],
+    ['the verified tarball', () => ['publish', '--dry-run', requirePackedProject().tarball], () => requirePackedProject().work],
     ['the package directory', () => ['publish', '--dry-run'], () => ROOT],
-  ]) {
+  ] as const) {
     test(`npm publish --dry-run of ${form} needs no manifest auto-correction`, { skip }, () => {
-      const dryRun = npm(args(), { cwd: cwd(), env: packed.env });
+      const dryRun = npm(args(), { cwd: cwd(), env: requirePackedProject().env });
       assert.equal(dryRun.status, 0, dryRun.stderr);
       const output = dryRun.stdout + dryRun.stderr;
       assert.doesNotMatch(output, /auto-corrected|errors corrected|was invalid/, 'npm would rewrite the published manifest');
@@ -316,8 +361,8 @@ describe('installed package', () => {
 
   test('in-memory library use and the installed executable', { skip, timeout: 300_000 }, () => {
     const { consumer, packageDir, bin } = installIntoConsumer();
-    const manifest = JSON.parse(fs.readFileSync(path.join(packageDir, 'package.json'), 'utf8'));
-    assert.equal(manifest.version, PKG.version);
+    const manifest = asRecord(readJson(path.join(packageDir, 'package.json')), 'the installed package.json');
+    assert.equal(manifest['version'], PKG.version);
     assert.equal(fs.existsSync(path.join(packageDir, 'test')), false, 'tests must not be installed');
 
     const js = String.raw;
@@ -353,7 +398,7 @@ describe('installed package', () => {
     assert.match(library.stdout, /^consumer-ok https:\/\/github\.com\/acme\/gizmos\/pull\/7#pullrequestreview-\d+/);
 
     assert.ok(fs.existsSync(bin), 'npm must link the installed executable');
-    const cleanEnv = { PATH: process.env.PATH };
+    const cleanEnv = { PATH: process.env['PATH'] };
     const help = spawnSync(bin, ['--help'], { cwd: consumer, encoding: 'utf8', env: cleanEnv });
     assert.equal(help.status, 0, help.stderr);
     assert.match(help.stdout, /--sarif FILE/);
@@ -374,7 +419,11 @@ describe('installed package', () => {
    * project's TypeScript. `expectErrors` lines must each fail to compile (they
    * carry `@ts-expect-error`, which itself errors if the line compiles).
    */
-  function typecheck(consumer, files, compilerOptions) {
+  function typecheck(
+    consumer: string,
+    files: Readonly<Record<string, string>>,
+    compilerOptions: Readonly<Record<string, unknown>>,
+  ): SpawnSyncReturns<string> {
     const dir = fs.mkdtempSync(path.join(consumer, 'types-'));
     for (const [name, text] of Object.entries(files)) fs.writeFileSync(path.join(dir, name), text);
     fs.writeFileSync(
@@ -392,7 +441,8 @@ describe('installed package', () => {
   }
 
   /** Identity tag for embedded TypeScript (escapes such as \n are interpreted). */
-  const ts = (strings, ...values) => strings.reduce((out, part, i) => out + part + (i < values.length ? values[i] : ''), '');
+  const ts = (strings: TemplateStringsArray, ...values: readonly string[]): string =>
+    strings.reduce((out, part, i) => out + part + (i < values.length ? (values[i] ?? '') : ''), '');
   const usage = ts`
     const outcome = await publishSarifReview({
       sarif: { version: '2.1.0', runs: [] },
@@ -567,20 +617,31 @@ export async function main(): Promise<void> { ${workflow} }` },
       timeout: 120_000,
     });
     assert.equal(run.status, 0, run.stderr);
-    const outcomes = JSON.parse(run.stdout);
+    const outcomes = asRecord(parseJson(run.stdout), 'the installed outcomes');
+    const status = (key: string): unknown => expectType(outcomes[key], isShape({ status: isUnknown }), `the ${key} outcome`).status;
     assert.deepEqual(
-      [outcomes.commentAdded.status, outcomes.commentInvalid.status, outcomes.inspected.status, outcomes.inspectInvalid.status,
-        outcomes.stagedAdded.status, outcomes.stagedFailed.status, outcomes.stagedInvalid.status],
+      [status('commentAdded'), status('commentInvalid'), status('inspected'), status('inspectInvalid'),
+        status('stagedAdded'), status('stagedFailed'), status('stagedInvalid')],
       ['added', 'invalid', 'inspected', 'invalid', 'added', 'failed', 'invalid'],
       'each declared outcome variant is exercised',
     );
     // The evidence-bearing optional fields really occur, so the literal checks below cover them.
-    const logView = outcomes.inspectedLogEvidence.view;
+    const logView = expectType(
+      outcomes['inspectedLogEvidence'],
+      isShape({ view: isShape({ log: isUnknown, externalProperties: isUnknown, summary: isShape({ externalFindings: isUnknown }) }) }),
+      'the log-evidence inspection',
+    ).view;
     assert.ok(logView.log && logView.externalProperties && logView.summary.externalFindings !== undefined, 'log and external evidence present');
     assert.ok(JSON.stringify(logView).includes('"otherContent":{"properties":{"rationale"'), 'a preview carries otherContent');
-    assert.equal(outcomes.stagedInsertion.status, 'added', outcomes.stagedInsertion.markdown);
-    assert.ok(outcomes.stagedInsertion.receipt.changes[0].replacements.every((r) => r.insertion === true), 'insertion receipts');
-    const typed = {
+    const insertion = expectType(outcomes['stagedInsertion'], isShape({ status: isUnknown, markdown: isOptional(isString) }), 'the insertion outcome');
+    assert.equal(insertion.status, 'added', insertion.markdown);
+    const { receipt } = expectType(
+      insertion,
+      isShape({ receipt: isShape({ changes: isArrayOf(isShape({ replacements: isArrayOf(isShape({ insertion: isUnknown })) })) }) }),
+      'an insertion receipt',
+    );
+    assert.ok(present(receipt.changes[0], 'a receipt change').replacements.every((r) => r.insertion === true), 'insertion receipts');
+    const typed: Readonly<Record<string, string>> = {
       log: 'ISarifLog',
       commentAdded: 'AddSarifCommentOutcome',
       commentInvalid: 'AddSarifCommentOutcome',
@@ -652,7 +713,20 @@ export async function main(): Promise<void> { ${workflow} }` },
     const probe = spawnSync(process.execPath, ['interop-probe.mjs'], { cwd: consumer, encoding: 'utf8' });
     assert.equal(probe.status, 0, probe.stderr);
     assert.equal(probe.stderr, '', 'no interop warning');
-    const seen = JSON.parse(probe.stdout);
+    const seen = expectType(
+      parseJson(probe.stdout),
+      isShape({
+        requireKeys: isUnknown,
+        requireEsModule: isUnknown,
+        namespaceKeys: isArrayOf(isString),
+        namespaceEsModule: isUnknown,
+        defaultIsRequire: isUnknown,
+        dynamicIsStatic: isUnknown,
+        moduleExportsIsRequire: isUnknown,
+        namedAreRequire: isUnknown,
+      }),
+      'the interop probe report',
+    );
     assert.deepEqual(seen.requireKeys, names, 'require() keys in documented order');
     assert.equal(seen.requireEsModule, false, 'require() result carries no __esModule marker');
     assert.equal(seen.namespaceEsModule, false, 'the ES namespace has no __esModule key');
