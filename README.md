@@ -181,7 +181,7 @@ If that comparison can't establish the old side, you may pass `oldSourceCommit` 
 - The durability steps (write, flush, then send) are ordered for crash safety, but that has not been tested against power loss.
 - GitHub Enterprise Server and GitHub App installation tokens are not supported.
 - There is no review maintenance, re-review or synchronisation back to SARIF.
-- Releases from the private source repository carry no npm provenance attestation (see [Releasing](#releasing)).
+- npm attaches a provenance attestation only when the source repository is public at publish time. A release published while the repository is private has no provenance attestation (see [Releasing](#releasing)).
 
 ## Development
 
@@ -242,7 +242,11 @@ Changesets pre mode (prereleases) is not part of this release path.
 
      That commit changes `package.json`, so the workflow runs with the fixed code and publishes the new version. The version that failed stays unpublished; its changelog entry remains as history.
 
-   The workflow publishes but does not create git tags. npm records the published commit (`gitHead`). Maintainers may run `pnpm changeset git-tag` locally and push the tags if they want them.
+   **Recording the release commit.** The workflow publishes the verified tarball but doesn't create git tags, and npm's registry metadata for 0.1.0 records no `gitHead`. Do not assume that field identifies a tarball release. The commit is identified in two places:
+   - by the successful `publish.yml` workflow run for that commit on `main`;
+   - when the repository is public at publish time, by the version's npm provenance attestation, which names the source repository, workflow and commit.
+
+   Maintainers who want tags can run `pnpm changeset git-tag` locally on that commit and push the tags.
 
 **First release.** The release history starts from npm's pre-existing `0.0.0`, the bootstrap baseline for this package. The initial `minor` changeset versions that baseline to **0.1.0**, with the first changelog entry, and 0.1.0 is the first version this workflow publishes. Later releases follow the same steps from whatever version `package.json` then holds.
 
@@ -259,4 +263,4 @@ On the package's **Settings → Trusted publishing** page, add a GitHub Actions 
 
 npm requires `repository.url` in `package.json` to match this repository exactly. It is `git+https://github.com/mike-north/sarif-to-comment.git`. Once a trusted release has succeeded, npm recommends setting **Publishing access** to *Require two-factor authentication and disallow tokens*.
 
-**Provenance.** npm attaches provenance automatically only when the source repository is public. The source repository is private, so its releases carry no provenance attestation. The workflow deliberately does not pass `--provenance`, which would fail for a private repository. If the repository is made public, npm will add provenance with no workflow change.
+**Provenance.** Trusted publishing authenticates with OIDC from a private or public repository alike. npm attaches a provenance attestation automatically only when the source repository is public at publish time; a release from a private repository has no provenance attestation. That limitation comes from npm, not from this workflow, and the workflow never changes repository visibility. Version 0.1.0 was published from the repository while it was public, and its npm provenance attestation verifies, naming commit `3797ca6efe2156d4c952fad7fed10b569f1dcbbb` and `.github/workflows/publish.yml`. The workflow deliberately does not pass `--provenance`, which fails for a private repository; npm adds provenance on its own whenever the repository is public.

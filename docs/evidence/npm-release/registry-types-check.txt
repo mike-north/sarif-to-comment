@@ -1,0 +1,2 @@
+Published types and38APIpages match the verified source.
+CJS and ESM consumer compilation, exhaustive outcomes and misuse rejection: exit 0.

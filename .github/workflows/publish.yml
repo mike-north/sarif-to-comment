@@ -17,9 +17,12 @@
 # later step runs only when it says publish: the full check, then the exact
 # tarball that was packed and verified is published.
 #
-# Provenance: npm generates it automatically only for public repositories.
-# This repository is private, so no provenance is produced; do not add
-# --provenance (it fails for private repositories).
+# Provenance: OIDC trusted publishing works from a private or public
+# repository, but npm attaches a provenance attestation automatically only
+# when the source repository is public at publish time; a release from a
+# private repository has none. This workflow never changes repository
+# visibility. Do not add --provenance: it fails for a private repository, and
+# npm adds provenance without it when the repository is public.
 name: Publish to npm
 
 on:

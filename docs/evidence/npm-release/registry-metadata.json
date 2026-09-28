@@ -1,0 +1,120 @@
+{
+  "_id": "sarif-to-comment@0.1.0",
+  "_rev": "2-79aa7f83fcddb84caec9f1ce146c257e",
+  "name": "sarif-to-comment",
+  "dist-tags": {
+    "latest": "0.1.0"
+  },
+  "versions": [
+    "0.0.0",
+    "0.1.0"
+  ],
+  "time": {
+    "created": "2026-09-27T18:19:21.313Z",
+    "modified": "2026-09-28T06:08:46.911Z",
+    "0.0.0": "2026-09-27T18:19:21.648Z",
+    "0.1.0": "2026-09-28T06:08:46.602Z"
+  },
+  "license": "ISC",
+  "keywords": [
+    "sarif",
+    "github",
+    "code-review",
+    "pull-request"
+  ],
+  "maintainers": [
+    "northm <michael.l.north@gmail.com>"
+  ],
+  "readmeFilename": "README.md",
+  "description": "Publish a ready SARIF 2.1.0 document as one GitHub draft pull request review, with durable, never-duplicating delivery.",
+  "homepage": "https://github.com/mike-north/sarif-to-comment#readme",
+  "repository": {
+    "url": "git+https://github.com/mike-north/sarif-to-comment.git",
+    "type": "git"
+  },
+  "bugs": {
+    "url": "https://github.com/mike-north/sarif-to-comment/issues"
+  },
+  "_contentLength": 25963,
+  "bin": {
+    "sarif-to-comment": "bin/sarif-to-comment.cjs"
+  },
+  "dist": {
+    "shasum": "286b1bf09b5a209333a85a34699b63b5e15ee22e",
+    "tarball": "https://registry.npmjs.org/sarif-to-comment/-/sarif-to-comment-0.1.0.tgz",
+    "fileCount": 52,
+    "integrity": "sha512-sCIfoHCSfrjqfmtzjgUmgcdNwzXX41bib/AbfnwS099QGEUammsTPOfwtDtxIZe/TIvi8Iy0W0Ow6kow4NEvDg==",
+    "signatures": [
+      {
+        "sig": "MEUCIHFPeXv3oGBDhAtSAhEFgs5Q0DfWrkOuWbrN85N8o38fAiEA1UkhvsSViN2YrzzLuV6USWFKJhxDm9cHvXM3KMfyUGw=",
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+      },
+      {
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+        "sig": "MEUCIF1byfn4OdsDha1p8XiTaj1fT0T2CiX21nYtPQOyi7HJAiEA1m+hGG2xzzEYPI1JE/ekLRWQsaB8UErbQkIo8d79nvM="
+      }
+    ],
+    "attestations": {
+      "url": "https://registry.npmjs.org/-/npm/v1/attestations/sarif-to-comment@0.1.0",
+      "provenance": {
+        "predicateType": "https://slsa.dev/provenance/v1"
+      }
+    },
+    "unpackedSize": 439210
+  },
+  "main": "./src/index.cjs",
+  "type": "commonjs",
+  "_from": "file:/home/runner/work/_temp/release/sarif-to-comment-0.1.0.tgz",
+  "types": "./types/index.d.ts",
+  "author": "",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "default": "./src/index.cjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.cjs",
+    "build": "node scripts/api-docs.cjs build",
+    "check": "npm run check:lint && npm run check:types && npm run check:api && npm run check:release && npm test",
+    "check:api": "node scripts/api-docs.cjs check",
+    "check:lint": "eslint .",
+    "check:types": "tsc -p tsconfig.json",
+    "check:release": "node scripts/release-guard.cjs plan",
+    "prepublishOnly": "node scripts/release-guard.cjs check-version",
+    "release:version": "node scripts/release-guard.cjs version"
+  },
+  "version": "0.1.0",
+  "_npmUser": "GitHub Actions <npm-oidc-no-reply@github.com>",
+  "_resolved": "/home/runner/work/_temp/release/sarif-to-comment-0.1.0.tgz",
+  "_integrity": "sha512-sCIfoHCSfrjqfmtzjgUmgcdNwzXX41bib/AbfnwS099QGEUammsTPOfwtDtxIZe/TIvi8Iy0W0Ow6kow4NEvDg==",
+  "_npmVersion": "11.19.0",
+  "directories": {},
+  "_nodeVersion": "24.21.0",
+  "dependencies": {
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "ajv-draft-04": "^1.0.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "_hasShrinkwrap": false,
+  "devDependencies": {
+    "eslint": "^10.11.0",
+    "prettier": "^3.9.9",
+    "typescript": "~5.9.3",
+    "@changesets/cli": "^3.0.3",
+    "@microsoft/api-extractor": "^7.59.2",
+    "@microsoft/api-documenter": "^7.30.16"
+  },
+  "_npmOperationalInternal": {
+    "host": "s3://npm-registry-packages-npm-production",
+    "tmp": "tmp/sarif-to-comment_0.1.0_1790575726419_0.986441291563843"
+  }
+}

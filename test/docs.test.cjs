@@ -5,7 +5,7 @@
  * reference are accurate, reachable and executable.
  *
  * - README links work on the npm package page even though the source
- *   repository is private: every link is absolute (or an in-page anchor), and
+ *   repository may be private: every link is absolute (or an in-page anchor), and
  *   links to packaged documents point at files that are in the tarball.
  * - The getting-started guide's library and CLI examples are extracted
  *   verbatim and run against the *installed* package, with the real GitHub
@@ -54,12 +54,12 @@ function example(text, name) {
 }
 
 describe('README', () => {
-  test('every link works on the npm page of a private repository (absolute or in-page)', () => {
+  test('every link works on the npm page even if the source repository is private (absolute or in-page)', () => {
     const targets = linkTargets(README);
     assert.ok(targets.length > 5);
     for (const target of targets) {
       assert.ok(/^https:\/\//.test(target) || target.startsWith('#'), `relative link would break on npm: ${target}`);
-      assert.doesNotMatch(target, /github\.com\/mike-north\/sarif-to-comment/, `the source repository is private: ${target}`);
+      assert.doesNotMatch(target, /github\.com\/mike-north\/sarif-to-comment/, `the source repository may be private: ${target}`);
     }
   });
 
@@ -285,6 +285,69 @@ describe('release recovery instructions match the publish workflow', () => {
     assert.match(paragraph, /0\.0\.0[^.]*baseline/i);
     assert.match(paragraph, /minor[^.]*0\.1\.0|0\.1\.0[^.]*minor/i);
     assert.doesNotMatch(paragraph, /is at `0\.0\.0`|pending changeset|\bremains?\b/i);
+  });
+});
+
+describe('provenance and release-commit statements match what npm actually records', () => {
+  // npm trusted publishing authenticates by OIDC from a private or a public
+  // repository, but npm attaches a provenance attestation automatically only
+  // when the source repository is public (https://docs.npmjs.com/trusted-publishers/).
+  // Visibility is a repository setting the workflow never changes, so the docs
+  // must be true for either setting: 0.1.0 was published from a public
+  // repository and carries a verified attestation naming its commit
+  // (docs/evidence/npm-release/provenance-statement.json), and a release from
+  // a private repository carries none. The 0.1.0 tarball publish records no `gitHead`
+  // in its registry metadata (docs/evidence/npm-release/registry-metadata.json),
+  // so the release commit is identified by the workflow run and, when present,
+  // the attestation.
+  const RELEASING = README.slice(README.indexOf('## Releasing'));
+  const PROVENANCE = RELEASING.split('\n').find((line) => line.startsWith('**Provenance.**')) || '';
+  const LIMITATIONS = README.slice(README.indexOf('## Limitations'), README.indexOf('## Development'));
+  const WORKFLOW = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'publish.yml'), 'utf8');
+
+  test('the evidence the docs rely on: an attested 0.1.0 commit, and no gitHead in the registry metadata', () => {
+    const statement = JSON.parse(fs.readFileSync(path.join(ROOT, 'docs/evidence/npm-release/provenance-statement.json'), 'utf8'));
+    const [source] = statement.predicate.buildDefinition.resolvedDependencies;
+    assert.equal(source.digest.gitCommit, '3797ca6efe2156d4c952fad7fed10b569f1dcbbb');
+    assert.equal(statement.predicate.buildDefinition.externalParameters.workflow.path, '.github/workflows/publish.yml');
+    const metadata = fs.readFileSync(path.join(ROOT, 'docs/evidence/npm-release/registry-metadata.json'), 'utf8');
+    assert.doesNotMatch(metadata, /gitHead/);
+  });
+
+  test('no document claims every release lacks provenance or that the repository is (still) private', () => {
+    for (const [name, text] of [['README.md', README], ['publish.yml', WORKFLOW]]) {
+      assert.doesNotMatch(text, /(its|every|all) releases carry no (npm )?provenance/i, name);
+      assert.doesNotMatch(text, /(the source|this) repository is private/i, name);
+    }
+  });
+
+  test('the provenance paragraph is conditional on visibility, which the workflow never changes', () => {
+    assert.match(PROVENANCE, /OIDC/);
+    assert.match(PROVENANCE, /private or public|public or private/i);
+    assert.match(PROVENANCE, /only when the source repository is public/i);
+    assert.match(PROVENANCE, /private repository[^.]*no provenance|no provenance[^.]*private repository/i);
+    assert.match(PROVENANCE, /never changes[^.]*visibility|visibility[^.]*never changes/i);
+    assert.match(PROVENANCE, /0\.1\.0[^.]*(attestation|provenance)/i);
+    assert.match(PROVENANCE, /--provenance/);
+  });
+
+  test('the limitations state the private-repository provenance limitation conditionally', () => {
+    const bullet = LIMITATIONS.split('\n').find((line) => /provenance/i.test(line)) || '';
+    assert.match(bullet, /private/i);
+    assert.match(bullet, /public/i);
+    assert.match(bullet, /\bwhen\b|\bif\b/i);
+  });
+
+  test('the release commit is identified without assuming npm records gitHead', () => {
+    assert.doesNotMatch(RELEASING, /npm records the published commit/i);
+    assert.match(RELEASING, /no `gitHead`|not record[^.]*`gitHead`|without[^.]*`gitHead`/i);
+    assert.match(RELEASING, /workflow run/i);
+    assert.match(RELEASING, /pnpm changeset git-tag/);
+  });
+
+  test('the workflow comment is conditional too, and the workflow still never forces provenance', () => {
+    assert.match(WORKFLOW, /^# Provenance:[\s\S]*?public[\s\S]*?private/m);
+    assert.doesNotMatch(WORKFLOW.replace(/^#.*$/gm, ''), /--provenance|NPM_CONFIG_PROVENANCE/i);
   });
 });
 

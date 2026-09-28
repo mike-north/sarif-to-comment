@@ -1,0 +1,15 @@
+publish	Decide whether this version must be published (release guard)	2026-09-28T06:06:33.2207311Z sarif-to-comment@0.1.0 is not on npm yet and may be published.
+publish	Lint, type-check, API/docs freshness, release plan and tests	2026-09-28T06:07:05.6977259Z ℹ tests 1409
+publish	Lint, type-check, API/docs freshness, release plan and tests	2026-09-28T06:07:05.6977603Z ℹ pass 1409
+publish	Lint, type-check, API/docs freshness, release plan and tests	2026-09-28T06:07:05.6977928Z ℹ fail 0
+publish	Lint, type-check, API/docs freshness, release plan and tests	2026-09-28T06:07:05.6978279Z ℹ skipped 0
+publish	Verify the tarball is exactly the distribution boundary	2026-09-28T06:07:06.2444513Z Verified sarif-to-comment-0.1.0.tgz: 52 files, all inside the distribution boundary.
+publish	Publish the verified tarball	2026-09-28T06:07:06.5549916Z npm notice version: 0.1.0
+publish	Publish the verified tarball	2026-09-28T06:07:06.5551639Z npm notice shasum: 286b1bf09b5a209333a85a34699b63b5e15ee22e
+publish	Publish the verified tarball	2026-09-28T06:07:06.5552251Z npm notice integrity: sha512-sCIfoHCSfrjqf[...]0Ow6kow4NEvDg==
+publish	Publish the verified tarball	2026-09-28T06:07:06.5552704Z npm notice total files: 52
+publish	Publish the verified tarball	2026-09-28T06:07:07.8559326Z npm notice Publishing to https://registry.npmjs.org/ with tag latest and public access
+publish	Publish the verified tarball	2026-09-28T06:07:08.4027091Z npm notice publish Signed provenance statement with source and build information from GitHub Actions
+publish	Publish the verified tarball	2026-09-28T06:07:08.4028505Z npm notice publish Provenance statement published to transparency log: https://search.sigstore.dev/?logIndex=2981429443
+publish	Publish the verified tarball	2026-09-28T06:07:10.7225686Z npm notice Your package is being processed and may take a few minutes to become available.
+publish	Publish the verified tarball	2026-09-28T06:07:10.7228410Z + sarif-to-comment@0.1.0

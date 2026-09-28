@@ -1,0 +1,47 @@
+{
+  "_type": "https://in-toto.io/Statement/v1",
+  "subject": [
+    {
+      "name": "pkg:npm/sarif-to-comment@0.1.0",
+      "digest": {
+        "sha512": "b0221fa070927eb8ea7e6b738e052681c74dc335d7e356e26ff01b7e7c12d3df5018451a9a6b133ce7f0b43b712197bf4c8be2f08cb45b43b0ea4a30e0d12f0e"
+      }
+    }
+  ],
+  "predicateType": "https://slsa.dev/provenance/v1",
+  "predicate": {
+    "buildDefinition": {
+      "buildType": "https://slsa-framework.github.io/github-actions-buildtypes/workflow/v1",
+      "externalParameters": {
+        "workflow": {
+          "ref": "refs/heads/main",
+          "repository": "https://github.com/mike-north/sarif-to-comment",
+          "path": ".github/workflows/publish.yml"
+        }
+      },
+      "internalParameters": {
+        "github": {
+          "event_name": "push",
+          "repository_id": "1391267540",
+          "repository_owner_id": "558005"
+        }
+      },
+      "resolvedDependencies": [
+        {
+          "uri": "git+https://github.com/mike-north/sarif-to-comment@refs/heads/main",
+          "digest": {
+            "gitCommit": "3797ca6efe2156d4c952fad7fed10b569f1dcbbb"
+          }
+        }
+      ]
+    },
+    "runDetails": {
+      "builder": {
+        "id": "https://github.com/actions/runner/github-hosted"
+      },
+      "metadata": {
+        "invocationId": "https://github.com/mike-north/sarif-to-comment/actions/runs/36384821585/attempts/1"
+      }
+    }
+  }
+}

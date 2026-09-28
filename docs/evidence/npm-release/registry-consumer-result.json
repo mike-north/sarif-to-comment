@@ -1,0 +1,23 @@
+{
+  "consumer": "/var/folders/r4/j5y28vpj6258k4_0kn5f33s00000gn/T/sarif-registry-consumer-P1FSAo/consumer",
+  "version": "0.1.0",
+  "source": "registry.npmjs.org",
+  "examples": [
+    {
+      "surface": "library",
+      "first": "published",
+      "retry": "same completed receipt",
+      "createRequests": 1,
+      "reviewedCommit": "4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e",
+      "pending": true
+    },
+    {
+      "surface": "cli",
+      "first": "published",
+      "retry": "same completed receipt",
+      "createRequests": 1,
+      "reviewedCommit": "4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e",
+      "pending": true
+    }
+  ]
+}

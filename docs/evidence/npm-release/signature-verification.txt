@@ -1,0 +1,6 @@
+audited 8 packages in 0s
+
+8 packages have verified registry signatures
+
+1 package has a verified attestation
+(use --json --include-attestations to view attestation details)

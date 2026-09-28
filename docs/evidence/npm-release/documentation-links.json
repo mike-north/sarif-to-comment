@@ -1,0 +1,16 @@
+[
+  {
+    "url": "https://unpkg.com/sarif-to-comment/docs/getting-started.md",
+    "finalUrl": "https://unpkg.com/sarif-to-comment@0.1.0/docs/getting-started.md",
+    "status": 200,
+    "bytes": 9597,
+    "matchesPublishedFile": true
+  },
+  {
+    "url": "https://unpkg.com/sarif-to-comment/docs/api/index.md",
+    "finalUrl": "https://unpkg.com/sarif-to-comment@0.1.0/docs/api/index.md",
+    "status": 200,
+    "bytes": 424,
+    "matchesPublishedFile": true
+  }
+]
