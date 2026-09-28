@@ -1,7 +1,5 @@
-'use strict';
-
 /**
- * Contract tests for exact source placement (src/placement.cjs).
+ * Contract tests for exact source placement (src/placement.cts).
  *
  * Placement is the milestone's release gate: feedback must land on exactly the
  * reviewed source it concerns, or not be placed inline at all. Two identities
@@ -35,20 +33,141 @@
  * @see https://git-scm.com/docs/git-config#Documentation/git-config.txt-corequotePath
  */
 
-const test = require('node:test');
-const { describe } = test;
-const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const { spawnSync } = require('node:child_process');
+import { describe, test } from 'node:test';
+import * as assert from 'node:assert/strict';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { spawnSync } from 'node:child_process';
 
-const { classifyPlacement } = require('../dist/placement.cjs');
+import { classifyPlacement } from '../dist/placement.cjs';
+import {
+  asString,
+  expectType,
+  isArray,
+  isArrayOf,
+  isBoolean,
+  isEither,
+  isNull,
+  isNumber,
+  isOptional,
+  isRecordOf,
+  isShape,
+  isString,
+  readJson,
+} from './support/runtime-types.mts';
+import type { Guard } from './support/runtime-types.mts';
 
-const FIXTURE_DIR = path.join(__dirname, 'fixtures', 'placement');
-const fixture = JSON.parse(fs.readFileSync(path.join(FIXTURE_DIR, 'pr-basic.json'), 'utf8'));
-const { cases, suggestionGroups } = JSON.parse(
-  fs.readFileSync(path.join(FIXTURE_DIR, 'placement-cases.json'), 'utf8'),
+/** One display row of an authored diff surface: [baseLine, headLine], null on the side a line is absent from. */
+type SurfaceRow = readonly [number | null, number | null];
+
+const isSurfaceRow: Guard<SurfaceRow> = (value): value is SurfaceRow =>
+  isArray(value) && value.length === 2 && value.every((n) => n === null || typeof n === 'number');
+
+const isAuthoredDiff = isShape({
+  baseCommit: isString,
+  headCommit: isString,
+  files: isArrayOf(isShape({
+    path: isString,
+    patch: isArrayOf(isString),
+    surface: isArrayOf(isArrayOf(isSurfaceRow)),
+    context: isOptional(isNumber),
+    gitReproducible: isOptional(isBoolean),
+  })),
+});
+
+const isExpectation = isShape({
+  kind: isString,
+  text: isOptional(isEither(isString, isNull)),
+  reason: isOptional(isString),
+  anchor: isOptional(isShape({ side: isString, line: isNumber, start_line: isOptional(isNumber) })),
+});
+
+const isRange = isShape({ start: isNumber, end: isNumber });
+
+const isCase = isShape({ id: isString, commit: isString, path: isString, range: isRange, expect: isExpectation, diff: isOptional(isString) });
+
+/** Where a case's source is: what a classifier request is built from. */
+interface ICaseSource {
+  readonly commit: string;
+  readonly path: string;
+  readonly range: { readonly start: number; readonly end: number };
+  readonly diff?: string | undefined;
+}
+
+/** A hand-authored case, or a deliberately altered copy of one. */
+interface ICase extends ICaseSource {
+  readonly id: string;
+  readonly expect: {
+    readonly kind: string;
+    readonly text?: string | null | undefined;
+    readonly reason?: string | undefined;
+    readonly anchor?: { readonly side: string; readonly line: number; readonly start_line?: number | undefined } | undefined;
+  };
+}
+
+/** A classifier request as the tests build and then deliberately alter it. */
+interface IRequest {
+  source: { commit: string; path: string; text: string | Buffer };
+  range: { startLine: number; endLine: number };
+  diff: IDiff;
+}
+
+interface IDiff {
+  baseCommit: string;
+  headCommit: string;
+  files: IDiffFile[];
+}
+
+interface IDiffFile {
+  path: string;
+  patch?: string;
+  previousPath?: string;
+}
+
+/** An expected classifier outcome, or a deliberately misplaced copy of one. */
+interface IExpectedOutcome {
+  readonly kind: string;
+  readonly reason?: string | undefined;
+  readonly source: {
+    readonly commit: string;
+    readonly path: string;
+    readonly startLine: number;
+    readonly endLine: number;
+    readonly text: string | null | undefined;
+  };
+  readonly anchor?: IExpectedAnchor;
+}
+
+interface IExpectedAnchor {
+  commit_id: string;
+  path: string;
+  side: string;
+  line: number;
+  start_line?: number;
+  start_side?: string;
+}
+
+const FIXTURE_DIR = path.join(import.meta.dirname, 'fixtures', 'placement');
+const fixture = expectType(
+  readJson(path.join(FIXTURE_DIR, 'pr-basic.json')),
+  isShape({
+    commits: isShape({ base: isString, head: isString, advancedBase: isString, advancedHead: isString }),
+    snapshots: isRecordOf(isRecordOf(isArrayOf(isString))),
+    diffs: isRecordOf(isAuthoredDiff),
+  }),
+  'the placement repository fixture',
+);
+const { cases, suggestionGroups } = expectType(
+  readJson(path.join(FIXTURE_DIR, 'placement-cases.json')),
+  isShape({
+    cases: isArrayOf(isCase),
+    suggestionGroups: isArrayOf(isShape({
+      id: isString,
+      members: isArrayOf(isShape({ role: isString, commit: isString, path: isString, range: isRange, expect: isExpectation })),
+    })),
+  }),
+  'the placement cases fixture',
 );
 
 const BASE = fixture.commits.base;
@@ -59,19 +178,34 @@ const ADVANCED_HEAD = fixture.commits.advancedHead;
 /** Matches the numeric part of a unified-diff hunk header. */
 const HUNK_HEADER = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
 
-const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
+const hasOwn = (object: object, key: string): boolean => Object.prototype.hasOwnProperty.call(object, key);
+
+/**
+ * A value the test data guarantees (a TypeError otherwise, as dereferencing
+ * the missing value would be; negative controls expect only AssertionErrors).
+ */
+function present<T>(value: T | null | undefined, what: string): T {
+  if (value === undefined || value === null) throw new TypeError(`${what} is missing`);
+  return value;
+}
+
+/** items[index], which the surrounding logic guarantees exists. */
+function at<T>(items: readonly T[], index: number): T {
+  return present(items[index], `item ${String(index)}`);
+}
 
 /** Authored physical lines (each with its own terminator) of a file at a commit. */
-function authoredLines(commit, filePath) {
+function authoredLines(commit: string, filePath: string): string[] {
   const snapshot = fixture.snapshots[commit];
-  if (!snapshot || !hasOwn(snapshot, filePath)) {
+  const lines = snapshot && hasOwn(snapshot, filePath) ? snapshot[filePath] : undefined;
+  if (!lines) {
     throw new assert.AssertionError({ message: `fixture has no ${filePath} at ${commit}` });
   }
-  return snapshot[filePath];
+  return lines;
 }
 
 /** Exact file text at a commit, as the mapper receives it. */
-function sourceText(commit, filePath) {
+function sourceText(commit: string, filePath: string): string {
   return authoredLines(commit, filePath).join('');
 }
 
@@ -83,12 +217,12 @@ function authoredDiff(diffId = 'primary') {
 }
 
 /** Authored patch lines for a primary diff entry. */
-function authoredPatchLines(filePath) {
-  return authoredDiff().files.find((f) => f.path === filePath).patch;
+function authoredPatchLines(filePath: string): string[] {
+  return present(authoredDiff().files.find((f) => f.path === filePath), `primary diff entry ${filePath}`).patch;
 }
 
 /** A fresh mapper diff context equivalent to an authored diff (no oracle data). */
-function fixtureDiff(diffId = 'primary') {
+function fixtureDiff(diffId = 'primary'): IDiff {
   const diff = authoredDiff(diffId);
   return {
     baseCommit: diff.baseCommit,
@@ -98,7 +232,7 @@ function fixtureDiff(diffId = 'primary') {
 }
 
 /** Builds a classifier request for a fixture case, optionally overriding parts. */
-function requestFor(c, overrides = {}) {
+function requestFor(c: ICaseSource, overrides: { text?: string; diff?: IDiff } = {}): IRequest {
   return {
     source: {
       commit: c.commit,
@@ -106,7 +240,7 @@ function requestFor(c, overrides = {}) {
       text: overrides.text !== undefined ? overrides.text : sourceText(c.commit, c.path),
     },
     range: { startLine: c.range.start, endLine: c.range.end },
-    diff: overrides.diff || fixtureDiff(c.diff),
+    diff: overrides.diff ?? fixtureDiff(c.diff),
   };
 }
 
@@ -115,16 +249,16 @@ function requestFor(c, overrides = {}) {
  * from the authored line array rather than computed by any line splitter.
  * The final line's terminator is excluded; inner terminators are kept.
  */
-function oracleText(commit, filePath, start, end) {
+function oracleText(commit: string, filePath: string, start: number, end: number): string {
   const lines = authoredLines(commit, filePath);
   if (!Number.isInteger(start) || !Number.isInteger(end) || start < 1 || end > lines.length || start > end) {
-    throw new assert.AssertionError({ message: `range ${start}-${end} is not within ${filePath}@${commit}` });
+    throw new assert.AssertionError({ message: `range ${String(start)}-${String(end)} is not within ${filePath}@${commit}` });
   }
   return lines.slice(start - 1, end).join('').replace(/\r?\n$/, '');
 }
 
 /** Inclusive integer sequence. */
-function span(start, end) {
+function span(start: number, end: number): number[] {
   return Array.from({ length: end - start + 1 }, (_, i) => start + i);
 }
 
@@ -138,11 +272,11 @@ function span(start, end) {
  * that base range in head numbering. The host-side text at the anchor must be
  * the same literal text.
  */
-function verifyExpectation(c) {
+function verifyExpectation(c: ICase): void {
   const { expect } = c;
   if (expect.text !== undefined) {
     assert.equal(oracleText(c.commit, c.path, c.range.start, c.range.end), expect.text,
-      `${c.id}: stated text is not the authored source at ${c.path}:${c.range.start}-${c.range.end}`);
+      `${c.id}: stated text is not the authored source at ${c.path}:${String(c.range.start)}-${String(c.range.end)}`);
   }
   if (expect.kind !== 'inline') {
     assert.equal(expect.anchor, undefined, `${c.id}: a non-inline expectation names an anchor`);
@@ -150,7 +284,7 @@ function verifyExpectation(c) {
   }
 
   const diff = authoredDiff(c.diff);
-  const { side, line, start_line: startLine } = expect.anchor;
+  const { side, line, start_line: startLine } = present(expect.anchor, `${c.id}: the inline anchor`);
   assert.ok(side === 'LEFT' || side === 'RIGHT', `${c.id}: unknown side ${side}`);
   if (startLine !== undefined) {
     assert.ok(startLine < line, `${c.id}: start_line must precede line when present`);
@@ -161,15 +295,15 @@ function verifyExpectation(c) {
 
   const coordinate = side === 'LEFT' ? 0 : 1;
   const hunk = entry.surface.find((rows) => rows.some((row) => row[coordinate] === anchorLines[0]));
-  assert.ok(hunk, `${c.id}: anchor line ${anchorLines[0]} ${side} is not on the diff surface`);
+  assert.ok(hunk, `${c.id}: anchor line ${String(anchorLines[0])} ${side} is not on the diff surface`);
   const anchorRows = anchorLines.map((n) => hunk.find((row) => row[coordinate] === n));
   assert.ok(anchorRows.every(Boolean), `${c.id}: anchor ${side} ${anchorLines.join(',')} is not within one hunk`);
 
   if (side === 'LEFT') {
     assert.equal(c.commit, diff.baseCommit, `${c.id}: LEFT anchors only base source`);
-    assert.ok(anchorRows.every((row) => row[1] === null), `${c.id}: LEFT anchor covers a line that is not a deletion`);
-    const rowIndices = anchorRows.map((row) => hunk.indexOf(row));
-    assert.ok(rowIndices.every((i, k) => k === 0 || i === rowIndices[k - 1] + 1),
+    assert.ok(anchorRows.every((row) => present(row, 'anchor row')[1] === null), `${c.id}: LEFT anchor covers a line that is not a deletion`);
+    const rowIndices = anchorRows.map((row) => hunk.indexOf(present(row, 'anchor row')));
+    assert.ok(rowIndices.every((i, k) => k === 0 || i === at(rowIndices, k - 1) + 1),
       `${c.id}: LEFT anchor deletions are separated by other diff rows`);
     assert.deepEqual(anchorLines, span(c.range.start, c.range.end), `${c.id}: LEFT anchor is not the source range`);
   } else if (c.commit === diff.headCommit) {
@@ -178,20 +312,20 @@ function verifyExpectation(c) {
     assert.equal(c.commit, diff.baseCommit, `${c.id}: inline source must be a diff side`);
     const sourceRows = span(c.range.start, c.range.end).map((n) => hunk.findIndex((row) => row[0] === n));
     assert.ok(sourceRows.every((i) => i >= 0), `${c.id}: base source range is not within the anchor's hunk`);
-    assert.ok(sourceRows.every((i, k) => k === 0 || i === sourceRows[k - 1] + 1),
+    assert.ok(sourceRows.every((i, k) => k === 0 || i === at(sourceRows, k - 1) + 1),
       `${c.id}: base source range is interrupted by other diff rows`);
-    assert.ok(sourceRows.every((i) => hunk[i][1] !== null), `${c.id}: base source range includes a deletion`);
-    assert.deepEqual(sourceRows.map((i) => hunk[i][1]), anchorLines,
+    assert.ok(sourceRows.every((i) => at(hunk, i)[1] !== null), `${c.id}: base source range includes a deletion`);
+    assert.deepEqual(sourceRows.map((i) => at(hunk, i)[1]), anchorLines,
       `${c.id}: RIGHT anchor is not the head numbering of the base context range`);
   }
 
   const hostCommit = side === 'LEFT' ? diff.baseCommit : diff.headCommit;
-  assert.equal(oracleText(hostCommit, c.path, anchorLines[0], line), expect.text,
+  assert.equal(oracleText(hostCommit, c.path, at(anchorLines, 0), line), expect.text,
     `${c.id}: host text at the anchor differs from the source text`);
 }
 
 /** The complete outcome a correct classifier must return for a verified case. */
-function expectedOutcome(c) {
+function expectedOutcome(c: ICase): IExpectedOutcome {
   const { expect } = c;
   const source = {
     commit: c.commit,
@@ -201,8 +335,8 @@ function expectedOutcome(c) {
     text: expect.text,
   };
   if (expect.kind === 'inline') {
-    const { side, line, start_line: startLine } = expect.anchor;
-    const anchor = { commit_id: authoredDiff(c.diff).headCommit, path: c.path, side, line };
+    const { side, line, start_line: startLine } = present(expect.anchor, `${c.id}: the inline anchor`);
+    const anchor: IExpectedAnchor = { commit_id: authoredDiff(c.diff).headCommit, path: c.path, side, line };
     if (startLine !== undefined) {
       anchor.start_line = startLine;
       anchor.start_side = side;
@@ -216,16 +350,17 @@ function expectedOutcome(c) {
 }
 
 /** Asserts a rejection with its reason and a human-readable message, and nothing placeable. */
-function assertRejected(result, reason) {
-  assert.equal(result.kind, 'rejected', `expected rejection, got ${JSON.stringify(result)}`);
-  assert.equal(result.reason, reason);
-  assert.equal(typeof result.message, 'string');
-  assert.ok(result.message.length > 0, 'rejection message is empty');
+function assertRejected(result: object, reason: string | undefined): void {
+  const { kind, reason: actualReason, message }: { kind?: unknown; reason?: unknown; message?: unknown } = result;
+  assert.equal(kind, 'rejected', `expected rejection, got ${JSON.stringify(result)}`);
+  assert.equal(actualReason, reason);
+  assert.equal(typeof message, 'string');
+  assert.ok(asString(message).length > 0, 'rejection message is empty');
   assert.deepEqual(Object.keys(result).sort(), ['kind', 'message', 'reason']);
 }
 
 /** Asserts a classifier outcome for a fixture case exactly. */
-function assertCaseOutcome(result, c) {
+function assertCaseOutcome(result: object, c: ICase): void {
   if (c.expect.kind === 'rejected') {
     assertRejected(result, c.expect.reason);
   } else {
@@ -233,23 +368,26 @@ function assertCaseOutcome(result, c) {
   }
 }
 
-function caseById(id) {
+function caseById(id: string): ICase {
   const c = cases.find((x) => x.id === id);
   assert.ok(c, `no fixture case ${id}`);
   return c;
 }
 
 /** A copy of a case with selected fields replaced (anchor replaced wholesale when given). */
-function withChanges(c, changes) {
+function withChanges(
+  c: ICase,
+  changes: { commit?: string; path?: string; range?: Partial<ICase['range']>; expect?: Partial<ICase['expect']> },
+): ICase {
   return {
     ...c,
     ...changes,
-    range: { ...c.range, ...(changes.range || {}) },
-    expect: { ...c.expect, ...(changes.expect || {}) },
+    range: { ...c.range, ...(changes.range ?? {}) },
+    expect: { ...c.expect, ...(changes.expect ?? {}) },
   };
 }
 
-function deepFreeze(value) {
+function deepFreeze<T>(value: T): T {
   if (value && typeof value === 'object') {
     Object.values(value).forEach(deepFreeze);
     Object.freeze(value);
@@ -258,9 +396,9 @@ function deepFreeze(value) {
 }
 
 /** A primary diff whose entry for `filePath` has the given patch text (or no patch if undefined). */
-function diffWithPatch(filePath, patch, entryOverrides = {}) {
+function diffWithPatch(filePath: string, patch: string | undefined, entryOverrides: Partial<IDiffFile> = {}): IDiff {
   const diff = fixtureDiff();
-  const entry = diff.files.find((f) => f.path === filePath);
+  const entry = present(diff.files.find((f) => f.path === filePath), `diff entry ${filePath}`);
   if (patch === undefined) delete entry.patch;
   else entry.patch = patch;
   Object.assign(entry, entryOverrides);
@@ -284,42 +422,42 @@ describe('fixture oracle', () => {
   test('negative control: a line shifted by one is detected', () => {
     const c = caseById('right-replacement-addition');
     const shifted = withChanges(c, { range: { start: 11, end: 11 }, expect: { anchor: { side: 'RIGHT', line: 11 } } });
-    assert.throws(() => verifyExpectation(shifted), assert.AssertionError);
+    assert.throws(() => { verifyExpectation(shifted); }, assert.AssertionError);
     const anchorOnlyShifted = withChanges(c, { expect: { anchor: { side: 'RIGHT', line: 11 } } });
-    assert.throws(() => verifyExpectation(anchorOnlyShifted), assert.AssertionError);
+    assert.throws(() => { verifyExpectation(anchorOnlyShifted); }, assert.AssertionError);
   });
 
   test('negative control: a deletion anchored RIGHT is detected', () => {
     const c = caseById('left-replaced-deletion');
-    assert.throws(() => verifyExpectation(withChanges(c, { expect: { anchor: { side: 'RIGHT', line: 8 } } })),
+    assert.throws(() => { verifyExpectation(withChanges(c, { expect: { anchor: { side: 'RIGHT', line: 8 } } })); },
       assert.AssertionError);
     const sameNumberOtherSide = withChanges(c, { commit: HEAD, expect: { anchor: { side: 'RIGHT', line: 8 } } });
-    assert.throws(() => verifyExpectation(sameNumberOtherSide), assert.AssertionError);
+    assert.throws(() => { verifyExpectation(sameNumberOtherSide); }, assert.AssertionError);
   });
 
   test('negative control: base-source context anchored LEFT is detected (source side is not host side)', () => {
     const c = caseById('base-first-line-context-anchors-right');
-    assert.throws(() => verifyExpectation(withChanges(c, { expect: { anchor: { side: 'LEFT', line: 1 } } })),
+    assert.throws(() => { verifyExpectation(withChanges(c, { expect: { anchor: { side: 'LEFT', line: 1 } } })); },
       assert.AssertionError);
     const shifted = caseById('base-context-shifted-by-insertion-anchors-right');
-    assert.throws(() => verifyExpectation(withChanges(shifted, { expect: { anchor: { side: 'LEFT', line: 4 } } })),
+    assert.throws(() => { verifyExpectation(withChanges(shifted, { expect: { anchor: { side: 'LEFT', line: 4 } } })); },
       assert.AssertionError);
   });
 
   test('negative control: base-source context anchored RIGHT at its base number is detected', () => {
     const c = caseById('base-context-shifted-by-insertion-anchors-right');
-    assert.throws(() => verifyExpectation(withChanges(c, { expect: { anchor: { side: 'RIGHT', line: 4 } } })),
+    assert.throws(() => { verifyExpectation(withChanges(c, { expect: { anchor: { side: 'RIGHT', line: 4 } } })); },
       assert.AssertionError);
     const multi = caseById('base-multiline-context-shifted-anchors-right');
-    assert.throws(() => verifyExpectation(withChanges(multi, {
+    assert.throws(() => { verifyExpectation(withChanges(multi, {
       expect: { anchor: { side: 'RIGHT', start_line: 9, line: 11 } },
-    })), assert.AssertionError);
+    })); }, assert.AssertionError);
   });
 
   test('negative control: a mixed deletion/context base range forced inline is detected', () => {
     const c = caseById('general-base-deletions-then-context');
     for (const anchor of [{ side: 'LEFT', start_line: 24, line: 26 }, { side: 'RIGHT', start_line: 23, line: 24 }]) {
-      assert.throws(() => verifyExpectation(withChanges(c, { expect: { kind: 'inline', reason: undefined, anchor } })),
+      assert.throws(() => { verifyExpectation(withChanges(c, { expect: { kind: 'inline', reason: undefined, anchor } })); },
         assert.AssertionError);
     }
   });
@@ -327,29 +465,29 @@ describe('fixture oracle', () => {
   test('negative control: base context interrupted by additions forced onto the widened RIGHT range is detected', () => {
     const c = caseById('general-base-context-interrupted-by-additions');
     const widened = withChanges(c, { expect: { kind: 'inline', reason: undefined, anchor: { side: 'RIGHT', start_line: 3, line: 6 } } });
-    assert.throws(() => verifyExpectation(widened), assert.AssertionError);
+    assert.throws(() => { verifyExpectation(widened); }, assert.AssertionError);
   });
 
   test('negative control: deletions separated by an addition anchored as one LEFT range are detected', () => {
     const c = caseById('general-reordered-deletions-interrupted-by-addition');
     const forced = withChanges(c, { expect: { kind: 'inline', reason: undefined, anchor: { side: 'LEFT', start_line: 3, line: 4 } } });
-    assert.throws(() => verifyExpectation(forced), /separated by other diff rows/);
+    assert.throws(() => { verifyExpectation(forced); }, /separated by other diff rows/);
   });
 
   test('negative control: head source anchored LEFT is detected', () => {
     const c = caseById('right-context-shifted-by-insertion');
-    assert.throws(() => verifyExpectation(withChanges(c, { expect: { anchor: { side: 'LEFT', line: 6 } } })),
+    assert.throws(() => { verifyExpectation(withChanges(c, { expect: { anchor: { side: 'LEFT', line: 6 } } })); },
       assert.AssertionError);
   });
 
   test('negative control: the wrong file is detected', () => {
     const c = caseById('right-crlf-multiline-preserves-inner-terminator');
-    assert.throws(() => verifyExpectation(withChanges(c, { path: 'src/calc.js' })), assert.AssertionError);
+    assert.throws(() => { verifyExpectation(withChanges(c, { path: 'src/calc.js' })); }, assert.AssertionError);
   });
 
   test('negative control: the wrong commit for the stated text is detected', () => {
     const c = caseById('right-context-shifted-by-insertion');
-    assert.throws(() => verifyExpectation(withChanges(c, { commit: BASE })), assert.AssertionError);
+    assert.throws(() => { verifyExpectation(withChanges(c, { commit: BASE })); }, assert.AssertionError);
   });
 
   test('negative control: outcome comparison rejects a plausibly misplaced anchor or altered source', () => {
@@ -364,16 +502,16 @@ describe('fixture oracle', () => {
       { ...correct, anchor: { ...correct.anchor, start_line: 5, start_side: 'RIGHT' } },
       { ...correct, source: { ...correct.source, commit: HEAD, startLine: 6, endLine: 6 } },
     ];
-    assert.doesNotThrow(() => assertCaseOutcome(correct, c));
+    assert.doesNotThrow(() => { assertCaseOutcome(correct, c); });
     for (const wrong of misplaced) {
-      assert.throws(() => assertCaseOutcome(wrong, c), assert.AssertionError);
+      assert.throws(() => { assertCaseOutcome(wrong, c); }, assert.AssertionError);
     }
   });
 });
 
 describe('authored surfaces regenerate the authored patch bodies', () => {
   /** One display line of a patch body for an authored source line, with its no-newline marker. */
-  const bodyLine = (prefix, text) => (text.endsWith('\n')
+  const bodyLine = (prefix: string, text: string) => (text.endsWith('\n')
     ? `${prefix}${text}`
     : `${prefix}${text}\n\\ No newline at end of file\n`);
 
@@ -381,31 +519,31 @@ describe('authored surfaces regenerate the authored patch bodies', () => {
     for (const entry of diff.files) {
       test(`${diffId}: surface of ${entry.path} matches its patch`, () => {
         const lines = entry.patch.slice(entry.patch.findIndex((l) => l.startsWith('@@')));
-        const hunks = [];
+        const hunks: { header: string; body: string[] }[] = [];
         for (const l of lines) {
           if (l.startsWith('@@')) hunks.push({ header: l, body: [] });
-          else hunks[hunks.length - 1].body.push(l);
+          else at(hunks, hunks.length - 1).body.push(l);
         }
         assert.equal(hunks.length, entry.surface.length, 'hunk count');
 
         hunks.forEach((hunk, i) => {
-          const rows = entry.surface[i];
-          const [, oldStart, oldCount = '1', newStart, newCount = '1'] = HUNK_HEADER.exec(hunk.header);
+          const rows = at(entry.surface, i);
+          const [, oldStart, oldCount = '1', newStart, newCount = '1'] = present(HUNK_HEADER.exec(hunk.header), `hunk ${String(i)} header`);
           const olds = rows.map((r) => r[0]).filter((n) => n !== null);
           const news = rows.map((r) => r[1]).filter((n) => n !== null);
-          assert.equal(olds.length, Number(oldCount), `hunk ${i} old count`);
-          assert.equal(news.length, Number(newCount), `hunk ${i} new count`);
+          assert.equal(olds.length, Number(oldCount), `hunk ${String(i)} old count`);
+          assert.equal(news.length, Number(newCount), `hunk ${String(i)} new count`);
           if (olds.length) assert.deepEqual(olds, span(Number(oldStart), Number(oldStart) + olds.length - 1));
           if (news.length) assert.deepEqual(news, span(Number(newStart), Number(newStart) + news.length - 1));
 
           const generated = rows.map(([b, h]) => {
-            if (h === null) return bodyLine('-', authoredLines(diff.baseCommit, entry.path)[b - 1]);
-            if (b === null) return bodyLine('+', authoredLines(diff.headCommit, entry.path)[h - 1]);
-            const baseText = authoredLines(diff.baseCommit, entry.path)[b - 1];
-            assert.equal(authoredLines(diff.headCommit, entry.path)[h - 1], baseText, `context row ${b}/${h} differs`);
+            if (h === null) return bodyLine('-', at(authoredLines(diff.baseCommit, entry.path), present(b, 'base line') - 1));
+            if (b === null) return bodyLine('+', at(authoredLines(diff.headCommit, entry.path), h - 1));
+            const baseText = at(authoredLines(diff.baseCommit, entry.path), b - 1);
+            assert.equal(authoredLines(diff.headCommit, entry.path)[h - 1], baseText, `context row ${String(b)}/${String(h)} differs`);
             return bodyLine(' ', baseText);
           });
-          assert.equal(generated.join(''), hunk.body.join(''), `hunk ${i} body`);
+          assert.equal(generated.join(''), hunk.body.join(''), `hunk ${String(i)} body`);
         });
       });
     }
@@ -415,7 +553,7 @@ describe('authored surfaces regenerate the authored patch bodies', () => {
 describe('authored patches agree with an independent diff generator', () => {
   const gitEnvHome = fs.mkdtempSync(path.join(os.tmpdir(), 'placement-git-home-'));
   const env = {
-    PATH: process.env.PATH,
+    PATH: process.env['PATH'],
     HOME: gitEnvHome,
     XDG_CONFIG_HOME: gitEnvHome,
     GIT_CONFIG_NOSYSTEM: '1',
@@ -425,7 +563,7 @@ describe('authored patches agree with an independent diff generator', () => {
   const probe = spawnSync('git', ['--version'], { env, encoding: 'utf8' });
 
   /** Patch text from the first hunk header onward, discarding file headers. */
-  const hunksOnly = (patch) => patch.slice(patch.indexOf('@@'));
+  const hunksOnly = (patch: string) => patch.slice(patch.indexOf('@@'));
 
   // Hand-authored orderings git never emits (gitReproducible: false) are not
   // enumerated here; the surface regeneration check and oracle cover them.
@@ -437,13 +575,14 @@ describe('authored patches agree with an independent diff generator', () => {
           return;
         }
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'placement-diff-'));
-        const sides = {};
-        for (const [side, commit] of [['base', diff.baseCommit], ['head', diff.headCommit]]) {
-          const snapshot = fixture.snapshots[commit];
+        const sides: Partial<Record<'base' | 'head', string>> = {};
+        for (const [side, commit] of [['base', diff.baseCommit], ['head', diff.headCommit]] as const) {
+          const snapshot = present(fixture.snapshots[commit], `snapshot ${commit}`);
           if (hasOwn(snapshot, entry.path)) {
-            sides[side] = path.join(dir, side, path.basename(entry.path));
-            fs.mkdirSync(path.dirname(sides[side]), { recursive: true });
-            fs.writeFileSync(sides[side], snapshot[entry.path].join(''));
+            const file = path.join(dir, side, path.basename(entry.path));
+            sides[side] = file;
+            fs.mkdirSync(path.dirname(file), { recursive: true });
+            fs.writeFileSync(file, present(snapshot[entry.path], entry.path).join(''));
           } else {
             sides[side] = '/dev/null';
           }
@@ -451,8 +590,8 @@ describe('authored patches agree with an independent diff generator', () => {
         const run = spawnSync('git', [
           '-c', 'core.quotepath=false',
           'diff', '--no-index', '--no-color', '--no-ext-diff', '--no-textconv',
-          `-U${entry.context === undefined ? 3 : entry.context}`, '--diff-algorithm=myers', '--indent-heuristic',
-          sides.base, sides.head,
+          `-U${String(entry.context === undefined ? 3 : entry.context)}`, '--diff-algorithm=myers', '--indent-heuristic',
+          present(sides.base, 'base side'), present(sides.head, 'head side'),
         ], { env, cwd: dir, encoding: 'utf8' });
         assert.equal(run.status, 1, `git diff did not report a difference: ${run.stderr}`);
         assert.equal(hunksOnly(entry.patch.join('')), hunksOnly(run.stdout));
@@ -484,7 +623,9 @@ describe('classifyPlacement: suggestion ranges stay separate from feedback range
       const forward = members.map((m) => classifyPlacement(requestFor(m, { diff })));
       const backward = [...members].reverse().map((m) => classifyPlacement(requestFor(m, { diff }))).reverse();
       assert.deepStrictEqual(backward, forward);
-      members.forEach((m, i) => assertCaseOutcome(forward[i], m));
+      members.forEach((m, i) => {
+        assertCaseOutcome(at(forward, i), m);
+      });
     });
   }
 });
@@ -507,17 +648,17 @@ describe('classifyPlacement: diff-side provenance is exact', () => {
   test('base-context source anchored RIGHT keeps its base identity and the review commit is the diff head', () => {
     const c = caseById('base-multiline-context-shifted-anchors-right');
     const result = classifyPlacement(requestFor(c));
-    assert.deepStrictEqual(result.source, {
+    assert.deepStrictEqual('source' in result ? result.source : undefined, {
       commit: BASE, path: 'src/calc.js', startLine: 9, endLine: 11, text: '}\n\n// helpers',
     });
-    assert.equal(result.anchor && result.anchor.commit_id, HEAD);
+    assert.equal('anchor' in result ? result.anchor.commit_id : undefined, HEAD);
   });
 
   test('the review commit of a LEFT anchor is the diff head, while source identity stays the base', () => {
     const c = caseById('left-replaced-deletion');
     const result = classifyPlacement(requestFor(c));
-    assert.equal(result.anchor && result.anchor.commit_id, HEAD);
-    assert.equal(result.source && result.source.commit, BASE);
+    assert.equal('anchor' in result ? result.anchor.commit_id : undefined, HEAD);
+    assert.equal('source' in result ? result.source.commit : undefined, BASE);
   });
 });
 
@@ -644,7 +785,7 @@ describe('classifyPlacement: untrusted source text or patch is rejected, never r
   test('patch file headers naming a different path than the diff entry are rejected', () => {
     const c = { commit: HEAD, path: 'src/other.js', range: { start: 1, end: 1 } };
     const diff = fixtureDiff();
-    diff.files.find((f) => f.path === 'src/new.js').path = 'src/other.js';
+    present(diff.files.find((f) => f.path === 'src/new.js'), 'diff entry src/new.js').path = 'src/other.js';
     const result = classifyPlacement(requestFor(c, { text: sourceText(HEAD, 'src/new.js'), diff }));
     assertRejected(result, 'diff-path-mismatch');
   });
@@ -715,31 +856,31 @@ describe('classifyPlacement: patch file headers with spaced and non-ASCII paths'
 describe('classifyPlacement: every primary case holds with complete Git output, headers included', () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'placement-repo-home-'));
   const env = {
-    PATH: process.env.PATH, HOME: home, XDG_CONFIG_HOME: home, GIT_CONFIG_NOSYSTEM: '1',
+    PATH: process.env['PATH'], HOME: home, XDG_CONFIG_HOME: home, GIT_CONFIG_NOSYSTEM: '1',
     GIT_CONFIG_GLOBAL: '/dev/null', LC_ALL: 'C',
     GIT_AUTHOR_NAME: 'fixture', GIT_AUTHOR_EMAIL: 'fixture@example.invalid',
     GIT_COMMITTER_NAME: 'fixture', GIT_COMMITTER_EMAIL: 'fixture@example.invalid',
   };
-  const git = (cwd, args) => spawnSync('git', args, { cwd, env, encoding: 'utf8' });
+  const git = (cwd: string, args: string[]) => spawnSync('git', args, { cwd, env, encoding: 'utf8' });
   const available = !spawnSync('git', ['--version'], { env }).error;
 
   /** A scratch repository whose index holds the head snapshot over a committed base snapshot. */
   function stagedRepository() {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'placement-repo-'));
-    const write = (snapshot) => {
+    const write = (snapshot: Record<string, string[]>) => {
       for (const [p, lines] of Object.entries(snapshot)) {
         fs.mkdirSync(path.dirname(path.join(dir, p)), { recursive: true });
         fs.writeFileSync(path.join(dir, p), lines.join(''));
       }
     };
     assert.equal(git(dir, ['init', '-q']).status, 0);
-    write(fixture.snapshots[BASE]);
+    write(present(fixture.snapshots[BASE], 'base snapshot'));
     assert.equal(git(dir, ['add', '-A']).status, 0);
     assert.equal(git(dir, ['-c', 'commit.gpgsign=false', 'commit', '-q', '-m', 'base']).status, 0);
-    for (const p of Object.keys(fixture.snapshots[BASE])) {
-      if (!hasOwn(fixture.snapshots[HEAD], p)) fs.unlinkSync(path.join(dir, p));
+    for (const p of Object.keys(present(fixture.snapshots[BASE], 'base snapshot'))) {
+      if (!hasOwn(present(fixture.snapshots[HEAD], 'head snapshot'), p)) fs.unlinkSync(path.join(dir, p));
     }
-    write(fixture.snapshots[HEAD]);
+    write(present(fixture.snapshots[HEAD], 'head snapshot'));
     assert.equal(git(dir, ['add', '-A']).status, 0);
     return dir;
   }
@@ -753,15 +894,15 @@ describe('classifyPlacement: every primary case holds with complete Git output, 
       const dir = stagedRepository();
       const diff = fixtureDiff();
       for (const entry of diff.files) {
-        const authored = authoredDiff().files.find((f) => f.path === entry.path);
+        const authored = present(authoredDiff().files.find((f) => f.path === entry.path), `authored entry ${entry.path}`);
         const run = git(dir, ['-c', `core.quotepath=${quotePath}`, 'diff', '--cached', '--no-color', '--no-ext-diff',
-          '--no-textconv', '--no-renames', `-U${authored.context === undefined ? 3 : authored.context}`,
+          '--no-textconv', '--no-renames', `-U${String(authored.context === undefined ? 3 : authored.context)}`,
           '--diff-algorithm=myers', '--indent-heuristic', '--', entry.path]);
         assert.equal(run.status, 0, run.stderr);
         assert.ok(run.stdout.startsWith('diff --git '), `no full Git patch for ${entry.path}`);
         entry.patch = run.stdout;
       }
-      for (const c of cases.filter((x) => (x.diff || 'primary') === 'primary')) {
+      for (const c of cases.filter((x) => (x.diff ?? 'primary') === 'primary')) {
         assertCaseOutcome(classifyPlacement(requestFor(c, { diff })), c);
       }
     });
@@ -816,7 +957,7 @@ describe('classifyPlacement: hunk header edge cases', () => {
     assertRejected(result, 'malformed-patch');
   });
 
-  for (const [name, separator] of [['CR', '\r'], ['U+2028', ' '], ['U+2029', ' ']]) {
+  for (const [name, separator] of [['CR', '\r'], ['U+2028', ' '], ['U+2029', ' ']] as const) {
     test(`regression: a hunk section heading containing ${name} is accepted`, () => {
       const patch = authoredPatchLines('src/calc.js').join('')
         .replace('@@ -18,11 +20,7 @@ function noop() {', `@@ -18,11 +20,7 @@ function${separator} noop() {`);
@@ -884,7 +1025,7 @@ describe('classifyPlacement: explicit unsupported outcomes', () => {
     ['binary', 'diff --git a/src/calc.js b/src/calc.js\nindex 1111111..2222222 100644\nBinary files a/src/calc.js and b/src/calc.js differ\n'],
     ['mode-only', 'diff --git a/src/calc.js b/src/calc.js\nold mode 100644\nnew mode 100755\n'],
     ['header-only', '--- a/src/calc.js\n+++ b/src/calc.js\n'],
-  ]) {
+  ] as const) {
     test(`a ${name} patch without hunks is unsupported rather than assumed unchanged`, () => {
       const c = caseById('right-second-hunk-addition');
       const result = classifyPlacement(requestFor(c, { diff: diffWithPatch('src/calc.js', patch) }));
@@ -939,19 +1080,19 @@ describe('classifyPlacement: identity inputs are validated exactly', () => {
 
   test('non-string source text is rejected', () => {
     const request = requestFor(c);
-    request.source.text = Buffer.from(request.source.text);
+    request.source.text = Buffer.from(asString(request.source.text));
     assertRejected(classifyPlacement(request), 'invalid-input');
   });
 
   test('a missing range is rejected', () => {
     const request = requestFor(c);
-    delete request.range;
+    Reflect.deleteProperty(request, 'range');
     assertRejected(classifyPlacement(request), 'invalid-input');
   });
 
   test('a missing diff context is rejected', () => {
     const request = requestFor(c);
-    delete request.diff;
+    Reflect.deleteProperty(request, 'diff');
     assertRejected(classifyPlacement(request), 'invalid-input');
   });
 
@@ -969,7 +1110,7 @@ describe('classifyPlacement: identity inputs are validated exactly', () => {
 
   test('a diff listing the same path twice is rejected', () => {
     const request = requestFor(c);
-    request.diff.files.push({ ...request.diff.files[0] });
+    request.diff.files.push({ ...at(request.diff.files, 0) });
     assertRejected(classifyPlacement(request), 'invalid-diff');
   });
 });

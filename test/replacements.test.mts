@@ -1,7 +1,5 @@
-'use strict';
-
 /**
- * Contract tests for exact SARIF text replacement (src/replacements.cjs).
+ * Contract tests for exact SARIF text replacement (src/replacements.cts).
  *
  * A replacement must reproduce the producer's literal edit of the original
  * file. Separately, it is described as a closed range of whole source lines:
@@ -30,18 +28,35 @@
  * @see https://docs.oasis-open.org/sarif/sarif/v2.1.0/os/schemas/sarif-schema-2.1.0.json (region charOffset/charLength defaults)
  */
 
-const test = require('node:test');
-const { describe } = test;
-const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
+import { describe, test } from 'node:test';
+import * as assert from 'node:assert/strict';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
-const { applyReplacement } = require('../dist/replacements.cjs');
+import { applyReplacement } from '../dist/replacements.cjs';
+import type { ReplacementOutcome } from '../dist/replacements.cjs';
+import {
+  asRecord,
+  isArrayOf,
+  isBoolean,
+  isEither,
+  isNumber,
+  isOneOf,
+  isOptional,
+  isRecordOf,
+  isShape,
+  isString,
+  isUnknown,
+  expectType,
+  readJson,
+} from './support/runtime-types.mts';
 
-const FIXTURE_DIR = path.join(__dirname, 'fixtures', 'replacements');
+const FIXTURE_DIR = path.join(import.meta.dirname, 'fixtures', 'replacements');
+
+type OutcomeKind = ReplacementOutcome['kind'];
 
 /** Exact result fields per outcome kind; anything else is outside this module's contract. */
-const RESULT_KEYS = {
+const RESULT_KEYS: Record<OutcomeKind, string[]> = {
   replacement: [
     'editedText',
     'endLine',
@@ -61,7 +76,48 @@ const WRONG_FIELDS = {
   wrongEditedText: 'editedText',
   wrongReplacementText: 'replacementText',
   wrongReplacementLines: 'replacementLines',
-};
+} as const;
+
+type WrongGroup = keyof typeof WRONG_FIELDS;
+
+/** WRONG_FIELDS as typed [group, field] pairs. */
+const WRONG_FIELD_ENTRIES = Object.keys(WRONG_FIELDS)
+  .filter((group): group is WrongGroup => Object.hasOwn(WRONG_FIELDS, group))
+  .map((group) => [group, WRONG_FIELDS[group]] as const);
+
+/** Authored expectation of an applied replacement. */
+const isExpectedReplacement = isShape({
+  kind: isOneOf('replacement'),
+  editedText: isString,
+  startLine: isNumber,
+  endLine: isNumber,
+  originalText: isString,
+  replacementText: isString,
+  replacementLines: isArrayOf(isString),
+  endsWithNewline: isShape({ original: isBoolean, edited: isBoolean }),
+});
+
+/** Authored expectation of a diagnostic (the editedText of an unanchored edit included). */
+const isExpectedDiagnostic = isShape({
+  kind: isOneOf('unanchored', 'invalid', 'unsupported'),
+  reason: isString,
+  editedText: isOptional(isString),
+});
+
+/** One authored case: the request (deliberately unchecked: invalid requests are cases too) and its expectation. */
+const isCase = isShape({
+  name: isString,
+  input: isShape({ sourceText: isUnknown, columnKind: isOptional(isString), charOffsetKind: isOptional(isString) }),
+  expected: isEither(isExpectedReplacement, isExpectedDiagnostic),
+  wrongEditedText: isOptional(isRecordOf(isUnknown)),
+  wrongReplacementText: isOptional(isRecordOf(isUnknown)),
+  wrongReplacementLines: isOptional(isRecordOf(isUnknown)),
+});
+
+const isFixture = isShape({
+  cases: isOptional(isArrayOf(isCase)),
+  groups: isOptional(isArrayOf(isShape({ name: isString, members: isArrayOf(isCase) }))),
+});
 
 /** Every fixture file, each contributing standalone cases and/or groups of adjacent alternatives. */
 function loadFixtures() {
@@ -69,7 +125,7 @@ function loadFixtures() {
     .readdirSync(FIXTURE_DIR)
     .filter((name) => name.endsWith('.json'))
     .sort()
-    .map((file) => ({ file, ...JSON.parse(fs.readFileSync(path.join(FIXTURE_DIR, file), 'utf8')) }));
+    .map((file) => ({ file, ...expectType(readJson(path.join(FIXTURE_DIR, file)), isFixture, `replacement fixture ${file}`) }));
 }
 
 const fixtures = loadFixtures();
@@ -85,7 +141,7 @@ const allCases = fixtures.flatMap(({ file, cases = [], groups = [] }) => [
  * LF), each string keeping its own terminator; a lone CR is line content and
  * a terminal newline yields no extra line.
  */
-function physicalLines(text) {
+function physicalLines(text: string): string[] {
   return text.match(/[^\n]*\n|[^\n]+$/g) ?? [];
 }
 
@@ -94,12 +150,12 @@ function physicalLines(text) {
  * with its terminator) replaced by replacementText. Independent of SARIF
  * region arithmetic.
  */
-function spliceLines(sourceText, startLine, endLine, replacementText) {
+function spliceLines(sourceText: string, startLine: number, endLine: number, replacementText: string): string {
   const lines = physicalLines(sourceText);
   return lines.slice(0, startLine - 1).join('') + replacementText + lines.slice(endLine).join('');
 }
 
-function deepFreeze(value) {
+function deepFreeze<T>(value: T): T {
   if (value && typeof value === 'object') {
     Object.values(value).forEach(deepFreeze);
     Object.freeze(value);
@@ -108,22 +164,40 @@ function deepFreeze(value) {
 }
 
 /** Calls the module with an immutable deep copy so any input mutation fails loudly. */
-function apply(input) {
+function apply(input: unknown): ReplacementOutcome {
   return applyReplacement(deepFreeze(structuredClone(input)));
 }
 
-function assertOutcome(actual, expected) {
-  assert.equal(actual.kind, expected.kind, `outcome kind (reason: ${actual.reason ?? 'none'})`);
+/** `value[name]` of a plain object (outcomes and fixture values), whatever its outcome kind. */
+function field(value: object, name: string): unknown {
+  return asRecord(value)[name];
+}
+
+/** items[index] of parallel arrays, which always exists. */
+function at<T>(items: readonly T[], index: number): T {
+  const item = items[index];
+  if (item === undefined) throw new RangeError(`no item at index ${String(index)}`);
+  return item;
+}
+
+type Case = (typeof allCases)[number];
+type ReplacementCase = Case & { expected: Extract<Case['expected'], { kind: 'replacement' }> };
+
+const isReplacementCase = (c: Case): c is ReplacementCase => c.expected.kind === 'replacement';
+
+function assertOutcome(actual: ReplacementOutcome, expected: Case['expected']): void {
+  assert.equal(actual.kind, expected.kind, `outcome kind (reason: ${'reason' in actual ? actual.reason : 'none'})`);
   assert.deepEqual(Object.keys(actual).sort(), RESULT_KEYS[expected.kind]);
   if (expected.kind === 'replacement') {
     assert.deepEqual(actual, expected);
     return;
   }
-  assert.equal(actual.reason, expected.reason);
-  assert.equal(typeof actual.message, 'string');
-  assert.ok(actual.message.trim().length > 0, 'diagnostic message is actionable text');
+  assert.equal(field(actual, 'reason'), expected.reason);
+  const message = field(actual, 'message');
+  assert.equal(typeof message, 'string');
+  assert.ok(String(message).trim().length > 0, 'diagnostic message is actionable text');
   if (expected.kind === 'unanchored') {
-    assert.equal(actual.editedText, expected.editedText);
+    assert.equal(field(actual, 'editedText'), expected.editedText);
   }
 }
 
@@ -141,7 +215,8 @@ describe('fixture integrity (checks authored expectations without the module und
       const { expected, input } = c;
       assert.ok(Object.hasOwn(RESULT_KEYS, expected.kind), 'known outcome kind');
       if (expected.kind === 'replacement') {
-        const lines = physicalLines(input.sourceText);
+        const sourceText = expectType(input.sourceText, isString, 'the source text of a valid edit');
+        const lines = physicalLines(sourceText);
         assert.ok(1 <= expected.startLine && expected.startLine <= expected.endLine);
         assert.ok(expected.endLine <= lines.length, 'candidate lines exist in the original source');
         assert.equal(
@@ -150,7 +225,7 @@ describe('fixture integrity (checks authored expectations without the module und
           'authored originalText is exactly the candidate source lines with their terminators',
         );
         assert.equal(
-          spliceLines(input.sourceText, expected.startLine, expected.endLine, expected.replacementText),
+          spliceLines(sourceText, expected.startLine, expected.endLine, expected.replacementText),
           expected.editedText,
           'authored replacement on the authored lines reproduces the authored edited source',
         );
@@ -160,7 +235,7 @@ describe('fixture integrity (checks authored expectations without the module und
           'authored line sequence is exactly the authored replacement text',
         );
         assert.deepEqual(expected.endsWithNewline, {
-          original: input.sourceText.endsWith('\n'),
+          original: sourceText.endsWith('\n'),
           edited: expected.editedText.endsWith('\n'),
         });
       }
@@ -171,9 +246,9 @@ describe('fixture integrity (checks authored expectations without the module und
       if (expected.kind === 'unanchored') {
         assert.equal(input.sourceText, '', 'only an empty source lacks an anchor line');
       }
-      for (const [group, field] of Object.entries(WRONG_FIELDS)) {
+      for (const [group, name] of WRONG_FIELD_ENTRIES) {
         for (const [defect, wrong] of Object.entries(c[group] ?? {})) {
-          assert.notDeepEqual(wrong, expected[field], `negative control "${defect}" is distinguishable`);
+          assert.notDeepEqual(wrong, field(expected, name), `negative control "${defect}" is distinguishable`);
         }
       }
     });
@@ -185,20 +260,20 @@ describe('applyReplacement', () => {
     test(`${c.file}: ${c.name}`, () => {
       const actual = apply(c.input);
       assertOutcome(actual, c.expected);
-      for (const [group, field] of Object.entries(WRONG_FIELDS)) {
+      for (const [group, name] of WRONG_FIELD_ENTRIES) {
         for (const [defect, wrong] of Object.entries(c[group] ?? {})) {
-          assert.notDeepEqual(actual[field], wrong, `exhibits defect "${defect}"`);
+          assert.notDeepEqual(field(actual, name), wrong, `exhibits defect "${defect}"`);
         }
       }
     });
   }
 
   test('repeated calls with equal input yield equal, independent results', () => {
-    const input = allCases.find((c) => c.expected.kind === 'replacement' && c.expected.replacementLines.length > 1).input;
+    const input = allCases.find((c) => c.expected.kind === 'replacement' && c.expected.replacementLines.length > 1)?.input;
     const first = apply(input);
     const second = apply(input);
     assert.deepEqual(second, first);
-    assert.notEqual(second.replacementLines, first.replacementLines, 'no shared mutable result state');
+    assert.notEqual(field(second, 'replacementLines'), field(first, 'replacementLines'), 'no shared mutable result state');
   });
 });
 
@@ -209,7 +284,9 @@ describe('adjacent replacements are independent alternatives', () => {
         const forward = group.members.map((m) => apply(m.input));
         const backward = [...group.members].reverse().map((m) => apply(m.input)).reverse();
         assert.deepEqual(backward, forward);
-        group.members.forEach((m, i) => assertOutcome(forward[i], m.expected));
+        group.members.forEach((m, i) => {
+          assertOutcome(at(forward, i), m.expected);
+        });
       });
     }
   }
@@ -218,7 +295,7 @@ describe('adjacent replacements are independent alternatives', () => {
 test('fixtures cover every outcome kind, both column kinds, and both offset kinds', () => {
   const kinds = new Set(allCases.map((c) => c.expected.kind));
   assert.deepEqual([...kinds].sort(), ['invalid', 'replacement', 'unanchored', 'unsupported']);
-  const replacements = allCases.filter((c) => c.expected.kind === 'replacement');
+  const replacements = allCases.filter(isReplacementCase);
   const columnKinds = new Set(replacements.map((c) => c.input.columnKind));
   assert.deepEqual([...columnKinds].sort(), ['unicodeCodePoints', 'utf16CodeUnits']);
   const offsetKinds = new Set(replacements.map((c) => c.input.charOffsetKind).filter(Boolean));
