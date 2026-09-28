@@ -517,6 +517,8 @@ describe('guarded versioning with the real Changesets CLI', () => {
     assert.notEqual(raised, text, 'control: the ceiling constant was found');
     const guardCopy = path.join(dir, 'release-guard.cjs');
     fs.writeFileSync(guardCopy, raised);
+    // check-version also verifies the build with the freshness tool beside the guard.
+    fs.copyFileSync(MANIFEST_TOOL, path.join(dir, 'build-manifest.mts'));
     return (...args) =>
       spawnSync(process.execPath, [guardCopy, ...args], { cwd: dir, encoding: 'utf8', env: { ...env, HOME: dir }, timeout: 120_000 });
   }
@@ -529,7 +531,12 @@ describe('guarded versioning with the real Changesets CLI', () => {
     assert.equal(run.status, 0, run.stderr + run.stdout);
     assert.equal(version(dir), '1.0.0');
     assert.match(fs.readFileSync(path.join(dir, 'CHANGELOG.md'), 'utf8'), /## 1\.0\.0\n\n### Major Changes/);
-    assert.equal(guard1('check-version').status, 0, 'the manual-publish backstop accepts 1.0.0 under the raised ceiling');
+    // A manual publish builds first; record a fresh build of the versioned repository.
+    fs.mkdirSync(path.join(dir, 'dist'));
+    const build = spawnSync(process.execPath, [MANIFEST_TOOL, 'write', dir], { encoding: 'utf8' });
+    assert.equal(build.status, 0, build.stderr);
+    const backstop = guard1('check-version');
+    assert.equal(backstop.status, 0, `the manual-publish backstop accepts 1.0.0 under the raised ceiling: ${backstop.stderr}`);
   });
 
   test('a raised ceiling of 1 still refuses 2.0.0, and its message is consistent', () => {
