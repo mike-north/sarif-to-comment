@@ -26,8 +26,8 @@ import { fileURLToPath } from 'node:url';
 
 export const MANIFEST_NAME = '.build-inputs.json';
 
-/** Directories whose every file is a build input (types/ holds the transitional hand-written declarations). */
-const INPUT_DIRS: readonly string[] = ['src', 'types'];
+/** Directories whose every file is a build input. */
+const INPUT_DIRS: readonly string[] = ['src'];
 
 /** Individual files that shape the build: configuration, the resolved toolchain and the build scripts themselves. */
 const INPUT_FILES: readonly string[] = [
@@ -38,6 +38,7 @@ const INPUT_FILES: readonly string[] = [
   'api-extractor.json',
   'scripts/build.mts',
   'scripts/build-manifest.mts',
+  'scripts/api-docs.cjs',
 ];
 
 /** The recorded state of one complete build. */

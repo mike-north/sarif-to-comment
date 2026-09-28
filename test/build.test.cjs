@@ -7,12 +7,12 @@
  * - The freshness guard (scripts/build-manifest.mts) accepts a fresh build
  *   and refuses, naming the path and `pnpm run build`, every way dist/ can
  *   disagree with its inputs: an edited, added or removed input (sources,
- *   hand-written declarations, configuration), a missing or unfinished build,
- *   and an orphaned, removed or tampered output.
+ *   configuration), a missing or unfinished build, and an orphaned, removed
+ *   or tampered output.
  * - A build that fails leaves no manifest, so the guard refuses its dist/.
- * - While runtime modules are still JavaScript, dist/ holds byte-identical
- *   copies of them and of the hand-written declarations; these checks follow
- *   the sources and fall away as modules are converted.
+ * - src/ holds TypeScript only: the build refuses any JavaScript module there.
+ * - The public declaration file is generated: API Extractor rolls it up from
+ *   the declaration entry, and it declares the public signatures only.
  *
  * @see https://nodejs.org/api/typescript.html#type-stripping
  */
@@ -40,9 +40,8 @@ function builtProject() {
     'package.json': '{"name":"probe","version":"1.0.0"}\n',
     'tsconfig.base.json': '{"compilerOptions":{"strict":true}}\n',
     'src/tsconfig.json': '{"extends":"../tsconfig.base.json"}\n',
-    'src/index.cjs': "'use strict';\nmodule.exports = { answer: 42 };\n",
-    'src/helper.cjs': "'use strict';\n",
-    'types/index.d.ts': 'export declare const answer: number;\n',
+    'src/index.cts': 'export = { answer: 42 };\n',
+    'src/helper.cts': 'export {};\n',
     'dist/index.cjs': "'use strict';\nmodule.exports = { answer: 42 };\n",
     'dist/helper.cjs': "'use strict';\n",
     'dist/sarif-to-comment.d.ts': 'export declare const answer: number;\n',
@@ -69,24 +68,19 @@ describe('the build-freshness guard', () => {
     assert.equal(manifest.version, 1);
     assert.deepEqual(Object.keys(manifest.inputs), [
       'package.json',
-      'src/helper.cjs',
-      'src/index.cjs',
+      'src/helper.cts',
+      'src/index.cts',
       'src/tsconfig.json',
       'tsconfig.base.json',
-      'types/index.d.ts',
     ]);
     assert.deepEqual(Object.keys(manifest.outputs), ['dist/helper.cjs', 'dist/index.cjs', 'dist/sarif-to-comment.d.ts']);
     for (const hash of [...Object.values(manifest.inputs), ...Object.values(manifest.outputs)]) assert.match(hash, /^[0-9a-f]{64}$/);
   });
 
   const stale = {
-    'an edited source': [(dir) => fs.appendFileSync(path.join(dir, 'src', 'index.cjs'), '// edit\n'), /input changed since the build: src\/index\.cjs/],
-    'an added source': [(dir) => fs.writeFileSync(path.join(dir, 'src', 'extra.cjs'), '\n'), /input added since the build: src\/extra\.cjs/],
-    'a removed source': [(dir) => fs.rmSync(path.join(dir, 'src', 'helper.cjs')), /input removed since the build: src\/helper\.cjs/],
-    'edited hand-written declarations': [
-      (dir) => fs.appendFileSync(path.join(dir, 'types', 'index.d.ts'), '\n'),
-      /input changed since the build: types\/index\.d\.ts/,
-    ],
+    'an edited source': [(dir) => fs.appendFileSync(path.join(dir, 'src', 'index.cts'), '// edit\n'), /input changed since the build: src\/index\.cts/],
+    'an added source': [(dir) => fs.writeFileSync(path.join(dir, 'src', 'extra.cts'), '\n'), /input added since the build: src\/extra\.cts/],
+    'a removed source': [(dir) => fs.rmSync(path.join(dir, 'src', 'helper.cts')), /input removed since the build: src\/helper\.cts/],
     'a changed compiler configuration': [
       (dir) => fs.writeFileSync(path.join(dir, 'tsconfig.base.json'), '{}\n'),
       /input changed since the build: tsconfig\.base\.json/,
@@ -126,7 +120,7 @@ describe('the build-freshness guard', () => {
 
   test('a change restored to the recorded content is fresh again (content, not timestamps)', () => {
     const dir = builtProject();
-    const file = path.join(dir, 'src', 'index.cjs');
+    const file = path.join(dir, 'src', 'index.cts');
     const original = fs.readFileSync(file);
     fs.writeFileSync(file, 'changed\n');
     assert.equal(manifestTool('verify', dir).status, 1);
@@ -151,7 +145,7 @@ describe('the build-freshness guard', () => {
 describe('the build', () => {
   test('a build that fails leaves no manifest, so its dist/ is refused', { timeout: 240_000 }, () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'build-failure-'));
-    for (const entry of ['package.json', 'pnpm-lock.yaml', 'tsconfig.base.json', 'tsconfig.json', 'api-extractor.json', 'src', 'types', 'scripts']) {
+    for (const entry of ['package.json', 'pnpm-lock.yaml', 'tsconfig.base.json', 'tsconfig.json', 'api-extractor.json', 'src', 'scripts']) {
       fs.cpSync(path.join(ROOT, entry), path.join(dir, entry), { recursive: true });
     }
     fs.symlinkSync(path.join(ROOT, 'node_modules'), path.join(dir, 'node_modules'), 'dir');
@@ -166,41 +160,38 @@ describe('the build', () => {
     assert.match(verify.stderr, /pnpm run build/);
   });
 
-  test('refuses a module that exists both as JavaScript and as TypeScript', { timeout: 60_000 }, () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'build-duplicate-'));
+  test('refuses any JavaScript module in src/, before building anything', { timeout: 60_000 }, () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'build-javascript-'));
     for (const entry of ['package.json', 'tsconfig.base.json', 'src', 'scripts']) {
       fs.cpSync(path.join(ROOT, entry), path.join(dir, entry), { recursive: true });
     }
     fs.symlinkSync(path.join(ROOT, 'node_modules'), path.join(dir, 'node_modules'), 'dir');
-    // A synthetic module name keeps this independent of which real modules are
-    // still JavaScript: the rule is about any name present in both languages.
-    fs.writeFileSync(path.join(dir, 'src', 'duplicate-probe.cjs'), "'use strict';\n");
-    fs.writeFileSync(path.join(dir, 'src', 'duplicate-probe.cts'), 'export {};\n');
+    // Every runtime module is TypeScript; a JavaScript file in src/ would be
+    // neither compiled nor shipped, so it is refused rather than ignored.
+    fs.writeFileSync(path.join(dir, 'src', 'stray-probe.cjs'), "'use strict';\n");
     const build = spawnSync(process.execPath, ['scripts/build.mts'], { cwd: dir, encoding: 'utf8' });
     assert.notEqual(build.status, 0);
-    assert.match(build.stderr, /duplicate-probe\.cjs/);
+    assert.match(build.stderr, /stray-probe\.cjs/);
     assert.equal(fs.existsSync(path.join(dir, 'dist')), false, 'nothing was built');
   });
 });
 
-describe('transitional JavaScript modules ship unchanged', () => {
-  // Until a module is converted to TypeScript, the build copies it byte for
-  // byte; the only intended change from the released package is the path.
-  const javascript = fs.readdirSync(path.join(ROOT, 'src')).filter((f) => f.endsWith('.cjs'));
-
-  test('every src/*.cjs is byte-identical in dist/', () => {
-    for (const file of javascript) {
-      assert.ok(
-        fs.readFileSync(path.join(ROOT, 'dist', file)).equals(fs.readFileSync(path.join(ROOT, 'src', file))),
-        `dist/${file} differs from src/${file}`,
-      );
-    }
+describe('the built package', () => {
+  test('src/ holds no JavaScript and the hand-written declarations are gone', () => {
+    assert.deepEqual(fs.readdirSync(path.join(ROOT, 'src')).filter((f) => f.endsWith('.cjs') || f.endsWith('.js')), []);
+    assert.equal(fs.existsSync(path.join(ROOT, 'types')), false);
   });
 
-  test('the hand-written declarations are shipped as the public declaration file while they exist', () => {
-    const handWritten = path.join(ROOT, 'types', 'index.d.ts');
-    if (!fs.existsSync(handWritten)) return;
-    assert.ok(fs.readFileSync(path.join(ROOT, 'dist', 'sarif-to-comment.d.ts')).equals(fs.readFileSync(handWritten)));
+  test('the public declaration file is rolled up from the declaration entry and declares public signatures only', () => {
+    const rollup = fs.readFileSync(path.join(ROOT, 'dist', 'sarif-to-comment.d.ts'), 'utf8');
+    assert.ok(fs.existsSync(path.join(ROOT, 'dist', 'public-api.d.cts')), 'the compiled declaration entry exists');
+    // The private test seam (a second argument) is runtime behavior only.
+    assert.match(
+      rollup,
+      /^export declare function publishSarifReview\(input: IPublishSarifReviewInput\): Promise<PublishSarifReviewOutcome>;$/m,
+    );
+    assert.doesNotMatch(rollup, /Internals|WithUntypedInput|WithInternals/);
+    assert.doesNotMatch(rollup, /^import |require\(|reference types/m);
   });
 
   test('the executable is a runtime module beside the library it runs', () => {

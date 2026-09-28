@@ -1,8 +1,8 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/api-extractor/v7/api-extractor.schema.json",
-  "mainEntryPointFilePath": "<projectFolder>/types/index.d.ts",
+  "mainEntryPointFilePath": "<projectFolder>/dist/public-api.d.cts",
   "compiler": {
-    "tsconfigFilePath": "<projectFolder>/types/tsconfig.json"
+    "tsconfigFilePath": "<projectFolder>/src/tsconfig.json"
   },
   "apiReport": {
     "enabled": true,
@@ -14,7 +14,8 @@
     "apiJsonFilePath": "<projectFolder>/temp/<unscopedPackageName>.api.json"
   },
   "dtsRollup": {
-    "enabled": false
+    "enabled": true,
+    "untrimmedFilePath": "<projectFolder>/dist/sarif-to-comment.d.ts"
   },
   "tsdocMetadata": {
     "enabled": false

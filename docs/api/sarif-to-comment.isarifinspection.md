@@ -131,7 +131,7 @@ Identifies this view format.
 
 </td><td>
 
-{ readonly otherContent: Readonly&lt;Record&lt;string, unknown&gt;&gt; } \| undefined
+{ readonly otherContent: Readonly&lt;Record&lt;string, unknown&gt;&gt;; } \| undefined
 
 
 </td><td>

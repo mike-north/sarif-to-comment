@@ -2,14 +2,16 @@
 'use strict';
 
 /**
- * Generates, and checks the freshness of, the API report and the Markdown API
- * reference.
+ * Generates, and checks the freshness of, the rolled-up public declarations,
+ * the API report and the Markdown API reference.
  *
  * Pipeline (https://api-extractor.com/pages/setup/generating_docs/):
- *   1. API Extractor analyses the hand-authored public declarations
- *      (types/index.d.ts, configured in api-extractor.json), writes the API
- *      report (api-report/sarif-to-comment.api.md, committed for review) and
- *      the doc model (temp/sarif-to-comment.api.json).
+ *   1. API Extractor analyses the declarations the compiler generated from
+ *      the declaration entry (dist/public-api.d.cts, from src/public-api.cts;
+ *      configured in api-extractor.json), writes the rolled-up public
+ *      declaration file (dist/sarif-to-comment.d.ts, shipped), the API report
+ *      (api-report/sarif-to-comment.api.md, committed for review) and the doc
+ *      model (temp/sarif-to-comment.api.json). It needs a compiled dist/.
  *   2. API Documenter renders the doc model as navigable Markdown in
  *      docs/api/ (committed and packaged). API Documenter replaces its output
  *      folder, so docs/api/ holds generated pages only.
@@ -29,11 +31,13 @@ const { spawnSync } = require('node:child_process');
 
 /**
  * Files and folders the generators read or write, relative to the project.
- * types/ holds both the declarations and the tsconfig API Extractor compiles
- * them with (api-extractor.json); the root tsconfig.json is how API Extractor
- * locates the project folder.
+ * dist/ holds the compiled declarations API Extractor analyses; src/ and the
+ * tsconfig files are the compilation it analyses them with
+ * (api-extractor.json names src/tsconfig.json, which extends
+ * tsconfig.base.json); the root tsconfig.json is how API Extractor locates the
+ * project folder.
  */
-const INPUTS = ['package.json', 'api-extractor.json', 'tsconfig.json', 'types'];
+const INPUTS = ['package.json', 'api-extractor.json', 'tsconfig.json', 'tsconfig.base.json', 'src', 'dist'];
 const REPORT = path.join('api-report', 'sarif-to-comment.api.md');
 const DOCS = path.join('docs', 'api');
 
@@ -64,6 +68,10 @@ function snapshot(dir) {
 }
 
 function check(projectDir) {
+  if (!fs.existsSync(path.join(projectDir, 'dist', 'public-api.d.cts'))) {
+    process.stderr.write('dist/ holds no compiled declarations to check the API report against. Run `pnpm run build` first.\n');
+    return 1;
+  }
   const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'api-docs-check-'));
   try {
     for (const entry of INPUTS) fs.cpSync(path.join(projectDir, entry), path.join(sandbox, entry), { recursive: true });
@@ -82,7 +90,7 @@ function check(projectDir) {
 
     if (stale.length > 0) {
       process.stderr.write(
-        `The API report or reference docs are out of date with types/index.d.ts:\n${stale.map((f) => `  - ${f}`).join('\n')}\nRun \`pnpm run build\` and commit the result.\n`,
+        `The API report or reference docs are out of date with the declarations built from src/:\n${stale.map((f) => `  - ${f}`).join('\n')}\nRun \`pnpm run build\` and commit the result.\n`,
       );
       return 1;
     }

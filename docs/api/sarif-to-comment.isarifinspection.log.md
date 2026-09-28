@@ -9,5 +9,7 @@ Log-level content other than `version`<!-- -->, `$schema`<!-- -->, `runs` and`in
 **Signature:**
 
 ```typescript
-readonly log?: { readonly otherContent: Readonly<Record<string, unknown>> } | undefined;
+readonly log?: {
+        readonly otherContent: Readonly<Record<string, unknown>>;
+    } | undefined;
 ```

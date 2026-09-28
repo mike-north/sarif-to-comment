@@ -9,5 +9,8 @@ The declared source: `unbound` when the run declares no provenance, otherwise `d
 **Signature:**
 
 ```typescript
-readonly source: { readonly state: 'unbound' | 'declared'; readonly provenance: readonly object[] };
+readonly source: {
+        readonly state: 'unbound' | 'declared';
+        readonly provenance: readonly object[];
+    };
 ```

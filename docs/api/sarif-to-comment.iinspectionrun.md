@@ -152,7 +152,7 @@ JSON Pointer to the run.
 
 </td><td>
 
-{ readonly state: 'unbound' \| 'declared'; readonly provenance: readonly object\[\] }
+{ readonly state: 'unbound' \| 'declared'; readonly provenance: readonly object\[\]; }
 
 
 </td><td>
@@ -173,7 +173,7 @@ The declared source: `unbound` when the run declares no provenance, otherwise `d
 
 </td><td>
 
-{ readonly name: string; readonly version?: string \| undefined }
+{ readonly name: string; readonly version?: string \| undefined; }
 
 
 </td><td>

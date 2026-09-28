@@ -234,9 +234,9 @@ pnpm run check             # lint, types, API report/docs freshness, release pla
 pnpm changeset             # describe a change for the next release
 ```
 
-Development needs Node 22.18.0 or later (`devEngines` in `package.json`), because the build and check tooling is TypeScript that Node runs directly by type stripping; the published package still supports Node 22 and later. The tests and the package both use the built `dist/`, so run `pnpm run build` after changing sources: `pnpm test` refuses a `dist/` that is missing or was built from different sources, configuration or declarations.
+Development needs Node 22.18.0 or later (`devEngines` in `package.json`), because the build and check tooling is TypeScript that Node runs directly by type stripping; the published package still supports Node 22 and later. The tests and the package both use the built `dist/`, so run `pnpm run build` after changing sources: `pnpm test` refuses a `dist/` that is missing or was built from different sources or configuration.
 
-The public TypeScript declarations are written by hand in `types/index.d.ts` and must match the CommonJS runtime in `src/index.cjs`. API Extractor checks them and writes a reviewable API report (`api-report/`) and a doc model. API Documenter renders the doc model as the Markdown reference in `docs/api/`. `pnpm run check` fails when either is out of date.
+The public TypeScript declarations are generated from the TypeScript sources. `src/public-api.cts` declares the public API, and the CommonJS runtime entry `src/index.cts` is checked at compile time to export exactly its functions. API Extractor rolls the compiled declarations up into the shipped `dist/sarif-to-comment.d.ts` and writes a reviewable API report (`api-report/`) and a doc model. API Documenter renders the doc model as the Markdown reference in `docs/api/`. `pnpm run check` fails when either is out of date.
 
 ## Releasing
 
