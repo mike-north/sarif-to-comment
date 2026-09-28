@@ -1,5 +1,3 @@
-'use strict';
-
 /**
  * Behavioral tests for staged-change incorporation (addStagedChangesToSarif).
  *
@@ -16,36 +14,130 @@
  * @see https://git-scm.com/docs/index-format (intent-to-add and extended flags)
  */
 
-const test = require('node:test');
-const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
+import * as assert from 'node:assert/strict';
+import { AssertionError } from 'node:assert';
+import { execFileSync } from 'node:child_process';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { test } from 'node:test';
 
-const { addStagedChangesToSarif } = require('../dist/staged-changes.cjs');
-const { MODE } = require('../dist/staged-git.cjs');
-const {
+import { prepareReview } from '../dist/prepare-review.cjs';
+import type { PreparedComment } from '../dist/prepare-review.cjs';
+import { addStagedChangesToSarif } from '../dist/staged-changes.cjs';
+import type {
+  AddStagedChangesOutcome,
+  IAddedStagedChangesOutcome,
+  IAddStagedChangesInput,
+  IStagedChangeReceipt,
+  IStagedReplacementReceipt,
+} from '../dist/staged-changes.cjs';
+import { MODE } from '../dist/staged-git.cjs';
+import {
   addConflict,
   addIntentToAdd,
   addRawPathEntry,
   createFixtureRepo,
   removeFixtureRepo,
-} = require('./fixtures/staged-changes/git-fixture.mts');
-const { applyReplacements } = require('./fixtures/staged-changes/apply-oracle.mts');
+} from './fixtures/staged-changes/git-fixture.mts';
+import type { IFixtureRepo, IFixtureRepoSpec } from './fixtures/staged-changes/git-fixture.mts';
+import { applyReplacements } from './fixtures/staged-changes/apply-oracle.mts';
+import type { ColumnKind, IOracleRegion } from './fixtures/staged-changes/apply-oracle.mts';
+import {
+  asArray,
+  asRecord,
+  asString,
+  expectType,
+  isNumber,
+  isOneOf,
+  isOptional,
+  isShape,
+  isString,
+  readJson,
+} from './support/runtime-types.mts';
 
-const PACKAGE_VERSION = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8')).version;
+const ROOT = path.join(import.meta.dirname, '..');
+const PACKAGE_VERSION = asString(at(readJson(path.join(ROOT, 'package.json')), 'version'), 'the package version');
 const REPOSITORY = { owner: 'acme', repo: 'widgets' };
 const REPOSITORY_URI = 'https://github.com/acme/widgets';
 const NEUTRAL_TAIL = 'No supplied finding was associated with this change.';
 
-const repos = [];
-function fixture(spec) {
+/** A SARIF region (§3.30) as the R2 oracle reads it. */
+const isRegion = isShape({
+  startLine: isOptional(isNumber),
+  startColumn: isOptional(isNumber),
+  endLine: isOptional(isNumber),
+  endColumn: isOptional(isNumber),
+  charOffset: isOptional(isNumber),
+  charLength: isOptional(isNumber),
+});
+
+const isColumnKind = isOneOf('utf16CodeUnits', 'unicodeCodePoints');
+
+/**
+ * Reads a nested value of a JSON document by object keys and array indexes;
+ * a missing container fails with an AssertionError naming where.
+ */
+function at(value: unknown, ...keys: readonly (string | number)[]): unknown {
+  let current = value;
+  for (const [depth, key] of keys.entries()) {
+    const where = `a container at /${keys.slice(0, depth).join('/')}`;
+    current = typeof key === 'number' ? asArray(current, where)[key] : asRecord(current, where)[key];
+  }
+  return current;
+}
+
+/** The element at `index`, failing with an AssertionError when there is none. */
+function item<T>(items: readonly T[], index: number): T {
+  const value = items[index];
+  if (value === undefined) throw new AssertionError({ message: `expected an element at index ${String(index)} of ${String(items.length)}` });
+  return value;
+}
+
+/** The replacements of an edit receipt, failing with an AssertionError for a whole-file operation. */
+function replacementsOf(change: IStagedChangeReceipt): readonly IStagedReplacementReceipt[] {
+  if (change.replacements === undefined) {
+    throw new AssertionError({ message: `expected an edit of ${change.path}, got a ${change.operation}`, actual: change });
+  }
+  return change.replacements;
+}
+
+/**
+ * The outcome of an extraction the test expects to succeed; any other status
+ * fails with an AssertionError carrying its explanation.
+ */
+function expectAdded(outcome: AddStagedChangesOutcome): IAddedStagedChangesOutcome {
+  if (outcome.status !== 'added') {
+    throw new AssertionError({ message: `expected an added outcome, got ${outcome.status}: ${outcome.markdown}`, actual: outcome });
+  }
+  return outcome;
+}
+
+/** The problems of a refused outcome, for failure messages. */
+function problemsOf(outcome: AddStagedChangesOutcome): unknown {
+  return 'problems' in outcome ? outcome.problems : undefined;
+}
+
+/** A prepared comment's start line: present only on a multi-line anchor. */
+function startLineOf(comment: PreparedComment): number | undefined {
+  return 'startLine' in comment ? comment.startLine : undefined;
+}
+
+function isError(value: unknown): value is Error {
+  return value instanceof Error;
+}
+
+const repos: IFixtureRepo[] = [];
+function fixture(spec: IFixtureRepoSpec): IFixtureRepo {
   const repo = createFixtureRepo(spec);
   repos.push(repo);
   return repo;
 }
-test.after(() => repos.forEach(removeFixtureRepo));
+test.after(() => {
+  repos.forEach(removeFixtureRepo);
+});
 
-function extract(repo, sarif, extra = {}) {
+function extract(repo: IFixtureRepo, sarif: object, extra: Partial<IAddStagedChangesInput> = {}): Promise<AddStagedChangesOutcome> {
   return addStagedChangesToSarif({
     sarif,
     worktree: repo.dir,
@@ -56,37 +148,37 @@ function extract(repo, sarif, extra = {}) {
 }
 
 /** An ordinary one-run SARIF document; results default to none. */
-function sarifWith(results = [], runExtra = {}) {
+function sarifWith(results: readonly object[] = [], runExtra: object = {}): { version: string; runs: object[] } {
   return {
     version: '2.1.0',
     runs: [{ tool: { driver: { name: 'Reviewer', version: '1.0.0' } }, results, ...runExtra }],
   };
 }
 
-function finding(uri, region, text = 'Finding.') {
+function finding(uri: string, region: object, text = 'Finding.'): object {
   return { message: { text }, locations: [{ physicalLocation: { artifactLocation: { uri }, region } }] };
 }
 
-function textFix(uri, deletedRegion, text) {
+function textFix(uri: string, deletedRegion: object, text: string): object {
   return { artifactChanges: [{ artifactLocation: { uri }, replacements: [{ deletedRegion, insertedContent: { text } }] }] };
 }
 
 /** The neutral run extraction appends when a change is unexplained (contract §4.8). */
-function neutralRun(reviewedCommit, results, artifacts) {
-  const run = {
+function neutralRun(reviewedCommit: string, results: readonly object[], artifacts?: readonly object[]): object {
+  const run: Record<string, unknown> = {
     tool: { driver: { name: 'sarif-to-comment', version: PACKAGE_VERSION, rules: [{ id: 'staged-change' }] } },
     columnKind: 'utf16CodeUnits',
     versionControlProvenance: [{ repositoryUri: REPOSITORY_URI, revisionId: reviewedCommit }],
     results,
   };
-  if (artifacts) run.artifacts = artifacts;
+  if (artifacts) run['artifacts'] = artifacts;
   return run;
 }
 
-function neutralEdit(uri, startLine, endLine, deletedRegion, text) {
+function neutralEdit(uri: string, startLine: number, endLine: number, deletedRegion: object, text: string): object {
   return {
     ruleId: 'staged-change',
-    message: { text: `Staged change to lines ${startLine}–${endLine} of \`${uri}\`. ${NEUTRAL_TAIL}` },
+    message: { text: `Staged change to lines ${String(startLine)}–${String(endLine)} of \`${uri}\`. ${NEUTRAL_TAIL}` },
     locations: [{ physicalLocation: { artifactLocation: { uri }, region: { startLine, endLine } } }],
     fixes: [textFix(uri, deletedRegion, text)],
   };
@@ -98,8 +190,8 @@ function neutralEdit(uri, startLine, endLine, deletedRegion, text) {
  * insertion at the end of the file has no reviewed line to point at and no
  * location. Neither claims that a reviewed line changed.
  */
-function neutralInsertion(uri, where, deletedRegion, text) {
-  const result = {
+function neutralInsertion(uri: string, where: string, deletedRegion: object, text: string): object {
+  const result: Record<string, unknown> = {
     ruleId: 'staged-change',
     message: { text: `Staged insertion ${where} of \`${uri}\`. ${NEUTRAL_TAIL}` },
     fixes: [textFix(uri, deletedRegion, text)],
@@ -107,12 +199,12 @@ function neutralInsertion(uri, where, deletedRegion, text) {
   const before = /^before line (\d+)$/.exec(where);
   if (before) {
     const line = Number(before[1]);
-    result.locations = [{ physicalLocation: { artifactLocation: { uri }, region: { startLine: line, startColumn: 1, endLine: line, endColumn: 1 } } }];
+    result['locations'] = [{ physicalLocation: { artifactLocation: { uri }, region: { startLine: line, startColumn: 1, endLine: line, endColumn: 1 } } }];
   }
   return result;
 }
 
-function neutralFileOperation(uri, verb, operation) {
+function neutralFileOperation(uri: string, verb: string, operation: object): object {
   return {
     ruleId: 'staged-change',
     message: { text: `Staged ${verb} of \`${uri}\`. ${NEUTRAL_TAIL}` },
@@ -121,16 +213,27 @@ function neutralFileOperation(uri, verb, operation) {
   };
 }
 
+/** One extracted replacement as the R2 oracle applies it, with its run's columnKind. */
+interface IExtractedReplacement {
+  readonly deletedRegion: IOracleRegion;
+  readonly insertedText: string;
+  readonly columnKind: ColumnKind | undefined;
+}
+
 /** Every distinct replacement for `uri` carried by fixes anywhere in `sarif`, with its run's columnKind. */
-function replacementsFor(sarif, uri) {
-  const seen = new Map();
-  for (const run of sarif.runs) {
-    for (const result of run.results || []) {
-      for (const fix of result.fixes || []) {
-        for (const change of fix.artifactChanges) {
-          if (change.artifactLocation.uri !== uri) continue;
-          for (const r of change.replacements) {
-            const entry = { deletedRegion: r.deletedRegion, insertedText: r.insertedContent.text, columnKind: run.columnKind };
+function replacementsFor(sarif: unknown, uri: string): IExtractedReplacement[] {
+  const seen = new Map<string, IExtractedReplacement>();
+  for (const run of asArray(at(sarif, 'runs'))) {
+    for (const result of asArray(at(run, 'results') || [])) {
+      for (const fix of asArray(at(result, 'fixes') || [])) {
+        for (const change of asArray(at(fix, 'artifactChanges'))) {
+          if (at(change, 'artifactLocation', 'uri') !== uri) continue;
+          for (const r of asArray(at(change, 'replacements'))) {
+            const entry = {
+              deletedRegion: expectType(at(r, 'deletedRegion'), isRegion, 'a SARIF region'),
+              insertedText: asString(at(r, 'insertedContent', 'text'), 'inserted text'),
+              columnKind: expectType(at(run, 'columnKind'), isOptional(isColumnKind), 'a SARIF columnKind'),
+            };
             seen.set(JSON.stringify(entry), entry);
           }
         }
@@ -141,7 +244,7 @@ function replacementsFor(sarif, uri) {
 }
 
 /** R2 oracle: extracted replacements applied to reviewed bytes reproduce staged bytes. */
-function assertReproduces(sarif, uri, reviewedText, stagedText) {
+function assertReproduces(sarif: unknown, uri: string, reviewedText: string, stagedText: string): void {
   const reps = replacementsFor(sarif, uri);
   const kinds = new Set(reps.map((r) => r.columnKind));
   assert.equal(kinds.size <= 1, true, 'one column convention per file in these fixtures');
@@ -153,11 +256,14 @@ function assertReproduces(sarif, uri, reviewedText, stagedText) {
 // Selected path: the parent's independent source oracle and upstream input
 // ---------------------------------------------------------------------------
 
-const ORACLE = JSON.parse(
-  fs.readFileSync(path.join(__dirname, '..', 'docs', 'evidence', 'second-milestone', 'source-oracle.json'), 'utf8'),
+const ORACLE = expectType(
+  readJson(path.join(ROOT, 'docs', 'evidence', 'second-milestone', 'source-oracle.json')),
+  isShape({ path: isString, base: isString, reviewed: isString, staged: isString, workingTree: isString }),
+  'the source oracle',
 );
-const UPSTREAM = JSON.parse(
-  fs.readFileSync(path.join(__dirname, '..', 'docs', 'evidence', 'second-milestone', 'upstream-input.sarif.json'), 'utf8'),
+const UPSTREAM = asRecord(
+  readJson(path.join(ROOT, 'docs', 'evidence', 'second-milestone', 'upstream-input.sarif.json')),
+  'the upstream SARIF document',
 );
 
 test('selected path: upstream findings gain exactly the staged fixes; unstaged bytes never appear', async () => {
@@ -169,17 +275,17 @@ test('selected path: upstream findings gain exactly the staged fixes; unstaged b
   });
   const input = structuredClone(UPSTREAM);
   const outcome = await extract(repo, input);
-  assert.equal(outcome.status, 'added', JSON.stringify(outcome.problems));
+  assert.equal(outcome.status, 'added', JSON.stringify(problemsOf(outcome)));
   assert.deepEqual(input, UPSTREAM, 'the caller input is not mutated');
 
   // Independently authored: finding A (line 2) and B (lines 5-6) each receive
   // their own exact replacement; the run is bound to the reviewed commit.
   const expected = structuredClone(UPSTREAM);
-  expected.runs[0].versionControlProvenance = [{ repositoryUri: REPOSITORY_URI, revisionId: repo.reviewedCommit }];
-  expected.runs[0].results[0].fixes = [
+  asRecord(at(expected, 'runs', 0))['versionControlProvenance'] = [{ repositoryUri: REPOSITORY_URI, revisionId: repo.reviewedCommit }];
+  asRecord(at(expected, 'runs', 0, 'results', 0))['fixes'] = [
     textFix('fixture/review.txt', { startLine: 2, startColumn: 1, endLine: 3, endColumn: 1 }, 'corrected two\n'),
   ];
-  expected.runs[0].results[1].fixes = [
+  asRecord(at(expected, 'runs', 0, 'results', 1))['fixes'] = [
     textFix('fixture/review.txt', { startLine: 5, startColumn: 1, endLine: 7, endColumn: 1 }, 'corrected five and six\n'),
   ];
   assert.deepEqual(outcome.sarif, expected);
@@ -217,20 +323,20 @@ test('selected path: outcome, receipt and SARIF additions keep their field order
     workTree: { [ORACLE.path]: ORACLE.workingTree },
   });
   const outcome = await extract(repo, structuredClone(UPSTREAM));
-  assert.equal(outcome.status, 'added', JSON.stringify(outcome.problems));
+  assert.equal(outcome.status, 'added', JSON.stringify(problemsOf(outcome)));
   assert.deepEqual(Object.keys(outcome), ['status', 'sarif', 'receipt']);
   assert.deepEqual(Object.keys(outcome.receipt), ['reviewedCommit', 'changes', 'boundRuns', 'addedRun', 'warnings']);
-  assert.deepEqual(Object.keys(outcome.receipt.changes[0]), ['path', 'operation', 'replacements']);
-  assert.deepEqual(Object.keys(outcome.receipt.changes[0].replacements[0]), ['startLine', 'endLine', 'associated', 'explainedBy']);
+  assert.deepEqual(Object.keys(item(outcome.receipt.changes, 0)), ['path', 'operation', 'replacements']);
+  assert.deepEqual(Object.keys(item(replacementsOf(item(outcome.receipt.changes, 0)), 0)), ['startLine', 'endLine', 'associated', 'explainedBy']);
 
-  const [run] = outcome.sarif.runs;
-  assert.deepEqual(Object.keys(run), [...Object.keys(UPSTREAM.runs[0]), 'versionControlProvenance']);
-  assert.deepEqual(Object.keys(run.results[0]), [...Object.keys(UPSTREAM.runs[0].results[0]), 'fixes']);
+  const run = at(outcome.sarif, 'runs', 0);
+  assert.deepEqual(Object.keys(asRecord(run)), [...Object.keys(asRecord(at(UPSTREAM, 'runs', 0))), 'versionControlProvenance']);
+  assert.deepEqual(Object.keys(asRecord(at(run, 'results', 0))), [...Object.keys(asRecord(at(UPSTREAM, 'runs', 0, 'results', 0))), 'fixes']);
   assert.equal(
-    JSON.stringify(run.results[0].fixes),
+    JSON.stringify(at(run, 'results', 0, 'fixes')),
     '[{"artifactChanges":[{"artifactLocation":{"uri":"fixture/review.txt"},"replacements":[{"deletedRegion":{"startLine":2,"startColumn":1,"endLine":3,"endColumn":1},"insertedContent":{"text":"corrected two\\n"}}]}]}]',
   );
-  assert.equal(JSON.stringify(run.versionControlProvenance), `[{"repositoryUri":"${REPOSITORY_URI}","revisionId":"${repo.reviewedCommit}"}]`);
+  assert.equal(JSON.stringify(at(run, 'versionControlProvenance')), `[{"repositoryUri":"${REPOSITORY_URI}","revisionId":"${repo.reviewedCommit}"}]`);
 });
 
 test('a schema-invalid document is refused with fields in contract order', async () => {
@@ -241,15 +347,15 @@ test('a schema-invalid document is refused with fields in contract order', async
 });
 
 test('selected path output is accepted by the unchanged publisher preparation as two native suggestions', async () => {
-  const { prepareReview } = require('../dist/prepare-review.cjs');
   const repo = fixture({
     before: { [ORACLE.path]: ORACLE.base },
     reviewed: { [ORACLE.path]: ORACLE.reviewed },
     staged: { [ORACLE.path]: ORACLE.staged },
     workTree: { [ORACLE.path]: ORACLE.workingTree },
   });
-  const outcome = await extract(repo, structuredClone(UPSTREAM));
-  const diff = repo.git(['diff', '--no-color', '-U3', repo.parentCommit, repo.reviewedCommit, '--', ORACLE.path]).toString('utf8');
+  const outcome = expectAdded(await extract(repo, structuredClone(UPSTREAM)));
+  const parentCommit = expectType(repo.parentCommit, isString, 'the fixture parent commit');
+  const diff = repo.git(['diff', '--no-color', '-U3', parentCommit, repo.reviewedCommit, '--', ORACLE.path]).toString('utf8');
   const patch = diff.slice(diff.indexOf('@@'));
   const prepared = await prepareReview({
     sarif: outcome.sarif,
@@ -258,9 +364,10 @@ test('selected path output is accepted by the unchanged publisher preparation as
       repo: 'widgets',
       pullNumber: 1,
       reviewedCommit: repo.reviewedCommit,
-      diff: { baseCommit: repo.parentCommit, headCommit: repo.reviewedCommit, files: [{ path: ORACLE.path, patch }] },
+      diff: { baseCommit: parentCommit, headCommit: repo.reviewedCommit, files: [{ path: ORACLE.path, patch }] },
     },
-    readSource: async (commit, p) => {
+    // eslint-disable-next-line @typescript-eslint/require-await -- readSource is async by contract; the Git read is synchronous
+    readSource: async (commit: string, p: string) => {
       try {
         return repo.git(['show', `${commit}:${p}`]).toString('utf8');
       } catch {
@@ -269,23 +376,23 @@ test('selected path output is accepted by the unchanged publisher preparation as
     },
   });
   assert.equal(prepared.status, 'ready', prepared.markdown);
-  const bodies = prepared.review.comments.map((c) => [c.side, c.startLine ?? c.line, c.line, c.body]);
+  const bodies = prepared.review.comments.map((c) => [c.side, startLineOf(c) ?? c.line, c.line, c.body]);
   assert.equal(bodies.length, 2);
   assert.deepEqual(bodies.map((b) => b.slice(0, 3)), [['RIGHT', 2, 2], ['RIGHT', 5, 6]]);
-  assert.ok(bodies[0][3].includes('```suggestion\ncorrected two\n```'));
-  assert.ok(bodies[1][3].includes('```suggestion\ncorrected five and six\n```'));
+  assert.ok(asString(at(bodies, 0, 3)).includes('```suggestion\ncorrected two\n```'));
+  assert.ok(asString(at(bodies, 1, 3)).includes('```suggestion\ncorrected five and six\n```'));
 });
 
 test('capture before await: mutating the caller input during extraction has no effect', async () => {
   const repo = fixture({ reviewed: { 'f.txt': 'a\nb\nc\n' }, staged: { 'f.txt': 'a\nB\nc\n' }, workTree: { 'f.txt': 'a\nUNSTAGED\nc\n' } });
   const input = sarifWith([finding('f.txt', { startLine: 2 }, 'Capitalize.')]);
   const pending = extract(repo, input);
-  input.runs[0].results[0].message.text = 'MUTATED';
-  input.runs[0].results[0].locations[0].physicalLocation.region.startLine = 1;
+  asRecord(at(input, 'runs', 0, 'results', 0, 'message'))['text'] = 'MUTATED';
+  asRecord(at(input, 'runs', 0, 'results', 0, 'locations', 0, 'physicalLocation', 'region'))['startLine'] = 1;
   const outcome = await pending;
   assert.equal(outcome.status, 'added');
-  assert.equal(outcome.sarif.runs[0].results[0].message.text, 'Capitalize.');
-  assert.deepEqual(outcome.sarif.runs[0].results[0].fixes, [
+  assert.equal(at(outcome.sarif, 'runs', 0, 'results', 0, 'message', 'text'), 'Capitalize.');
+  assert.deepEqual(at(outcome.sarif, 'runs', 0, 'results', 0, 'fixes'), [
     textFix('f.txt', { startLine: 2, startColumn: 1, endLine: 3, endColumn: 1 }, 'B\n'),
   ]);
   assert.ok(!JSON.stringify(outcome.sarif).includes('UNSTAGED'));
@@ -295,7 +402,15 @@ test('capture before await: mutating the caller input during extraction has no e
 // Coordinates, newlines and encodings (neutral results: no supplied findings)
 // ---------------------------------------------------------------------------
 
-const EDIT_CASES = [
+/** One edit case: reviewed and staged bytes and the neutral results expected for them. */
+interface IEditCase {
+  readonly name: string;
+  readonly reviewed: string;
+  readonly staged: string;
+  readonly results: (uri: string) => object[];
+}
+
+const EDIT_CASES: readonly IEditCase[] = [
   {
     name: 'CRLF middle line',
     reviewed: 'a\r\nb\r\nc\r\n',
@@ -390,28 +505,28 @@ for (const c of EDIT_CASES) {
     const uri = 'dir/file.txt';
     const repo = fixture({ reviewed: { [uri]: c.reviewed }, staged: { [uri]: c.staged }, workTree: { [uri]: 'UNSTAGED\n' } });
     const outcome = await extract(repo, sarifWith());
-    assert.equal(outcome.status, 'added', JSON.stringify(outcome.problems));
-    assert.deepEqual(outcome.sarif.runs[1], neutralRun(repo.reviewedCommit, c.results(uri)));
+    assert.equal(outcome.status, 'added', JSON.stringify(problemsOf(outcome)));
+    assert.deepEqual(at(outcome.sarif, 'runs', 1), neutralRun(repo.reviewedCommit, c.results(uri)));
     assert.equal(outcome.receipt.addedRun, 1);
     assert.deepEqual(outcome.receipt.boundRuns, []);
     assert.equal(outcome.receipt.changes.length, 1);
-    assert.equal(outcome.receipt.changes[0].operation, 'edit');
-    assert.ok(outcome.receipt.changes[0].replacements.every((r) => r.explainedBy === 'neutral' && r.associated.length === 0));
+    assert.equal(item(outcome.receipt.changes, 0).operation, 'edit');
+    assert.ok(replacementsOf(item(outcome.receipt.changes, 0)).every((r) => r.explainedBy === 'neutral' && r.associated.length === 0));
     assertReproduces(outcome.sarif, uri, c.reviewed, c.staged);
   });
 }
 
 test('repeated identical lines: any single insertion that reproduces the staged bytes is valid', async () => {
   const repo = fixture({ reviewed: { 'r.txt': 'x\nx\n' }, staged: { 'r.txt': 'x\nx\nx\n' } });
-  const outcome = await extract(repo, sarifWith());
+  const outcome = expectAdded(await extract(repo, sarifWith()));
   const reps = replacementsFor(outcome.sarif, 'r.txt');
   assert.equal(reps.length, 1);
-  assert.equal(reps[0].insertedText, 'x\n');
+  assert.equal(item(reps, 0).insertedText, 'x\n');
   assertReproduces(outcome.sarif, 'r.txt', 'x\nx\n', 'x\nx\nx\n');
 });
 
 test('a BOM added or removed by the index is an explicit failure, never silently dropped', async () => {
-  for (const [reviewed, staged] of [['a\n', '﻿a\n'], ['﻿a\n', 'a\n']]) {
+  for (const [reviewed, staged] of [['a\n', '﻿a\n'], ['﻿a\n', 'a\n']] as const) {
     const repo = fixture({ reviewed: { 'b.txt': reviewed }, staged: { 'b.txt': staged } });
     const outcome = await extract(repo, sarifWith());
     assert.equal(outcome.status, 'failed');
@@ -433,22 +548,22 @@ test('contained finding receives the replacement; partial overlap stays separate
   const outcome = await extract(repo, input);
   assert.equal(outcome.status, 'added');
   const fix = textFix('f.txt', { startLine: 2, startColumn: 1, endLine: 3, endColumn: 1 }, 'B\n');
-  assert.deepEqual(outcome.sarif.runs[0].results, [{ ...contained, fixes: [fix] }, partial, adjacent]);
+  assert.deepEqual(at(outcome.sarif, 'runs', 0, 'results'), [{ ...contained, fixes: [fix] }, partial, adjacent]);
   assert.equal(outcome.sarif.runs.length, 1, 'no neutral run: the change is explained');
-  assert.deepEqual(outcome.receipt.changes[0].replacements, [
+  assert.deepEqual(item(outcome.receipt.changes, 0).replacements, [
     { startLine: 2, endLine: 2, associated: ['/runs/0/results/0'], explainedBy: 'finding' },
   ]);
   assert.equal(outcome.receipt.warnings.length, 1);
-  assert.equal(outcome.receipt.warnings[0].pointer, '/runs/0/results/1');
-  assert.match(outcome.receipt.warnings[0].message, /partially overlaps/);
+  assert.equal(item(outcome.receipt.warnings, 0).pointer, '/runs/0/results/1');
+  assert.match(item(outcome.receipt.warnings, 0).message, /partially overlaps/);
 });
 
 test('partial overlap alone leaves the change unexplained (neutral) and the finding untouched', async () => {
   const repo = fixture({ reviewed: { 'f.txt': 'a\nb\nc\n' }, staged: { 'f.txt': 'a\nB\nc\n' } });
   const partial = finding('f.txt', { startLine: 2, endLine: 3 }, 'Partial.');
-  const outcome = await extract(repo, sarifWith([partial]));
-  assert.deepEqual(outcome.sarif.runs[0].results, [partial]);
-  assert.deepEqual(outcome.sarif.runs[1], neutralRun(repo.reviewedCommit, [
+  const outcome = expectAdded(await extract(repo, sarifWith([partial])));
+  assert.deepEqual(at(outcome.sarif, 'runs', 0, 'results'), [partial]);
+  assert.deepEqual(at(outcome.sarif, 'runs', 1), neutralRun(repo.reviewedCommit, [
     neutralEdit('f.txt', 2, 2, { startLine: 2, startColumn: 1, endLine: 3, endColumn: 1 }, 'B\n'),
   ]));
   assert.deepEqual(outcome.receipt.boundRuns, [], 'a run that received nothing is not bound');
@@ -463,22 +578,22 @@ test('findings in two runs share one replacement; each keeps its own text and or
       { tool: { driver: { name: 'Agent B' } }, results: [finding('f.txt', { startLine: 2 }, 'From B.')] },
     ],
   };
-  const outcome = await extract(repo, input);
+  const outcome = expectAdded(await extract(repo, input));
   const fix = textFix('f.txt', { startLine: 2, startColumn: 1, endLine: 3, endColumn: 1 }, 'B\n');
-  assert.deepEqual(outcome.sarif.runs[0].results[0].fixes, [fix]);
-  assert.deepEqual(outcome.sarif.runs[1].results[0].fixes, [fix]);
-  assert.equal(outcome.sarif.runs[0].results[0].message.text, 'From A.');
-  assert.equal(outcome.sarif.runs[1].results[0].message.text, 'From B.');
-  assert.deepEqual(outcome.receipt.changes[0].replacements[0].associated, ['/runs/0/results/0', '/runs/1/results/0']);
+  assert.deepEqual(at(outcome.sarif, 'runs', 0, 'results', 0, 'fixes'), [fix]);
+  assert.deepEqual(at(outcome.sarif, 'runs', 1, 'results', 0, 'fixes'), [fix]);
+  assert.equal(at(outcome.sarif, 'runs', 0, 'results', 0, 'message', 'text'), 'From A.');
+  assert.equal(at(outcome.sarif, 'runs', 1, 'results', 0, 'message', 'text'), 'From B.');
+  assert.deepEqual(item(replacementsOf(item(outcome.receipt.changes, 0)), 0).associated, ['/runs/0/results/0', '/runs/1/results/0']);
   assert.deepEqual(outcome.receipt.boundRuns, [0, 1]);
 });
 
 test('a pure insertion never auto-associates a finding on the neighbouring line', async () => {
   const repo = fixture({ reviewed: { 'f.txt': 'a\nc\n' }, staged: { 'f.txt': 'a\nb\nc\n' } });
   const near = finding('f.txt', { startLine: 2 }, 'Near.');
-  const outcome = await extract(repo, sarifWith([near]));
-  assert.deepEqual(outcome.sarif.runs[0].results, [near]);
-  assert.equal(outcome.receipt.changes[0].replacements[0].explainedBy, 'neutral');
+  const outcome = expectAdded(await extract(repo, sarifWith([near])));
+  assert.deepEqual(at(outcome.sarif, 'runs', 0, 'results'), [near]);
+  assert.equal(item(replacementsOf(item(outcome.receipt.changes, 0)), 0).explainedBy, 'neutral');
 });
 
 test('a run bound to another commit is never associated or rebound', async () => {
@@ -488,9 +603,9 @@ test('a run bound to another commit is never associated or rebound', async () =>
     versionControlProvenance: [{ repositoryUri: REPOSITORY_URI, revisionId: 'a'.repeat(40) }],
     results: [finding('f.txt', { startLine: 2 }, 'Historical.')],
   };
-  const outcome = await extract(repo, { version: '2.1.0', runs: [historical] });
-  assert.deepEqual(outcome.sarif.runs[0], historical);
-  assert.equal(outcome.receipt.changes[0].replacements[0].explainedBy, 'neutral');
+  const outcome = expectAdded(await extract(repo, { version: '2.1.0', runs: [historical] }));
+  assert.deepEqual(at(outcome.sarif, 'runs', 0), historical);
+  assert.equal(item(replacementsOf(item(outcome.receipt.changes, 0)), 0).explainedBy, 'neutral');
 });
 
 test('a matching provenance entry without a revision gains it; other provenance is preserved', async () => {
@@ -500,8 +615,8 @@ test('a matching provenance entry without a revision gains it; other provenance 
     { repositoryUri: 'git@github.com:Acme/Widgets.git'.replace('git@github.com:', 'ssh://git@github.com/'), branch: 'main' },
   ];
   const input = sarifWith([finding('f.txt', { startLine: 1 })], { versionControlProvenance: provenance });
-  const outcome = await extract(repo, input);
-  assert.deepEqual(outcome.sarif.runs[0].versionControlProvenance, [
+  const outcome = expectAdded(await extract(repo, input));
+  assert.deepEqual(at(outcome.sarif, 'runs', 0, 'versionControlProvenance'), [
     provenance[0],
     { ...provenance[1], revisionId: repo.reviewedCommit },
   ]);
@@ -515,7 +630,7 @@ test('an equal supplied fix explains the change; re-extracting the output is ide
   const second = await extract(repo, first.sarif);
   assert.equal(second.status, 'added');
   assert.deepEqual(second.sarif, first.sarif, 'no duplicate fixes or neutral results');
-  assert.deepEqual(second.receipt.changes[0].replacements.map((r) => r.explainedBy), ['existing-fix', 'existing-fix']);
+  assert.deepEqual(replacementsOf(item(second.receipt.changes, 0)).map((r) => r.explainedBy), ['existing-fix', 'existing-fix']);
   assert.deepEqual(second.receipt.boundRuns, []);
   assert.equal(second.receipt.addedRun, null);
 });
@@ -540,8 +655,8 @@ test('a contained finding that already has a non-overlapping fix is left untouch
   };
   const outcome = await extract(repo, sarifWith([supplied]));
   assert.equal(outcome.status, 'added');
-  assert.deepEqual(outcome.sarif.runs[0].results[0], supplied);
-  assert.equal(outcome.receipt.changes[0].replacements[0].explainedBy, 'neutral');
+  assert.deepEqual(at(outcome.sarif, 'runs', 0, 'results', 0), supplied);
+  assert.equal(item(replacementsOf(item(outcome.receipt.changes, 0)), 0).explainedBy, 'neutral');
 });
 
 test('a finding beyond the reviewed file on a changed path fails rather than being reduced', async () => {
@@ -556,7 +671,7 @@ test('a finding on an unchanged path is neither validated nor modified', async (
   const elsewhere = finding('g.txt', { startLine: 50 }, 'Publisher will judge this.');
   const outcome = await extract(repo, sarifWith([elsewhere]));
   assert.equal(outcome.status, 'added');
-  assert.deepEqual(outcome.sarif.runs[0].results[0], elsewhere);
+  assert.deepEqual(at(outcome.sarif, 'runs', 0, 'results', 0), elsewhere);
 });
 
 test('a run without columnKind cannot take an end-of-file column that differs by unit; the finding stays separate', async () => {
@@ -564,8 +679,8 @@ test('a run without columnKind cannot take an end-of-file column that differs by
   const f = finding('e.txt', { startLine: 2 });
   const outcome = await extract(repo, sarifWith([f]));
   assert.equal(outcome.status, 'added');
-  assert.deepEqual(outcome.sarif.runs[0].results[0], f, 'no columnKind stamped, no fix attached');
-  assert.deepEqual(outcome.sarif.runs[1].results, [
+  assert.deepEqual(at(outcome.sarif, 'runs', 0, 'results', 0), f, 'no columnKind stamped, no fix attached');
+  assert.deepEqual(at(outcome.sarif, 'runs', 1, 'results'), [
     neutralEdit('e.txt', 2, 2, { startLine: 2, startColumn: 1, endLine: 2, endColumn: 4 }, '\u{1F600}'),
   ]);
   assert.ok(outcome.receipt.warnings.some((w) => /columnKind/.test(w.message)));
@@ -573,11 +688,11 @@ test('a run without columnKind cannot take an end-of-file column that differs by
 
 test('a run declaring unicodeCodePoints receives code-point columns', async () => {
   const repo = fixture({ reviewed: { 'e.txt': 'x\n\u{1F600}\n' }, staged: { 'e.txt': 'x\n\u{1F600}' } });
-  const outcome = await extract(repo, sarifWith([finding('e.txt', { startLine: 2 })], { columnKind: 'unicodeCodePoints' }));
-  assert.deepEqual(outcome.sarif.runs[0].results[0].fixes, [
+  const outcome = expectAdded(await extract(repo, sarifWith([finding('e.txt', { startLine: 2 })], { columnKind: 'unicodeCodePoints' })));
+  assert.deepEqual(at(outcome.sarif, 'runs', 0, 'results', 0, 'fixes'), [
     textFix('e.txt', { startLine: 2, startColumn: 1, endLine: 2, endColumn: 3 }, '\u{1F600}'),
   ]);
-  assert.equal(outcome.sarif.runs[0].columnKind, 'unicodeCodePoints');
+  assert.equal(at(outcome.sarif, 'runs', 0, 'columnKind'), 'unicodeCodePoints');
 });
 
 // ---------------------------------------------------------------------------
@@ -588,11 +703,11 @@ test('creation: a finding on a real proposed line carries the create operation a
   const repo = fixture({ reviewed: { 'a.txt': 'a\n' }, staged: { 'a.txt': 'a\n', 'docs/new.md': '# New\n\nBody.\n' } });
   const f = finding('docs/new.md', { startLine: 1 }, 'Here is the missing page.');
   const outcome = await extract(repo, sarifWith([f]));
-  assert.equal(outcome.status, 'added', JSON.stringify(outcome.problems));
-  assert.deepEqual(outcome.sarif.runs[0].artifacts, [
+  assert.equal(outcome.status, 'added', JSON.stringify(problemsOf(outcome)));
+  assert.deepEqual(at(outcome.sarif, 'runs', 0, 'artifacts'), [
     { location: { uri: 'docs/new.md' }, contents: { text: '# New\n\nBody.\n' }, encoding: 'utf-8' },
   ]);
-  assert.deepEqual(outcome.sarif.runs[0].results[0], {
+  assert.deepEqual(at(outcome.sarif, 'runs', 0, 'results', 0), {
     ...f,
     properties: { sarifToComment: { proposedFileChanges: [{ operation: 'create', artifactIndex: 0, fileMode: '100644' }] } },
   });
@@ -615,14 +730,14 @@ test('creation, deletion and emptying stay distinct operations', async () => {
     staged: { 'keep.txt': 'k\n', 'empty-me.txt': '', 'blank.txt': '', 'tool.sh': { bytes: '#!/bin/sh\n', mode: '100755' } },
   });
   const outcome = await extract(repo, sarifWith());
-  assert.equal(outcome.status, 'added', JSON.stringify(outcome.problems));
-  const neutral = outcome.sarif.runs[1];
-  assert.deepEqual(neutral.artifacts, [
+  assert.equal(outcome.status, 'added', JSON.stringify(problemsOf(outcome)));
+  const neutral = at(outcome.sarif, 'runs', 1);
+  assert.deepEqual(at(neutral, 'artifacts'), [
     { location: { uri: 'blank.txt' }, contents: { text: '' }, encoding: 'utf-8' },
     { location: { uri: 'gone.txt' } },
     { location: { uri: 'tool.sh' }, contents: { text: '#!/bin/sh\n' }, encoding: 'utf-8' },
   ]);
-  assert.deepEqual(neutral.results, [
+  assert.deepEqual(at(neutral, 'results'), [
     neutralFileOperation('blank.txt', 'creation', { operation: 'create', artifactIndex: 0, fileMode: '100644' }),
     neutralEdit('empty-me.txt', 1, 1, { startLine: 1, startColumn: 1, endLine: 1, endColumn: 3 }, ''),
     neutralFileOperation('gone.txt', 'deletion', { operation: 'delete', artifactIndex: 1 }),
@@ -637,9 +752,9 @@ test('creation, deletion and emptying stay distinct operations', async () => {
 test('deletion: a finding on the reviewed file carries the delete operation; its line does not narrow it', async () => {
   const repo = fixture({ reviewed: { 'old.test.js': 'one\ntwo\nthree\n' }, staged: {} });
   const f = finding('old.test.js', { startLine: 2 }, 'Obsolete test module.');
-  const outcome = await extract(repo, sarifWith([f]));
-  assert.deepEqual(outcome.sarif.runs[0].artifacts, [{ location: { uri: 'old.test.js' } }]);
-  assert.deepEqual(outcome.sarif.runs[0].results[0].properties, {
+  const outcome = expectAdded(await extract(repo, sarifWith([f])));
+  assert.deepEqual(at(outcome.sarif, 'runs', 0, 'artifacts'), [{ location: { uri: 'old.test.js' } }]);
+  assert.deepEqual(at(outcome.sarif, 'runs', 0, 'results', 0, 'properties'), {
     sarifToComment: { proposedFileChanges: [{ operation: 'delete', artifactIndex: 0 }] },
   });
   assert.equal(outcome.sarif.runs.length, 1);
@@ -647,14 +762,14 @@ test('deletion: a finding on the reviewed file carries the delete operation; its
 
 test('a moved file is a deletion plus a creation; no rename is inferred', async () => {
   const repo = fixture({ reviewed: { 'from.txt': 'same\n' }, staged: { 'to.txt': 'same\n' } });
-  const outcome = await extract(repo, sarifWith());
+  const outcome = expectAdded(await extract(repo, sarifWith()));
   assert.deepEqual(outcome.receipt.changes.map((c) => [c.path, c.operation]), [['from.txt', 'delete'], ['to.txt', 'create']]);
 });
 
 test('deleting a non-UTF-8 file is allowed; its content is not needed', async () => {
   const repo = fixture({ reviewed: { 'blob.bin': Buffer.from([0xff, 0x00, 0xfe]) }, staged: {} });
   const outcome = await extract(repo, sarifWith());
-  assert.equal(outcome.status, 'added', JSON.stringify(outcome.problems));
+  assert.equal(outcome.status, 'added', JSON.stringify(problemsOf(outcome)));
   assert.deepEqual(outcome.receipt.changes, [{ path: 'blob.bin', operation: 'delete', associated: [], explainedBy: 'neutral' }]);
 });
 
@@ -662,18 +777,18 @@ test('paths are written as percent-encoded URIs and matched after decoding', asy
   const p = 'docs/guide notes/Überblick.md';
   const uri = 'docs/guide%20notes/%C3%9Cberblick.md';
   const repo = fixture({ reviewed: { [p]: 'alt\n' }, staged: { [p]: 'neu\n' } });
-  const outcome = await extract(repo, sarifWith([finding(uri, { startLine: 1 })]));
-  assert.deepEqual(outcome.sarif.runs[0].results[0].fixes, [
+  const outcome = expectAdded(await extract(repo, sarifWith([finding(uri, { startLine: 1 })])));
+  assert.deepEqual(at(outcome.sarif, 'runs', 0, 'results', 0, 'fixes'), [
     textFix(uri, { startLine: 1, startColumn: 1, endLine: 1, endColumn: 5 }, 'neu\n'),
   ]);
-  assert.equal(outcome.receipt.changes[0].path, p);
+  assert.equal(item(outcome.receipt.changes, 0).path, p);
 });
 
 // ---------------------------------------------------------------------------
 // Strict failure envelope
 // ---------------------------------------------------------------------------
 
-const FAILURES = [
+const FAILURES: readonly (readonly [string, IFixtureRepoSpec, RegExp, RegExp])[] = [
   ['mode change', { reviewed: { 's.sh': 'x\n' }, staged: { 's.sh': { bytes: 'x\n', mode: '100755' } } }, /s\.sh/, /mode/i],
   ['mode and content change', { reviewed: { 's.sh': 'x\n' }, staged: { 's.sh': { bytes: 'y\n', mode: '100755' } } }, /s\.sh/, /mode/i],
   ['symlink', { reviewed: { 'a.txt': 'a\n' }, staged: { 'a.txt': 'a\n', link: { bytes: 'a.txt', mode: '120000' } } }, /link/, /symbolic link/i],
@@ -691,7 +806,7 @@ for (const [name, spec, pathPattern, reasonPattern] of FAILURES) {
     assert.ok(Array.isArray(outcome.problems) && outcome.problems.length > 0);
     assert.match(outcome.markdown, pathPattern);
     assert.match(outcome.markdown, reasonPattern);
-    assert.equal(outcome.sarif, undefined, 'strict failure withholds SARIF');
+    assert.equal(at(outcome, 'sarif'), undefined, 'strict failure withholds SARIF');
   });
 }
 
@@ -725,7 +840,7 @@ test('strict failure: a changed path that is not valid UTF-8', async () => {
 test('no staged changes: the SARIF is returned unchanged with an empty receipt', async () => {
   const repo = fixture({ reviewed: { 'a.txt': 'a\n' }, staged: { 'a.txt': 'a\n' }, workTree: { 'a.txt': 'UNSTAGED\n' } });
   const input = sarifWith([finding('a.txt', { startLine: 1 })]);
-  const outcome = await extract(repo, input);
+  const outcome = expectAdded(await extract(repo, input));
   assert.deepEqual(outcome, {
     status: 'added',
     sarif: input,
@@ -738,19 +853,18 @@ test('GIT_INDEX_FILE selects the intended index, as Git itself does', async () =
   const repo = fixture({ reviewed: { 'f.txt': 'a\n' }, staged: { 'f.txt': 'a\n' } });
   const alternate = path.join(repo.dir, '.git', 'alternate-index');
   const env = { ...process.env, GIT_INDEX_FILE: alternate };
-  const { execFileSync } = require('node:child_process');
   execFileSync('git', ['read-tree', repo.reviewedCommit], { cwd: repo.dir, env });
   const oid = execFileSync('git', ['hash-object', '-w', '--no-filters', '--stdin'], { cwd: repo.dir, env, input: 'ALT\n' })
     .toString().trim();
   execFileSync('git', ['update-index', '--cacheinfo', `100644,${oid},f.txt`], { cwd: repo.dir, env });
-  const saved = process.env.GIT_INDEX_FILE;
-  process.env.GIT_INDEX_FILE = alternate;
+  const saved = process.env['GIT_INDEX_FILE'];
+  process.env['GIT_INDEX_FILE'] = alternate;
   try {
-    const outcome = await extract(repo, sarifWith());
+    const outcome = expectAdded(await extract(repo, sarifWith()));
     assert.deepEqual(replacementsFor(outcome.sarif, 'f.txt').map((r) => r.insertedText), ['ALT\n']);
   } finally {
-    if (saved === undefined) delete process.env.GIT_INDEX_FILE;
-    else process.env.GIT_INDEX_FILE = saved;
+    if (saved === undefined) delete process.env['GIT_INDEX_FILE'];
+    else process.env['GIT_INDEX_FILE'] = saved;
   }
 });
 
@@ -779,6 +893,7 @@ test('malformed input is a TypeError', async () => {
     { ...base, repository: { owner: 'acme' } },
     { ...base, sourceRootUri: 'https://example.com/' },
   ]) {
+    // @ts-expect-error -- deliberately invalid: proves runtime validation of every input field
     await assert.rejects(addStagedChangesToSarif(bad), TypeError, JSON.stringify(Object.keys(bad)));
   }
 });
@@ -787,10 +902,10 @@ test('environment failures reject with actionable errors', async () => {
   const repo = fixture({ reviewed: { 'a.txt': 'a\n' }, staged: { 'a.txt': 'a\n' } });
   await assert.rejects(extract(repo, sarifWith(), { reviewedCommit: 'd'.repeat(40) }), (err) => {
     assert.ok(!(err instanceof TypeError));
-    assert.match(err.message, /d{40}/);
+    assert.match(expectType(err, isError, 'an Error').message, /d{40}/);
     return true;
   });
-  const notRepo = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'sarif-norepo-'));
+  const notRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'sarif-norepo-'));
   try {
     await assert.rejects(
       addStagedChangesToSarif({ sarif: sarifWith(), worktree: notRepo, reviewedCommit: repo.reviewedCommit, repository: REPOSITORY }),
@@ -821,7 +936,7 @@ test('an index written without a trailing checksum (index.skipHash) is accepted'
   const repo = fixture({ reviewed: { 'f.txt': 'a\n' }, staged: { 'f.txt': 'a\n' } });
   const oid = repo.text(['hash-object', '-w', '--no-filters', '--stdin'], 'A\n');
   repo.git(['-c', 'index.skipHash=true', 'update-index', '--cacheinfo', `100644,${oid},f.txt`]);
-  const outcome = await extract(repo, sarifWith());
+  const outcome = expectAdded(await extract(repo, sarifWith()));
   assert.deepEqual(replacementsFor(outcome.sarif, 'f.txt').map((r) => r.insertedText), ['A\n']);
 });
 
@@ -829,7 +944,7 @@ test('a corrupted index is an operational error, never an empty snapshot', async
   const repo = fixture({ reviewed: { 'f.txt': 'a\n' }, staged: { 'f.txt': 'A\n' } });
   const indexPath = path.join(repo.dir, '.git', 'index');
   const bytes = fs.readFileSync(indexPath);
-  bytes[bytes.length - 30] ^= 0xff;
+  bytes.writeUInt8(bytes.readUInt8(bytes.length - 30) ^ 0xff, bytes.length - 30);
   fs.writeFileSync(indexPath, bytes);
   await assert.rejects(extract(repo, sarifWith()), /index/);
 });
@@ -862,8 +977,8 @@ test('strict failure: a split index', async () => {
 
 test('an equal supplied creation proposal explains the staged creation', async () => {
   const repo = fixture({ reviewed: { 'a.txt': 'a\n' }, staged: { 'a.txt': 'a\n', 'n.md': 'new\n' } });
-  const first = await extract(repo, sarifWith([finding('n.md', { startLine: 1 })]));
-  const second = await extract(repo, first.sarif);
+  const first = expectAdded(await extract(repo, sarifWith([finding('n.md', { startLine: 1 })])));
+  const second = expectAdded(await extract(repo, first.sarif));
   assert.deepEqual(second.sarif, first.sarif);
   assert.deepEqual(second.receipt.changes, [{ path: 'n.md', operation: 'create', associated: [], explainedBy: 'existing-proposal' }]);
 });
@@ -888,27 +1003,27 @@ test('a supplied creation with different content, or a text fix on a created fil
 test('findings in one run on a created file share one artifact; region-less findings associate too', async () => {
   const repo = fixture({ reviewed: { 'a.txt': 'a\n' }, staged: { 'a.txt': 'a\n', 'n.md': 'one\ntwo\n' } });
   const whole = { message: { text: 'Whole file.' }, locations: [{ physicalLocation: { artifactLocation: { uri: 'n.md' } } }] };
-  const outcome = await extract(repo, sarifWith([whole, finding('n.md', { startLine: 2 })]));
-  assert.equal(outcome.sarif.runs[0].artifacts.length, 1);
-  for (const r of outcome.sarif.runs[0].results) {
-    assert.deepEqual(r.properties.sarifToComment.proposedFileChanges, [{ operation: 'create', artifactIndex: 0, fileMode: '100644' }]);
+  const outcome = expectAdded(await extract(repo, sarifWith([whole, finding('n.md', { startLine: 2 })])));
+  assert.equal(asArray(at(outcome.sarif, 'runs', 0, 'artifacts')).length, 1);
+  for (const r of asArray(at(outcome.sarif, 'runs', 0, 'results'))) {
+    assert.deepEqual(at(r, 'properties', 'sarifToComment', 'proposedFileChanges'), [{ operation: 'create', artifactIndex: 0, fileMode: '100644' }]);
   }
 });
 
 test('a region-less finding on an edited file is not associated with a text change', async () => {
   const repo = fixture({ reviewed: { 'f.txt': 'a\n' }, staged: { 'f.txt': 'A\n' } });
   const whole = { message: { text: 'About the file.' }, locations: [{ physicalLocation: { artifactLocation: { uri: 'f.txt' } } }] };
-  const outcome = await extract(repo, sarifWith([whole]));
-  assert.deepEqual(outcome.sarif.runs[0].results[0], whole);
-  assert.equal(outcome.receipt.changes[0].replacements[0].explainedBy, 'neutral');
+  const outcome = expectAdded(await extract(repo, sarifWith([whole])));
+  assert.deepEqual(at(outcome.sarif, 'runs', 0, 'results', 0), whole);
+  assert.equal(item(replacementsOf(item(outcome.receipt.changes, 0)), 0).explainedBy, 'neutral');
 });
 
 test('an absolute file: location resolves through sourceRootUri; an unresolvable one fails', async () => {
   const repo = fixture({ reviewed: { 'src/f.txt': 'a\n' }, staged: { 'src/f.txt': 'A\n' } });
   const located = sarifWith([finding('file:///build/checkout/src/f.txt', { startLine: 1 })]);
   const ok = await extract(repo, located, { sourceRootUri: 'file:///build/checkout/' });
-  assert.equal(ok.status, 'added', JSON.stringify(ok.problems));
-  assert.deepEqual(ok.receipt.changes[0].replacements[0].associated, ['/runs/0/results/0']);
+  assert.equal(ok.status, 'added', JSON.stringify(problemsOf(ok)));
+  assert.deepEqual(item(replacementsOf(item(ok.receipt.changes, 0)), 0).associated, ['/runs/0/results/0']);
   const missing = await extract(repo, located);
   assert.equal(missing.status, 'failed');
   assert.match(missing.markdown, /\/runs\/0\/results\/0/);
@@ -921,9 +1036,9 @@ test('a foreign run (provenance names only another repository) is untouched', as
     versionControlProvenance: [{ repositoryUri: 'https://github.com/other/project', revisionId: repo.reviewedCommit }],
     results: [finding('f.txt', { startLine: 1 })],
   };
-  const outcome = await extract(repo, { version: '2.1.0', runs: [foreign] });
-  assert.deepEqual(outcome.sarif.runs[0], foreign);
-  assert.equal(outcome.receipt.changes[0].replacements[0].explainedBy, 'neutral');
+  const outcome = expectAdded(await extract(repo, { version: '2.1.0', runs: [foreign] }));
+  assert.deepEqual(at(outcome.sarif, 'runs', 0), foreign);
+  assert.equal(item(replacementsOf(item(outcome.receipt.changes, 0)), 0).explainedBy, 'neutral');
 });
 
 test('strict failure: an eligible finding whose run declares non-default newline sequences', async () => {
@@ -942,11 +1057,11 @@ test('strict failure: a region snippet that is not the reviewed text', async () 
 
 test('a finding with columns inside the changed line is contained by its line', async () => {
   const repo = fixture({ reviewed: { 'f.txt': 'let a = 1;\nnext\n' }, staged: { 'f.txt': 'let a = 2;\nnext\n' } });
-  const outcome = await extract(repo, sarifWith(
+  const outcome = expectAdded(await extract(repo, sarifWith(
     [finding('f.txt', { startLine: 1, startColumn: 9, endColumn: 10, snippet: { text: '1' } })],
     { columnKind: 'utf16CodeUnits' },
-  ));
-  assert.deepEqual(outcome.receipt.changes[0].replacements[0].associated, ['/runs/0/results/0']);
+  )));
+  assert.deepEqual(item(replacementsOf(item(outcome.receipt.changes, 0)), 0).associated, ['/runs/0/results/0']);
 });
 
 test('findings on an edited file use reviewed coordinates, never staged ones', async () => {
@@ -954,9 +1069,9 @@ test('findings on an edited file use reviewed coordinates, never staged ones', a
   const repo = fixture({ reviewed: { 'f.txt': 'a\nb\nc\n' }, staged: { 'f.txt': 'c\n' } });
   const onReviewedLine3 = finding('f.txt', { startLine: 3, snippet: { text: 'c' } });
   const outcome = await extract(repo, sarifWith([onReviewedLine3]));
-  assert.equal(outcome.status, 'added', JSON.stringify(outcome.problems));
-  assert.deepEqual(outcome.sarif.runs[0].results[0], onReviewedLine3, 'unchanged line 3 is not part of the change');
-  assert.deepEqual(outcome.receipt.changes[0].replacements, [{ startLine: 1, endLine: 2, associated: [], explainedBy: 'neutral' }]);
+  assert.equal(outcome.status, 'added', JSON.stringify(problemsOf(outcome)));
+  assert.deepEqual(at(outcome.sarif, 'runs', 0, 'results', 0), onReviewedLine3, 'unchanged line 3 is not part of the change');
+  assert.deepEqual(item(outcome.receipt.changes, 0).replacements, [{ startLine: 1, endLine: 2, associated: [], explainedBy: 'neutral' }]);
 });
 
 test('the Git file-mode table is frozen with the index-format values', () => {
@@ -966,6 +1081,7 @@ test('the Git file-mode table is frozen with the index-format values', () => {
   assert.deepStrictEqual({ ...MODE }, { REGULAR: 0o100644, EXECUTABLE: 0o100755, SYMLINK: 0o120000, GITLINK: 0o160000, DIRECTORY: 0o040000 });
   assert.equal(Object.isFrozen(MODE), true);
   assert.throws(() => {
+    // @ts-expect-error -- deliberately invalid: proves the table is frozen at run time, not only read-only in its type
     MODE.REGULAR = 0;
   }, TypeError);
 });

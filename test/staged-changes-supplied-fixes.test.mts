@@ -1,5 +1,3 @@
-'use strict';
-
 /**
  * Regression tests: supplied fixes with several replacements are compared
  * with staged changes by their combined effect (contract §4.5).
@@ -20,24 +18,36 @@
  * @see https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/sarif-v2.1.0-errata01-os-complete.html (3.30 region, 3.56 artifactChange, 3.57 replacement)
  */
 
-const test = require('node:test');
-const assert = require('node:assert/strict');
+import * as assert from 'node:assert/strict';
+import { test } from 'node:test';
 
-const { addStagedChangesToSarif } = require('../dist/staged-changes.cjs');
-const { createFixtureRepo, removeFixtureRepo } = require('./fixtures/staged-changes/git-fixture.mts');
+import { addStagedChangesToSarif } from '../dist/staged-changes.cjs';
+import type { AddStagedChangesOutcome } from '../dist/staged-changes.cjs';
+import { createFixtureRepo, removeFixtureRepo } from './fixtures/staged-changes/git-fixture.mts';
+import type { IFixtureRepo } from './fixtures/staged-changes/git-fixture.mts';
+
+/** One `[startLine, endLine]` range of the reviewed file. */
+type LineRange = readonly [number, number];
 
 const REPOSITORY = { owner: 'acme', repo: 'widgets' };
-const repos = [];
-test.after(() => repos.forEach(removeFixtureRepo));
+const repos: IFixtureRepo[] = [];
+test.after(() => {
+  repos.forEach(removeFixtureRepo);
+});
 
-function fixture(reviewed, staged) {
+/** The Markdown of a refused outcome, for failure messages. */
+function markdownOf(outcome: AddStagedChangesOutcome): string | undefined {
+  return 'markdown' in outcome ? outcome.markdown : undefined;
+}
+
+function fixture(reviewed: string, staged: string): IFixtureRepo {
   const repo = createFixtureRepo({ reviewed: { 'a.txt': reviewed }, staged: { 'a.txt': staged }, workTree: { 'a.txt': 'UNSTAGED\n' } });
   repos.push(repo);
   return repo;
 }
 
 /** An upstream document whose one result carries one fix with the given replacements. */
-function groupedFix(replacements, runExtra = {}) {
+function groupedFix(replacements: readonly object[], runExtra: object = {}): object {
   return {
     version: '2.1.0',
     runs: [
@@ -62,15 +72,15 @@ function groupedFix(replacements, runExtra = {}) {
   };
 }
 
-function extract(repo, sarif) {
+function extract(repo: IFixtureRepo, sarif: object): Promise<AddStagedChangesOutcome> {
   return addStagedChangesToSarif({ sarif, worktree: repo.dir, reviewedCommit: repo.reviewedCommit, repository: REPOSITORY });
 }
 
 /** Asserts the supplied fix explains every staged change and the document is returned unchanged. */
-async function assertExplained(repo, sarif, expectedRanges) {
+async function assertExplained(repo: IFixtureRepo, sarif: object, expectedRanges: readonly LineRange[]): Promise<void> {
   const input = structuredClone(sarif);
   const outcome = await extract(repo, sarif);
-  assert.equal(outcome.status, 'added', outcome.markdown);
+  assert.equal(outcome.status, 'added', markdownOf(outcome));
   assert.deepEqual(outcome.sarif, input, 'the supplied fix and its metadata are preserved exactly; nothing is added');
   assert.deepEqual(outcome.receipt.changes, [
     {

@@ -1,5 +1,3 @@
-'use strict';
-
 /**
  * Extraction integration contracts:
  *   pure insertions must compose with the unchanged publisher;
@@ -17,36 +15,95 @@
  * @see https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/sarif-v2.1.0-errata01-os-complete.html (3.24 artifact, 3.3 artifactContent, 3.14.24 defaultEncoding)
  */
 
-const test = require('node:test');
-const assert = require('node:assert/strict');
-const crypto = require('node:crypto');
+import * as assert from 'node:assert/strict';
+import { AssertionError } from 'node:assert';
+import * as crypto from 'node:crypto';
+import { test } from 'node:test';
 
-const { addStagedChangesToSarif } = require('../dist/staged-changes.cjs');
-const { prepareReview } = require('../dist/prepare-review.cjs');
-const { createFixtureRepo, removeFixtureRepo } = require('./fixtures/staged-changes/git-fixture.mts');
-const { applyReplacements } = require('./fixtures/staged-changes/apply-oracle.mts');
+import { addStagedChangesToSarif } from '../dist/staged-changes.cjs';
+import type { AddStagedChangesOutcome, IAddedStagedChangesOutcome } from '../dist/staged-changes.cjs';
+import { prepareReview } from '../dist/prepare-review.cjs';
+import type { PreparedComment, PrepareReviewOutcome } from '../dist/prepare-review.cjs';
+import { createFixtureRepo, removeFixtureRepo } from './fixtures/staged-changes/git-fixture.mts';
+import type { IFixtureRepo, IFixtureRepoSpec } from './fixtures/staged-changes/git-fixture.mts';
+import { applyReplacements } from './fixtures/staged-changes/apply-oracle.mts';
+import { asArray, asRecord, expectType, isNumber, isOptional, isShape, isString } from './support/runtime-types.mts';
 
 const REPOSITORY = { owner: 'acme', repo: 'widgets' };
-const repos = [];
-test.after(() => repos.forEach(removeFixtureRepo));
+const repos: IFixtureRepo[] = [];
+test.after(() => {
+  repos.forEach(removeFixtureRepo);
+});
 
-function fixture(spec) {
+/** A SARIF region (§3.30) as the R2 oracle reads it. */
+const isRegion = isShape({
+  startLine: isOptional(isNumber),
+  startColumn: isOptional(isNumber),
+  endLine: isOptional(isNumber),
+  endColumn: isOptional(isNumber),
+  charOffset: isOptional(isNumber),
+  charLength: isOptional(isNumber),
+});
+
+/**
+ * Reads a nested value of a JSON document by object keys and array indexes;
+ * a missing container fails with an AssertionError naming where.
+ */
+function at(value: unknown, ...keys: readonly (string | number)[]): unknown {
+  let current = value;
+  for (const [depth, key] of keys.entries()) {
+    const where = `a container at /${keys.slice(0, depth).join('/')}`;
+    current = typeof key === 'number' ? asArray(current, where)[key] : asRecord(current, where)[key];
+  }
+  return current;
+}
+
+/** The element at `index`, failing with an AssertionError when there is none. */
+function item<T>(items: readonly T[], index: number): T {
+  const value = items[index];
+  if (value === undefined) throw new AssertionError({ message: `expected an element at index ${String(index)} of ${String(items.length)}` });
+  return value;
+}
+
+/**
+ * The outcome of an extraction the test expects to succeed; any other status
+ * fails with an AssertionError carrying its explanation.
+ */
+function expectAdded(outcome: AddStagedChangesOutcome): IAddedStagedChangesOutcome {
+  if (outcome.status !== 'added') {
+    throw new AssertionError({ message: `expected an added outcome, got ${outcome.status}: ${outcome.markdown}`, actual: outcome });
+  }
+  return outcome;
+}
+
+/** The Markdown of a refused outcome, for failure messages. */
+function markdownOf(outcome: AddStagedChangesOutcome): string | undefined {
+  return 'markdown' in outcome ? outcome.markdown : undefined;
+}
+
+/** A prepared comment's start line: present only on a multi-line anchor. */
+function startLineOf(comment: PreparedComment): number | undefined {
+  return 'startLine' in comment ? comment.startLine : undefined;
+}
+
+function fixture(spec: IFixtureRepoSpec): IFixtureRepo {
   const repo = createFixtureRepo(spec);
   repos.push(repo);
   return repo;
 }
 
-function run(results = [], extra = {}) {
+function run(results: readonly object[] = [], extra: object = {}): { version: string; runs: object[] } {
   return { version: '2.1.0', runs: [{ tool: { driver: { name: 'Reviewer' } }, ...extra, results }] };
 }
 
-function extract(repo, sarif) {
+function extract(repo: IFixtureRepo, sarif: object): Promise<AddStagedChangesOutcome> {
   return addStagedChangesToSarif({ sarif, worktree: repo.dir, reviewedCommit: repo.reviewedCommit, repository: REPOSITORY });
 }
 
 /** Prepares extraction output with the unchanged publisher against the PR diff parent -> reviewed. */
-async function prepare(repo, sarif, filePath) {
-  const diff = repo.git(['diff', '--no-color', '-U3', repo.parentCommit, repo.reviewedCommit, '--', filePath]).toString('utf8');
+async function prepare(repo: IFixtureRepo, sarif: unknown, filePath: string): Promise<PrepareReviewOutcome> {
+  const parentCommit = expectType(repo.parentCommit, isString, 'the fixture parent commit');
+  const diff = repo.git(['diff', '--no-color', '-U3', parentCommit, repo.reviewedCommit, '--', filePath]).toString('utf8');
   return prepareReview({
     sarif,
     context: {
@@ -54,9 +111,10 @@ async function prepare(repo, sarif, filePath) {
       repo: 'widgets',
       pullNumber: 1,
       reviewedCommit: repo.reviewedCommit,
-      diff: { baseCommit: repo.parentCommit, headCommit: repo.reviewedCommit, files: [{ path: filePath, patch: diff.slice(diff.indexOf('@@')) }] },
+      diff: { baseCommit: parentCommit, headCommit: repo.reviewedCommit, files: [{ path: filePath, patch: diff.slice(diff.indexOf('@@')) }] },
     },
-    readSource: async (commit, p) => {
+    // eslint-disable-next-line @typescript-eslint/require-await -- readSource is async by contract; the Git read is synchronous
+    readSource: async (commit: string, p: string) => {
       try {
         return repo.git(['show', `${commit}:${p}`]).toString('utf8');
       } catch {
@@ -77,16 +135,16 @@ const PARSE_STAGED = "function parse(input) {\n  const parts = input.split(';');
 test('C1: a middle insertion publishes as one native suggestion on the line it is inserted before', async () => {
   const repo = fixture({ before: { 'src/parse.js': PARSE_BASE }, reviewed: { 'src/parse.js': PARSE_REVIEWED }, staged: { 'src/parse.js': PARSE_STAGED } });
   const outcome = await extract(repo, run());
-  assert.equal(outcome.status, 'added', outcome.markdown);
+  assert.equal(outcome.status, 'added', markdownOf(outcome));
   // The carrying result names the insertion point itself (zero-length), never line 3's content.
-  assert.deepEqual(outcome.sarif.runs[1].results[0].locations, [
+  assert.deepEqual(at(outcome.sarif, 'runs', 1, 'results', 0, 'locations'), [
     { physicalLocation: { artifactLocation: { uri: 'src/parse.js' }, region: { startLine: 3, startColumn: 1, endLine: 3, endColumn: 1 } } },
   ]);
   const prepared = await prepare(repo, outcome.sarif, 'src/parse.js');
   assert.equal(prepared.status, 'ready', prepared.markdown);
   assert.equal(prepared.review.comments.length, 1);
-  const [comment] = prepared.review.comments;
-  assert.deepEqual([comment.path, comment.side, comment.startLine, comment.line], ['src/parse.js', 'RIGHT', undefined, 3]);
+  const comment = item(prepared.review.comments, 0);
+  assert.deepEqual([comment.path, comment.side, startLineOf(comment), comment.line], ['src/parse.js', 'RIGHT', undefined, 3]);
   assert.ok(comment.body.includes('Staged insertion before line 3 of'), comment.body);
   assert.ok(comment.body.includes("```suggestion\n  if (parts.length === 0) return [];\n  return parts.map(Number);\n```"), comment.body);
   assert.equal(prepared.review.body, '', 'nothing becomes general feedback');
@@ -99,17 +157,17 @@ test('C1: an end-of-file append publishes as one native suggestion on the final 
     staged: { 'list.txt': 'one\nTWO\nthree\nfour\n' },
   });
   const outcome = await extract(repo, run());
-  assert.equal(outcome.status, 'added', outcome.markdown);
+  assert.equal(outcome.status, 'added', markdownOf(outcome));
   // The end-of-file point follows the last line's terminator and has no
   // reviewed line, so the carrying result has no location; its fix names the file.
-  assert.equal(outcome.sarif.runs[1].results[0].locations, undefined);
-  assert.deepEqual(outcome.sarif.runs[1].results[0].fixes[0].artifactChanges[0].replacements, [
+  assert.equal(at(outcome.sarif, 'runs', 1, 'results', 0, 'locations'), undefined);
+  assert.deepEqual(at(outcome.sarif, 'runs', 1, 'results', 0, 'fixes', 0, 'artifactChanges', 0, 'replacements'), [
     { deletedRegion: { startLine: 3, startColumn: 7, endLine: 3, endColumn: 7 }, insertedContent: { text: 'four\n' } },
   ]);
   const prepared = await prepare(repo, outcome.sarif, 'list.txt');
   assert.equal(prepared.status, 'ready', prepared.markdown);
-  const [comment] = prepared.review.comments;
-  assert.deepEqual([comment.side, comment.startLine, comment.line], ['RIGHT', undefined, 3]);
+  const comment = item(prepared.review.comments, 0);
+  assert.deepEqual([comment.side, startLineOf(comment), comment.line], ['RIGHT', undefined, 3]);
   assert.ok(comment.body.includes('Staged insertion at the end of'), comment.body);
   assert.ok(comment.body.includes('```suggestion\nthree\nfour\n```'), comment.body);
 });
@@ -120,14 +178,14 @@ test('C1: feedback on the borrowed line stays separate and publishes without the
     message: { text: 'Mapping to Number drops NaN handling.' },
     locations: [{ physicalLocation: { artifactLocation: { uri: 'src/parse.js' }, region: { startLine: 3 } } }],
   };
-  const outcome = await extract(repo, run([onLine3]));
-  assert.deepEqual(outcome.sarif.runs[0].results[0], onLine3, 'never associated with the insertion');
+  const outcome = expectAdded(await extract(repo, run([onLine3])));
+  assert.deepEqual(at(outcome.sarif, 'runs', 0, 'results', 0), onLine3, 'never associated with the insertion');
   const prepared = await prepare(repo, outcome.sarif, 'src/parse.js');
   assert.equal(prepared.status, 'ready', prepared.markdown);
   const bodies = prepared.review.comments.map((c) => c.body);
   assert.equal(bodies.length, 2);
   assert.equal(bodies.filter((b) => b.includes('```suggestion')).length, 1);
-  const feedback = bodies.find((b) => b.includes('drops NaN'));
+  const feedback = expectType(bodies.find((b) => b.includes('drops NaN')), isString, 'the feedback comment body');
   assert.ok(!feedback.includes('```suggestion'), 'the finding does not carry the insertion');
 });
 
@@ -136,23 +194,23 @@ test('C1: feedback on the borrowed line stays separate and publishes without the
 // ---------------------------------------------------------------------------
 
 test('C5: insertion receipts carry an empty changed range at the insertion point, marked as insertions', async () => {
-  const middle = await extract(fixture({ reviewed: { 'f.txt': 'a\nc\n' }, staged: { 'f.txt': 'a\nb\nc\n' } }), run());
-  assert.deepEqual(middle.receipt.changes[0].replacements, [
+  const middle = expectAdded(await extract(fixture({ reviewed: { 'f.txt': 'a\nc\n' }, staged: { 'f.txt': 'a\nb\nc\n' } }), run()));
+  assert.deepEqual(item(middle.receipt.changes, 0).replacements, [
     { startLine: 2, endLine: 1, insertion: true, associated: [], explainedBy: 'neutral' },
   ]);
-  const append = await extract(fixture({ reviewed: { 'f.txt': 'one\nTWO\nthree\n' }, staged: { 'f.txt': 'one\nTWO\nthree\nfour\n' } }), run());
-  assert.deepEqual(append.receipt.changes[0].replacements, [
+  const append = expectAdded(await extract(fixture({ reviewed: { 'f.txt': 'one\nTWO\nthree\n' }, staged: { 'f.txt': 'one\nTWO\nthree\nfour\n' } }), run()));
+  assert.deepEqual(item(append.receipt.changes, 0).replacements, [
     { startLine: 4, endLine: 3, insertion: true, associated: [], explainedBy: 'neutral' },
   ]);
-  const empty = await extract(fixture({ reviewed: { 'f.txt': '' }, staged: { 'f.txt': 'hello\n' } }), run());
-  assert.deepEqual(empty.receipt.changes[0].replacements, [
+  const empty = expectAdded(await extract(fixture({ reviewed: { 'f.txt': '' }, staged: { 'f.txt': 'hello\n' } }), run()));
+  assert.deepEqual(item(empty.receipt.changes, 0).replacements, [
     { startLine: 1, endLine: 0, insertion: true, associated: [], explainedBy: 'neutral' },
   ]);
 });
 
 test('C5: replacements of existing lines keep their exact changed lines and no insertion marker', async () => {
-  const outcome = await extract(fixture({ reviewed: { 'f.txt': 'a\nb\nc\n' }, staged: { 'f.txt': 'a\nB\nc\n' } }), run());
-  assert.deepEqual(outcome.receipt.changes[0].replacements, [{ startLine: 2, endLine: 2, associated: [], explainedBy: 'neutral' }]);
+  const outcome = expectAdded(await extract(fixture({ reviewed: { 'f.txt': 'a\nb\nc\n' }, staged: { 'f.txt': 'a\nB\nc\n' } }), run()));
+  assert.deepEqual(item(outcome.receipt.changes, 0).replacements, [{ startLine: 2, endLine: 2, associated: [], explainedBy: 'neutral' }]);
 });
 
 // ---------------------------------------------------------------------------
@@ -164,11 +222,11 @@ const BOM = '﻿';
 test('C3: text staged into a file that is only a byte-order mark is a faithful insertion after the mark', async () => {
   const repo = fixture({ reviewed: { 'b.txt': BOM }, staged: { 'b.txt': `${BOM}z\n` } });
   const outcome = await extract(repo, run());
-  assert.equal(outcome.status, 'added', outcome.markdown);
-  const [replacement] = outcome.sarif.runs[1].results[0].fixes[0].artifactChanges[0].replacements;
+  assert.equal(outcome.status, 'added', markdownOf(outcome));
+  const replacement = at(outcome.sarif, 'runs', 1, 'results', 0, 'fixes', 0, 'artifactChanges', 0, 'replacements', 0);
   assert.deepEqual(replacement, { deletedRegion: { charOffset: 0, charLength: 0 }, insertedContent: { text: 'z\n' } });
-  assert.equal(applyReplacements(BOM, [{ deletedRegion: replacement.deletedRegion, insertedText: 'z\n' }]), `${BOM}z\n`);
-  assert.deepEqual(outcome.receipt.changes[0].replacements, [
+  assert.equal(applyReplacements(BOM, [{ deletedRegion: expectType(at(replacement, 'deletedRegion'), isRegion, 'a SARIF region'), insertedText: 'z\n' }]), `${BOM}z\n`);
+  assert.deepEqual(item(outcome.receipt.changes, 0).replacements, [
     { startLine: 1, endLine: 0, insertion: true, associated: [], explainedBy: 'neutral' },
   ]);
 });
@@ -176,16 +234,16 @@ test('C3: text staged into a file that is only a byte-order mark is a faithful i
 test('C3: emptying a file down to its byte-order mark keeps the mark', async () => {
   const repo = fixture({ reviewed: { 'b.txt': `${BOM}z\n` }, staged: { 'b.txt': BOM } });
   const outcome = await extract(repo, run());
-  assert.equal(outcome.status, 'added', outcome.markdown);
-  const [replacement] = outcome.sarif.runs[1].results[0].fixes[0].artifactChanges[0].replacements;
+  assert.equal(outcome.status, 'added', markdownOf(outcome));
+  const replacement = at(outcome.sarif, 'runs', 1, 'results', 0, 'fixes', 0, 'artifactChanges', 0, 'replacements', 0);
   assert.deepEqual(replacement, { deletedRegion: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 3 }, insertedContent: { text: '' } });
-  assert.equal(applyReplacements(`${BOM}z\n`, [{ deletedRegion: replacement.deletedRegion, insertedText: '' }], 'utf16CodeUnits'), BOM);
+  assert.equal(applyReplacements(`${BOM}z\n`, [{ deletedRegion: expectType(at(replacement, 'deletedRegion'), isRegion, 'a SARIF region'), insertedText: '' }], 'utf16CodeUnits'), BOM);
 });
 
 test('C3: an unchanged byte-order-mark-only file is not a change, and adding or removing the mark still fails', async () => {
-  const same = await extract(fixture({ reviewed: { 'b.txt': BOM, 'x.txt': 'x\n' }, staged: { 'b.txt': BOM, 'x.txt': 'X\n' } }), run());
+  const same = expectAdded(await extract(fixture({ reviewed: { 'b.txt': BOM, 'x.txt': 'x\n' }, staged: { 'b.txt': BOM, 'x.txt': 'X\n' } }), run()));
   assert.deepEqual(same.receipt.changes.map((c) => c.path), ['x.txt']);
-  for (const [reviewed, staged] of [[BOM, ''], ['', BOM], [BOM, 'z\n']]) {
+  for (const [reviewed, staged] of [[BOM, ''], ['', BOM], [BOM, 'z\n']] as const) {
     const outcome = await extract(fixture({ reviewed: { 'b.txt': reviewed }, staged: { 'b.txt': staged } }), run());
     assert.equal(outcome.status, 'failed', JSON.stringify([reviewed, staged]));
     assert.match(outcome.markdown, /byte-order mark/);
@@ -196,8 +254,15 @@ test('C3: an unchanged byte-order-mark-only file is not a change, and adding or 
 // Supplied file proposals: equality by meaning, metadata preserved
 // ---------------------------------------------------------------------------
 
+/** Extra fields merged into the supplied operation, artifact and run. */
+interface ISuppliedCreateOptions {
+  readonly operation?: object;
+  readonly artifact?: object;
+  readonly runExtra?: object;
+}
+
 /** A document whose one finding on `n.md` carries a supplied create operation. */
-function suppliedCreate({ operation = {}, artifact = {}, runExtra = {} } = {}) {
+function suppliedCreate({ operation = {}, artifact = {}, runExtra = {} }: ISuppliedCreateOptions = {}): object {
   return run(
     [
       {
@@ -210,19 +275,19 @@ function suppliedCreate({ operation = {}, artifact = {}, runExtra = {} } = {}) {
   );
 }
 
-function createFixture() {
+function createFixture(): IFixtureRepo {
   return fixture({ reviewed: { 'a.txt': 'a\n' }, staged: { 'a.txt': 'a\n', 'n.md': 'new\n' } });
 }
 
-async function assertExplainedAndPreserved(sarif) {
+async function assertExplainedAndPreserved(sarif: object): Promise<void> {
   const input = structuredClone(sarif);
   const outcome = await extract(createFixture(), sarif);
-  assert.equal(outcome.status, 'added', outcome.markdown);
+  assert.equal(outcome.status, 'added', markdownOf(outcome));
   assert.deepEqual(outcome.receipt.changes, [{ path: 'n.md', operation: 'create', associated: [], explainedBy: 'existing-proposal' }]);
   assert.deepEqual(outcome.sarif, input, 'the supplied proposal and its metadata are preserved exactly');
 }
 
-async function assertConflict(sarif, pattern) {
+async function assertConflict(sarif: object, pattern: RegExp): Promise<void> {
   const outcome = await extract(createFixture(), sarif);
   assert.equal(outcome.status, 'failed');
   assert.match(outcome.markdown, /\/runs\/0\/results\/0/);
@@ -261,7 +326,7 @@ test('file proposals: base64 contents that differ from the staged bytes are a co
 
 test('file proposals: missing contents cannot establish equality', async () => {
   const withoutContents = suppliedCreate();
-  delete withoutContents.runs[0].artifacts[0].contents;
+  delete asRecord(at(withoutContents, 'runs', 0, 'artifacts', 0))['contents'];
   await assertConflict(withoutContents, /content/);
 });
 

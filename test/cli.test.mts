@@ -1,7 +1,5 @@
-'use strict';
-
 /**
- * User-acceptance tests for the thin CLI (bin/sarif-to-comment.cjs).
+ * User-acceptance tests for the thin CLI (dist/sarif-to-comment.cjs).
  *
  * Each test runs the real CLI entry point in a child process through
  * test/fixtures/public-api/cli-with-fake-github.mts, which injects only the
@@ -9,7 +7,8 @@
  * FAKE_GITHUB_DIR). Parsing, file reading, credential selection, the library
  * call, Markdown output and exit status are the real CLI's. Delegation to the
  * library is checked by comparing CLI output and sent requests with an
- * in-process publishSarifReview run on an identical fresh host.
+ * in-process publishSarifReview run on an identical fresh host (through
+ * publishSarifReviewWithInternals, which injects the same fake client).
  *
  * Exit status contract: 0 published, 2 blocked, 3 uncertain, 1 usage error,
  * unreadable input file, operational failure, state refusal or host rejection.
@@ -23,26 +22,30 @@
  * @see https://encoding.spec.whatwg.org/#utf-8-decode (BOM handling and fatal decoding)
  */
 
-const test = require('node:test');
-const { describe } = test;
-const assert = require('node:assert/strict');
-const crypto = require('node:crypto');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const { spawnSync } = require('node:child_process');
+import * as assert from 'node:assert/strict';
+import { AssertionError } from 'node:assert';
+import { spawnSync } from 'node:child_process';
+import * as crypto from 'node:crypto';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { describe, test } from 'node:test';
 
-const { publishSarifReview } = require('../dist/index.cjs');
-const { FakeGitHubRemote } = require('./fixtures/publication/fake-github.mts');
-const {
+import { publishSarifReviewWithInternals } from '../dist/publish-sarif-review.cjs';
+import type { PublishSarifReviewOutcome } from '../dist/publish-sarif-review.cjs';
+import { FakeGitHubRemote } from './fixtures/publication/fake-github.mts';
+import type { IFakeRemoteConfig } from './fixtures/publication/fake-github.mts';
+import {
   REPOSITORY,
   createFakeClientFactory,
   setAdapterConfig,
-} = require('./fixtures/public-api/fake-adapter.mts');
+} from './fixtures/public-api/fake-adapter.mts';
+import { asArray, asRecord, asString, readJson } from './support/runtime-types.mts';
+import type { UnknownRecord } from './support/runtime-types.mts';
 
-const FIXTURE_DIR = path.join(__dirname, 'fixtures', 'public-api');
+const FIXTURE_DIR = path.join(import.meta.dirname, 'fixtures', 'public-api');
 const WRAPPER = path.join(FIXTURE_DIR, 'cli-with-fake-github.mts');
-const loadSarif = (name) => JSON.parse(fs.readFileSync(path.join(FIXTURE_DIR, name), 'utf8'));
+const loadSarif = (name: string): UnknownRecord => asRecord(readJson(path.join(FIXTURE_DIR, name)), name);
 const READY = loadSarif('ready.sarif.json');
 const HELD = loadSarif('held.sarif.json');
 const INVALID = loadSarif('invalid.sarif.json');
@@ -64,18 +67,45 @@ const FLAGS = [
   '--ignore-approval-hold',
 ];
 
-function canonicalJson(value) {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
-  if (value && typeof value === 'object') {
-    return `{${Object.keys(value)
-      .sort()
-      .map((k) => `${JSON.stringify(k)}:${canonicalJson(value[k])}`)
-      .join(',')}}`;
+/**
+ * Reads a nested value of a JSON document by object keys and array indexes;
+ * a missing container fails with an AssertionError naming where.
+ */
+function at(value: unknown, ...keys: readonly (string | number)[]): unknown {
+  let current = value;
+  for (const [depth, key] of keys.entries()) {
+    const where = `a container at /${keys.slice(0, depth).join('/')}`;
+    current = typeof key === 'number' ? asArray(current, where)[key] : asRecord(current, where)[key];
   }
-  return JSON.stringify(value);
+  return current;
 }
 
-function expectedInputFingerprint(sarif, { sourceRootUri = null, oldSourceCommit = null } = {}) {
+/** The element at `index`, failing with an AssertionError when there is none. */
+function item<T>(items: readonly T[], index: number): T {
+  const value = items[index];
+  if (value === undefined) throw new AssertionError({ message: `expected an element at index ${String(index)} of ${String(items.length)}` });
+  return value;
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    const record = asRecord(value);
+    return `{${Object.keys(record)
+      .sort()
+      .map((k) => `${JSON.stringify(k)}:${canonicalJson(record[k])}`)
+      .join(',')}}`;
+  }
+  return asString(JSON.stringify(value), 'a JSON value');
+}
+
+/** The optional publication identity inputs (null when absent, as the library records them). */
+interface IIdentityOptions {
+  readonly sourceRootUri?: string | null;
+  readonly oldSourceCommit?: string | null;
+}
+
+function expectedInputFingerprint(sarif: unknown, { sourceRootUri = null, oldSourceCommit = null }: IIdentityOptions = {}): string {
   const identity = { format: 'sarif-to-comment.input', version: 1, sarif, sourceRootUri, oldSourceCommit };
   return `sha256:${crypto.createHash('sha256').update(canonicalJson(identity), 'utf8').digest('hex')}`;
 }
@@ -84,7 +114,24 @@ function expectedInputFingerprint(sarif, { sourceRootUri = null, oldSourceCommit
 // World and child-process helpers
 // ---------------------------------------------------------------------------
 
-function makeWorld(hostConfig = {}, sarif = READY) {
+/** A temporary publication world: a fake remote, a state directory and the input file. */
+interface IWorld {
+  readonly root: string;
+  readonly stateDir: string;
+  readonly statePath: string;
+  readonly remote: FakeGitHubRemote;
+  readonly sarifPath: string;
+}
+
+/** A finished CLI child process. */
+interface ICliRun {
+  readonly status: number | null;
+  readonly signal: NodeJS.Signals | null;
+  readonly stdout: string;
+  readonly stderr: string;
+}
+
+function makeWorld(hostConfig: Partial<IFakeRemoteConfig> = {}, sarif: unknown = READY): IWorld {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-'));
   const stateDir = path.join(root, 'state');
   fs.mkdirSync(stateDir);
@@ -94,8 +141,8 @@ function makeWorld(hostConfig = {}, sarif = READY) {
   return { root, stateDir, statePath: path.join(stateDir, 'review.publication.json'), remote, sarifPath };
 }
 
-function standardArgs(world, overrides = {}) {
-  const values = {
+function standardArgs(world: IWorld, overrides: Readonly<Record<string, string | undefined>> = {}): string[] {
+  const values: Record<string, string | undefined> = {
     '--sarif': world.sarifPath,
     '--repo': REPO_FLAG,
     '--pull': PULL_FLAG,
@@ -104,7 +151,7 @@ function standardArgs(world, overrides = {}) {
     ...overrides,
   };
   return Object.entries(values)
-    .filter(([, v]) => v !== undefined)
+    .filter((entry): entry is [string, string] => entry[1] !== undefined)
     .flatMap(([flag, v]) => [flag, v]);
 }
 
@@ -113,52 +160,64 @@ function standardArgs(world, overrides = {}) {
  * remote location and explicitly supplied variables (never the developer's
  * own GitHub credentials).
  */
-function runCli(world, argv, env = { GH_TOKEN: TOKEN }) {
+function runCli(world: IWorld, argv: readonly string[], env: Readonly<Record<string, string>> = { GH_TOKEN: TOKEN }): ICliRun {
   const result = spawnSync(process.execPath, [WRAPPER, ...argv], {
     encoding: 'utf8',
     timeout: 30_000,
-    env: { PATH: process.env.PATH, FAKE_GITHUB_DIR: world.remote.dir, ...env },
+    env: { PATH: process.env['PATH'], FAKE_GITHUB_DIR: world.remote.dir, ...env },
   });
   return { status: result.status, signal: result.signal, stdout: result.stdout, stderr: result.stderr };
 }
 
-function adapterCreated(world) {
+function adapterCreated(world: IWorld): ReturnType<FakeGitHubRemote['calls']> {
   return world.remote.calls('adapter:create');
 }
 
-function stateFiles(world) {
+function stateFiles(world: IWorld): string[] {
   return fs.readdirSync(world.stateDir);
 }
 
-function assertNoToken(world, run) {
-  for (const [name, text] of [
+function assertNoToken(world: IWorld, run: ICliRun): void {
+  const texts: [string, string][] = [
     ['stdout', run.stdout],
     ['stderr', run.stderr],
-    ...stateFiles(world).map((f) => [f, fs.readFileSync(path.join(world.stateDir, f), 'utf8')]),
-  ]) {
+    ...stateFiles(world).map((f): [string, string] => [f, fs.readFileSync(path.join(world.stateDir, f), 'utf8')]),
+  ];
+  for (const [name, text] of texts) {
     assert.equal(text.includes(TOKEN), false, `token appeared in ${name}`);
     assert.equal(text.includes(OTHER_TOKEN), false, `secondary token appeared in ${name}`);
   }
 }
 
 /** The same operation through the library, on a fresh identical host. */
-async function libraryOutcome(sarif, { hostConfig = {}, options, sourceRootUri, oldSourceCommit } = {}) {
+/** What libraryOutcome varies: the host and the optional publication inputs. */
+interface ILibraryOptions {
+  readonly hostConfig?: Partial<IFakeRemoteConfig>;
+  readonly options?: object;
+  readonly sourceRootUri?: string;
+  readonly oldSourceCommit?: string;
+}
+
+async function libraryOutcome(
+  sarif: unknown,
+  { hostConfig = {}, options, sourceRootUri, oldSourceCommit }: ILibraryOptions = {},
+): Promise<{ world: IWorld; outcome: PublishSarifReviewOutcome }> {
   const world = makeWorld(hostConfig, sarif);
-  const input = {
+  const input: Record<string, unknown> = {
     sarif: structuredClone(sarif),
     destination: { ...REPOSITORY.destination },
     reviewedCommit: HEAD,
     statePath: world.statePath,
     token: TOKEN,
   };
-  if (options) input.options = options;
-  if (sourceRootUri) input.sourceRootUri = sourceRootUri;
-  if (oldSourceCommit) input.oldSourceCommit = oldSourceCommit;
-  const outcome = await publishSarifReview(input, { createGitHubClient: createFakeClientFactory(world.remote.dir) });
+  if (options) input['options'] = options;
+  if (sourceRootUri) input['sourceRootUri'] = sourceRootUri;
+  if (oldSourceCommit) input['oldSourceCommit'] = oldSourceCommit;
+  const outcome = await publishSarifReviewWithInternals(input, { createGitHubClient: createFakeClientFactory(world.remote.dir) });
   return { world, outcome };
 }
 
-function withoutStatePath(markdown, statePath) {
+function withoutStatePath(markdown: string, statePath: string): string {
   return markdown.split(statePath).join('<STATE>');
 }
 
@@ -183,7 +242,7 @@ describe('help needs no token and no network', () => {
 });
 
 describe('usage errors are exact, actionable and make no remote call', () => {
-  const cases = [
+  const cases: readonly (readonly [string, (w: IWorld) => string[], string])[] = [
     ['unknown flag', (w) => [...standardArgs(w), '--bogus', 'x'], '--bogus'],
     ['token flag is not supported', (w) => [...standardArgs(w), '--token', TOKEN], '--token'],
     ['missing --sarif', (w) => standardArgs(w, { '--sarif': undefined }), '--sarif'],
@@ -257,7 +316,7 @@ describe('outcomes delegate to the library and map to exit statuses', () => {
     assert.equal(run.status, 0, run.stderr);
     const creates = world.remote.calls('createReview');
     assert.equal(creates.length, 1);
-    const [stored] = world.remote.reviews();
+    const stored = item(world.remote.reviews(), 0);
     assert.ok(run.stdout.includes(stored.htmlUrl));
 
     const library = await libraryOutcome(READY);
@@ -266,11 +325,11 @@ describe('outcomes delegate to the library and map to exit statuses', () => {
       withoutStatePath(run.stdout.trimEnd(), world.statePath),
       withoutStatePath(library.outcome.markdown.trimEnd(), library.world.statePath),
     );
-    const [libraryCreate] = library.world.remote.calls('createReview');
-    assert.deepEqual(creates[0].args.comments, libraryCreate.args.comments);
-    const strip = (body) => body.replace(/<!-- sarif-to-comment:review:[0-9a-f-]{36} -->$/, '');
-    assert.equal(strip(creates[0].args.body), strip(libraryCreate.args.body));
-    assert.equal(creates[0].args.commitId, HEAD);
+    const libraryCreate = item(library.world.remote.calls('createReview'), 0);
+    assert.deepEqual(at(creates, 0, 'args', 'comments'), libraryCreate.args['comments']);
+    const strip = (body: unknown): string => asString(body).replace(/<!-- sarif-to-comment:review:[0-9a-f-]{36} -->$/, '');
+    assert.equal(strip(at(creates, 0, 'args', 'body')), strip(libraryCreate.args['body']));
+    assert.equal(at(creates, 0, 'args', 'commitId'), HEAD);
     assertNoToken(world, run);
   });
 
@@ -291,18 +350,18 @@ describe('outcomes delegate to the library and map to exit statuses', () => {
     const sourceRootUri = 'file:///work/gizmos/';
     const run = runCli(world, [...standardArgs(world), '--source-root', sourceRootUri]);
     assert.equal(run.status, 0, run.stderr);
-    const record = JSON.parse(fs.readFileSync(world.statePath, 'utf8'));
-    assert.equal(record.inputFingerprint, expectedInputFingerprint(READY, { sourceRootUri }));
+    const record = readJson(world.statePath);
+    assert.equal(at(record, 'inputFingerprint'), expectedInputFingerprint(READY, { sourceRootUri }));
   });
 
   test('--old-source-commit is a candidate passed to GitHub and part of the identity, like the library', async () => {
     const world = makeWorld();
     const run = runCli(world, [...standardArgs(world), '--old-source-commit', BASE]);
     assert.equal(run.status, 0, run.stderr);
-    const [fetch] = world.remote.calls('adapter:fetchContext');
-    assert.equal(fetch.args.oldSourceCommit, BASE);
-    const record = JSON.parse(fs.readFileSync(world.statePath, 'utf8'));
-    assert.equal(record.inputFingerprint, expectedInputFingerprint(READY, { oldSourceCommit: BASE }));
+    const fetch = item(world.remote.calls('adapter:fetchContext'), 0);
+    assert.equal(fetch.args['oldSourceCommit'], BASE);
+    const record = readJson(world.statePath);
+    assert.equal(at(record, 'inputFingerprint'), expectedInputFingerprint(READY, { oldSourceCommit: BASE }));
 
     const library = await libraryOutcome(READY, { oldSourceCommit: BASE });
     assert.equal(
@@ -374,7 +433,7 @@ describe('outcomes delegate to the library and map to exit statuses', () => {
     const world = makeWorld();
     assert.equal(runCli(world, standardArgs(world)).status, 0);
     const changed = structuredClone(READY);
-    changed.runs[0].results[0].message.text = 'A different finding.';
+    asRecord(at(changed, 'runs', 0, 'results', 0, 'message'))['text'] = 'A different finding.';
     fs.writeFileSync(world.sarifPath, JSON.stringify(changed));
     const run = runCli(world, standardArgs(world));
     assert.equal(run.status, 1);
@@ -391,7 +450,7 @@ describe('outcomes delegate to the library and map to exit statuses', () => {
     const again = runCli(world, standardArgs(world));
     assert.equal(again.status, 0, again.stderr);
     assert.deepEqual(world.remote.calls('adapter:network-attempt'), []);
-    assert.ok(again.stdout.includes(world.remote.reviews()[0].htmlUrl));
+    assert.ok(again.stdout.includes(item(world.remote.reviews(), 0).htmlUrl));
   });
 });
 
@@ -403,13 +462,13 @@ describe('SARIF file decoding is faithful UTF-8', () => {
   // never replaced with U+FFFD.
   const BOM = Buffer.from([0xef, 0xbb, 0xbf]);
 
-  test('a UTF-8 byte-order mark is ignored: same publication identity as the library given the parsed document', async () => {
+  test('a UTF-8 byte-order mark is ignored: same publication identity as the library given the parsed document', () => {
     const world = makeWorld();
     fs.writeFileSync(world.sarifPath, Buffer.concat([BOM, Buffer.from(JSON.stringify(READY), 'utf8')]));
     const run = runCli(world, standardArgs(world));
     assert.equal(run.status, 0, run.stderr);
-    const record = JSON.parse(fs.readFileSync(world.statePath, 'utf8'));
-    assert.equal(record.inputFingerprint, expectedInputFingerprint(READY));
+    const record = readJson(world.statePath);
+    assert.equal(at(record, 'inputFingerprint'), expectedInputFingerprint(READY));
     assert.equal(world.remote.calls('createReview').length, 1);
   });
 
@@ -417,22 +476,23 @@ describe('SARIF file decoding is faithful UTF-8', () => {
     const world = makeWorld();
     const sarif = structuredClone(READY);
     const text = 'Überprüfe die Grenze — 限界を確認 😀';
-    sarif.runs[0].results[0].message.text = text;
+    asRecord(at(sarif, 'runs', 0, 'results', 0, 'message'))['text'] = text;
     fs.writeFileSync(world.sarifPath, Buffer.concat([BOM, Buffer.from(JSON.stringify(sarif), 'utf8')]));
     const run = runCli(world, standardArgs(world));
     assert.equal(run.status, 0, run.stderr);
-    const [create] = world.remote.calls('createReview');
-    assert.ok(create.args.body.includes(text), 'the message text must reach the review unaltered');
-    const record = JSON.parse(fs.readFileSync(world.statePath, 'utf8'));
-    assert.equal(record.inputFingerprint, expectedInputFingerprint(sarif));
+    const create = item(world.remote.calls('createReview'), 0);
+    assert.ok(asString(create.args['body']).includes(text), 'the message text must reach the review unaltered');
+    const record = readJson(world.statePath);
+    assert.equal(at(record, 'inputFingerprint'), expectedInputFingerprint(sarif));
   });
 
-  for (const [label, bytes] of [
+  const encodings: readonly (readonly [string, (json: Buffer) => Buffer])[] = [
     ['an invalid UTF-8 byte inside a string', (json) => Buffer.concat([json.subarray(0, 40), Buffer.from([0xff]), json.subarray(40)])],
     ['a truncated multi-byte sequence', (json) => Buffer.concat([json.subarray(0, 40), Buffer.from([0xe6, 0x97]), json.subarray(40)])],
     ['an encoded surrogate (CESU-8)', (json) => Buffer.concat([json.subarray(0, 40), Buffer.from([0xed, 0xa0, 0x80]), json.subarray(40)])],
     ['a UTF-16 file with its byte-order mark', () => Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(JSON.stringify(READY), 'utf16le')])],
-  ]) {
+  ];
+  for (const [label, bytes] of encodings) {
     test(`${label} is refused naming the file, before any remote work or state`, () => {
       const world = makeWorld();
       const json = Buffer.from(JSON.stringify(READY), 'utf8');
@@ -453,7 +513,7 @@ describe('SARIF file decoding is faithful UTF-8', () => {
   test('control: a lenient decoder would have published the altered text', () => {
     const json = Buffer.from(JSON.stringify(READY), 'utf8');
     const corrupted = Buffer.concat([json.subarray(0, 40), Buffer.from([0xff]), json.subarray(40)]);
-    const lenient = JSON.parse(corrupted.toString('utf8'));
+    const lenient: unknown = JSON.parse(corrupted.toString('utf8'));
     assert.ok(JSON.stringify(lenient).includes('\uFFFD'), 'lenient decoding silently substitutes U+FFFD');
   });
 });
@@ -463,7 +523,7 @@ describe('credentials', () => {
     const world = makeWorld();
     const run = runCli(world, standardArgs(world), { GH_TOKEN: TOKEN, GITHUB_TOKEN: OTHER_TOKEN });
     assert.equal(run.status, 0, run.stderr);
-    assert.deepEqual(adapterCreated(world).map((c) => c.args.token), [TOKEN]);
+    assert.deepEqual(adapterCreated(world).map((c) => c.args['token']), [TOKEN]);
     assertNoToken(world, run);
   });
 
@@ -472,11 +532,11 @@ describe('credentials', () => {
       const world = makeWorld();
       const run = runCli(world, standardArgs(world), env);
       assert.equal(run.status, 0, run.stderr);
-      assert.deepEqual(adapterCreated(world).map((c) => c.args.token), [OTHER_TOKEN]);
+      assert.deepEqual(adapterCreated(world).map((c) => c.args['token']), [OTHER_TOKEN]);
     }
   });
 
-  for (const mode of ['throw-with-token', 'throw-with-token-cause']) {
+  for (const mode of ['throw-with-token', 'throw-with-token-cause'] as const) {
     test(`an operational error carrying the token (${mode}) is reported without it`, () => {
       const world = makeWorld();
       setAdapterConfig(world.remote.dir, { context: mode });
