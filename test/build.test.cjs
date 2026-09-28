@@ -172,10 +172,13 @@ describe('the build', () => {
       fs.cpSync(path.join(ROOT, entry), path.join(dir, entry), { recursive: true });
     }
     fs.symlinkSync(path.join(ROOT, 'node_modules'), path.join(dir, 'node_modules'), 'dir');
-    fs.writeFileSync(path.join(dir, 'src', 'staged-git.cts'), 'export {};\n');
+    // A synthetic module name keeps this independent of which real modules are
+    // still JavaScript: the rule is about any name present in both languages.
+    fs.writeFileSync(path.join(dir, 'src', 'duplicate-probe.cjs'), "'use strict';\n");
+    fs.writeFileSync(path.join(dir, 'src', 'duplicate-probe.cts'), 'export {};\n');
     const build = spawnSync(process.execPath, ['scripts/build.mts'], { cwd: dir, encoding: 'utf8' });
     assert.notEqual(build.status, 0);
-    assert.match(build.stderr, /staged-git\.cjs/);
+    assert.match(build.stderr, /duplicate-probe\.cjs/);
     assert.equal(fs.existsSync(path.join(dir, 'dist')), false, 'nothing was built');
   });
 });
