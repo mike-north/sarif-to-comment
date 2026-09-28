@@ -575,13 +575,31 @@ describe('publish preflight (as the workflow runs it)', () => {
   }
 
   /** Runs `release-guard publish-preflight` asynchronously (the registry lives in this process). */
-  function preflight(release, registryUrl) {
+  /** The real npm executable on this machine's PATH. */
+  const REAL_NPM = spawnSync('sh', ['-c', 'command -v npm'], { encoding: 'utf8' }).stdout.trim();
+
+  /**
+   * A directory holding an `npm` shim that reports `version` for
+   * `npm --version` and runs the real npm for everything else. The preflight's
+   * tool-version rule is covered by the decidePublish tests; the shim keeps
+   * these registry-behaviour tests independent of the npm bundled with the
+   * Node running them (CI's Node 22 job bundles npm 10, which the guard
+   * rightly refuses for publishing).
+   */
+  function npmReporting(version) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'npm-shim-'));
+    const shim = path.join(dir, 'npm');
+    fs.writeFileSync(shim, `#!/bin/sh\nif [ "$1" = "--version" ]; then echo ${version}; exit 0; fi\nexec "${REAL_NPM}" "$@"\n`, { mode: 0o755 });
+    return dir;
+  }
+
+  function preflight(release, registryUrl, { npmVersion = guard.MIN_NPM } = {}) {
     const outputFile = path.join(release.dir, 'github-output');
     fs.writeFileSync(outputFile, '');
     const work = fs.mkdtempSync(path.join(os.tmpdir(), 'npm-home-'));
     fs.writeFileSync(path.join(work, 'npmrc'), '');
     const env = {
-      PATH: process.env.PATH,
+      PATH: `${npmReporting(npmVersion)}${path.delimiter}${process.env.PATH}`,
       HOME: work,
       GITHUB_SHA: release.sha,
       GITHUB_OUTPUT: outputFile,
@@ -640,6 +658,18 @@ describe('publish preflight (as the workflow runs it)', () => {
       const run = await preflight(makeRelease('1.0.0'), registry.url);
       assert.equal(run.status, 1);
       assert.match(run.stderr, /1\.0\.0/);
+      assert.doesNotMatch(run.output, /publish=true/);
+    } finally {
+      registry.server.close();
+    }
+  });
+
+  test('control: the npm reported to the preflight is the one it judges (npm 10 is refused)', async () => {
+    const registry = await startRegistry(['0.0.0']);
+    try {
+      const run = await preflight(makeRelease('0.1.0'), registry.url, { npmVersion: '10.9.4' });
+      assert.equal(run.status, 1);
+      assert.match(run.stderr, /npm 10\.9\.4 is too old/);
       assert.doesNotMatch(run.output, /publish=true/);
     } finally {
       registry.server.close();
@@ -792,6 +822,68 @@ describe('continuous integration workflow', () => {
     assert.match(text, /pnpm install --frozen-lockfile/);
     assert.match(text, /pnpm run check/);
     assert.doesNotMatch(text, /npm publish|id-token|changeset publish/);
+  });
+});
+
+describe('the pnpm version the workflows install is a usable release', () => {
+  // pnpm/action-setup installs exactly the pinned pnpm, and pnpm's installer
+  // refuses a release its registry metadata marks as broken
+  // (ERR_PNPM_BROKEN_PNPM_RELEASE): pinning pnpm 11.12.0 failed both CI and
+  // publishing before any check ran. Registry facts are recorded in
+  // test/fixtures/release/pnpm-releases.json (refresh with the commands it
+  // lists when changing the pin) so this runs offline.
+  const RELEASES = JSON.parse(fs.readFileSync(path.join(ROOT, 'test', 'fixtures', 'release', 'pnpm-releases.json'), 'utf8'));
+  const WORKFLOWS = ['ci.yml', 'publish.yml'].map((name) => [
+    name,
+    fs.readFileSync(path.join(ROOT, '.github', 'workflows', name), 'utf8'),
+  ]);
+
+  /** The pnpm version a workflow passes to pnpm/action-setup. */
+  function pinnedPnpm(text) {
+    // The `with:` block may carry comment lines before `version:`.
+    const match = /uses: pnpm\/action-setup@[0-9a-f]{40}[^\n]*\n\s+with:\n(?:\s*#[^\n]*\n)*\s+version: (\S+)\n/.exec(text);
+    return match && match[1];
+  }
+
+  /** Why the recorded registry facts make `version` unusable as a pin (empty when usable). */
+  function pinProblems(version) {
+    const facts = RELEASES.releases[version];
+    if (!facts) return [`no registry facts recorded for pnpm ${version}`];
+    const problems = [];
+    if (facts.pnpmDeprecated) problems.push(`pnpm@${version} is deprecated: ${facts.pnpmDeprecated}`);
+    if (!facts.exePublished) problems.push(`@pnpm/exe@${version} is not published`);
+    if (facts.exeDeprecated) problems.push(`@pnpm/exe@${version} is deprecated: ${facts.exeDeprecated}`);
+    return problems;
+  }
+
+  test('control: the pin that broke CI (11.12.0) is recognised as broken', () => {
+    assert.match(pinProblems('11.12.0').join(' '), /broken/);
+  });
+
+  test('both workflows pin the same exact pnpm version', () => {
+    const pins = WORKFLOWS.map(([name, text]) => [name, pinnedPnpm(text)]);
+    for (const [name, pin] of pins) assert.match(pin || '', /^\d+\.\d+\.\d+$/, `${name} pins an exact version`);
+    assert.equal(new Set(pins.map(([, pin]) => pin)).size, 1, JSON.stringify(pins));
+  });
+
+  test('the pinned pnpm is neither broken nor deprecated, for pnpm and @pnpm/exe', () => {
+    const pin = pinnedPnpm(WORKFLOWS[0][1]);
+    assert.deepEqual(pinProblems(pin), []);
+  });
+
+  test('the pinned pnpm supports every Node version the workflows use', () => {
+    const pin = pinnedPnpm(WORKFLOWS[0][1]);
+    assert.equal(RELEASES.releases[pin].nodeEngine, '>=22.13');
+    // CI runs Node 22 and 24 (setup-node resolves the latest release of each
+    // major, which satisfies >=22.13); publishing runs Node 24.
+    assert.match(WORKFLOWS[0][1], /node: \[22, 24\]/);
+    assert.match(WORKFLOWS[1][1], /node-version: 24/);
+  });
+
+  test('the pin stays on the major the lockfile was produced and verified with', () => {
+    const pin = pinnedPnpm(WORKFLOWS[0][1]);
+    assert.equal(pin.split('.')[0], '11');
+    assert.match(fs.readFileSync(path.join(ROOT, 'pnpm-lock.yaml'), 'utf8'), /^lockfileVersion: '9\.0'/);
   });
 });
 

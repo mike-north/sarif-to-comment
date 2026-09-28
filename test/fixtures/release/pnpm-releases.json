@@ -1,0 +1,33 @@
+{
+  "description": "npm registry facts about pnpm releases that the workflows pin with pnpm/action-setup. Recorded so tests can check the pin offline. pnpm's self-installer refuses releases its registry metadata marks as broken (ERR_PNPM_BROKEN_PNPM_RELEASE, logs/opus/setup-publish-failure.txt); on npm those releases carry a deprecation message. Refresh with the commands in \"source\" when changing the pin.",
+  "retrievedAt": "2026-09-28",
+  "source": [
+    "npm view pnpm dist-tags --json",
+    "npm view pnpm@<version> deprecated",
+    "npm view @pnpm/exe@<version> version deprecated --json"
+  ],
+  "distTags": {
+    "latest-11": "11.27.1",
+    "latest": "12.6.0"
+  },
+  "releases": {
+    "11.12.0": {
+      "pnpmDeprecated": "This release is broken. Please upgrade to v11.13.1 or newer.",
+      "exePublished": true,
+      "exeDeprecated": "This release is broken. Please upgrade to v11.13.1 or newer.",
+      "nodeEngine": ">=22.13"
+    },
+    "11.13.1": {
+      "pnpmDeprecated": null,
+      "exePublished": true,
+      "exeDeprecated": null,
+      "nodeEngine": ">=22.13"
+    },
+    "11.27.1": {
+      "pnpmDeprecated": null,
+      "exePublished": true,
+      "exeDeprecated": null,
+      "nodeEngine": ">=22.13"
+    }
+  }
+}
