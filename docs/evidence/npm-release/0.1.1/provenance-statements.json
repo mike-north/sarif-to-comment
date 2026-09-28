@@ -1,0 +1,66 @@
+[
+  {
+    "_type": "https://in-toto.io/Statement/v0.1",
+    "subject": [
+      {
+        "name": "pkg:npm/sarif-to-comment@0.1.1",
+        "digest": {
+          "sha512": "66cad3ba9621f9c8f4df062019a737899c3a0bbd159e4347a59e0708123df3fa2bd8c709bbc3e1086700327e540394cf89c519a5f3631e7035a260980597ed66"
+        }
+      }
+    ],
+    "predicateType": "https://github.com/npm/attestation/tree/main/specs/publish/v0.1",
+    "predicate": {
+      "name": "sarif-to-comment",
+      "version": "0.1.1",
+      "registry": "https://registry.npmjs.org"
+    }
+  },
+  {
+    "_type": "https://in-toto.io/Statement/v1",
+    "subject": [
+      {
+        "name": "pkg:npm/sarif-to-comment@0.1.1",
+        "digest": {
+          "sha512": "66cad3ba9621f9c8f4df062019a737899c3a0bbd159e4347a59e0708123df3fa2bd8c709bbc3e1086700327e540394cf89c519a5f3631e7035a260980597ed66"
+        }
+      }
+    ],
+    "predicateType": "https://slsa.dev/provenance/v1",
+    "predicate": {
+      "buildDefinition": {
+        "buildType": "https://slsa-framework.github.io/github-actions-buildtypes/workflow/v1",
+        "externalParameters": {
+          "workflow": {
+            "ref": "refs/heads/main",
+            "repository": "https://github.com/mike-north/sarif-to-comment",
+            "path": ".github/workflows/publish.yml"
+          }
+        },
+        "internalParameters": {
+          "github": {
+            "event_name": "push",
+            "repository_id": "1391267540",
+            "repository_owner_id": "558005"
+          }
+        },
+        "resolvedDependencies": [
+          {
+            "uri": "git+https://github.com/mike-north/sarif-to-comment@refs/heads/main",
+            "digest": {
+              "gitCommit": "b586beeb25314eee6dd90c8a2a1dbb3f002c27c3"
+            }
+          }
+        ]
+      },
+      "runDetails": {
+        "builder": {
+          "id": "https://github.com/actions/runner/github-hosted"
+        },
+        "metadata": {
+          "invocationId": "https://github.com/mike-north/sarif-to-comment/actions/runs/36433021589/attempts/1"
+        }
+      }
+    }
+  }
+]

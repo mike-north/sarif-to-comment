@@ -1,0 +1,2 @@
+Registry-installed 0.1.1 CJS and ESM consumer compilation, exhaustive outcomes, and invalid-input control passed.
+Published README, CHANGELOG, declarations, getting-started, and all 38 generated API pages match the verified release source.

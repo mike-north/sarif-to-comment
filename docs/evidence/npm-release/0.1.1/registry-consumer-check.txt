@@ -1,0 +1,63 @@
+
+added 8 packages in 423ms
+
+sarif-to-comment — publish a ready SARIF file as one GitHub draft review
+
+Usage:
+  sarif-to-comment --sarif FILE --repo OWNER/REPO --pull N --commit FULLSHA
+                   --state ABSOLUTE_FILE [--source-root ABSOLUTE_FILE_URI]
+                   [--old-source-commit FULLSHA] [--ignore-approval-hold]
+  sarif-to-comment --help
+
+Options:
+  --sarif FILE                   SARIF 2.1.0 JSON file to publish.
+  --repo OWNER/REPO              Repository of the pull request.
+  --pull N                       Pull request number.
+  --commit FULLSHA               Full 40-character commit the review is about.
+  --state ABSOLUTE_FILE          Durable publication state. Retry with the same
+                                 file; never delete it after an uncertain
+                                 result. A new file starts a separate review.
+  --source-root ABSOLUTE_FILE_URI
+                                 Repository root in the SARIF producer's file
+                                 system (file:///.../ ending in "/").
+  --old-source-commit FULLSHA    Candidate commit for the diff's old side, used
+                                 only when GitHub's comparison cannot establish
+                                 it; verified against the pull request's patches.
+  --ignore-approval-hold         Publish despite an approval hold (bypasses only
+                                 the hold, never validation).
+  --help                         Show this help. Needs no token, makes no request.
+
+Credentials:
+  GH_TOKEN, or else GITHUB_TOKEN: a GitHub personal access token or user token.
+  GitHub App installation tokens (including the automatic Actions token) are
+  not supported. There is no token flag.
+
+Exit status:
+  0  published (or already published)
+  2  blocked: nothing was published
+  3  uncertain: delivery could not be confirmed; retry with the same --state
+  1  usage error, unreadable SARIF file, refused request, or operational failure
+
+{
+  "consumer": "/var/folders/r4/j5y28vpj6258k4_0kn5f33s00000gn/T/sarif-registry-consumer-5iP8I0/consumer",
+  "version": "0.1.1",
+  "source": "registry.npmjs.org",
+  "examples": [
+    {
+      "surface": "library",
+      "first": "published",
+      "retry": "same completed receipt",
+      "createRequests": 1,
+      "reviewedCommit": "4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e",
+      "pending": true
+    },
+    {
+      "surface": "cli",
+      "first": "published",
+      "retry": "same completed receipt",
+      "createRequests": 1,
+      "reviewedCommit": "4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e",
+      "pending": true
+    }
+  ]
+}

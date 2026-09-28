@@ -1,0 +1,16 @@
+Release commit: b586beeb25314eee6dd90c8a2a1dbb3f002c27c3
+Publish run: https://github.com/mike-north/sarif-to-comment/actions/runs/36433021589
+CI run: https://github.com/mike-north/sarif-to-comment/actions/runs/36433021542
+Both completed successfully.
+
+publish	Lint, type-check, API/docs freshness, release plan and tests	2026-09-28T14:03:13.2544046Z API report and 38 reference pages are up to date.
+publish	Lint, type-check, API/docs freshness, release plan and tests	2026-09-28T14:03:48.1237298Z ℹ tests 1415
+publish	Lint, type-check, API/docs freshness, release plan and tests	2026-09-28T14:03:48.1238222Z ℹ pass 1415
+publish	Lint, type-check, API/docs freshness, release plan and tests	2026-09-28T14:03:48.1238559Z ℹ fail 0
+publish	Lint, type-check, API/docs freshness, release plan and tests	2026-09-28T14:03:48.1239266Z ℹ skipped 0
+publish	Publish the verified tarball	2026-09-28T14:03:49.2446928Z npm notice shasum: 76e706586e4681b03609cbb82783bee1e604c458
+publish	Publish the verified tarball	2026-09-28T14:03:49.2447959Z npm notice total files: 52
+publish	Publish the verified tarball	2026-09-28T14:03:51.7867775Z npm notice publish Signed provenance statement with source and build information from GitHub Actions
+publish	Publish the verified tarball	2026-09-28T14:03:51.7869217Z npm notice publish Provenance statement published to transparency log: https://search.sigstore.dev/?logIndex=2982868301
+publish	Publish the verified tarball	2026-09-28T14:03:53.7541954Z npm notice Your package is being processed and may take a few minutes to become available.
+publish	Publish the verified tarball	2026-09-28T14:03:53.7545323Z + sarif-to-comment@0.1.1
