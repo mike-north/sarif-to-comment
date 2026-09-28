@@ -33,7 +33,7 @@ jobs:
         with:
           # Exact pnpm release (npm dist-tag latest-11). pnpm's installer refuses
           # releases the registry marks as broken, as it did 11.12.0; keep both
-          # workflows on the same verified pin (test/release.test.cjs,
+          # workflows on the same verified pin (test/release.test.mts,
           # test/fixtures/release/pnpm-releases.json).
           version: 11.27.1
 

@@ -12,7 +12,7 @@
  *      per-module declarations dist/*.d.cts) with `tsc -b src`.
  *   4. Roll up the public declarations from the declaration entry
  *      (dist/public-api.d.cts -> dist/sarif-to-comment.d.ts) and regenerate
- *      the API report and the Markdown reference (scripts/api-docs.cjs build).
+ *      the API report and the Markdown reference (scripts/api-docs.mts build).
  *   5. Write the build-freshness manifest (scripts/build-manifest.mts) last,
  *      so a build that fails or is interrupted leaves no manifest and the
  *      freshness check refuses its dist/.
@@ -48,7 +48,7 @@ rmSync(dist, { recursive: true, force: true });
 mkdirSync(dist);
 
 run([tsc, '-b', 'src']);
-run(['scripts/api-docs.cjs', 'build']);
+run(['scripts/api-docs.mts', 'build']);
 
 writeManifest(root);
 process.stdout.write(`Built dist/ (${String(typescriptModules.length)} modules compiled, declarations rolled up).\n`);

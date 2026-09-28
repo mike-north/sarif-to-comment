@@ -38,7 +38,7 @@ const INPUT_FILES: readonly string[] = [
   'api-extractor.json',
   'scripts/build.mts',
   'scripts/build-manifest.mts',
-  'scripts/api-docs.cjs',
+  'scripts/api-docs.mts',
 ];
 
 /** The recorded state of one complete build. */

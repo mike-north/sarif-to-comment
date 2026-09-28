@@ -229,7 +229,7 @@ If that comparison can't establish the old side, you may pass `oldSourceCommit` 
 ```sh
 pnpm install
 pnpm run build             # build dist/ and regenerate api-report/ and docs/api/
-pnpm test                  # refuse a missing or stale dist/, then node --test test/*.test.cjs
+pnpm test                  # refuse a missing or stale dist/, then node --test test/*.test.cjs test/*.test.mts
 pnpm run check             # lint, types, API report/docs freshness, release plan, tests (read-only)
 pnpm changeset             # describe a change for the next release
 ```
@@ -244,7 +244,7 @@ Releases use [Changesets](https://changesets.dev/) for versioning and [npm trust
 
 ### Versions stay below 1.0.0
 
-`MAXIMUM_RELEASE_MAJOR` in `scripts/release-guard.cjs` is `0`. Until someone deliberately raises it in a reviewed change, nothing can version or publish `1.0.0` or higher, including prereleases such as `1.0.0-rc.0`:
+`MAXIMUM_RELEASE_MAJOR` in `scripts/release-guard.mts` is `0`. Until someone deliberately raises it in a reviewed change, nothing can version or publish `1.0.0` or higher, including prereleases such as `1.0.0-rc.0`:
 
 - **`pnpm run check`** (run in CI on every pull request) fails if a pending changeset would reach 1.0.0. A `major` changeset is refused with an explanation. It is never quietly converted to a smaller bump; choose `minor` yourself if the change shouldn't start 1.0.
 - **`pnpm run release:version`** refuses the same plans before `changeset version` changes any file.
@@ -253,7 +253,7 @@ Releases use [Changesets](https://changesets.dev/) for versioning and [npm trust
 
 Changesets pre mode (prereleases) is not part of this release path.
 
-**Deliberately releasing 1.0.** In a reviewed change, raise `MAXIMUM_RELEASE_MAJOR` to `1` and update the test in `test/release.test.cjs` that pins its value. That is the only step: a `major` changeset then versions and publishes `1.0.0` through the normal flow above, while `2.0.0` and above stay blocked.
+**Deliberately releasing 1.0.** In a reviewed change, raise `MAXIMUM_RELEASE_MAJOR` to `1` and update the test in `test/release.test.mts` that pins its value. That is the only step: a `major` changeset then versions and publishes `1.0.0` through the normal flow above, while `2.0.0` and above stay blocked.
 
 ### Making a release
 
