@@ -1,0 +1,15 @@
+publish	Lint, type-check, API/docs freshness, release plan and tests	2026-09-28T17:27:52.4777894Z API report and 225 reference pages are up to date.
+publish	Lint, type-check, API/docs freshness, release plan and tests	2026-09-28T17:28:44.3014756Z ℹ tests 1806
+publish	Lint, type-check, API/docs freshness, release plan and tests	2026-09-28T17:28:44.3014972Z ℹ suites 138
+publish	Lint, type-check, API/docs freshness, release plan and tests	2026-09-28T17:28:44.3015178Z ℹ pass 1806
+publish	Lint, type-check, API/docs freshness, release plan and tests	2026-09-28T17:28:44.3015380Z ℹ fail 0
+publish	Lint, type-check, API/docs freshness, release plan and tests	2026-09-28T17:28:44.3015801Z ℹ skipped 0
+publish	Publish the verified tarball	2026-09-28T17:28:45.7542880Z npm notice 📦  sarif-to-comment@0.2.0
+publish	Publish the verified tarball	2026-09-28T17:28:45.7796699Z npm notice shasum: 11bdab3d94fd8c20506ddb900ecb769b50d084f6
+publish	Publish the verified tarball	2026-09-28T17:28:45.7797178Z npm notice integrity: sha512-QkKDYpkytGagt[...]LWF8qOAmoV7pg==
+publish	Publish the verified tarball	2026-09-28T17:28:45.7797585Z npm notice total files: 246
+publish	Publish the verified tarball	2026-09-28T17:28:47.0351825Z npm notice Publishing to https://registry.npmjs.org/ with tag latest and public access
+publish	Publish the verified tarball	2026-09-28T17:28:48.2855145Z npm notice publish Signed provenance statement with source and build information from GitHub Actions
+publish	Publish the verified tarball	2026-09-28T17:28:48.2856975Z npm notice publish Provenance statement published to transparency log: https://search.sigstore.dev/?logIndex=2985193966
+publish	Publish the verified tarball	2026-09-28T17:28:50.1705670Z npm notice Your package is being processed and may take a few minutes to become available.
+publish	Publish the verified tarball	2026-09-28T17:28:50.1711841Z + sarif-to-comment@0.2.0

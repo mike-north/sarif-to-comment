@@ -1,0 +1,26 @@
+{
+  "version": "0.2.0",
+  "dist": {
+    "shasum": "11bdab3d94fd8c20506ddb900ecb769b50d084f6",
+    "tarball": "https://registry.npmjs.org/sarif-to-comment/-/sarif-to-comment-0.2.0.tgz",
+    "fileCount": 246,
+    "integrity": "sha512-QkKDYpkytGagtw8rBwWT7fGk1+zA+Hq9oTXEGk8dYULvC6/TElZ5yCl2Oy/MSWJRdfZkeXnpBLWF8qOAmoV7pg==",
+    "signatures": [
+      {
+        "sig": "MEYCIQCR8fsssR6rZ/JZ9666xS2eIV/PxoXuKD/LPs8Q81rwrgIhAIUKlH++it8h1ukDOasjBAncbrFBLsLPY/DKGoB3rWKk",
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+      },
+      {
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+        "sig": "MEUCIGfzNspqlPSUQmkRRFIYOZkoIcabEIYe/iWt4mUTgxdEAiEAyMUE86PCF3LWwrZOGK8cXfQd4ARpaqxVPbkJzS41QF4="
+      }
+    ],
+    "attestations": {
+      "url": "https://registry.npmjs.org/-/npm/v1/attestations/sarif-to-comment@0.2.0",
+      "provenance": {
+        "predicateType": "https://slsa.dev/provenance/v1"
+      }
+    },
+    "unpackedSize": 807401
+  }
+}

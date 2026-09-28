@@ -1,0 +1,16 @@
+{
+  "status": "verified",
+  "package": "sarif-to-comment@0.2.0",
+  "commit": "da3c138897d45deaf90817bf10afbb426717cda5",
+  "ciRun": 36458246012,
+  "publishRun": 36458245873,
+  "registryFileCount": 246,
+  "allPublishedFilesEqualAcceptedArtifact": true,
+  "registryConsumerAcceptance": "passed",
+  "registrySignaturesVerified": 8,
+  "verifiedProvenanceAttestations": 1,
+  "provenanceCommitWorkflowAndTarballDigestMatch": true,
+  "registrySha1": "11bdab3d94fd8c20506ddb900ecb769b50d084f6",
+  "registryIntegrity": "sha512-QkKDYpkytGagtw8rBwWT7fGk1+zA+Hq9oTXEGk8dYULvC6/TElZ5yCl2Oy/MSWJRdfZkeXnpBLWF8qOAmoV7pg==",
+  "initialRegistryProcessingDelay": true
+}

@@ -1,0 +1,18 @@
+# Second-milestone release verification
+
+`sarif-to-comment@0.2.0` is published on npm and verified from a clean registry installation. The accepted release commit is [`da3c138897d45deaf90817bf10afbb426717cda5`](https://github.com/mike-north/sarif-to-comment/commit/da3c138897d45deaf90817bf10afbb426717cda5). The existing Changesets version preparation and trusted-publishing workflow were used without changing release guards, workflow permissions or repository visibility.
+
+| Check | Evidence | Result |
+| --- | --- | --- |
+| Release checks | [Publish run](https://github.com/mike-north/sarif-to-comment/actions/runs/36458245873), [summary](evidence/second-milestone/release/publish-run-summary.txt) | Lint, types, generated API freshness, release guard and all 1,806 tests passed; 138 suites, zero failures or skips. The workflow packed and verified 246 files before publication. |
+| Supported Node versions | [CI run](https://github.com/mike-north/sarif-to-comment/actions/runs/36458246012), [job receipt](evidence/second-milestone/release/ci-run.json) | Both Node 22 and Node 24 jobs passed on the exact release commit. |
+| Registry publication | [npm package](https://www.npmjs.com/package/sarif-to-comment/v/0.2.0), [metadata](evidence/second-milestone/release/registry-metadata.json) | Public version 0.2.0, SHA-1 `11bdab3d94fd8c20506ddb900ecb769b50d084f6`, matching the publish log. |
+| Clean installation | [install result](evidence/second-milestone/release/registry-install.txt), [file identity](evidence/second-milestone/release/registry-file-identity.json) | All 246 installed package files exactly match the accepted locally packed artifact, including runtime, CLI, declarations, schema, README and API documentation. |
+| Installed public behavior | [consumer acceptance](evidence/second-milestone/release/registry-local-acceptance.txt) | Authored CLI/library and ordinary upstream bypass flows passed against the independent source oracle, including inspection, staged extraction, exact applied replacement bytes and non-mutation checks. |
+| Signatures and provenance | [npm verification](evidence/second-milestone/release/signature-verification.txt), [decoded statements](evidence/second-milestone/release/provenance-statements.json) | npm verified all eight installed packages' registry signatures and one provenance attestation. Its subject digest matches registry integrity; its source commit, main ref, repository, `publish.yml` and invocation match this release. |
+
+[release-result.json](evidence/second-milestone/release/release-result.json) consolidates these checks. npm initially returned 404 during its documented post-publication processing period; subsequent registry lookup, installation and verification succeeded. No extra release or republish was attempted.
+
+The registry consumer check is local transformation evidence. Actual GitHub publication, independent original-anchor readback and native suggestion application were established using the accepted artifact before release, as documented in [the end-to-end report](second-milestone-e2e-evidence.md). The published files are byte-identical to that artifact. Both synthetic PRs are closed unmerged, no pending test review remains and `doc-linter` main is unchanged.
+
+The completed [requirement audit](second-milestone-release-audit.md) retains support limits: staged file creation/deletion can be represented and inspected, while the current publisher blocks unsupported proposals as a whole. Removal/correction, standalone validation, suggestion PRs and review maintenance remain deferred. These limits were not widened during release.

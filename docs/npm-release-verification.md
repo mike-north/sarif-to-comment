@@ -1,5 +1,7 @@
 # npm release verification
 
+The current verified release is [0.2.0](second-milestone-release-verification.md). The record below preserves the initial release-setup and 0.1.1 verification history.
+
 `sarif-to-comment@0.1.1` is published and verified from a clean public-registry installation. Trusted publishing, Changesets, the pre-1.0 guard, API Extractor and API Documenter, and the shipped CLI/library guides are complete. On 2026-09-28 the user explicitly instructed “Keep it public,” superseding the original private-visibility constraint. The repository remains public; no agent changed its visibility.
 
 ## Acceptance record
