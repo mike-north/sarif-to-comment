@@ -1,5 +1,3 @@
-'use strict';
-
 /**
  * Read-only Git access for staged-change extraction (private module).
  *
@@ -33,10 +31,73 @@
  * @see https://git-scm.com/docs/git#Documentation/git.txt-codeGITNOREPLACEOBJECTScode
  */
 
-const { spawn } = require('node:child_process');
-const crypto = require('node:crypto');
-const fs = require('node:fs');
-const path = require('node:path');
+import * as childProcess from 'node:child_process';
+import * as crypto from 'node:crypto';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
+/** Object formats this module supports, named as Node's crypto names their hashes. */
+export type GitHashAlgorithm = 'sha1' | 'sha256';
+
+/** Git object types this module reads by id. */
+export type GitObjectType = 'commit' | 'tree' | 'blob';
+
+/**
+ * An opened repository: the working directory Git runs in, the absolute
+ * index path, and the object format's hash algorithm and raw id length.
+ */
+export interface IGitRepository {
+  readonly cwd: string;
+  readonly indexPath: string;
+  readonly hashAlgorithm: GitHashAlgorithm;
+  readonly hashBytes: 20 | 32;
+}
+
+/**
+ * One index entry in index order: its raw path bytes, file mode, object id
+ * (lowercase hex), merge stage, and the intent-to-add and skip-worktree flags.
+ */
+export interface IIndexEntry {
+  readonly pathBytes: Buffer;
+  readonly mode: number;
+  readonly oid: string;
+  readonly stage: number;
+  readonly intentToAdd: boolean;
+  readonly skipWorktree: boolean;
+}
+
+/** A strict-extraction refusal found while reading the index (a split index). */
+export interface IIndexProblem {
+  readonly message: string;
+}
+
+/** One parsed index snapshot. */
+export interface IIndexSnapshot {
+  readonly entries: readonly IIndexEntry[];
+  readonly problems: readonly IIndexProblem[];
+}
+
+/** One non-tree entry of the reviewed commit's tree, keyed by its latin1 path. */
+export interface ITreeEntry {
+  readonly pathBytes: Buffer;
+  readonly mode: number;
+  readonly oid: string;
+}
+
+/** One changed-line hunk in Git's unified-diff numbering. */
+export interface IDiffHunk {
+  readonly oldStart: number;
+  readonly oldCount: number;
+  readonly newStart: number;
+  readonly newCount: number;
+}
+
+/** A finished Git process: its exit code (null when a signal ended it) and captured output. */
+interface IGitResult {
+  readonly code: number | null;
+  readonly stdout: Buffer;
+  readonly stderr: Buffer;
+}
 
 /** Git file modes, as numbers, that extraction distinguishes. */
 const MODE = Object.freeze({
@@ -54,16 +115,33 @@ const EXTENDED_SKIP_WORKTREE = 0x4000;
 const EXTENDED_INTENT_TO_ADD = 0x2000;
 
 /**
+ * The message of a caught value, for an operational error that names it.
+ * Node's process and file-system APIs throw Error instances.
+ */
+function messageOf(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * A value this module has already established is present (a verified object
+ * it just read). Reaching the throw means an internal invariant was broken.
+ */
+function present<T>(value: T | undefined, what: string): T {
+  if (value === undefined) throw new Error(`Internal error: ${what} is missing.`);
+  return value;
+}
+
+/**
  * Environment for every Git invocation: the caller's environment, so Git
  * honors GIT_INDEX_FILE and GIT_DIR as it normally would, minus variables
  * that could run external programs, with optional locks disabled so no read
  * writes the index, and with replacement refs disabled so every object id
  * denotes that object's own content.
  */
-function gitEnvironment() {
-  const env = { ...process.env, GIT_OPTIONAL_LOCKS: '0', GIT_NO_REPLACE_OBJECTS: '1' };
-  delete env.GIT_EXTERNAL_DIFF;
-  delete env.GIT_DIFF_OPTS;
+function gitEnvironment(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env, GIT_OPTIONAL_LOCKS: '0', GIT_NO_REPLACE_OBJECTS: '1' };
+  delete env['GIT_EXTERNAL_DIFF'];
+  delete env['GIT_DIFF_OPTS'];
   return env;
 }
 
@@ -71,28 +149,28 @@ function gitEnvironment() {
  * Runs Git in `cwd` and resolves with { code, stdout, stderr } Buffers.
  * Rejects only when Git cannot be started at all.
  */
-function runGit(cwd, args, input) {
+function runGit(cwd: string, args: readonly string[], input?: string): Promise<IGitResult> {
   return new Promise((resolve, reject) => {
     let child;
     try {
-      child = spawn('git', args, { cwd, env: gitEnvironment(), stdio: ['pipe', 'pipe', 'pipe'] });
+      child = childProcess.spawn('git', args, { cwd, env: gitEnvironment(), stdio: ['pipe', 'pipe', 'pipe'] });
     } catch (err) {
-      reject(new Error(`Git could not be started (${err.message}).`, { cause: err }));
+      reject(new Error(`Git could not be started (${messageOf(err)}).`, { cause: err }));
       return;
     }
-    const out = [];
-    const errOut = [];
-    child.stdout.on('data', (chunk) => out.push(chunk));
-    child.stderr.on('data', (chunk) => errOut.push(chunk));
-    child.on('error', (err) => reject(new Error(`Git could not be started (${err.message}).`, { cause: err })));
-    child.on('close', (code) => resolve({ code, stdout: Buffer.concat(out), stderr: Buffer.concat(errOut) }));
+    const out: Buffer[] = [];
+    const errOut: Buffer[] = [];
+    child.stdout.on('data', (chunk: Buffer) => out.push(chunk));
+    child.stderr.on('data', (chunk: Buffer) => errOut.push(chunk));
+    child.on('error', (err) => { reject(new Error(`Git could not be started (${err.message}).`, { cause: err })); });
+    child.on('close', (code) => { resolve({ code, stdout: Buffer.concat(out), stderr: Buffer.concat(errOut) }); });
     child.stdin.on('error', () => {});
     child.stdin.end(input);
   });
 }
 
 /** Runs Git and returns stdout, rejecting with an operational error on failure. */
-async function gitOutput(cwd, args, what, input) {
+async function gitOutput(cwd: string, args: readonly string[], what: string, input?: string): Promise<Buffer> {
   const result = await runGit(cwd, args, input);
   if (result.code !== 0) {
     const detail = result.stderr.toString('utf8').trim();
@@ -105,8 +183,8 @@ async function gitOutput(cwd, args, what, input) {
  * Opens the repository containing `worktree` and verifies the reviewed
  * commit exists locally. Returns { cwd, indexPath, hashAlgorithm, hashBytes }.
  */
-async function openRepository(worktree, reviewedCommit) {
-  let stat;
+async function openRepository(worktree: string, reviewedCommit: string): Promise<IGitRepository> {
+  let stat: fs.Stats | null;
   try {
     stat = fs.statSync(worktree);
   } catch {
@@ -142,13 +220,16 @@ async function openRepository(worktree, reviewedCommit) {
   };
 }
 
-/** Decodes the index-format v4 variable-length integer at `offset`. */
-function readVarint(buffer, offset) {
-  let byte = buffer[offset];
+/**
+ * Decodes the index-format v4 variable-length integer at `offset`. A byte
+ * past the end of the buffer reads as 0, as its bitwise use would.
+ */
+function readVarint(buffer: Buffer, offset: number): { readonly value: number; readonly next: number } {
+  let byte = buffer[offset] ?? 0;
   let position = offset + 1;
   let value = byte & 0x7f;
   while (byte & 0x80) {
-    byte = buffer[position];
+    byte = buffer[position] ?? 0;
     position += 1;
     value = ((value + 1) << 7) | (byte & 0x7f);
   }
@@ -161,15 +242,15 @@ function readVarint(buffer, offset) {
  * index order, and problems are strict-extraction refusals (split index).
  * A malformed or torn index is an operational error.
  */
-function readIndexSnapshot(repo) {
-  let buffer;
+function readIndexSnapshot(repo: IGitRepository): IIndexSnapshot {
+  let buffer: Buffer;
   try {
     buffer = fs.readFileSync(repo.indexPath);
   } catch (err) {
-    if (err.code === 'ENOENT') return { entries: [], problems: [] };
-    throw new Error(`The Git index at ${repo.indexPath} could not be read (${err.message}).`, { cause: err });
+    if (err instanceof Error && 'code' in err && err.code === 'ENOENT') return { entries: [], problems: [] };
+    throw new Error(`The Git index at ${repo.indexPath} could not be read (${messageOf(err)}).`, { cause: err });
   }
-  const corrupt = (why) => new Error(`The Git index at ${repo.indexPath} could not be parsed (${why}).`);
+  const corrupt = (why: string): Error => new Error(`The Git index at ${repo.indexPath} could not be parsed (${why}).`);
   const hashBytes = repo.hashBytes;
   if (buffer.length < 12 + hashBytes || buffer.toString('latin1', 0, 4) !== 'DIRC') throw corrupt('bad header');
   const trailer = buffer.subarray(buffer.length - hashBytes);
@@ -178,12 +259,12 @@ function readIndexSnapshot(repo) {
     if (!digest.equals(trailer)) throw corrupt('checksum mismatch; it may have changed while being read');
   }
   const version = buffer.readUInt32BE(4);
-  if (version < 2 || version > 4) throw corrupt(`unsupported version ${version}`);
+  if (version < 2 || version > 4) throw corrupt(`unsupported version ${String(version)}`);
   const count = buffer.readUInt32BE(8);
   const end = buffer.length - hashBytes;
-  const entries = [];
+  const entries: IIndexEntry[] = [];
   let offset = 12;
-  let previousName = Buffer.alloc(0);
+  let previousName: Buffer = Buffer.alloc(0);
   for (let i = 0; i < count; i += 1) {
     const start = offset;
     const fixed = 40 + hashBytes + 2;
@@ -198,7 +279,7 @@ function readIndexSnapshot(repo) {
       extended = buffer.readUInt16BE(position);
       position += 2;
     }
-    let pathBytes;
+    let pathBytes: Buffer;
     if (version === 4) {
       const strip = readVarint(buffer, position);
       const nul = buffer.indexOf(0, strip.next);
@@ -221,7 +302,7 @@ function readIndexSnapshot(repo) {
       skipWorktree: Boolean(extended & EXTENDED_SKIP_WORKTREE),
     });
   }
-  const problems = [];
+  const problems: IIndexProblem[] = [];
   while (offset + 8 <= end) {
     const signature = buffer.toString('latin1', offset, offset + 4);
     const size = buffer.readUInt32BE(offset + 4);
@@ -243,8 +324,12 @@ function readIndexSnapshot(repo) {
  * requested id. Returns Map<oid, Buffer>. Any mismatch or missing object is
  * an operational error naming the object, never substituted content.
  */
-async function readVerifiedObjects(repo, oids, expectedType) {
-  const objects = new Map();
+async function readVerifiedObjects(
+  repo: IGitRepository,
+  oids: readonly string[],
+  expectedType: GitObjectType,
+): Promise<Map<string, Buffer>> {
+  const objects = new Map<string, Buffer>();
   const unique = [...new Set(oids)];
   if (unique.length === 0) return objects;
   const output = await gitOutput(repo.cwd, ['cat-file', '--batch'], `read ${expectedType} objects`, `${unique.join('\n')}\n`);
@@ -257,13 +342,13 @@ async function readVerifiedObjects(repo, oids, expectedType) {
       throw new Error(`Object ${requested} is not available in the local repository.`);
     }
     if (type !== expectedType) {
-      throw new Error(`Object ${requested} is a ${type}, not the expected ${expectedType}.`);
+      throw new Error(`Object ${requested} is a ${String(type)}, not the expected ${expectedType}.`);
     }
     const start = newline + 1;
     const bytes = Buffer.from(output.subarray(start, start + Number(size)));
     const digest = crypto
       .createHash(repo.hashAlgorithm)
-      .update(Buffer.concat([Buffer.from(`${type} ${bytes.length}\0`), bytes]))
+      .update(Buffer.concat([Buffer.from(`${type} ${String(bytes.length)}\0`), bytes]))
       .digest('hex');
     if (digest !== requested) {
       throw new Error(
@@ -277,10 +362,11 @@ async function readVerifiedObjects(repo, oids, expectedType) {
 }
 
 /** The root tree id recorded in a verified raw commit object. */
-function commitTreeId(commit, bytes, hashBytes) {
+function commitTreeId(commit: string, bytes: Buffer, hashBytes: number): string {
   const match = /^tree ([0-9a-f]+)\n/.exec(bytes.toString('latin1', 0, 12 + hashBytes * 2));
-  if (!match || match[1].length !== hashBytes * 2) throw new Error(`Commit ${commit} does not name a root tree.`);
-  return match[1];
+  const treeId = match?.[1];
+  if (treeId === undefined || treeId.length !== hashBytes * 2) throw new Error(`Commit ${commit} does not name a root tree.`);
+  return treeId;
 }
 
 /**
@@ -288,15 +374,15 @@ function commitTreeId(commit, bytes, hashBytes) {
  * tree objects: Map<pathKey, { pathBytes, mode, oid }> for every non-tree
  * entry. Subtrees are read one level at a time.
  */
-async function readTree(repo, commit) {
+async function readTree(repo: IGitRepository, commit: string): Promise<Map<string, ITreeEntry>> {
   const commits = await readVerifiedObjects(repo, [commit], 'commit');
-  let level = [{ oid: commitTreeId(commit, commits.get(commit), repo.hashBytes), prefix: Buffer.alloc(0) }];
-  const tree = new Map();
+  let level: { oid: string; prefix: Buffer }[] = [{ oid: commitTreeId(commit, present(commits.get(commit), `commit ${commit}`), repo.hashBytes), prefix: Buffer.alloc(0) }];
+  const tree = new Map<string, ITreeEntry>();
   while (level.length > 0) {
     const trees = await readVerifiedObjects(repo, level.map((t) => t.oid), 'tree');
-    const next = [];
+    const next: typeof level = [];
     for (const { oid, prefix } of level) {
-      const bytes = trees.get(oid);
+      const bytes = present(trees.get(oid), `tree ${oid}`);
       let offset = 0;
       while (offset < bytes.length) {
         const space = bytes.indexOf(0x20, offset);
@@ -321,8 +407,8 @@ async function readTree(repo, commit) {
 }
 
 /** Sizes of blobs by object id: Map<oid, size>. */
-async function blobSizes(repo, oids) {
-  const sizes = new Map();
+async function blobSizes(repo: IGitRepository, oids: readonly string[]): Promise<Map<string, number>> {
+  const sizes = new Map<string, number>();
   if (oids.length === 0) return sizes;
   const output = await gitOutput(repo.cwd, ['cat-file', '--batch-check'], 'inspect blobs', `${oids.join('\n')}\n`);
   for (const line of output.toString('utf8').split('\n')) {
@@ -333,7 +419,7 @@ async function blobSizes(repo, oids) {
 }
 
 /** Verified blob bytes by object id: Map<oid, Buffer>. */
-async function readBlobs(repo, oids) {
+async function readBlobs(repo: IGitRepository, oids: readonly string[]): Promise<Map<string, Buffer>> {
   return readVerifiedObjects(repo, oids, 'blob');
 }
 
@@ -344,13 +430,13 @@ async function readBlobs(repo, oids) {
  * indent heuristic disabled and zero context, independent of diff config.
  * Lines are compared with their terminators, so newline changes are edits.
  */
-async function diffHunks(repo, oldOid, newOid) {
+async function diffHunks(repo: IGitRepository, oldOid: string, newOid: string): Promise<IDiffHunk[]> {
   const output = await gitOutput(
     repo.cwd,
     ['diff', '--no-ext-diff', '--no-textconv', '--no-color', '--text', '--no-indent-heuristic', '--diff-algorithm=myers', '--unified=0', oldOid, newOid],
     'compare two blobs',
   );
-  const hunks = [];
+  const hunks: IDiffHunk[] = [];
   for (const line of output.toString('latin1').split('\n')) {
     const match = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/.exec(line);
     if (!match) continue;
@@ -364,4 +450,4 @@ async function diffHunks(repo, oldOid, newOid) {
   return hunks;
 }
 
-module.exports = { MODE, blobSizes, diffHunks, openRepository, readBlobs, readIndexSnapshot, readTree };
+export { MODE, blobSizes, diffHunks, openRepository, readBlobs, readIndexSnapshot, readTree };
