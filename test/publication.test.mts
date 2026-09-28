@@ -1,7 +1,5 @@
-'use strict';
-
 /**
- * Contract tests for durable initial publication (src/publication.cjs).
+ * Contract tests for durable initial publication (src/publication.cts).
  *
  * The coordinator receives a wholly validated prepared review and must create
  * exactly one GitHub draft review from it: body plus every inline comment in
@@ -38,26 +36,85 @@
  * @see https://pubs.opengroup.org/onlinepubs/9799919799/functions/rename.html
  */
 
-const test = require('node:test');
-const { describe } = test;
-const assert = require('node:assert/strict');
-const crypto = require('node:crypto');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const { spawn, spawnSync } = require('node:child_process');
+import { AssertionError } from 'node:assert';
+import * as assert from 'node:assert/strict';
+import { spawn, spawnSync } from 'node:child_process';
+import * as crypto from 'node:crypto';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { describe, test } from 'node:test';
 
-const {
-  publishPreparedReview,
-  recoverPublication,
-  PublicationStateError,
-} = require('../dist/publication.cjs');
-const { FakeGitHubRemote, DEFAULT_USER, SENTINEL_TOKEN } = require('./fixtures/publication/fake-github.mts');
+import { publishPreparedReview, recoverPublication, PublicationStateError } from '../dist/publication.cjs';
+import { FakeGitHubRemote, DEFAULT_USER, SENTINEL_TOKEN } from './fixtures/publication/fake-github.mts';
+import type {
+  FakeCreatedReview,
+  IFakeRemoteConfig,
+  IFakeReviewPage,
+  IFakeReviewSummary,
+  IFakeTransport,
+  IFakeUser,
+  ISeedReview,
+} from './fixtures/publication/fake-github.mts';
+import {
+  asString,
+  expectType,
+  isArrayOf,
+  isNumber,
+  isOptional,
+  isShape,
+  isString,
+  isUnknown,
+  parseJson,
+  readJson,
+} from './support/runtime-types.mts';
+import type { Guard } from './support/runtime-types.mts';
 
-const FIXTURE_DIR = path.join(__dirname, 'fixtures', 'publication');
-const FIXTURE = JSON.parse(fs.readFileSync(path.join(FIXTURE_DIR, 'prepared-review.json'), 'utf8'));
+/** One inline comment of a prepared review (start fields together or not at all). */
+interface IComment {
+  path: string;
+  side: string;
+  line: number;
+  startSide?: string | undefined;
+  startLine?: number | undefined;
+  body: string;
+}
+
+const isComment: Guard<IComment> = isShape({
+  path: isString,
+  side: isString,
+  line: isNumber,
+  startSide: isOptional(isString),
+  startLine: isOptional(isNumber),
+  body: isString,
+});
+
+const FIXTURE_DIR = path.join(import.meta.dirname, 'fixtures', 'publication');
+const FIXTURE = expectType(
+  readJson(path.join(FIXTURE_DIR, 'prepared-review.json')),
+  isShape({
+    input: isShape({
+      destination: isShape({ owner: isString, repo: isString, pullNumber: isNumber }),
+      reviewedCommit: isString,
+      inputFingerprint: isString,
+      preparedReview: isShape({ body: isString, comments: isArrayOf(isComment) }),
+    }),
+    expectedRequest: isShape({
+      owner: isString,
+      repo: isString,
+      pullNumber: isNumber,
+      commitId: isString,
+      bodyBeforeMarker: isString,
+      comments: isArrayOf(isComment),
+    }),
+  }),
+  'the prepared-review fixture',
+);
 const EXPECTED = FIXTURE.expectedRequest;
 const CHILD = path.join(FIXTURE_DIR, 'child-publish.mts');
+
+/** The fixture's publication input fields (a deep copy is what tests edit). */
+type FixtureInput = typeof FIXTURE.input;
 
 /** Proposed marker form: one hidden HTML comment carrying a v4 UUID. */
 const MARKER_SOURCE =
@@ -70,20 +127,70 @@ const FOREIGN_MARKER = '<!-- sarif-to-comment:review:0b6f2e1c-5a4d-4e3f-9c2b-1a0
 const OTHER_FINGERPRINT = `sha256:${'e'.repeat(64)}`;
 
 // ---------------------------------------------------------------------------
+// Narrowing guards (each throws an AssertionError only on a shape no correct
+// run produces, where the untyped reads would have failed the test anyway)
+// ---------------------------------------------------------------------------
+
+/** Every outcome publish can return. */
+type PublishOutcome = Awaited<ReturnType<typeof publishPreparedReview>>;
+/** Every outcome publish or recover can return. */
+type Outcome = Awaited<ReturnType<typeof recoverPublication>>;
+type PublishedOutcome = Extract<Outcome, { status: 'published' }>;
+
+/** The element at `index` (negative counts from the end); fails when there is none. */
+function itemAt<T>(list: readonly T[], index: number, what: string): T {
+  const item = list.at(index);
+  if (item === undefined) {
+    throw new AssertionError({
+      message: `expected ${what} at index ${String(index)} of a list of ${String(list.length)}`,
+      actual: list,
+      operator: 'itemAt',
+    });
+  }
+  return item;
+}
+
+/** `value`, failing when it is null or undefined. */
+function defined<T>(value: T | null | undefined, what: string): T {
+  if (value === null || value === undefined) {
+    throw new AssertionError({ message: `expected ${what}, got ${String(value)}`, actual: value, operator: 'defined' });
+  }
+  return value;
+}
+
+/** A published outcome, failing on any other status. */
+function published(outcome: Outcome): PublishedOutcome {
+  if (outcome.status !== 'published') {
+    throw new AssertionError({
+      message: `expected a published outcome, got ${JSON.stringify(outcome)}`,
+      actual: outcome.status,
+      expected: 'published',
+      operator: 'published',
+    });
+  }
+  return outcome;
+}
+
+/** The property `key` of a value of unknown type, or undefined when it has none (as a property read would give). */
+function propertyOf(value: unknown, key: string): unknown {
+  return typeof value === 'object' && value !== null && key in value ? Reflect.get(value, key) : undefined;
+}
+
+// ---------------------------------------------------------------------------
 // Independent canonical fingerprint (spec: sha256 over JSON with recursively
 // sorted object keys and no insignificant whitespace, UTF-8 encoded)
 // ---------------------------------------------------------------------------
 
-function canonicalJson(value) {
+function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
   if (value && typeof value === 'object') {
     const keys = Object.keys(value).sort();
-    return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJson(value[k])}`).join(',')}}`;
+    return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJson(Reflect.get(value, k))}`).join(',')}}`;
   }
   return JSON.stringify(value);
 }
 
-function fingerprintOf(value) {
+function fingerprintOf(value: unknown): string {
   return `sha256:${crypto.createHash('sha256').update(canonicalJson(value), 'utf8').digest('hex')}`;
 }
 
@@ -91,11 +198,18 @@ function fingerprintOf(value) {
 // World construction
 // ---------------------------------------------------------------------------
 
+interface IWorld {
+  readonly root: string;
+  readonly stateDir: string;
+  readonly statePath: string;
+  readonly remote: FakeGitHubRemote;
+}
+
 /**
  * A fresh isolated world: a publication state directory and an independent
  * fake remote, both on disk under one temp root.
  */
-function makeWorld(config = {}) {
+function makeWorld(config: Partial<IFakeRemoteConfig> = {}): IWorld {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'publication-'));
   const stateDir = path.join(root, 'state');
   fs.mkdirSync(stateDir);
@@ -103,8 +217,25 @@ function makeWorld(config = {}) {
   return { root, stateDir, statePath: path.join(stateDir, 'review.publication.json'), remote };
 }
 
+/** A publication input as makeInput builds it. */
+interface IPublishInput {
+  destination: FixtureInput['destination'];
+  reviewedCommit: string;
+  inputFingerprint: string;
+  preparedReview: FixtureInput['preparedReview'];
+  statePath: string;
+  transport: IFakeTransport;
+}
+
+interface IInputOptions {
+  readonly statePath?: string;
+  readonly user?: IFakeUser;
+  readonly events?: RecordedEvent[];
+  readonly mutate?: (input: FixtureInput) => unknown;
+}
+
 /** Publication input for `world`; `mutate` edits a deep copy of the fixture input. */
-function makeInput(world, { statePath = world.statePath, user, events, mutate } = {}) {
+function makeInput(world: IWorld, { statePath = world.statePath, user, events, mutate }: IInputOptions = {}): IPublishInput {
   const base = structuredClone(FIXTURE.input);
   if (mutate) mutate(base);
   return {
@@ -117,29 +248,55 @@ function makeInput(world, { statePath = world.statePath, user, events, mutate } 
   };
 }
 
-function publish(world, options) {
+function publish(world: IWorld, options?: IInputOptions): Promise<PublishOutcome> {
   return publishPreparedReview(makeInput(world, options));
 }
 
 /** Recovery input: the same identity, but no prepared review at all. */
-function recover(world, options) {
+function recover(world: IWorld, options?: IInputOptions): Promise<Outcome> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the rest-sibling binding only drops preparedReview from the copy
   const { preparedReview: _unused, ...input } = makeInput(world, options);
   return recoverPublication(input);
 }
 
-function readRecord(statePath) {
-  return JSON.parse(fs.readFileSync(statePath, 'utf8'));
+/**
+ * A state record as read back from disk: a JSON object whose fields tests
+ * compare (unknown until compared).
+ */
+const isStateRecordView = isShape({
+  format: isUnknown,
+  version: isUnknown,
+  phase: isUnknown,
+  marker: isUnknown,
+  destination: isUnknown,
+  reviewedCommit: isUnknown,
+  inputFingerprint: isUnknown,
+  authorId: isUnknown,
+  request: isUnknown,
+  requestFingerprint: isUnknown,
+  receipt: isUnknown,
+  rejection: isUnknown,
+});
+
+type StateRecordView = typeof isStateRecordView extends Guard<infer T> ? T : never;
+
+function asStateRecord(value: unknown): StateRecordView {
+  return expectType(value, isStateRecordView, 'a publication state record (JSON object)');
+}
+
+function readRecord(statePath: string): StateRecordView {
+  return asStateRecord(readJson(statePath));
 }
 
 /** The single marker in a body; fails if there is not exactly one. */
-function extractMarker(body) {
+function extractMarker(body: string): string {
   const found = body.match(MARKER_ANY) || [];
-  assert.equal(found.length, 1, `expected exactly one publication marker in body, found ${found.length}`);
-  return found[0];
+  assert.equal(found.length, 1, `expected exactly one publication marker in body, found ${String(found.length)}`);
+  return itemAt(found, 0, 'the publication marker');
 }
 
 /** The hand-authored request this publication must send, given its marker. */
-function expectedRequest(marker) {
+function expectedRequest(marker: string) {
   return {
     owner: EXPECTED.owner,
     repo: EXPECTED.repo,
@@ -151,10 +308,10 @@ function expectedRequest(marker) {
 }
 
 /** The marker the coordinator sent in its (single) create attempt. */
-function sentMarker(remote) {
+function sentMarker(remote: FakeGitHubRemote): string {
   const [create] = remote.calls('createReview');
   assert.ok(create, 'no create-review attempt was recorded');
-  return extractMarker(create.args.body);
+  return extractMarker(asString(create.args['body'], 'the create-review body'));
 }
 
 /** A complete, consistent sending intent built only from the spec. */
@@ -174,8 +331,10 @@ function handBuiltIntent(marker = '<!-- sarif-to-comment:review:1c9a7e52-3b4d-4f
   };
 }
 
+type Intent = ReturnType<typeof handBuiltIntent>;
+
 /** Copy of a record whose request was edited and whose fingerprint was recomputed to match. */
-function rehashed(record, editRequest) {
+function rehashed(record: Intent, editRequest: (request: Intent['request']) => unknown): Intent {
   const copy = structuredClone(record);
   editRequest(copy.request);
   copy.requestFingerprint = fingerprintOf(copy.request);
@@ -186,16 +345,16 @@ function rehashed(record, editRequest) {
 // Oracles (each validated against faulty and reference publishers below)
 // ---------------------------------------------------------------------------
 
-function assertExactlyOneCreateAttempt(remote) {
+function assertExactlyOneCreateAttempt(remote: FakeGitHubRemote): void {
   const creates = remote.calls('createReview');
-  assert.equal(creates.length, 1, `expected exactly one create-review attempt, saw ${creates.length}`);
+  assert.equal(creates.length, 1, `expected exactly one create-review attempt, saw ${String(creates.length)}`);
 }
 
-function assertNoCreateAttempt(remote) {
+function assertNoCreateAttempt(remote: FakeGitHubRemote): void {
   assert.equal(remote.calls('createReview').length, 0, 'a create-review attempt was made');
 }
 
-function assertNoWriteOtherThanCreate(remote) {
+function assertNoWriteOtherThanCreate(remote: FakeGitHubRemote): void {
   const others = remote.writeCalls().filter((c) => c.method !== 'createReview');
   assert.deepEqual(
     others.map((c) => c.method),
@@ -204,17 +363,27 @@ function assertNoWriteOtherThanCreate(remote) {
   );
 }
 
-function findLastIndex(list, predicate, before = list.length) {
-  for (let i = before - 1; i >= 0; i -= 1) if (predicate(list[i])) return i;
+function findLastIndex<T>(list: readonly T[], predicate: (item: T) => boolean, before = list.length): number {
+  for (let i = before - 1; i >= 0; i -= 1) if (predicate(itemAt(list, i, 'an event'))) return i;
   return -1;
 }
+
+/**
+ * One recorded step: a state-file operation from recordingFs, or a send
+ * marker from the fake transport's event sink.
+ */
+type RecordedEvent =
+  | { readonly op: 'open'; readonly path: string | undefined; readonly created: boolean }
+  | { readonly op: 'write' | 'fsync' | 'close'; readonly path: string | undefined }
+  | { readonly op: 'link' | 'rename'; readonly from: string; readonly path: string }
+  | { readonly op: 'createReview' | 'createReview:returned' | 'createReview:rejected' };
 
 /**
  * The state record's directory entry was created, its contents were written
  * and flushed, and its parent directory was flushed after the entry existed —
  * all before the first create-review request.
  */
-function assertDurableIntentBeforeSend(events, statePath) {
+function assertDurableIntentBeforeSend(events: readonly RecordedEvent[], statePath: string): void {
   const target = path.resolve(statePath);
   const dir = path.dirname(target);
   const sendIdx = events.findIndex((e) => e.op === 'createReview');
@@ -223,7 +392,7 @@ function assertDurableIntentBeforeSend(events, statePath) {
   let entryIdx = -1;
   let dataPath = target;
   for (let i = 0; i < sendIdx; i += 1) {
-    const e = events[i];
+    const e = itemAt(events, i, 'an event');
     if ((e.op === 'link' || e.op === 'rename') && e.path === target) {
       entryIdx = i;
       dataPath = e.from;
@@ -234,7 +403,7 @@ function assertDurableIntentBeforeSend(events, statePath) {
   }
   assert.ok(entryIdx >= 0, 'state record entry was not created before the create-review request');
 
-  const holders = new Set([dataPath, target]);
+  const holders = new Set<string | undefined>([dataPath, target]);
   const lastWrite = findLastIndex(events, (e) => e.op === 'write' && holders.has(e.path), sendIdx);
   assert.ok(lastWrite >= 0, 'state record contents were not written before the send');
   const fileFlush = events.findIndex(
@@ -252,12 +421,12 @@ function assertDurableIntentBeforeSend(events, statePath) {
  * only via rename of a flushed sibling file, followed by a directory flush;
  * the live state record was never opened for writing in place.
  */
-function assertAtomicDurableReceipt(events, statePath) {
+function assertAtomicDurableReceipt(events: readonly RecordedEvent[], statePath: string): void {
   assertAtomicDurableReplacement(events, statePath, 'createReview:returned');
 }
 
 /** The same atomic, durable replacement discipline for a persisted host rejection. */
-function assertAtomicDurableRejection(events, statePath) {
+function assertAtomicDurableRejection(events: readonly RecordedEvent[], statePath: string): void {
   assertAtomicDurableReplacement(events, statePath, 'createReview:rejected');
 }
 
@@ -266,7 +435,7 @@ function assertAtomicDurableRejection(events, statePath) {
  * rename of a flushed sibling file followed by a directory flush, and was never
  * opened for writing in place.
  */
-function assertAtomicDurableReplacement(events, statePath, startOp) {
+function assertAtomicDurableReplacement(events: readonly RecordedEvent[], statePath: string, startOp: string): void {
   const target = path.resolve(statePath);
   const dir = path.dirname(target);
   const start = events.findIndex((e) => e.op === startOp);
@@ -276,7 +445,9 @@ function assertAtomicDurableReplacement(events, statePath, startOp) {
   assert.deepEqual(inPlace, [], 'state record was rewritten in place after sending');
   const renameIdx = findLastIndex(after, (e) => e.op === 'rename' && e.path === target);
   assert.ok(renameIdx >= 0, 'receipt was not atomically renamed onto the state path');
-  const tmp = after[renameIdx].from;
+  const renamed = itemAt(after, renameIdx, 'the receipt rename');
+  if (renamed.op !== 'rename') throw new AssertionError({ message: 'expected a rename event', actual: renamed });
+  const tmp = renamed.from;
   assert.equal(path.dirname(tmp), dir, 'receipt temp file must live beside the state record');
   const lastWrite = findLastIndex(after, (e) => e.op === 'write' && e.path === tmp, renameIdx);
   assert.ok(lastWrite >= 0, 'receipt contents were never written');
@@ -288,78 +459,85 @@ function assertAtomicDurableReplacement(events, statePath, startOp) {
   assert.ok(dirFlush >= 0, 'parent directory was not flushed after the receipt rename');
 }
 
+/** Local I/O failures recordingFs can inject. */
+interface IFsFaults {
+  readonly fsync?: (path: string | undefined) => void;
+  readonly rename?: (from: string, to: string) => void;
+}
+
 /**
  * node:fs wrapped to record state-file operations into `events`, in order,
  * alongside the transport's send markers. `faults` may throw from fsync or
  * rename to simulate local I/O failure.
  */
-function recordingFs(events, faults = {}) {
-  const fdPaths = new Map();
-  const abs = (p) => path.resolve(String(p));
+function recordingFs(events: RecordedEvent[], faults: IFsFaults = {}): typeof fs {
+  const fdPaths = new Map<number, string>();
+  const abs = (p: fs.PathLike): string => path.resolve(String(p));
   const wrapped = {
-    openSync(p, flags, mode) {
+    openSync(p: fs.PathLike, flags: fs.OpenMode, mode?: fs.Mode | null): number {
       const existed = fs.existsSync(p);
       const fd = fs.openSync(p, flags, mode);
       fdPaths.set(fd, abs(p));
       events.push({ op: 'open', path: abs(p), created: !existed });
       return fd;
     },
-    writeSync(fd, ...rest) {
-      const n = fs.writeSync(fd, ...rest);
+    writeSync(fd: number, ...rest: unknown[]): unknown {
+      // fs.writeSync is overloaded (buffer or string forms); forward every argument unchanged.
+      const n: unknown = Reflect.apply(fs.writeSync, fs, [fd, ...rest]);
       events.push({ op: 'write', path: fdPaths.get(fd) });
       return n;
     },
-    writeFileSync(target, ...rest) {
+    writeFileSync(target: fs.PathOrFileDescriptor, data: string | NodeJS.ArrayBufferView, options?: fs.WriteFileOptions): void {
       const p = typeof target === 'number' ? fdPaths.get(target) : abs(target);
       const existed = typeof target === 'number' || fs.existsSync(target);
-      fs.writeFileSync(target, ...rest);
+      fs.writeFileSync(target, data, options);
       events.push({ op: 'open', path: p, created: !existed });
       events.push({ op: 'write', path: p });
     },
-    appendFileSync(target, ...rest) {
+    appendFileSync(target: fs.PathOrFileDescriptor, data: string | Uint8Array, options?: fs.WriteFileOptions): void {
       const p = typeof target === 'number' ? fdPaths.get(target) : abs(target);
       const existed = typeof target === 'number' || fs.existsSync(target);
-      fs.appendFileSync(target, ...rest);
+      fs.appendFileSync(target, data, options);
       events.push({ op: 'open', path: p, created: !existed });
       events.push({ op: 'write', path: p });
     },
-    ftruncateSync(fd, len) {
+    ftruncateSync(fd: number, len?: number): void {
       fs.ftruncateSync(fd, len);
       events.push({ op: 'write', path: fdPaths.get(fd) });
     },
-    fsyncSync(fd) {
+    fsyncSync(fd: number): void {
       if (faults.fsync) faults.fsync(fdPaths.get(fd));
       fs.fsyncSync(fd);
       events.push({ op: 'fsync', path: fdPaths.get(fd) });
     },
-    fdatasyncSync(fd) {
+    fdatasyncSync(fd: number): void {
       if (faults.fsync) faults.fsync(fdPaths.get(fd));
       fs.fdatasyncSync(fd);
       events.push({ op: 'fsync', path: fdPaths.get(fd) });
     },
-    closeSync(fd) {
+    closeSync(fd: number): void {
       fs.closeSync(fd);
       events.push({ op: 'close', path: fdPaths.get(fd) });
       fdPaths.delete(fd);
     },
-    linkSync(from, to) {
+    linkSync(from: fs.PathLike, to: fs.PathLike): void {
       fs.linkSync(from, to);
       events.push({ op: 'link', from: abs(from), path: abs(to) });
     },
-    renameSync(from, to) {
+    renameSync(from: fs.PathLike, to: fs.PathLike): void {
       if (faults.rename) faults.rename(abs(from), abs(to));
       fs.renameSync(from, to);
       events.push({ op: 'rename', from: abs(from), path: abs(to) });
     },
   };
-  return new Proxy(fs, { get: (t, k) => (Object.hasOwn(wrapped, k) ? wrapped[k] : t[k]) });
+  return new Proxy(fs, { get: (t, k): unknown => Reflect.get(Object.hasOwn(wrapped, k) ? wrapped : t, k) });
 }
 
-function ioError(message) {
+function ioError(message: string): Error & { code: string } {
   return Object.assign(new Error(`EIO: ${message}`), { code: 'EIO' });
 }
 
-function isStateError(code) {
+function isStateError(code: string): (err: unknown) => boolean {
   return (err) => err instanceof PublicationStateError && err.code === code;
 }
 
@@ -367,12 +545,46 @@ function isStateError(code) {
 // Child processes (restart and cross-process concurrency)
 // ---------------------------------------------------------------------------
 
-function parseChildOutput(stdout) {
-  const lines = stdout.trim().split('\n').filter(Boolean);
-  return lines.length ? JSON.parse(lines[lines.length - 1]) : null;
+/** The outcome fields tests read from a child's `{ result }` (any `cause` reduced to its message). */
+interface IOutcomeView {
+  readonly status: string;
+  readonly via?: string | undefined;
+  readonly reason?: string | undefined;
+  readonly marker: string;
+  readonly review?: { readonly id: number; readonly htmlUrl: string } | undefined;
 }
 
-function runChild(world, extra = {}) {
+const isOutcomeView: Guard<IOutcomeView> = isShape({
+  status: isString,
+  via: isOptional(isString),
+  reason: isOptional(isString),
+  marker: isString,
+  review: isOptional(isShape({ id: isNumber, htmlUrl: isString })),
+});
+
+/** The one JSON line child-publish prints: `{ result }` or `{ thrown }`. */
+interface IChildOutput {
+  readonly result?: IOutcomeView | undefined;
+  readonly thrown?: unknown;
+}
+
+const isChildOutput: Guard<IChildOutput> = isShape({ result: isOptional(isOutcomeView), thrown: isUnknown });
+
+interface IChildRun {
+  readonly signal: NodeJS.Signals | null;
+  readonly status: number | null;
+  readonly stderr: string;
+  readonly out: IChildOutput | null;
+}
+
+function parseChildOutput(stdout: string): IChildOutput | null {
+  const lines = stdout.trim().split('\n').filter(Boolean);
+  return lines.length
+    ? expectType(parseJson(itemAt(lines, lines.length - 1, 'the last output line')), isChildOutput, 'child-publish output')
+    : null;
+}
+
+function runChild(world: IWorld, extra: Record<string, unknown> = {}): IChildRun {
   const args = { statePath: world.statePath, remoteDir: world.remote.dir, ...extra };
   const run = spawnSync(process.execPath, [CHILD, JSON.stringify(args)], {
     encoding: 'utf8',
@@ -381,15 +593,17 @@ function runChild(world, extra = {}) {
   return { signal: run.signal, status: run.status, stderr: run.stderr, out: parseChildOutput(run.stdout) };
 }
 
-function startChild(world, extra = {}) {
+function startChild(world: IWorld, extra: Record<string, unknown> = {}): Promise<IChildRun> {
   const args = { statePath: world.statePath, remoteDir: world.remote.dir, ...extra };
   const child = spawn(process.execPath, [CHILD, JSON.stringify(args)], { stdio: ['ignore', 'pipe', 'pipe'] });
   let stdout = '';
   let stderr = '';
-  child.stdout.on('data', (d) => (stdout += d));
-  child.stderr.on('data', (d) => (stderr += d));
-  return new Promise((resolve) => {
-    child.on('close', (status, signal) => resolve({ status, signal, stderr, out: parseChildOutput(stdout) }));
+  child.stdout.on('data', (d: Buffer) => (stdout += String(d)));
+  child.stderr.on('data', (d: Buffer) => (stderr += String(d)));
+  return new Promise<IChildRun>((resolve) => {
+    child.on('close', (status, signal) => {
+      resolve({ status, signal, stderr, out: parseChildOutput(stdout) });
+    });
   });
 }
 
@@ -399,7 +613,7 @@ function startChild(world, extra = {}) {
 
 const CONTROL_MARKER = '<!-- sarif-to-comment:review:5d2c1b0a-9f8e-4d7c-8b6a-5f4e3d2c1b0a -->';
 
-function requestFor(input, marker) {
+function requestFor(input: IPublishInput, marker: string) {
   return {
     ...input.destination,
     commitId: input.reviewedCommit,
@@ -408,41 +622,49 @@ function requestFor(input, marker) {
   };
 }
 
-function writeFlushed(fsImpl, file, text, flags) {
+/** The reviews of a well-formed page (the host double sends a string only when configured to be malformed). */
+function reviewsOf(page: IFakeReviewPage): readonly IFakeReviewSummary[] {
+  if (typeof page.reviews === 'string') {
+    throw new AssertionError({ message: 'expected a list of reviews', actual: page.reviews, operator: 'reviewsOf' });
+  }
+  return page.reviews;
+}
+
+function writeFlushed(fsImpl: typeof fs, file: string, text: string, flags: string): void {
   const fd = fsImpl.openSync(file, flags, 0o600);
   fsImpl.writeSync(fd, text);
   fsImpl.fsyncSync(fd);
   fsImpl.closeSync(fd);
 }
 
-function flushDir(fsImpl, dir) {
+function flushDir(fsImpl: typeof fs, dir: string): void {
   const fd = fsImpl.openSync(dir, 'r');
   fsImpl.fsyncSync(fd);
   fsImpl.closeSync(fd);
 }
 
 /** Correct reference: exclusive create, flush file and directory, then send. */
-async function referenceIntentThenSend(input, fsImpl) {
+async function referenceIntentThenSend(input: IPublishInput, fsImpl: typeof fs): Promise<FakeCreatedReview> {
   writeFlushed(fsImpl, input.statePath, '{"phase":"sending"}', 'wx');
   flushDir(fsImpl, path.dirname(input.statePath));
   return input.transport.createReview(requestFor(input, CONTROL_MARKER));
 }
 
 /** Faulty: sends before any durable intent exists. */
-async function faultySendBeforePersist(input, fsImpl) {
+async function faultySendBeforePersist(input: IPublishInput, fsImpl: typeof fs): Promise<void> {
   await input.transport.createReview(requestFor(input, CONTROL_MARKER));
   writeFlushed(fsImpl, input.statePath, '{"phase":"sending"}', 'wx');
   flushDir(fsImpl, path.dirname(input.statePath));
 }
 
 /** Faulty: flushes the file but never the directory entry before sending. */
-async function faultyNoDirectoryFlush(input, fsImpl) {
+async function faultyNoDirectoryFlush(input: IPublishInput, fsImpl: typeof fs): Promise<FakeCreatedReview> {
   writeFlushed(fsImpl, input.statePath, '{"phase":"sending"}', 'wx');
   return input.transport.createReview(requestFor(input, CONTROL_MARKER));
 }
 
 /** Correct reference receipt: flushed sibling, rename, directory flush. */
-function referenceAtomicReceipt(input, fsImpl) {
+function referenceAtomicReceipt(input: IPublishInput, fsImpl: typeof fs): void {
   const tmp = `${input.statePath}.receipt-tmp`;
   writeFlushed(fsImpl, tmp, '{"phase":"completed"}', 'wx');
   fsImpl.renameSync(tmp, input.statePath);
@@ -450,19 +672,19 @@ function referenceAtomicReceipt(input, fsImpl) {
 }
 
 /** Faulty receipt: truncates and rewrites the live record in place. */
-function faultyInPlaceReceipt(input, fsImpl) {
+function faultyInPlaceReceipt(input: IPublishInput, fsImpl: typeof fs): void {
   writeFlushed(fsImpl, input.statePath, '{"phase":"completed"}', 'w');
   flushDir(fsImpl, path.dirname(input.statePath));
 }
 
 /** Faulty: treats a lookup miss after a lost response as permission to resend. */
-async function faultyRetryOnMiss(input) {
+async function faultyRetryOnMiss(input: IPublishInput): Promise<FakeCreatedReview | null> {
   const request = requestFor(input, CONTROL_MARKER);
   try {
     return await input.transport.createReview(request);
   } catch {
     const page = await input.transport.listReviews({ ...input.destination, cursor: null });
-    if (!page.reviews.some((r) => r.body.includes(CONTROL_MARKER))) {
+    if (!reviewsOf(page).some((r) => r.body.includes(CONTROL_MARKER))) {
       // The resend's own response may be lost too; the duplicate still lands.
       return input.transport.createReview(request).catch(() => null);
     }
@@ -471,12 +693,15 @@ async function faultyRetryOnMiss(input) {
 }
 
 /** Faulty: "repairs" a marker candidate by adding the comments it lacks. */
-async function faultyRepairMissingComments(input) {
+async function faultyRepairMissingComments(input: IPublishInput): Promise<void> {
   try {
     await input.transport.createReview(requestFor(input, CONTROL_MARKER));
   } catch {
     const page = await input.transport.listReviews({ ...input.destination, cursor: null });
-    const found = page.reviews.find((r) => r.body.includes(CONTROL_MARKER));
+    const found = defined(
+      reviewsOf(page).find((r) => r.body.includes(CONTROL_MARKER)),
+      'a review carrying the control marker',
+    );
     const { comments } = await input.transport.listReviewComments({
       ...input.destination,
       reviewId: found.id,
@@ -489,7 +714,7 @@ async function faultyRepairMissingComments(input) {
 }
 
 /** Faulty: check-then-write claim instead of exclusive creation. */
-async function faultyNonExclusiveClaim(input) {
+async function faultyNonExclusiveClaim(input: IPublishInput): Promise<FakeCreatedReview | null> {
   if (fs.existsSync(input.statePath)) return null;
   await input.transport.getAuthenticatedUser();
   fs.writeFileSync(input.statePath, '{"phase":"sending"}');
@@ -503,38 +728,45 @@ async function faultyNonExclusiveClaim(input) {
 describe('oracles discriminate faulty publishers (negative and positive controls)', () => {
   test('durable-intent oracle accepts exclusive create + file flush + directory flush before send', async () => {
     const world = makeWorld();
-    const events = [];
+    const events: RecordedEvent[] = [];
     await referenceIntentThenSend(makeInput(world, { events }), recordingFs(events));
     assertDurableIntentBeforeSend(events, world.statePath);
   });
 
   test('durable-intent oracle detects a premature send', async () => {
     const world = makeWorld();
-    const events = [];
+    const events: RecordedEvent[] = [];
     await faultySendBeforePersist(makeInput(world, { events }), recordingFs(events));
-    assert.throws(() => assertDurableIntentBeforeSend(events, world.statePath), /not created before/);
+    assert.throws(() => {
+      assertDurableIntentBeforeSend(events, world.statePath);
+    }, /not created before/);
   });
 
   test('durable-intent oracle detects a missing parent-directory flush', async () => {
     const world = makeWorld();
-    const events = [];
+    const events: RecordedEvent[] = [];
     await faultyNoDirectoryFlush(makeInput(world, { events }), recordingFs(events));
-    assert.throws(() => assertDurableIntentBeforeSend(events, world.statePath), /parent directory/);
+    assert.throws(() => {
+      assertDurableIntentBeforeSend(events, world.statePath);
+    }, /parent directory/);
   });
 
   test('receipt oracle accepts rename of a flushed sibling and rejects in-place rewrite', async () => {
     for (const [writer, shouldPass] of [
       [referenceAtomicReceipt, true],
       [faultyInPlaceReceipt, false],
-    ]) {
+    ] as const) {
       const world = makeWorld();
-      const events = [];
+      const events: RecordedEvent[] = [];
       const fsImpl = recordingFs(events);
       const input = makeInput(world, { events });
       await referenceIntentThenSend(input, fsImpl);
       writer(input, fsImpl);
       if (shouldPass) assertAtomicDurableReceipt(events, world.statePath);
-      else assert.throws(() => assertAtomicDurableReceipt(events, world.statePath), /in place/);
+      else
+        assert.throws(() => {
+          assertAtomicDurableReceipt(events, world.statePath);
+        }, /in place/);
     }
   });
 
@@ -545,13 +777,17 @@ describe('oracles discriminate faulty publishers (negative and positive controls
     // pending; once a human submits or deletes that draft, the same resend
     // would land as a duplicate review. The oracle judges attempts, not luck.
     assert.equal(world.remote.calls('createReview').length, 2, 'control must actually resend');
-    assert.throws(() => assertExactlyOneCreateAttempt(world.remote), /exactly one create-review attempt, saw 2/);
+    assert.throws(() => {
+      assertExactlyOneCreateAttempt(world.remote);
+    }, /exactly one create-review attempt, saw 2/);
   });
 
   test('no-other-writes oracle detects repair of a partially persisted review', async () => {
     const world = makeWorld({ create: 'lose-response', dropCommentIndexesOnPersist: [1, 2] });
     await faultyRepairMissingComments(makeInput(world));
-    assert.throws(() => assertNoWriteOtherThanCreate(world.remote), /other than the single create-review/);
+    assert.throws(() => {
+      assertNoWriteOtherThanCreate(world.remote);
+    }, /other than the single create-review/);
   });
 
   test('single-create oracle detects a non-exclusive concurrent claim', async () => {
@@ -559,7 +795,9 @@ describe('oracles discriminate faulty publishers (negative and positive controls
     // Four of the five creates are refused by the host's one-pending-review rule;
     // the claim is still faulty because it attempted to send five times.
     await Promise.allSettled(Array.from({ length: 5 }, () => faultyNonExclusiveClaim(makeInput(world))));
-    assert.throws(() => assertExactlyOneCreateAttempt(world.remote), /exactly one create-review attempt, saw 5/);
+    assert.throws(() => {
+      assertExactlyOneCreateAttempt(world.remote);
+    }, /exactly one create-review attempt, saw 5/);
   });
 });
 
@@ -573,13 +811,13 @@ describe('one draft create-review request carries the complete contribution', ()
 
     assertExactlyOneCreateAttempt(world.remote);
     assertNoWriteOtherThanCreate(world.remote);
-    const [create] = world.remote.calls('createReview');
+    const create = itemAt(world.remote.calls('createReview'), 0, 'the create-review call');
     assert.equal(Object.hasOwn(create.args, 'event'), false, 'draft review must omit the submission event');
-    const marker = extractMarker(create.args.body);
+    const marker = extractMarker(asString(create.args['body'], 'the create-review body'));
     assert.match(marker, MARKER_EXACT);
     assert.deepEqual(create.args, expectedRequest(marker));
 
-    const [stored] = world.remote.reviews();
+    const stored = itemAt(world.remote.reviews(), 0, 'the stored review');
     assert.equal(stored.state, 'PENDING');
     assert.deepEqual(stored.comments, EXPECTED.comments);
 
@@ -601,7 +839,7 @@ describe('one draft create-review request carries the complete contribution', ()
     const createAt = calls.indexOf('createReview');
     assert.ok(calls.indexOf('listReviews', createAt) > createAt, 'reviews were not read back after create');
     const commentReads = world.remote.calls('listReviewComments');
-    assert.ok(commentReads.some((c) => c.args.reviewId === result.review.id), 'comments were not read back');
+    assert.ok(commentReads.some((c) => c.args['reviewId'] === published(result).review.id), 'comments were not read back');
   });
 
   test('completed state record binds original identity, complete request and receipt', async () => {
@@ -631,21 +869,25 @@ describe('one draft create-review request carries the complete contribution', ()
     assert.equal(record.authorId, 7001001);
     assert.deepEqual(record.request, expectedRequest(result.marker));
     assert.equal(record.requestFingerprint, fingerprintOf(expectedRequest(result.marker)));
-    const [stored] = world.remote.reviews();
+    const stored = itemAt(world.remote.reviews(), 0, 'the stored review');
     assert.deepEqual(record.receipt, { reviewId: stored.id, htmlUrl: stored.htmlUrl, via: 'created' });
   });
 
   test('malformed input is refused before any transport call or state write', async () => {
     const world = makeWorld();
-    const cases = [
+    const cases: ((i: IPublishInput) => unknown)[] = [
+      // @ts-expect-error -- deliberately invalid: proves runtime validation of a missing statePath
       (i) => delete i.statePath,
       (i) => (i.statePath = 'relative/review.publication.json'),
       (i) => (i.reviewedCommit = '3f9c2a7'),
+      // @ts-expect-error -- deliberately invalid: proves runtime validation of a missing inputFingerprint
       (i) => delete i.inputFingerprint,
       (i) => (i.inputFingerprint = 'md5:abc'),
+      // @ts-expect-error -- deliberately invalid: proves runtime validation of a prepared review without comments
       (i) => (i.preparedReview = { body: 'x' }),
-      (i) => (i.preparedReview.comments[0].side = 'MIDDLE'),
-      (i) => delete i.preparedReview.comments[1].startSide,
+      (i) => (itemAt(i.preparedReview.comments, 0, 'the first comment').side = 'MIDDLE'),
+      (i) => delete itemAt(i.preparedReview.comments, 1, 'the second comment').startSide,
+      // @ts-expect-error -- deliberately invalid: proves runtime validation of a destination without pullNumber
       (i) => (i.destination = { owner: 'octo-org', repo: 'widgets' }),
     ];
     for (const breakIt of cases) {
@@ -653,7 +895,9 @@ describe('one draft create-review request carries the complete contribution', ()
       breakIt(input);
       await assert.rejects(publishPreparedReview(input), TypeError);
     }
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the rest-sibling binding only drops preparedReview from the copy
     const { preparedReview: _p, ...recovery } = makeInput(world);
+    // @ts-expect-error -- deliberately invalid: proves runtime validation of a recovery identity without inputFingerprint
     delete recovery.inputFingerprint;
     await assert.rejects(recoverPublication(recovery), TypeError);
     assert.deepEqual(world.remote.calls(), []);
@@ -666,16 +910,19 @@ describe('intent is complete and durable before the single send', () => {
     const world = makeWorld();
     const input = makeInput(world);
     const send = input.transport.createReview;
-    let atSend = null;
+    // Written by the wrapped send; a holder object, because the compiler does not
+    // see assignments made inside the callback when narrowing a local variable.
+    const seen: { atSend: { raw: string; request: Parameters<typeof send>[0] } | null } = { atSend: null };
     input.transport.createReview = async (request) => {
-      atSend = { raw: fs.readFileSync(world.statePath, 'utf8'), request: structuredClone(request) };
+      seen.atSend = { raw: fs.readFileSync(world.statePath, 'utf8'), request: structuredClone(request) };
       return send(request);
     };
 
     await publishPreparedReview(input);
 
+    const { atSend } = seen;
     assert.ok(atSend, 'create-review was never sent');
-    const record = JSON.parse(atSend.raw);
+    const record = asStateRecord(parseJson(atSend.raw));
     const marker = extractMarker(atSend.request.body);
     assert.equal(record.phase, 'sending');
     assert.equal(record.marker, marker);
@@ -689,7 +936,7 @@ describe('intent is complete and durable before the single send', () => {
 
   test('file contents and parent directory are flushed before the send; receipt is atomic and durable', async () => {
     const world = makeWorld();
-    const events = [];
+    const events: RecordedEvent[] = [];
     await publishPreparedReview(makeInput(world, { events }), { fs: recordingFs(events) });
     assertDurableIntentBeforeSend(events, world.statePath);
     assertAtomicDurableReceipt(events, world.statePath);
@@ -710,10 +957,11 @@ describe('intent is complete and durable before the single send', () => {
     const world = makeWorld();
     const input = makeInput(world);
     const cause = Object.assign(new Error('401 Bad credentials'), { status: 401 });
+    // eslint-disable-next-line @typescript-eslint/require-await -- async like the transport method it replaces: the failure must reach the publisher as a rejection
     input.transport.getAuthenticatedUser = async () => {
       throw cause;
     };
-    await assert.rejects(publishPreparedReview(input), (err) => err === cause || err.cause === cause);
+    await assert.rejects(publishPreparedReview(input), (err) => err === cause || propertyOf(err, 'cause') === cause);
     assertNoCreateAttempt(world.remote);
     assert.deepEqual(fs.readdirSync(world.stateDir), []);
   });
@@ -722,6 +970,8 @@ describe('intent is complete and durable before the single send', () => {
     const world = makeWorld();
     const input = makeInput(world);
     let asked = false;
+    // @ts-expect-error -- deliberately invalid: proves runtime validation of an authenticated user without a numeric id
+    // eslint-disable-next-line @typescript-eslint/require-await -- async like the transport method it replaces
     input.transport.getAuthenticatedUser = async () => {
       asked = true;
       return { login: 'reviewer-bot' };
@@ -734,7 +984,7 @@ describe('intent is complete and durable before the single send', () => {
 
   test('directory flush failure before send is a local error with no send, and later calls still never send', async () => {
     const world = makeWorld();
-    const events = [];
+    const events: RecordedEvent[] = [];
     const failing = recordingFs(events, {
       fsync: (p) => {
         if (p === world.stateDir) throw ioError('directory fsync failed');
@@ -771,7 +1021,7 @@ describe('a positive create response is verified before completion', () => {
     }
     assertExactlyOneCreateAttempt(world.remote);
     assertNoWriteOtherThanCreate(world.remote);
-    assert.equal(world.remote.reviews()[0].comments.length, 2);
+    assert.equal(itemAt(world.remote.reviews(), 0, 'the stored review').comments.length, 2);
   });
 
   test('host stored a comment on a different line despite a positive response: uncertain', async () => {
@@ -784,8 +1034,10 @@ describe('a positive create response is verified before completion', () => {
   });
 
   test('duplicate identical comments are compared as a multiset', async () => {
-    const duplicate = (i) => {
-      const [first, second] = i.preparedReview.comments;
+    const duplicate = (i: FixtureInput): void => {
+      const { comments } = i.preparedReview;
+      const first = itemAt(comments, 0, 'the first comment');
+      const second = itemAt(comments, 1, 'the second comment');
       i.preparedReview.comments = [first, structuredClone(first), second];
     };
     const complete = makeWorld();
@@ -796,14 +1048,14 @@ describe('a positive create response is verified before completion', () => {
     const missingOne = makeWorld({ dropCommentIndexesOnPersist: [1] });
     const result = await publish(missingOne, { mutate: duplicate });
     // Control: the host holds each distinct comment, so a set comparison would pass.
-    const stored = missingOne.remote.reviews()[0].comments;
+    const stored = itemAt(missingOne.remote.reviews(), 0, 'the stored review').comments;
     assert.equal(new Set(stored.map((c) => JSON.stringify(c))).size, 2);
     assert.equal(result.status, 'uncertain');
     assert.equal(result.reason, 'candidate-differs');
   });
 
   test('line endings are compared exactly; a normalizing host is not silently accepted', async () => {
-    const crlf = (i) => (i.preparedReview.body = 'First line.\r\nSecond line.');
+    const crlf = (i: FixtureInput): string => (i.preparedReview.body = 'First line.\r\nSecond line.');
     const exact = makeWorld();
     const ok = await publish(exact, { mutate: crlf });
     assert.equal(ok.status, 'published');
@@ -820,7 +1072,7 @@ describe('a positive create response is verified before completion', () => {
     assert.equal(first.status, 'uncertain');
     assert.equal(first.reason, 'not-found');
     assert.equal(readRecord(world.statePath).phase, 'sending');
-    let later = first;
+    let later: PublishOutcome = first;
     for (let i = 0; i < 5 && later.status === 'uncertain'; i += 1) later = await publish(world);
     assert.equal(later.status, 'published');
     assert.equal(later.via, 'recovered');
@@ -834,7 +1086,7 @@ describe('lost or failed create outcomes never produce a second create', () => {
     const result = await publish(world);
     assertExactlyOneCreateAttempt(world.remote);
     assertNoWriteOtherThanCreate(world.remote);
-    const [stored] = world.remote.reviews();
+    const stored = itemAt(world.remote.reviews(), 0, 'the stored review');
     assert.equal(result.status, 'published');
     assert.equal(result.via, 'recovered');
     assert.deepEqual(result.review, { id: stored.id, htmlUrl: stored.htmlUrl });
@@ -850,7 +1102,7 @@ describe('lost or failed create outcomes never produce a second create', () => {
     assertExactlyOneCreateAttempt(world.remote);
     assert.equal(result.status, 'published');
     assert.equal(result.via, 'recovered');
-    assert.equal(result.review.id, world.remote.reviews()[0].id);
+    assert.equal(result.review.id, itemAt(world.remote.reviews(), 0, 'the stored review').id);
   });
 
   test('indeterminate failure with nothing persisted stays uncertain on every retry', async () => {
@@ -858,7 +1110,7 @@ describe('lost or failed create outcomes never produce a second create', () => {
     const first = await publish(world);
     assert.equal(first.status, 'uncertain');
     assert.equal(first.reason, 'not-found');
-    assert.match(String(first.cause && first.cause.message), /connection reset/);
+    assert.match(String(propertyOf(first.cause, 'message')), /connection reset/);
     world.remote.setConfig({ create: 'ok' });
     for (let i = 0; i < 3; i += 1) {
       const again = await publish(world);
@@ -873,13 +1125,13 @@ describe('lost or failed create outcomes never produce a second create', () => {
 
   test('host-confirmed rejection is persisted atomically and durably, then reported without transport (regression: was later reported as not-found)', async () => {
     const world = makeWorld({ create: 'reject' });
-    const events = [];
+    const events: RecordedEvent[] = [];
     const result = await publishPreparedReview(makeInput(world, { events }), { fs: recordingFs(events) });
     assert.equal(result.status, 'rejected');
     assert.equal(result.via, 'response');
     assert.equal(result.httpStatus, 422);
     assert.equal(result.rejectionPersisted, true);
-    assert.equal(result.cause.hostRejected, true);
+    assert.equal(propertyOf(result.cause, 'hostRejected'), true);
     assert.match(result.marker, MARKER_EXACT);
     assert.match(result.detail, /line must be part of the diff/);
     assertAtomicDurableRejection(events, world.statePath);
@@ -930,6 +1182,7 @@ describe('lost or failed create outcomes never produce a second create', () => {
   test('only the refusal status and a bounded message are persisted from a rejection', async () => {
     const world = makeWorld();
     const input = makeInput(world);
+    // eslint-disable-next-line @typescript-eslint/require-await -- async like the transport method it replaces: the refusal must reach the publisher as a rejection
     input.transport.createReview = async () => {
       throw Object.assign(new Error(`Validation Failed: ${'x'.repeat(5000)}`), {
         hostRejected: true,
@@ -942,20 +1195,25 @@ describe('lost or failed create outcomes never produce a second create', () => {
     assert.equal(result.status, 'rejected');
     const text = fs.readFileSync(world.statePath, 'utf8');
     assert.equal(text.includes(SENTINEL_TOKEN), false, 'rejection details beyond status and message were persisted');
-    const { rejection } = JSON.parse(text);
+    const { rejection } = expectType(
+      parseJson(text),
+      isShape({ rejection: isShape({ message: isString }) }),
+      'a rejected state record',
+    );
     assert.deepEqual(Object.keys(rejection).sort(), ['message', 'status']);
     assert.ok(rejection.message.startsWith('Validation Failed: xxx'));
-    assert.ok(rejection.message.length <= 1000, `persisted message is ${rejection.message.length} characters`);
+    assert.ok(rejection.message.length <= 1000, `persisted message is ${String(rejection.message.length)} characters`);
   });
 
   for (const [label, status] of [
     ['request timeout 408', 408],
     ['server error 500', 500],
     ['a missing status', undefined],
-  ]) {
+  ] as const) {
     test(`a claimed rejection with ${label} is indeterminate, investigated and not persisted as rejected`, async () => {
       const world = makeWorld();
       const input = makeInput(world);
+      // eslint-disable-next-line @typescript-eslint/require-await -- async like the transport method it replaces: the refusal must reach the publisher as a rejection
       input.transport.createReview = async () => {
         throw Object.assign(new Error('refused?'), { hostRejected: true, status });
       };
@@ -969,7 +1227,7 @@ describe('lost or failed create outcomes never produce a second create', () => {
   test('a create response naming a different review than the sole complete candidate is a candidate mismatch', async () => {
     const world = makeWorld({ create: 'wrong-id-response' });
     const result = await publish(world);
-    const [stored] = world.remote.reviews();
+    const stored = itemAt(world.remote.reviews(), 0, 'the stored review');
     assert.equal(stored.comments.length, EXPECTED.comments.length, 'control: the host holds the complete review');
     assert.equal(result.status, 'uncertain');
     assert.equal(result.reason, 'candidate-mismatch');
@@ -981,18 +1239,18 @@ describe('lost or failed create outcomes never produce a second create', () => {
   test('receipt persistence failure after verified completion reports the review and leaves a recoverable intent', async () => {
     const world = makeWorld();
     const target = path.resolve(world.statePath);
-    const events = [];
+    const events: RecordedEvent[] = [];
     const failing = recordingFs(events, {
       rename: (_from, to) => {
         if (to === target) throw ioError('rename failed');
       },
     });
     const first = await publishPreparedReview(makeInput(world, { events }), { fs: failing });
-    const [stored] = world.remote.reviews();
+    const stored = itemAt(world.remote.reviews(), 0, 'the stored review');
     assert.equal(first.status, 'published');
     assert.equal(first.via, 'created');
     assert.equal(first.receiptPersisted, false);
-    assert.match(String(first.cause && first.cause.message), /rename failed/);
+    assert.match(String(propertyOf(first.cause, 'message')), /rename failed/);
     assert.deepEqual(first.review, { id: stored.id, htmlUrl: stored.htmlUrl });
 
     const intent = readRecord(world.statePath);
@@ -1012,15 +1270,15 @@ describe('lost or failed create outcomes never produce a second create', () => {
 describe('delayed visibility remains uncertain across successive retries', () => {
   test('retries only investigate until the review becomes visible, then finish with a receipt', async () => {
     const world = makeWorld({ create: 'lose-response', visibilityDelay: 6 });
-    const outcomes = [];
+    const outcomes: PublishOutcome[] = [];
     for (let i = 0; i < 20; i += 1) {
       const r = await publish(world);
       outcomes.push(r);
       if (r.status !== 'uncertain') break;
     }
-    const final = outcomes[outcomes.length - 1];
+    const final = itemAt(outcomes, outcomes.length - 1, 'the final outcome');
     const waiting = outcomes.slice(0, -1);
-    const [stored] = world.remote.reviews();
+    const stored = itemAt(world.remote.reviews(), 0, 'the stored review');
 
     assert.ok(waiting.length >= 1, 'the first attempt must not see a review hidden by delayed visibility');
     for (const w of waiting) {
@@ -1036,7 +1294,7 @@ describe('delayed visibility remains uncertain across successive retries', () =>
 
     const callsBefore = world.remote.calls().length;
     const afterReceipt = await publish(world);
-    assert.equal(afterReceipt.via, 'receipt');
+    assert.equal(published(afterReceipt).via, 'receipt');
     assert.equal(world.remote.calls().length, callsBefore, 'a receipt ends all remote interaction');
   });
 });
@@ -1046,7 +1304,7 @@ describe('candidate enumeration is complete and bounded', () => {
    * Earlier reviews by other publications and people. Our own account's earlier
    * reviews are submitted, as the host allows it at most one pending draft.
    */
-  function seedForeign(world, count, { marker = null } = {}) {
+  function seedForeign(world: IWorld, count: number, { marker = null }: { readonly marker?: string | null } = {}): void {
     for (let i = 0; i < count; i += 1) {
       const ours = i % 2 === 1;
       world.remote.seedReview({
@@ -1054,7 +1312,7 @@ describe('candidate enumeration is complete and bounded', () => {
         authorId: ours ? DEFAULT_USER.id : 5550001,
         authorLogin: ours ? DEFAULT_USER.login : 'human-colleague',
         commitId: FIXTURE.input.reviewedCommit,
-        body: marker ? `Earlier automated review ${i}\n\n${marker}` : `Human review ${i}`,
+        body: marker ? `Earlier automated review ${String(i)}\n\n${marker}` : `Human review ${String(i)}`,
         state: ours ? 'COMMENTED' : 'PENDING',
       });
     }
@@ -1066,9 +1324,9 @@ describe('candidate enumeration is complete and bounded', () => {
     const result = await publish(world);
     assert.equal(result.status, 'published');
     assert.equal(result.via, 'recovered');
-    const ours = world.remote.reviews().at(-1);
+    const ours = itemAt(world.remote.reviews(), -1, 'the newest stored review');
     assert.equal(result.review.id, ours.id);
-    const cursors = world.remote.calls('listReviews').map((c) => c.args.cursor);
+    const cursors = world.remote.calls('listReviews').map((c) => c.args['cursor']);
     const lastStart = cursors.lastIndexOf(null);
     assert.deepEqual(cursors.slice(lastStart), [null, '10', '20', '30', '40', '50', '60', '70', '80', '90']);
     assertExactlyOneCreateAttempt(world.remote);
@@ -1122,7 +1380,7 @@ describe('candidate enumeration is complete and bounded', () => {
     const result = await publish(world);
     assert.equal(result.status, 'published');
     assert.equal(result.via, 'recovered');
-    const cursors = world.remote.calls('listReviewComments').map((c) => c.args.cursor);
+    const cursors = world.remote.calls('listReviewComments').map((c) => c.args['cursor']);
     assert.deepEqual(cursors, [null, '1', '2']);
   });
 
@@ -1165,7 +1423,7 @@ describe('candidate enumeration is complete and bounded', () => {
 
 describe('candidate verification never repairs (D29)', () => {
   /** Publish once with nothing persisted remotely, then seed a marker-bearing review. */
-  async function seedMarkedCandidate(overrides) {
+  async function seedMarkedCandidate(overrides: Partial<ISeedReview>): Promise<IWorld> {
     const world = makeWorld({ create: 'fail-before-persist' });
     await publish(world);
     const marker = sentMarker(world.remote);
@@ -1216,7 +1474,7 @@ describe('candidate verification never repairs (D29)', () => {
   test('marker alone is not proof: a candidate missing initial comments stays uncertain without writes', async () => {
     const world = makeWorld({ create: 'lose-response', dropCommentIndexesOnPersist: [1, 2] });
     const result = await publish(world);
-    const [stored] = world.remote.reviews();
+    const stored = itemAt(world.remote.reviews(), 0, 'the stored review');
     // Control: the host really holds our marker, so marker-only recovery would have "succeeded".
     assert.equal(stored.body.includes(sentMarker(world.remote)), true);
     assert.equal(stored.comments.length, 1);
@@ -1231,14 +1489,18 @@ describe('candidate verification never repairs (D29)', () => {
 
   test('human deletion or edit during uncertain delivery is reported, never restored', async () => {
     const edits = [
-      (remote, id) => remote.humanDeleteComment(id, 0),
-      (remote, id) => remote.humanEditBody(id, `${remote.review(id).body}\n\nEdited by a human.`),
+      (remote: FakeGitHubRemote, id: number): void => {
+        remote.humanDeleteComment(id, 0);
+      },
+      (remote: FakeGitHubRemote, id: number): void => {
+        remote.humanEditBody(id, `${remote.review(id).body}\n\nEdited by a human.`);
+      },
     ];
     for (const edit of edits) {
       const world = makeWorld({ create: 'lose-response', visibilityDelay: 1 });
       const first = await publish(world);
       assert.equal(first.status, 'uncertain');
-      const [stored] = world.remote.reviews();
+      const stored = itemAt(world.remote.reviews(), 0, 'the stored review');
       edit(world.remote, stored.id);
       const humanVersion = world.remote.review(stored.id);
 
@@ -1254,7 +1516,7 @@ describe('candidate verification never repairs (D29)', () => {
   test('human removal of the marker during uncertain delivery leaves it not-found, never a new create', async () => {
     const world = makeWorld({ create: 'lose-response', visibilityDelay: 1 });
     await publish(world);
-    const [stored] = world.remote.reviews();
+    const stored = itemAt(world.remote.reviews(), 0, 'the stored review');
     world.remote.humanEditBody(stored.id, 'A human rewrote this draft.');
     const result = await publish(world);
     assert.equal(result.status, 'uncertain');
@@ -1265,7 +1527,7 @@ describe('candidate verification never repairs (D29)', () => {
   test('a human-submitted review with unchanged content still counts as the initial delivery', async () => {
     const world = makeWorld({ create: 'lose-response', visibilityDelay: 1 });
     await publish(world);
-    const [stored] = world.remote.reviews();
+    const stored = itemAt(world.remote.reviews(), 0, 'the stored review');
     world.remote.humanSubmit(stored.id);
     const result = await publish(world);
     assert.equal(result.status, 'published');
@@ -1279,7 +1541,7 @@ describe('a completed receipt is final (D29)', () => {
   test('later human edits and deletions are neither inspected nor restored', async () => {
     const world = makeWorld();
     const first = await publish(world);
-    const [stored] = world.remote.reviews();
+    const stored = itemAt(world.remote.reviews(), 0, 'the stored review');
     world.remote.humanEditBody(stored.id, 'Rewritten by a human; marker removed.');
     world.remote.humanDeleteComment(stored.id, 2);
     world.remote.humanDeleteComment(stored.id, 0);
@@ -1295,18 +1557,28 @@ describe('a completed receipt is final (D29)', () => {
   });
 
   for (const [label, humanAction] of [
-    ['submits', (remote, id) => remote.humanSubmit(id)],
-    ['deletes', (remote, id) => remote.humanDeleteReview(id)],
-  ]) {
+    [
+      'submits',
+      (remote: FakeGitHubRemote, id: number): void => {
+        remote.humanSubmit(id);
+      },
+    ],
+    [
+      'deletes',
+      (remote: FakeGitHubRemote, id: number): void => {
+        remote.humanDeleteReview(id);
+      },
+    ],
+  ] as const) {
     test(`after a human ${label} the first draft, a new state path creates a separate review`, async () => {
       const world = makeWorld();
       const first = await publish(world);
-      humanAction(world.remote, first.review.id);
+      humanAction(world.remote, published(first).review.id);
       const second = await publish(world, { statePath: path.join(world.stateDir, 'second.publication.json') });
 
       assert.equal(second.status, 'published');
       assert.equal(second.via, 'created');
-      assert.notEqual(second.review.id, first.review.id);
+      assert.notEqual(second.review.id, published(first).review.id);
       assert.notEqual(second.marker, first.marker);
       assert.equal(world.remote.calls('createReview').length, 2);
       assertNoWriteOtherThanCreate(world.remote);
@@ -1321,9 +1593,9 @@ describe('the host allows one pending review per author per pull request', () =>
     const request = { ...FIXTURE.input.destination, commitId: EXPECTED.commitId, body: 'first', comments: [] };
     await transport.createReview(request);
     await assert.rejects(transport.createReview({ ...request, body: 'second' }), (err) => {
-      assert.equal(err.hostRejected, true);
-      assert.equal(err.status, 422);
-      assert.match(err.message, /one pending review per pull request/);
+      assert.equal(propertyOf(err, 'hostRejected'), true);
+      assert.equal(propertyOf(err, 'status'), 422);
+      assert.match(String(propertyOf(err, 'message')), /one pending review per pull request/);
       return true;
     });
     assert.equal(world.remote.reviews().length, 1);
@@ -1332,7 +1604,7 @@ describe('the host allows one pending review per author per pull request', () =>
   test('a second state path while the first draft is pending is refused by the host, remembered, and alters nothing', async () => {
     const world = makeWorld();
     const first = await publish(world);
-    const earlier = world.remote.review(first.review.id);
+    const earlier = world.remote.review(published(first).review.id);
     const secondPath = path.join(world.stateDir, 'second.publication.json');
 
     const second = await publish(world, { statePath: secondPath });
@@ -1346,7 +1618,7 @@ describe('the host allows one pending review per author per pull request', () =>
     assert.equal(again.via, 'record');
     assert.equal(world.remote.calls('createReview').length, 2, 'the rejected identity is never resent');
     assert.equal(world.remote.reviews().length, 1);
-    assert.deepEqual(world.remote.review(first.review.id), earlier);
+    assert.deepEqual(world.remote.review(published(first).review.id), earlier);
     assertNoWriteOtherThanCreate(world.remote);
   });
 
@@ -1372,13 +1644,16 @@ describe('the host allows one pending review per author per pull request', () =>
 
 describe('original-input identity governs reuse of a state path', () => {
   /** Re-preparation after the author's branch advanced: different eligible comments and wording. */
-  const reprepared = (i) => {
+  const reprepared = (i: FixtureInput): void => {
     i.preparedReview.body = 'Re-rendered against a newer head; should never be sent.';
     i.preparedReview.comments = i.preparedReview.comments.slice(0, 1);
   };
 
   /** Model of the public wrapper: recover first, prepare only when no identity exists. */
-  async function wrapper(world, prepare) {
+  async function wrapper(
+    world: IWorld,
+    prepare: () => IPublishInput['preparedReview'],
+  ): Promise<{ outcome: Outcome; prepared: boolean }> {
     const recovered = await recover(world);
     if (recovered.status !== 'missing') return { outcome: recovered, prepared: false };
     const input = makeInput(world);
@@ -1407,7 +1682,7 @@ describe('original-input identity governs reuse of a state path', () => {
     assert.deepEqual(fs.readdirSync(world.stateDir), []);
     const { outcome, prepared } = await wrapper(world, () => structuredClone(FIXTURE.input.preparedReview));
     assert.equal(prepared, true);
-    assert.equal(outcome.via, 'created');
+    assert.equal(published(outcome).via, 'created');
   });
 
   test('a re-prepared request under the same identity recovers the saved request and is never sent', async () => {
@@ -1418,7 +1693,7 @@ describe('original-input identity governs reuse of a state path', () => {
     assert.equal(result.status, 'published');
     assert.equal(result.via, 'recovered');
     assertExactlyOneCreateAttempt(world.remote);
-    assert.deepEqual(world.remote.reviews()[0].comments, EXPECTED.comments);
+    assert.deepEqual(itemAt(world.remote.reviews(), 0, 'the stored review').comments, EXPECTED.comments);
     assert.deepEqual(readRecord(world.statePath).request, expectedRequest(first.marker));
   });
 
@@ -1453,7 +1728,7 @@ describe('original-input identity governs reuse of a state path', () => {
     assertExactlyOneCreateAttempt(world.remote);
   });
 
-  const identityChanges = {
+  const identityChanges: Record<string, (i: FixtureInput) => unknown> = {
     'different original input fingerprint': (i) => (i.inputFingerprint = OTHER_FINGERPRINT),
     'different pull request': (i) => (i.destination.pullNumber = 43),
     'different repository': (i) => (i.destination.repo = 'gadgets'),
@@ -1464,11 +1739,11 @@ describe('original-input identity governs reuse of a state path', () => {
     for (const [phase, config] of [
       ['completed', {}],
       ['sending', { create: 'fail-before-persist' }],
-    ]) {
+    ] as const) {
       for (const [op, run] of [
         ['publish', publish],
         ['recover', recover],
-      ]) {
+      ] as const) {
         test(`${label} against a ${phase} record is refused by ${op} without lookup or send`, async () => {
           const world = makeWorld(config);
           await publish(world);
@@ -1487,7 +1762,7 @@ describe('original-input identity governs reuse of a state path', () => {
   for (const [op, run] of [
     ['publish', publish],
     ['recover', recover],
-  ]) {
+  ] as const) {
     test(`a different author id with the same login cannot ${op} under an existing intent`, async () => {
       const world = makeWorld({ create: 'fail-before-persist' });
       await publish(world);
@@ -1527,8 +1802,9 @@ describe('existing state is authoritative and fails closed', () => {
 
   const valid = handBuiltIntent();
   const rejectedRecord = { ...valid, phase: 'rejected', rejection: { status: 422, message: 'Validation Failed' } };
-  const without = (key) => {
-    const copy = structuredClone(valid);
+  const without = (key: keyof Intent): Partial<Intent> => {
+    const copy: Partial<Intent> = structuredClone(valid);
+    // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- builds a record missing exactly the named field
     delete copy[key];
     return copy;
   };
@@ -1565,7 +1841,9 @@ describe('existing state is authoritative and fails closed', () => {
     'saved body with a second marker (rehashed)': JSON.stringify(
       rehashed(valid, (r) => (r.body = `${valid.marker}\n${r.body}`)),
     ),
-    'saved comment malformed (rehashed)': JSON.stringify(rehashed(valid, (r) => (r.comments[0].line = -1))),
+    'saved comment malformed (rehashed)': JSON.stringify(
+      rehashed(valid, (r) => (itemAt(r.comments, 0, 'the first saved comment').line = -1)),
+    ),
     'rejected without rejection details': JSON.stringify({ ...valid, phase: 'rejected' }),
     'rejection with an extra field': JSON.stringify({
       ...rejectedRecord,
@@ -1605,7 +1883,7 @@ describe('existing state is authoritative and fails closed', () => {
     for (const [op, run] of [
       ['publish', publish],
       ['recover', recover],
-    ]) {
+    ] as const) {
       test(`${label} is corrupt state for ${op}, never absence`, async () => {
         const world = makeWorld();
         fs.writeFileSync(world.statePath, contents, { mode: 0o600 });
@@ -1639,7 +1917,7 @@ describe('restart and concurrency use on-disk state and fresh processes', () => 
     for (const operation of ['publish', 'recover', 'publish']) {
       const later = runChild(world, { operation });
       assert.equal(later.status, 0, later.stderr);
-      assert.equal(later.out.result.status, 'uncertain', JSON.stringify(later.out));
+      assert.equal(later.out?.result?.status, 'uncertain', JSON.stringify(later.out));
       assert.equal(later.out.result.reason, 'not-found');
       assert.equal(later.out.result.marker, intent.marker);
     }
@@ -1655,10 +1933,10 @@ describe('restart and concurrency use on-disk state and fresh processes', () => 
 
     const later = runChild(world, { operation: 'recover' });
     assert.equal(later.status, 0, later.stderr);
-    const [stored] = world.remote.reviews();
-    assert.equal(later.out.result.status, 'published', JSON.stringify(later.out));
+    const stored = itemAt(world.remote.reviews(), 0, 'the stored review');
+    assert.equal(later.out?.result?.status, 'published', JSON.stringify(later.out));
     assert.equal(later.out.result.via, 'recovered');
-    assert.equal(later.out.result.review.id, stored.id);
+    assert.equal(later.out.result.review?.id, stored.id);
     assertExactlyOneCreateAttempt(world.remote);
     assert.equal(readRecord(world.statePath).phase, 'completed');
   });
@@ -1673,7 +1951,7 @@ describe('restart and concurrency use on-disk state and fresh processes', () => 
   });
 
   for (let round = 1; round <= 3; round += 1) {
-    test(`concurrent separate processes on one state path send exactly once (round ${round})`, async () => {
+    test(`concurrent separate processes on one state path send exactly once (round ${String(round)})`, async () => {
       const world = makeWorld();
       const barrierPath = path.join(world.root, 'go');
       const running = Array.from({ length: 6 }, () => startChild(world, { barrierPath }));
@@ -1684,20 +1962,20 @@ describe('restart and concurrency use on-disk state and fresh processes', () => 
     });
   }
 
-  function assertOneWinner(world, outs) {
-    const thrown = outs.filter((o) => o.thrown);
+  function assertOneWinner(world: IWorld, outs: readonly (IChildOutput | null)[]): void {
+    const thrown = outs.filter((o) => defined(o, 'a caller output').thrown);
     assert.deepEqual(thrown, [], 'a concurrent caller must never see partial state or fail');
     assertExactlyOneCreateAttempt(world.remote);
     assertNoWriteOtherThanCreate(world.remote);
-    const results = outs.map((o) => o.result);
+    const results = outs.map((o) => defined(defined(o, 'a caller output').result, 'a caller result'));
     const created = results.filter((r) => r.status === 'published' && r.via === 'created');
     assert.equal(created.length, 1, 'exactly one caller is the sender');
     for (const r of results) {
       const allowed =
-        (r.status === 'published' && ['created', 'recovered', 'receipt'].includes(r.via)) ||
+        (r.status === 'published' && r.via !== undefined && ['created', 'recovered', 'receipt'].includes(r.via)) ||
         (r.status === 'uncertain' && r.reason === 'not-found');
       assert.ok(allowed, `unexpected concurrent outcome ${JSON.stringify(r)}`);
-      assert.equal(r.marker, created[0].marker);
+      assert.equal(r.marker, itemAt(created, 0, 'the sender outcome').marker);
     }
     assert.equal(readRecord(world.statePath).phase, 'completed');
   }
@@ -1734,7 +2012,7 @@ describe('PublicationStateError runtime shape', () => {
     fs.writeFileSync(world.statePath, '{"format":', { mode: 0o600 });
     const err = await recover(world).then(
       () => assert.fail('expected a state error'),
-      (e) => e,
+      (e: unknown) => e,
     );
     assert.ok(err instanceof PublicationStateError);
     assert.equal(err.code, 'state-corrupt');
