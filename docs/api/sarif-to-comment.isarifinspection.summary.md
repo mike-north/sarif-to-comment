@@ -10,11 +10,11 @@ Counts of what the view contains.
 
 ```typescript
 readonly summary: {
-    readonly runs: number;
-    readonly findings: number;
-    readonly fixes: number;
-    readonly fileProposals: number;
-    readonly truncatedPreviews: number;
-    readonly externalFindings?: number | undefined;
-  };
+        readonly runs: number;
+        readonly findings: number;
+        readonly fixes: number;
+        readonly fileProposals: number;
+        readonly truncatedPreviews: number;
+        readonly externalFindings?: number | undefined;
+    };
 ```

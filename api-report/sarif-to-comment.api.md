@@ -197,8 +197,14 @@ export interface IInspectionRun {
     readonly index: number;
     readonly otherContent: Readonly<Record<string, unknown>>;
     readonly ref: string;
-    readonly source: { readonly state: 'unbound' | 'declared'; readonly provenance: readonly object[] };
-    readonly tool: { readonly name: string; readonly version?: string | undefined };
+    readonly source: {
+        readonly state: 'unbound' | 'declared';
+        readonly provenance: readonly object[];
+    };
+    readonly tool: {
+        readonly name: string;
+        readonly version?: string | undefined;
+    };
 }
 
 // @public
@@ -298,7 +304,9 @@ export interface ISarifInspection {
     readonly externalProperties?: readonly IInspectionExternalProperties[] | undefined;
     readonly findings: readonly IInspectionFinding[];
     readonly format: 'sarif-to-comment.inspection';
-    readonly log?: { readonly otherContent: Readonly<Record<string, unknown>> } | undefined;
+    readonly log?: {
+        readonly otherContent: Readonly<Record<string, unknown>>;
+    } | undefined;
     readonly runs: readonly IInspectionRun[];
     readonly summary: {
         readonly runs: number;

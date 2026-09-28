@@ -35,24 +35,40 @@
  * is used only by `publish` and is redacted from every output in both modes.
  */
 
-const fs = require('node:fs');
-const path = require('node:path');
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
-const library = require('./index.cjs');
-const files = require('./artifact-files.cjs');
-const { isNormalizedRepositoryPath, OWNER_PATTERN, REPO_PATTERN } = require('./sarif-common.cjs');
-const { renderInspectionText } = require('./sarif-inspection.cjs');
+import * as files from './artifact-files.cjs';
+import type { IArchivedOutput, IJsonFile, ReleaseOwnership } from './artifact-files.cjs';
+import type { IPublishSarifReviewInternals } from './publish-sarif-review.cjs';
+import { publishSarifReviewWithInternals } from './publish-sarif-review.cjs';
+import type { ISarifSourceBinding } from './public-types.cjs';
+import { createSarifDocument, addSarifCommentWithUntypedInput } from './sarif-authoring.cjs';
+import type { ICreateSarifDocumentOptions, INewSarifRun, ISarifComment } from './sarif-authoring.cjs';
+import { isNormalizedRepositoryPath, OWNER_PATTERN, REPO_PATTERN } from './sarif-common.cjs';
+import { inspectSarifWithUntypedInput, renderInspectionText } from './sarif-inspection.cjs';
+import type { IInspectSarifOptions } from './sarif-inspection.cjs';
+import { addStagedChangesToSarifWithUntypedInput } from './staged-changes.cjs';
+import type { IStagedChangesReceipt } from './staged-changes.cjs';
 
 const md = String.raw;
 
+/** A CLI command, in workflow order. */
+type CliCommand = 'init' | 'add-comment' | 'inspect' | 'add-staged-changes' | 'publish';
+
 /** The commands, in workflow order. */
-const COMMANDS = ['init', 'add-comment', 'inspect', 'add-staged-changes', 'publish'];
+const COMMANDS: readonly CliCommand[] = ['init', 'add-comment', 'inspect', 'add-staged-changes', 'publish'];
 
 /** Exit statuses for non-publication outcomes (§5). */
-const EXIT = Object.freeze({ ok: 0, usage: 1, error: 1, refused: 2 });
+const EXIT: Readonly<{ ok: 0; usage: 1; error: 1; refused: 2 }> = Object.freeze({ ok: 0, usage: 1, error: 1, refused: 2 });
 
 /** Exit statuses for publication, unchanged from the flag-only publisher. */
-const PUBLISH_EXIT = Object.freeze({ published: 0, blocked: 2, uncertain: 3, rejected: 1 });
+const PUBLISH_EXIT: Readonly<{ published: 0; blocked: 2; uncertain: 3; rejected: 1 }> = Object.freeze({
+  published: 0,
+  blocked: 2,
+  uncertain: 3,
+  rejected: 1,
+});
 
 const COMMIT_FLAG_PATTERN = /^[0-9a-f]{40}$/;
 const REPO_FLAG_PATTERN = /^([^/\s]+)\/([^/\s]+)$/;
@@ -88,7 +104,8 @@ const FORMAT_OPTION = md`  --format human|json            Output format (default
                                  document on stdout for every outcome.
 `;
 
-const USAGE = {
+/** Help text: the top-level usage and each command's. */
+const USAGE: Readonly<Record<'top' | CliCommand, string>> = {
   top: md`sarif-to-comment — author, inspect and publish SARIF as one GitHub draft review
 
 Usage:
@@ -254,20 +271,47 @@ Exit status:
 /** A command-line mistake the user fixes by changing the arguments. */
 class UsageError extends Error {}
 
+/** An output format; human is the default and is never inferred from a terminal. */
+type OutputFormat = 'human' | 'json';
+
+/** Parsed options: each value option's value, and the boolean flags given. */
+interface IParsedOptions {
+  readonly values: ReadonlyMap<string, string>;
+  readonly flags: ReadonlySet<string>;
+}
+
+/** The options a command accepts; every other option is a usage error. */
+interface IOptionSpec {
+  readonly values: readonly string[];
+  readonly booleans?: readonly string[];
+  readonly required?: readonly string[];
+}
+
+/**
+ * The argument at `index`, which the caller's loop bound keeps in range.
+ * (An out-of-range read would be a defect in this module, never user input.)
+ */
+function argAt(argv: readonly string[], index: number): string {
+  const arg = argv[index];
+  if (arg === undefined) throw new Error(`Internal error: argument ${String(index)} is outside a list of ${String(argv.length)}.`);
+  return arg;
+}
+
 /**
  * Removes the `--format` option from argv and resolves it. Throws UsageError
  * (always reported in human form) when it is repeated, valueless or unknown.
  */
-function resolveFormat(argv) {
-  const rest = [];
-  let format;
+function resolveFormat(argv: readonly string[]): { readonly format: OutputFormat; readonly argv: string[] } {
+  const rest: string[] = [];
+  let format: OutputFormat | undefined;
   let seen = false;
   for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i];
-    let value;
+    const arg = argAt(argv, i);
+    let value: string;
     if (arg === '--format') {
-      value = argv[i + 1];
-      if (value === undefined || value.startsWith('--')) throw new UsageError('--format requires a value: human or json');
+      const next = argv[i + 1];
+      if (next === undefined || next.startsWith('--')) throw new UsageError('--format requires a value: human or json');
+      value = next;
       i += 1;
     } else if (arg.startsWith('--format=')) {
       value = arg.slice('--format='.length);
@@ -288,11 +332,11 @@ function resolveFormat(argv) {
  * publisher always has: unknown, repeated, valueless or empty options and
  * positional arguments are usage errors. Returns { values: Map, flags: Set }.
  */
-function parseOptions(argv, { values: valueFlags, booleans = [], required = [] }) {
-  const values = new Map();
-  const flags = new Set();
+function parseOptions(argv: readonly string[], { values: valueFlags, booleans = [], required = [] }: IOptionSpec): IParsedOptions {
+  const values = new Map<string, string>();
+  const flags = new Set<string>();
   for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i];
+    const arg = argAt(argv, i);
     if (!arg.startsWith('--')) throw new UsageError(`unexpected argument ${arg}`);
     const eq = arg.indexOf('=');
     const name = eq === -1 ? arg : arg.slice(0, eq);
@@ -307,12 +351,13 @@ function parseOptions(argv, { values: valueFlags, booleans = [], required = [] }
     }
     if (!valueFlags.includes(name)) throw new UsageError(`unknown option ${name}`);
     if (values.has(name)) throw new UsageError(`${name} was given more than once`);
-    let value;
+    let value: string;
     if (eq !== -1) {
       value = arg.slice(eq + 1);
     } else {
-      value = argv[i + 1];
-      if (value === undefined || value.startsWith('--')) throw new UsageError(`${name} requires a value`);
+      const next = argv[i + 1];
+      if (next === undefined || next.startsWith('--')) throw new UsageError(`${name} requires a value`);
+      value = next;
       i += 1;
     }
     if (value === '') throw new UsageError(`${name} requires a non-empty value`);
@@ -323,37 +368,56 @@ function parseOptions(argv, { values: valueFlags, booleans = [], required = [] }
   return { values, flags };
 }
 
-/** OWNER/REPO from a flag, validated as GitHub names; throws UsageError. */
-function repositoryFlag(values, flag = '--repo') {
-  const match = REPO_FLAG_PATTERN.exec(values.get(flag));
-  if (!match || !OWNER_PATTERN.test(match[1]) || !REPO_PATTERN.test(match[2]) || match[2] === '.' || match[2] === '..') {
-    throw new UsageError(`${flag} must be OWNER/REPO`);
-  }
-  return { owner: match[1], repo: match[2] };
+/**
+ * A required option's value. parseOptions has already refused its absence,
+ * so a missing value is a defect in this module, never user input.
+ */
+function requiredValue(values: ReadonlyMap<string, string>, flag: string): string {
+  const value = values.get(flag);
+  if (value === undefined) throw new Error(`Internal error: required option ${flag} was not parsed.`);
+  return value;
 }
 
-/** A full lowercase commit from a flag, or undefined; throws UsageError. */
-function commitFlag(values, flag) {
-  const value = values.get(flag);
-  if (value !== undefined && !COMMIT_FLAG_PATTERN.test(value)) {
+/** OWNER/REPO from a flag, validated as GitHub names; throws UsageError. */
+function repositoryFlag(values: ReadonlyMap<string, string>, flag = '--repo'): { readonly owner: string; readonly repo: string } {
+  // String() is the conversion RegExp#exec applies itself.
+  const match = REPO_FLAG_PATTERN.exec(String(values.get(flag)));
+  const owner = match?.[1];
+  const repo = match?.[2];
+  if (owner === undefined || repo === undefined || !OWNER_PATTERN.test(owner) || !REPO_PATTERN.test(repo) || repo === '.' || repo === '..') {
+    throw new UsageError(`${flag} must be OWNER/REPO`);
+  }
+  return { owner, repo };
+}
+
+/** A full lowercase commit given for a flag; throws UsageError. */
+function commitValue(value: string, flag: string): string {
+  if (!COMMIT_FLAG_PATTERN.test(value)) {
     throw new UsageError(`${flag} must be a full 40-character lowercase commit SHA`);
   }
   return value;
 }
 
+/** A full lowercase commit from a flag, or undefined; throws UsageError. */
+function commitFlag(values: ReadonlyMap<string, string>, flag: string): string | undefined {
+  const value = values.get(flag);
+  return value === undefined ? undefined : commitValue(value, flag);
+}
+
 /** `{ owner, repo, commit }` from --repo/--commit given together, or undefined. */
-function optionalSource(values) {
+function optionalSource(values: ReadonlyMap<string, string>): ISarifSourceBinding | undefined {
   const hasRepo = values.has('--repo');
-  const hasCommit = values.has('--commit');
+  const commit = values.get('--commit');
+  const hasCommit = commit !== undefined;
   if (hasRepo && !hasCommit) throw new UsageError('--repo requires --commit (give both or neither)');
   if (hasCommit && !hasRepo) throw new UsageError('--commit requires --repo (give both or neither)');
-  if (!hasRepo) return undefined;
+  if (!hasRepo || !hasCommit) return undefined;
   const { owner, repo } = repositoryFlag(values);
-  return { owner, repo, commit: commitFlag(values, '--commit') };
+  return { owner, repo, commit: commitValue(commit, '--commit') };
 }
 
 /** A `--source-root` value, or undefined; throws UsageError. */
-function sourceRootFlag(values) {
+function sourceRootFlag(values: ReadonlyMap<string, string>): string | undefined {
   const value = values.get('--source-root');
   if (value !== undefined && !(value.startsWith('file:') && value.endsWith('/'))) {
     throw new UsageError('--source-root must be an absolute file: URI ending in "/"');
@@ -361,18 +425,23 @@ function sourceRootFlag(values) {
   return value;
 }
 
-/** A positive whole number from a flag; throws UsageError. */
-function positiveFlag(values, flag) {
-  const value = values.get(flag);
-  if (value === undefined) return undefined;
+/** A positive whole number given for a flag; throws UsageError. */
+function positiveValue(value: string, flag: string): number {
   if (!/^[1-9][0-9]*$/.test(value) || !Number.isSafeInteger(Number(value))) {
     throw new UsageError(`${flag} must be a positive whole number`);
   }
   return Number(value);
 }
 
+/** A positive whole number from a flag; throws UsageError. */
+function positiveFlag(values: ReadonlyMap<string, string>, flag: string): number | undefined {
+  const value = values.get(flag);
+  if (value === undefined) return undefined;
+  return positiveValue(value, flag);
+}
+
 /** A preview limit: a positive whole number, or "all" (no limit, null); throws UsageError. */
-function previewFlag(values, flag) {
+function previewFlag(values: ReadonlyMap<string, string>, flag: string): number | null | undefined {
   const value = values.get(flag);
   if (value === undefined) return undefined;
   if (value === 'all') return null;
@@ -382,34 +451,51 @@ function previewFlag(values, flag) {
   return Number(value);
 }
 
+/** The process environment as the CLI reads it (only the token variables). */
+type CliEnvironment = Readonly<Record<string, string | undefined>>;
+
 /** The credential: GH_TOKEN, else GITHUB_TOKEN; empty counts as unset. */
-function tokenFrom(env) {
-  if (typeof env.GH_TOKEN === 'string' && env.GH_TOKEN !== '') return env.GH_TOKEN;
-  if (typeof env.GITHUB_TOKEN === 'string' && env.GITHUB_TOKEN !== '') return env.GITHUB_TOKEN;
+function tokenFrom(env: CliEnvironment): string | undefined {
+  const ghToken = env['GH_TOKEN'];
+  if (typeof ghToken === 'string' && ghToken !== '') return ghToken;
+  const githubToken = env['GITHUB_TOKEN'];
+  if (typeof githubToken === 'string' && githubToken !== '') return githubToken;
   return undefined;
 }
 
+/**
+ * A caught value's `message` property, read as `value.message` reads it
+ * (a primitive has none; neither has null or undefined, which cannot be read).
+ */
+function messageProperty(value: unknown): unknown {
+  return (typeof value === 'object' && value !== null) || typeof value === 'function' ? Reflect.get(value, 'message') : undefined;
+}
+
 /** An error's message and cause chain, one line each. */
-function describeError(err) {
-  const lines = [];
-  const seen = new Set();
-  for (let current = err; current !== undefined && current !== null && !seen.has(current); current = current.cause) {
+function describeError(err: unknown): string {
+  const lines: string[] = [];
+  const seen = new Set<unknown>();
+  let current: unknown = err;
+  while (current !== undefined && current !== null && !seen.has(current)) {
     seen.add(current);
-    lines.push(lines.length === 0 ? String(current.message ?? current) : `  caused by: ${current.message ?? current}`);
+    const message = messageProperty(current) ?? current;
+    // eslint-disable-next-line @typescript-eslint/no-base-to-string -- a thrown value of any type is shown by its message, else by String(), the deliberate total coercion
+    lines.push(lines.length === 0 ? String(message) : `  caused by: ${String(message)}`);
     if (!(current instanceof Error)) break;
+    current = current.cause;
   }
   return lines.join('\n');
 }
 
 /** Reads all of a readable stream as a Buffer. */
-async function readStream(stream) {
-  const chunks = [];
+async function readStream(stream: AsyncIterable<Buffer | string>): Promise<Buffer> {
+  const chunks: Buffer[] = [];
   for await (const chunk of stream) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
   return Buffer.concat(chunks);
 }
 
 /** SARIF as written by the CLI: two-space indented JSON with a final newline. */
-function serialize(sarif) {
+function serialize(sarif: unknown): string {
   return `${JSON.stringify(sarif, null, 2)}\n`;
 }
 
@@ -421,36 +507,59 @@ function serialize(sarif) {
 // and `err` are the human renderings for stdout and stderr.
 // ---------------------------------------------------------------------------
 
+/** The JSON document of an outcome: `{ command, status, ... }`. */
+type OutcomeDocument = Readonly<Record<string, unknown>>;
+
+/** What a handled invocation produced (see above). */
+interface IOutcome {
+  readonly exit: number;
+  readonly doc: OutcomeDocument;
+  readonly out?: string;
+  readonly err?: string;
+}
+
+/** An artifact receipt: the fields naming files written, archived or deliberately not written. */
+type ArtifactReceipt = Readonly<Record<string, unknown>>;
+
 /** An operational failure after arguments were accepted, with its artifact receipt fields. */
-function errorOutcome(command, message, receipt = {}, humanNotes = []) {
+function errorOutcome(command: CliCommand, message: string, receipt: ArtifactReceipt = {}, humanNotes: readonly string[] = []): IOutcome {
   const notes = humanNotes.length === 0 ? '' : `\n${humanNotes.join('\n')}`;
   return { exit: EXIT.error, doc: { command, status: 'error', message, ...receipt }, err: `sarif-to-comment: ${message}${notes}\n` };
 }
 
 /** A usage error; `usage` is the command's help (or the top-level help). */
-function usageOutcome(command, message, legacy = false) {
+function usageOutcome(command: CliCommand | null, message: string, legacy = false): IOutcome {
   const hint = legacy || command === null ? 'sarif-to-comment --help' : `sarif-to-comment ${command} --help`;
   return {
     exit: EXIT.usage,
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- every command has help text; the top-level fallback is kept as the durable guard it always was
     doc: { command, status: 'usage-error', message, usage: USAGE[command ?? 'top'] ?? USAGE.top },
     err: `sarif-to-comment: ${message}\nRun ${hint} for usage.\n`,
   };
 }
 
 /** Human text for refused content: the library's Markdown and what happened to files. */
-function refusedText(markdown, notes) {
+function refusedText(markdown: string, notes: readonly string[]): string {
   const text = markdown.endsWith('\n') ? markdown : `${markdown}\n`;
   return notes.length === 0 ? text : `${text}\n${notes.join('\n')}\n`;
 }
 
 /** A one-based line or inclusive range, written like inspection output (`2` or `5-6`). */
-const lineRange = (start, end) => (end === undefined || end === start ? `${start}` : `${start}-${end}`);
+const lineRange = (start: number, end: number | undefined): string =>
+  end === undefined || end === start ? String(start) : `${String(start)}-${String(end)}`;
+
+/** What every command handler may use from the invocation. */
+interface IHandlerContext {
+  readonly env: CliEnvironment;
+  readonly stdin: AsyncIterable<Buffer | string>;
+  readonly cwd: string;
+}
 
 // ---------------------------------------------------------------------------
 // init
 // ---------------------------------------------------------------------------
 
-function init(argv, { cwd }) {
+function init(argv: readonly string[], { cwd }: IHandlerContext): IOutcome {
   const { values } = parseOptions(argv, {
     values: ['--output', '--tool-name', '--tool-version', '--repo', '--commit'],
     required: ['--output'],
@@ -459,31 +568,36 @@ function init(argv, { cwd }) {
     throw new UsageError("--tool-version requires --tool-name (this package's version is never attributed to another tool)");
   }
   const source = optionalSource(values);
-  const options = {};
-  if (values.has('--tool-name')) {
-    options.tool = { name: values.get('--tool-name') };
-    if (values.has('--tool-version')) options.tool.version = values.get('--tool-version');
-  }
-  if (source) options.source = source;
+  const toolName = values.get('--tool-name');
+  const toolVersion = values.get('--tool-version');
+  const options: ICreateSarifDocumentOptions = {
+    ...(toolName === undefined ? {} : { tool: { name: toolName, ...(toolVersion === undefined ? {} : { version: toolVersion }) } }),
+    ...(source ? { source } : {}),
+  };
   let sarif;
   try {
-    sarif = library.createSarifDocument(options);
+    sarif = createSarifDocument(options);
   } catch (err) {
     if (err instanceof TypeError) throw new UsageError(err.message);
     throw err;
   }
 
-  const output = path.resolve(cwd, values.get('--output'));
+  const output = path.resolve(cwd, requiredValue(values, '--output'));
   try {
     files.createExclusive(output, serialize(sarif));
   } catch (err) {
     if (!(err instanceof files.ArtifactError)) throw err;
     return errorOutcome('init', err.message, { output: { path: output, written: false } });
   }
-  const doc = { command: 'init', status: 'created', output: { path: output, written: true }, runIndex: 0 };
-  const run = sarif.runs[0];
+  const run = createdRun(sarif.runs[0]);
   const binding = run.versionControlProvenance?.[0];
-  if (binding) doc.source = { repositoryUri: binding.repositoryUri, commit: binding.revisionId };
+  const doc = {
+    command: 'init',
+    status: 'created',
+    output: { path: output, written: true },
+    runIndex: 0,
+    ...(binding ? { source: { repositoryUri: binding.repositoryUri, commit: binding.revisionId } } : {}),
+  };
   const tool = run.tool.driver.version === undefined ? run.tool.driver.name : `${run.tool.driver.name} ${run.tool.driver.version}`;
   const bound = binding ? `, bound to ${binding.repositoryUri} at ${binding.revisionId}` : ', not bound to a commit';
   return {
@@ -493,11 +607,61 @@ function init(argv, { cwd }) {
   };
 }
 
+/** The run createSarifDocument makes, as far as init reports it. */
+interface ICreatedRun {
+  readonly tool: { readonly driver: { readonly name: string; readonly version?: string } };
+  readonly versionControlProvenance?: readonly { readonly repositoryUri: string; readonly revisionId: string }[];
+}
+
+/**
+ * The one run of a document createSarifDocument has just made. It always
+ * has that run (with a named driver and, when bound, its provenance), so
+ * this check refuses only a defect in this package, never user input.
+ */
+function createdRun(run: object | undefined): ICreatedRun {
+  if (!isCreatedRun(run)) throw new Error('Internal error: createSarifDocument returned no run with a named tool.');
+  return run;
+}
+
+/** Whether `value` has the shape createSarifDocument gives its run (see ICreatedRun). */
+function isCreatedRun(value: unknown): value is ICreatedRun {
+  if (typeof value !== 'object' || value === null || !('tool' in value)) return false;
+  const { tool } = value;
+  if (typeof tool !== 'object' || tool === null || !('driver' in tool)) return false;
+  const { driver } = tool;
+  if (typeof driver !== 'object' || driver === null || !('name' in driver) || typeof driver.name !== 'string') return false;
+  if ('version' in driver && driver.version !== undefined && typeof driver.version !== 'string') return false;
+  if (!('versionControlProvenance' in value) || value.versionControlProvenance === undefined) return true;
+  const provenance = value.versionControlProvenance;
+  return (
+    Array.isArray(provenance) &&
+    provenance.every(
+      (entry: unknown) =>
+        typeof entry === 'object' &&
+        entry !== null &&
+        'repositoryUri' in entry &&
+        typeof entry.repositoryUri === 'string' &&
+        'revisionId' in entry &&
+        typeof entry.revisionId === 'string',
+    )
+  );
+}
+
 // ---------------------------------------------------------------------------
 // add-comment
 // ---------------------------------------------------------------------------
 
-async function addComment(argv, { cwd, stdin }) {
+/** A SARIF level `--level` accepts. */
+type SarifLevel = NonNullable<ISarifComment['level']>;
+
+/** The SARIF levels `--level` accepts. */
+const LEVELS: readonly SarifLevel[] = ['none', 'note', 'warning', 'error'];
+
+function isLevel(value: string): value is SarifLevel {
+  return LEVELS.some((level) => level === value);
+}
+
+async function addComment(argv: readonly string[], { cwd, stdin }: IHandlerContext): Promise<IOutcome> {
   const { values, flags } = parseOptions(argv, {
     values: [
       '--sarif', '--file', '--line', '--end-line', '--message', '--message-file', '--rule-id', '--level', '--run',
@@ -509,15 +673,15 @@ async function addComment(argv, { cwd, stdin }) {
   if (values.has('--message') === values.has('--message-file')) {
     throw new UsageError('give exactly one of --message TEXT or --message-file FILE|-');
   }
-  const file = values.get('--file');
+  const file = requiredValue(values, '--file');
   if (!isNormalizedRepositoryPath(file)) {
     throw new UsageError('--file must be a repository-relative path with "/" separators and no leading "/", ".", ".." or empty segment');
   }
-  const line = positiveFlag(values, '--line');
+  const line = positiveValue(requiredValue(values, '--line'), '--line');
   const endLine = positiveFlag(values, '--end-line');
   if (endLine !== undefined && endLine < line) throw new UsageError('--end-line must not be smaller than --line');
   const level = values.get('--level');
-  if (level !== undefined && !['none', 'note', 'warning', 'error'].includes(level)) {
+  if (level !== undefined && !isLevel(level)) {
     throw new UsageError('--level must be none, note, warning or error');
   }
   const newRunTool = values.get('--new-run-tool');
@@ -525,29 +689,31 @@ async function addComment(argv, { cwd, stdin }) {
   for (const flag of ['--new-run-tool-version', '--repo', '--commit']) {
     if (values.has(flag) && newRunTool === undefined) throw new UsageError(`${flag} applies only to a new run: give --new-run-tool NAME`);
   }
-  let run;
-  if (values.has('--run')) {
-    const index = values.get('--run');
+  let run: number | INewSarifRun | undefined;
+  const index = values.get('--run');
+  if (index !== undefined) {
     if (!/^(0|[1-9][0-9]*)$/.test(index)) throw new UsageError('--run must be a run index (0, 1, ...)');
     run = Number(index);
   } else if (newRunTool !== undefined) {
-    run = { toolName: newRunTool };
-    if (values.has('--new-run-tool-version')) run.toolVersion = values.get('--new-run-tool-version');
+    const toolVersion = values.get('--new-run-tool-version');
+    const newRunVersion = toolVersion === undefined ? {} : { toolVersion };
     const source = optionalSource(values);
-    if (source) run.source = source;
+    run = { toolName: newRunTool, ...newRunVersion, ...(source ? { source } : {}) };
   }
 
-  const sarifPath = path.resolve(cwd, values.get('--sarif'));
+  const sarifPath = path.resolve(cwd, requiredValue(values, '--sarif'));
   const notWritten = { sarif: { path: sarifPath, written: false } };
 
-  let message;
+  let message: string;
   try {
-    if (values.has('--message')) {
-      message = values.get('--message');
-    } else if (values.get('--message-file') === '-') {
+    const inline = values.get('--message');
+    const messageFile = values.get('--message-file');
+    if (inline !== undefined) {
+      message = inline;
+    } else if (messageFile === '-') {
       message = new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(await readStream(stdin));
     } else {
-      message = files.readTextFile(path.resolve(cwd, values.get('--message-file')), 'message file').text;
+      message = files.readTextFile(path.resolve(cwd, String(messageFile)), 'message file').text;
     }
   } catch (err) {
     if (err instanceof files.ArtifactError) return errorOutcome('add-comment', err.message, notWritten);
@@ -556,21 +722,26 @@ async function addComment(argv, { cwd, stdin }) {
   }
   if (message === '') throw new UsageError('the message must not be empty');
 
-  const comment = { file, line, message };
-  if (endLine !== undefined) comment.endLine = endLine;
-  if (flags.has('--markdown')) comment.messageFormat = 'markdown';
-  if (values.has('--rule-id')) comment.ruleId = values.get('--rule-id');
-  if (level !== undefined) comment.level = level;
-  if (run !== undefined) comment.run = run;
+  const ruleId = values.get('--rule-id');
+  const comment: ISarifComment = {
+    file,
+    line,
+    message,
+    ...(endLine === undefined ? {} : { endLine }),
+    ...(flags.has('--markdown') ? { messageFormat: 'markdown' as const } : {}),
+    ...(ruleId === undefined ? {} : { ruleId }),
+    ...(level === undefined ? {} : { level }),
+    ...(run === undefined ? {} : { run }),
+  };
 
   // Edit the real file behind any symbolic link, so the link itself survives.
-  let target;
+  let target: string;
   try {
     target = fs.realpathSync(sarifPath);
   } catch (err) {
-    return errorOutcome('add-comment', `cannot read SARIF file ${sarifPath}: ${err.message}`, notWritten);
+    return errorOutcome('add-comment', `cannot read SARIF file ${sarifPath}: ${String(messageProperty(err))}`, notWritten);
   }
-  let release;
+  let release: ReleaseOwnership;
   try {
     release = files.acquireOwnership(target);
   } catch (err) {
@@ -578,7 +749,7 @@ async function addComment(argv, { cwd, stdin }) {
     throw err;
   }
   try {
-    let read;
+    let read: IJsonFile;
     try {
       read = files.readJsonFile(target, 'SARIF file');
     } catch (err) {
@@ -587,7 +758,7 @@ async function addComment(argv, { cwd, stdin }) {
     }
     let outcome;
     try {
-      outcome = library.addSarifComment(read.value, comment);
+      outcome = addSarifCommentWithUntypedInput(read.value, comment);
     } catch (err) {
       if (err instanceof TypeError) {
         throw new UsageError(`${err.message}. Select a run with --run N, or add one with --new-run-tool NAME.`);
@@ -622,21 +793,22 @@ async function addComment(argv, { cwd, stdin }) {
 // inspect
 // ---------------------------------------------------------------------------
 
-function inspect(argv, { cwd }) {
+function inspect(argv: readonly string[], { cwd }: IHandlerContext): IOutcome {
   const { values } = parseOptions(argv, {
     values: ['--sarif', '--preview-lines', '--preview-chars', '--source-root'],
     required: ['--sarif'],
   });
-  const options = {};
   const previewLines = previewFlag(values, '--preview-lines');
   const previewChars = previewFlag(values, '--preview-chars');
   const sourceRootUri = sourceRootFlag(values);
-  if (previewLines !== undefined) options.previewLines = previewLines;
-  if (previewChars !== undefined) options.previewChars = previewChars;
-  if (sourceRootUri !== undefined) options.sourceRootUri = sourceRootUri;
+  const options: IInspectSarifOptions = {
+    ...(previewLines === undefined ? {} : { previewLines }),
+    ...(previewChars === undefined ? {} : { previewChars }),
+    ...(sourceRootUri === undefined ? {} : { sourceRootUri }),
+  };
 
-  const sarifPath = path.resolve(cwd, values.get('--sarif'));
-  let read;
+  const sarifPath = path.resolve(cwd, requiredValue(values, '--sarif'));
+  let read: IJsonFile;
   try {
     read = files.readJsonFile(sarifPath, 'SARIF file');
   } catch (err) {
@@ -645,7 +817,7 @@ function inspect(argv, { cwd }) {
   }
   let outcome;
   try {
-    outcome = library.inspectSarif(read.value, options);
+    outcome = inspectSarifWithUntypedInput(read.value, options);
   } catch (err) {
     if (err instanceof TypeError) throw new UsageError(err.message);
     throw err;
@@ -670,8 +842,8 @@ function inspect(argv, { cwd }) {
 // ---------------------------------------------------------------------------
 
 /** Human lines describing an extraction receipt. */
-function stagedReceiptText(receipt) {
-  const lines = [];
+function stagedReceiptText(receipt: IStagedChangesReceipt): string[] {
+  const lines: string[] = [];
   if (receipt.changes.length === 0) lines.push('No staged changes: the SARIF content is unchanged.');
   for (const change of receipt.changes) {
     if (change.operation === 'edit') {
@@ -681,43 +853,44 @@ function stagedReceiptText(receipt) {
         // A pure insertion changes no reviewed line; its empty range ends at the
         // line it follows, so name that position rather than a changed range.
         const where = r.insertion
-          ? `${r.endLine === 0 ? 'insertion at the start of the file' : `insertion after line ${r.endLine}`} (no reviewed line changed)`
+          ? `${r.endLine === 0 ? 'insertion at the start of the file' : `insertion after line ${String(r.endLine)}`} (no reviewed line changed)`
           : `lines ${lineRange(r.startLine, r.endLine)}`;
         lines.push(`  ${where}: ${who} (explained by ${r.explainedBy})`);
       }
     } else {
-      const who = (change.associated ?? []).length === 0 ? 'no finding' : change.associated.join(', ');
-      lines.push(`${change.operation} ${change.path}: ${who} (explained by ${change.explainedBy})`);
+      const associated = change.associated ?? [];
+      const who = associated.length === 0 ? 'no finding' : associated.join(', ');
+      lines.push(`${change.operation} ${change.path}: ${who} (explained by ${String(change.explainedBy)})`);
     }
   }
   if (receipt.boundRuns.length > 0) lines.push(`Runs bound to ${receipt.reviewedCommit}: ${receipt.boundRuns.join(', ')}`);
-  if (receipt.addedRun !== null) lines.push(`Changes no finding explains are in run ${receipt.addedRun}.`);
+  if (receipt.addedRun !== null) lines.push(`Changes no finding explains are in run ${String(receipt.addedRun)}.`);
   for (const warning of receipt.warnings) lines.push(`Warning: ${warning.message}`);
   return lines;
 }
 
 /** Human line describing an archived output. */
-function archiveNote(archived) {
+function archiveNote(archived: IArchivedOutput | null): string[] {
   if (!archived) return [];
   const time = archived.timeSource === 'birth' ? 'creation' : 'modification';
   return [`The previous ${archived.from} was preserved as ${archived.path} (named by its ${time} time).`];
 }
 
-async function addStagedChanges(argv, { cwd }) {
+async function addStagedChanges(argv: readonly string[], { cwd }: IHandlerContext): Promise<IOutcome> {
   const { values } = parseOptions(argv, {
     values: ['--sarif', '--output', '--worktree', '--repo', '--commit', '--source-root'],
     required: ['--sarif', '--output', '--worktree', '--repo', '--commit'],
   });
   const repository = repositoryFlag(values);
-  const reviewedCommit = commitFlag(values, '--commit');
+  const reviewedCommit = commitValue(requiredValue(values, '--commit'), '--commit');
   const sourceRootUri = sourceRootFlag(values);
-  const input = path.resolve(cwd, values.get('--sarif'));
-  const output = path.resolve(cwd, values.get('--output'));
-  const worktree = path.resolve(cwd, values.get('--worktree'));
+  const input = path.resolve(cwd, requiredValue(values, '--sarif'));
+  const output = path.resolve(cwd, requiredValue(values, '--output'));
+  const worktree = path.resolve(cwd, requiredValue(values, '--worktree'));
   if (input === output || files.sameExistingFile(input, output)) {
     throw new UsageError(`--output must be a different file from --sarif (${output} and ${input} are the same file)`);
   }
-  let outputDirectory;
+  let outputDirectory: fs.Stats | null;
   try {
     outputDirectory = fs.statSync(path.dirname(output));
   } catch {
@@ -729,7 +902,7 @@ async function addStagedChanges(argv, { cwd }) {
 
   // Operation start (§6.4): ownership, then archive, before any other work.
   const command = 'add-staged-changes';
-  let release;
+  let release: ReleaseOwnership;
   try {
     release = files.acquireOwnership(output);
   } catch (err) {
@@ -738,9 +911,9 @@ async function addStagedChanges(argv, { cwd }) {
     }
     throw err;
   }
-  let archived = null;
-  const receiptFields = () => ({ output: { path: output, written: false }, archived });
-  const notes = () => [`${output} was not written.`, ...archiveNote(archived)];
+  let archived: IArchivedOutput | null = null;
+  const receiptFields = (): ArtifactReceipt => ({ output: { path: output, written: false }, archived });
+  const notes = (): string[] => [`${output} was not written.`, ...archiveNote(archived)];
   try {
     try {
       archived = files.archiveExisting(output);
@@ -748,18 +921,23 @@ async function addStagedChanges(argv, { cwd }) {
       if (err instanceof files.ArtifactError) return errorOutcome(command, err.message, receiptFields(), notes());
       throw err;
     }
-    let read;
+    let read: IJsonFile;
     try {
       read = files.readJsonFile(input, 'SARIF file');
     } catch (err) {
       if (err instanceof files.ArtifactError) return errorOutcome(command, err.message, receiptFields(), notes());
       throw err;
     }
-    const request = { sarif: read.value, worktree, reviewedCommit, repository };
-    if (sourceRootUri !== undefined) request.sourceRootUri = sourceRootUri;
+    const request = {
+      sarif: read.value,
+      worktree,
+      reviewedCommit,
+      repository,
+      ...(sourceRootUri === undefined ? {} : { sourceRootUri }),
+    };
     let outcome;
     try {
-      outcome = await library.addStagedChangesToSarif(request);
+      outcome = await addStagedChangesToSarifWithUntypedInput(request);
     } catch (err) {
       return errorOutcome(command, describeError(err), receiptFields(), notes());
     }
@@ -790,34 +968,51 @@ async function addStagedChanges(argv, { cwd }) {
 // publish (and the flag-only publisher)
 // ---------------------------------------------------------------------------
 
-const PUBLISH_SPEC = {
+const PUBLISH_SPEC: IOptionSpec = {
   values: ['--sarif', '--repo', '--pull', '--commit', '--state', '--source-root', '--old-source-commit'],
   booleans: ['--ignore-approval-hold'],
   required: ['--sarif', '--repo', '--pull', '--commit', '--state'],
 };
 
+/** Library input fields from publish options (everything but the SARIF and the token). */
+interface IPublishRequest {
+  readonly sarifPath: string;
+  readonly input: {
+    readonly destination: { readonly owner: string; readonly repo: string; readonly pullNumber: number };
+    readonly reviewedCommit: string;
+    readonly statePath: string;
+    readonly oldSourceCommit?: string;
+    readonly sourceRootUri?: string;
+    readonly options?: { readonly ignoreApprovalHold: true };
+  };
+}
+
 /** Library input fields from publish options; throws UsageError. */
-function publishRequest(argv) {
+function publishRequest(argv: readonly string[]): IPublishRequest {
   const { values, flags } = parseOptions(argv, PUBLISH_SPEC);
-  const repo = REPO_FLAG_PATTERN.exec(values.get('--repo'));
-  if (!repo) throw new UsageError('--repo must be OWNER/REPO');
-  const pull = values.get('--pull');
+  const repo = REPO_FLAG_PATTERN.exec(requiredValue(values, '--repo'));
+  const owner = repo?.[1];
+  const name = repo?.[2];
+  if (owner === undefined || name === undefined) throw new UsageError('--repo must be OWNER/REPO');
+  const pull = requiredValue(values, '--pull');
   if (!/^[1-9][0-9]*$/.test(pull) || !Number.isSafeInteger(Number(pull))) {
     throw new UsageError('--pull must be a positive pull request number');
   }
-  const statePath = values.get('--state');
+  const statePath = requiredValue(values, '--state');
   if (!path.isAbsolute(statePath)) throw new UsageError('--state must be an absolute file path');
-  const input = {
-    destination: { owner: repo[1], repo: repo[2], pullNumber: Number(pull) },
-    reviewedCommit: commitFlag(values, '--commit'),
-    statePath,
-  };
+  const destination = { owner, repo: name, pullNumber: Number(pull) };
+  const reviewedCommit = commitValue(requiredValue(values, '--commit'), '--commit');
   const oldSourceCommit = commitFlag(values, '--old-source-commit');
-  if (oldSourceCommit !== undefined) input.oldSourceCommit = oldSourceCommit;
   const sourceRootUri = sourceRootFlag(values);
-  if (sourceRootUri !== undefined) input.sourceRootUri = sourceRootUri;
-  if (flags.has('--ignore-approval-hold')) input.options = { ignoreApprovalHold: true };
-  return { sarifPath: values.get('--sarif'), input };
+  const input = {
+    destination,
+    reviewedCommit,
+    statePath,
+    ...(oldSourceCommit === undefined ? {} : { oldSourceCommit }),
+    ...(sourceRootUri === undefined ? {} : { sourceRootUri }),
+    ...(flags.has('--ignore-approval-hold') ? { options: { ignoreApprovalHold: true as const } } : {}),
+  };
+  return { sarifPath: requiredValue(values, '--sarif'), input };
 }
 
 /**
@@ -825,13 +1020,17 @@ function publishRequest(argv) {
  * library's Markdown on stdout, errors on stderr. The SARIF path is used as
  * given, as it always has been.
  */
-async function publish(argv, { env }, internals) {
+async function publish(
+  argv: readonly string[],
+  { env }: IHandlerContext,
+  internals: IPublishSarifReviewInternals | undefined,
+): Promise<IOutcome> {
   const request = publishRequest(argv);
   const token = tokenFrom(env);
   if (token === undefined) {
     return errorOutcome('publish', 'no GitHub token: set GH_TOKEN (or GITHUB_TOKEN) to a personal access token or user token.');
   }
-  let sarif;
+  let sarif: unknown;
   try {
     ({ value: sarif } = files.readJsonFile(request.sarifPath, 'SARIF file'));
   } catch (err) {
@@ -844,15 +1043,19 @@ async function publish(argv, { env }, internals) {
   }
   let outcome;
   try {
-    outcome = await library.publishSarifReview({ ...request.input, sarif, token }, internals);
+    outcome = await publishSarifReviewWithInternals({ ...request.input, sarif, token }, internals);
   } catch (err) {
     return errorOutcome('publish', describeError(err));
   }
-  const doc = { command: 'publish', status: outcome.status };
-  if (outcome.review) doc.review = { id: outcome.review.id, url: outcome.review.url };
-  if (outcome.statePath) doc.statePath = outcome.statePath;
-  doc.message = outcome.markdown;
+  const doc = {
+    command: 'publish',
+    status: outcome.status,
+    ...('review' in outcome ? { review: { id: outcome.review.id, url: outcome.review.url } } : {}),
+    ...('statePath' in outcome && outcome.statePath ? { statePath: outcome.statePath } : {}),
+    message: outcome.markdown,
+  };
   return {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- every publication status has an exit status; the operational-error fallback is kept as the durable guard it always was
     exit: PUBLISH_EXIT[outcome.status] ?? EXIT.error,
     doc,
     out: outcome.markdown.endsWith('\n') ? outcome.markdown : `${outcome.markdown}\n`,
@@ -863,7 +1066,14 @@ async function publish(argv, { env }, internals) {
 // main
 // ---------------------------------------------------------------------------
 
-const HANDLERS = {
+/** A command handler: arguments after the command, the invocation, and the private seam. */
+type Handler = (
+  argv: readonly string[],
+  context: IHandlerContext,
+  internals: IPublishSarifReviewInternals | undefined,
+) => IOutcome | Promise<IOutcome>;
+
+const HANDLERS: Readonly<Record<CliCommand, Handler>> = {
   init,
   'add-comment': addComment,
   inspect,
@@ -871,22 +1081,46 @@ const HANDLERS = {
   publish,
 };
 
+/** Whether an argument names a command. */
+function isCommand(arg: string): arg is CliCommand {
+  return COMMANDS.some((command) => command === arg);
+}
+
+/** Something the CLI writes its output to (the process's stdout or stderr, or a test's capture). */
+interface IOutputStream {
+  write(text: string): unknown;
+}
+
+/**
+ * The invocation `main` runs: argv is the arguments after the executable;
+ * stdin is read only by `add-comment --message-file -`; cwd resolves
+ * relative paths (default: the process's working directory).
+ */
+export interface ICliIo {
+  readonly argv: readonly string[];
+  readonly env: CliEnvironment;
+  readonly stdout: IOutputStream;
+  readonly stderr: IOutputStream;
+  readonly stdin?: AsyncIterable<Buffer | string> | undefined;
+  readonly cwd?: string | undefined;
+}
+
 /**
  * Runs the CLI and returns its exit status; expected failures never throw.
  *
- * @param {{ argv: string[], env: object, stdout: object, stderr: object,
- *           stdin?: object, cwd?: string }} io
- *   argv: arguments after the executable; stdin is read only by
- *   `add-comment --message-file -`; cwd resolves relative paths (default:
- *   the process's working directory).
- * @param {object} [internals] passed to publishSarifReview (private test seam)
+ * @param io - `{ argv, env, stdout, stderr, stdin?, cwd? }` (see ICliIo)
+ * @param internals - passed to publishSarifReview (private test seam; the
+ *   shipped executable's test wrapper injects a fake GitHub client through it)
  */
-async function main({ argv, env, stdout, stderr, stdin = process.stdin, cwd = process.cwd() }, internals) {
+async function main(
+  { argv, env, stdout, stderr, stdin = process.stdin, cwd = process.cwd() }: ICliIo,
+  internals?: IPublishSarifReviewInternals,
+): Promise<number> {
   const token = tokenFrom(env);
-  const safe = (text) => (token === undefined ? String(text) : String(text).split(token).join('[redacted]'));
+  const safe = (text: string): string => (token === undefined ? text : text.split(token).join('[redacted]'));
 
-  let format;
-  let args;
+  let format: OutputFormat;
+  let args: string[];
   try {
     ({ format, argv: args } = resolveFormat(argv));
   } catch (err) {
@@ -895,13 +1129,14 @@ async function main({ argv, env, stdout, stderr, stdin = process.stdin, cwd = pr
     return EXIT.usage;
   }
 
-  const legacy = args.length === 0 || args[0].startsWith('-');
-  const command = legacy ? 'publish' : COMMANDS.includes(args[0]) ? args[0] : null;
+  const first = args[0];
+  const legacy = first === undefined || first.startsWith('-');
+  const command = first === undefined || legacy ? 'publish' : isCommand(first) ? first : null;
   const rest = legacy ? args : args.slice(1);
 
-  let outcome;
+  let outcome: IOutcome;
   if (command === null) {
-    outcome = usageOutcome(null, `unknown command ${args[0]}`);
+    outcome = usageOutcome(null, `unknown command ${String(first)}`);
   } else if (rest.includes('--help') || rest.includes('-h')) {
     const helpCommand = legacy ? null : command;
     const usage = USAGE[helpCommand ?? 'top'];
@@ -924,4 +1159,4 @@ async function main({ argv, env, stdout, stderr, stdin = process.stdin, cwd = pr
   return outcome.exit;
 }
 
-module.exports = { main, USAGE };
+export { main, USAGE };

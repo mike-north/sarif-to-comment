@@ -31,87 +31,16 @@ import {
   COMMIT_PATTERN, OWNER_PATTERN, REPO_PATTERN, captureJson, validateSarif, isPlainObject,
   isNormalizedRepositoryPath, encodeRepositoryPath, packageVersion,
 } from './sarif-common.cjs';
+import type { IInvalidSarifOutcome, ISarifLog, ISarifSourceBinding } from './public-types.cjs';
 
 // ---------------------------------------------------------------------------
 // Public types
 //
 // These are the shapes the package documents for authoring. Their names and
 // documentation are the public ones, so declarations generated from this
-// module read exactly as the published API.
-
-/**
- * A SARIF 2.1.0 log as a plain JSON object. The operations in this package
- * return fresh values of this shape, which you own and may change or store.
- *
- * @remarks
- * Only the top-level fields every document has are typed; everything else in
- * SARIF is ordinary JSON.
- *
- * @public
- */
-export interface ISarifLog {
-  /** The SARIF schema URI, when present. */
-  $schema?: string;
-  /** Always `"2.1.0"`. */
-  version: '2.1.0';
-  /** The runs, each with its own tool and results. */
-  runs: object[];
-  /** Any other top-level SARIF property. */
-  [property: string]: unknown;
-}
-
-/**
- * A problem that prevented an operation, with where it is.
- *
- * @public
- */
-export interface IProblem {
-  /** What is wrong and what would fix it, as Markdown. */
-  readonly message: string;
-  /** JSON Pointer into the SARIF document, when the problem is in it. */
-  readonly pointer?: string | undefined;
-  /** Repository-relative path, when the problem concerns a file. */
-  readonly path?: string | undefined;
-}
-
-/**
- * The input is not schema-valid SARIF 2.1.0, or cannot take the requested
- * change. Nothing was produced.
- *
- * @public
- */
-export interface IInvalidSarifOutcome {
-  /** Discriminant: the SARIF input was refused. */
-  readonly status: 'invalid';
-  /** Every problem found. */
-  readonly problems: readonly IProblem[];
-  /** The same problems as a human-readable explanation. */
-  readonly markdown: string;
-}
-
-/**
- * A GitHub repository.
- *
- * @public
- */
-export interface IGitHubRepository {
-  /** Account or organization that owns the repository, for example `acme`. */
-  readonly owner: string;
-  /** Repository name, for example `widgets`. */
-  readonly repo: string;
-}
-
-/**
- * The repository and reviewed commit a run's locations refer to. The run
- * records it as `versionControlProvenance` with repository URI
- * `https://github.com/OWNER/REPO`.
- *
- * @public
- */
-export interface ISarifSourceBinding extends IGitHubRepository {
-  /** Full 40-character lowercase commit SHA. */
-  readonly commit: string;
-}
+// module read exactly as the published API. The shapes several operations
+// share (the SARIF log, the invalid outcome, the source binding) are declared
+// once in public-types.cts.
 
 /**
  * The author of findings, recorded as a run's tool.
@@ -367,6 +296,30 @@ function newRun({ name, version }: ISarifToolIdentity, source: ISarifSourceBindi
 }
 
 /**
+ * Creates a SARIF document with one empty run, ready for
+ * {@link addSarifComment}.
+ *
+ * @remarks
+ * The result is ordinary SARIF: it has the schema URI, version `2.1.0` and
+ * one run with the tool, `columnKind: "utf16CodeUnits"`, the optional
+ * binding and no results. It carries no authoring marker, and nothing else in
+ * the package requires a document to have been created this way.
+ *
+ * @param options - The findings' author and an optional source binding.
+ * @returns A new SARIF log.
+ * @throws `TypeError` for malformed options.
+ *
+ * @example
+ * ```ts
+ * import { createSarifDocument } from 'sarif-to-comment';
+ *
+ * let sarif = createSarifDocument({ tool: { name: 'Review agent' } });
+ * ```
+ *
+ * @public
+ */
+export function createSarifDocument(options?: ICreateSarifDocumentOptions): ISarifLog;
+/**
  * Creates an ordinary SARIF document with one empty run (contract §3.1).
  *
  * @param options - the author (`tool: { name, version? }`) and an optional
@@ -375,7 +328,7 @@ function newRun({ name, version }: ISarifToolIdentity, source: ISarifSourceBindi
  * @returns a fresh, schema-valid SARIF log
  * @throws TypeError on malformed options
  */
-function createSarifDocument(options?: ICreateSarifDocumentOptions): ISarifLog {
+export function createSarifDocument(options?: ICreateSarifDocumentOptions): ISarifLog {
   const operation = 'createSarifDocument';
   const input: unknown = options;
   const given: unknown = input === undefined ? {} : captureJson(input, 'options');
@@ -473,6 +426,38 @@ function isValidatedLog(captured: unknown): captured is IExtensibleSarifLog {
 }
 
 /**
+ * Adds one finding on a line or line range to a copy of a SARIF document.
+ *
+ * @remarks
+ * Works on any schema-valid SARIF, whether it came from
+ * {@link createSarifDocument} or from another producer. The input is copied
+ * and never changed; every existing run, finding and property is kept. Only
+ * what you supply is written: no source is read, so lines are checked later,
+ * by {@link addStagedChangesToSarif} and by publication.
+ *
+ * @param sarif - A SARIF log as a parsed JSON object.
+ * @param comment - The finding.
+ * @returns `added` with the new document, or `invalid` if the input is not
+ * schema-valid SARIF or has no run.
+ * @throws `TypeError` for a malformed comment, a run index out of range, or
+ * a document with several runs and no `run` choice.
+ *
+ * @example
+ * ```ts
+ * import { createSarifDocument, addSarifComment } from 'sarif-to-comment';
+ *
+ * let sarif = createSarifDocument({ tool: { name: 'Review agent' } });
+ * const added = addSarifComment(sarif, { file: 'src/parse.js', line: 2, message: 'Handle empty input.' });
+ * if (added.status === 'added') sarif = added.sarif;
+ * ```
+ *
+ * @public
+ */
+export function addSarifComment(sarif: object, comment: ISarifComment): AddSarifCommentOutcome {
+  return addSarifCommentWithUntypedInput(sarif, comment);
+}
+
+/**
  * Appends one line or line-range finding to a copy of `sarif` (contract §3.2).
  *
  * Run selection, for D5 attribution:
@@ -487,13 +472,15 @@ function isValidatedLog(captured: unknown): captured is IExtensibleSarifLog {
  * document. It is not a persistent identifier.
  *
  * Both arguments are validated at run time, since JavaScript callers can pass
- * anything.
+ * anything. The public {@link addSarifComment} calls this with its
+ * documented parameter types; the CLI calls it directly, because it
+ * passes parsed file content that only this validation judges.
  *
  * @returns `{ status: 'added', sarif, finding: { ref, runIndex, resultIndex, tool } }`
  *   or `{ status: 'invalid', problems, markdown }`
  * @throws TypeError on caller misuse
  */
-function addSarifComment(sarif: object, comment: ISarifComment): AddSarifCommentOutcome {
+function addSarifCommentWithUntypedInput(sarif: unknown, comment: unknown): AddSarifCommentOutcome {
   const operation = 'addSarifComment';
   const input: unknown = sarif;
   if (input === null || typeof input !== 'object' || Array.isArray(input)) {
@@ -538,4 +525,4 @@ function addSarifComment(sarif: object, comment: ISarifComment): AddSarifComment
   };
 }
 
-export { createSarifDocument, addSarifComment };
+export { addSarifCommentWithUntypedInput };

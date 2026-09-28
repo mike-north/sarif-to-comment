@@ -328,9 +328,10 @@ describe('the published outcome is described as a completed publication', () => 
   // contacting GitHub (test/publication.test.cjs, "a completed receipt is
   // final"). The review may since have been submitted, edited or deleted, so
   // no document may promise that it currently exists or is still a draft.
-  const DECLARATIONS = fs.readFileSync(path.join(ROOT, 'types', 'index.d.ts'), 'utf8');
+  // The shipped public declarations, generated from the TypeScript sources.
+  const DECLARATIONS = fs.readFileSync(path.join(ROOT, 'dist', 'sarif-to-comment.d.ts'), 'utf8');
   const sources = {
-    'types/index.d.ts': DECLARATIONS,
+    'dist/sarif-to-comment.d.ts': DECLARATIONS,
     'docs/getting-started.md': GUIDE,
     'README.md': README,
     ...Object.fromEntries(
@@ -347,7 +348,7 @@ describe('the published outcome is described as a completed publication', () => 
   });
 
   test('the declaration explains the receipt path and that the tool does not check again', () => {
-    const doc = /\/\*\*([\s\S]*?)\*\/\s*export interface IPublishedOutcome/.exec(DECLARATIONS);
+    const doc = /\/\*\*((?:(?!\*\/)[\s\S])*?)\*\/\s*export declare interface IPublishedOutcome/.exec(DECLARATIONS);
     assert.ok(doc, 'IPublishedOutcome has a doc comment');
     assert.match(doc[1], /recorded as complete/i);
     assert.match(doc[1], /submitted, edited or deleted/i);
@@ -484,7 +485,7 @@ describe('release tooling comments are accurate and durable', () => {
   test('code comments and test names carry no task-specific review labels', () => {
     // Owned sources in every language they are written in, so the scan keeps
     // covering them as JavaScript is converted to TypeScript.
-    const scanned = ['scripts', 'test', 'src', 'types'].map((dir) => [
+    const scanned = ['scripts', 'test', 'src'].map((dir) => [
       dir,
       fs
         .readdirSync(path.join(ROOT, dir))
@@ -539,7 +540,7 @@ describe('generated API reference', () => {
 
   test('the staleness check passes for this checkout and detects an unregenerated declaration change', { timeout: 300_000 }, () => {
     const copy = fs.mkdtempSync(path.join(os.tmpdir(), 'api-docs-'));
-    for (const entry of ['package.json', 'api-extractor.json', 'tsconfig.json', 'types', 'api-report', 'docs/api', 'scripts']) {
+    for (const entry of ['package.json', 'api-extractor.json', 'tsconfig.json', 'tsconfig.base.json', 'src', 'dist', 'api-report', 'docs/api', 'scripts']) {
       fs.cpSync(path.join(ROOT, entry), path.join(copy, entry), { recursive: true });
     }
     fs.symlinkSync(path.join(ROOT, 'node_modules'), path.join(copy, 'node_modules'), 'dir');
@@ -548,7 +549,9 @@ describe('generated API reference', () => {
     const fresh = check();
     assert.equal(fresh.status, 0, fresh.stdout + fresh.stderr);
 
-    const declarations = path.join(copy, 'types', 'index.d.ts');
+    // A documentation change compiled into the declarations but never
+    // regenerated into the report and reference.
+    const declarations = path.join(copy, 'dist', 'publish-sarif-review.d.cts');
     const text = fs.readFileSync(declarations, 'utf8');
     const changed = text.replace(/(\n \* @public\n \*\/\nexport declare function publishSarifReview)/, '\n *\n * A sentence added without regenerating the docs.$1');
     assert.notEqual(changed, text, 'control: the declaration was changed');

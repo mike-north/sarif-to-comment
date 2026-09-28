@@ -37,6 +37,7 @@
     "!dist/*.tsbuildinfo",
     "!dist/.build-inputs.json",
     "!dist/public-api.cjs",
+    "!dist/public-types.cjs",
     "vendor/",
     "docs/getting-started.md",
     "docs/api/",

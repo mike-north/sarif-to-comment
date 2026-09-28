@@ -9,5 +9,8 @@ The run's tool.
 **Signature:**
 
 ```typescript
-readonly tool: { readonly name: string; readonly version?: string | undefined };
+readonly tool: {
+        readonly name: string;
+        readonly version?: string | undefined;
+    };
 ```
