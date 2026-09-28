@@ -83,10 +83,11 @@ jobs:
       # working tree, so the check's API/docs freshness comparison would pass
       # even when the committed copies are stale. Refuse to publish if the
       # build changed them: the committed API report and reference docs must
-      # match the sources being released.
+      # match the sources being released. git status, not git diff, so a newly
+      # generated page that was never committed (untracked) also refuses.
       - name: Committed API report and reference docs match the sources
         if: steps.preflight.outputs.publish == 'true'
-        run: git diff --exit-code -- api-report docs/api
+        run: test -z "$(git status --porcelain -- api-report docs/api | tee /dev/stderr)"
 
       - name: Lint, type-check, API/docs freshness, release plan and tests
         if: steps.preflight.outputs.publish == 'true'

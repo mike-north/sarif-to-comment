@@ -909,9 +909,11 @@ describe('package scripts', () => {
  * working tree against the commit right after the build restores the
  * guarantee that the committed API report and docs match the sources: a
  * change to the public API or its TSDoc must come with the regenerated
- * report and docs.
+ * report and docs. `git status --porcelain` rather than `git diff`, because
+ * a newly generated page that was never committed is untracked, and
+ * `git diff` does not report untracked files.
  */
-const API_FRESHNESS_STEP = /run: git diff --exit-code -- api-report docs\/api\n/;
+const API_FRESHNESS_STEP = /run: test -z "\$\(git status --porcelain -- api-report docs\/api \| tee \/dev\/stderr\)"\n/;
 
 /** Assert that each pattern appears in `text`, in order. */
 function assertStepOrder(text: string, order: readonly RegExp[]): void {

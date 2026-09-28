@@ -53,9 +53,11 @@ jobs:
       # working tree, so the check's API/docs freshness comparison would pass
       # even when the committed copies are stale. Fail if the build changed
       # them: the committed API report and reference docs must match the
-      # sources (run `pnpm run build` and commit the result).
+      # sources (run `pnpm run build` and commit the result). git status, not
+      # git diff, so a newly generated page that was never committed (untracked)
+      # also fails; the offending paths are printed.
       - name: Committed API report and reference docs match the sources
-        run: git diff --exit-code -- api-report docs/api
+        run: test -z "$(git status --porcelain -- api-report docs/api | tee /dev/stderr)"
 
       - name: Lint, type-check, API/docs freshness, release plan and tests
         run: pnpm run check
