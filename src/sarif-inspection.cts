@@ -43,7 +43,7 @@ import type {
   ArtifactPathResolution, IPlainObject, ISarifArtifact, ISarifArtifactLocation, ISarifMessage, ISarifReportingDescriptor,
   ISarifResult, ISarifRun, ISarifTool, ISarifToolComponent,
 } from './sarif-common.cjs';
-import type { IInvalidSarifOutcome } from './sarif-authoring.cjs';
+import type { IInvalidSarifOutcome } from './public-types.cjs';
 
 // ---------------------------------------------------------------------------
 // Public types

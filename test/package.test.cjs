@@ -44,7 +44,8 @@ const { UPSTREAM_SARIF_PATH, createGitWorld } = require('./fixtures/authoring-wo
  * dist/ is build output; the negations keep build by-products out of the
  * package: per-module declarations (only the rolled-up public declaration
  * ships), TypeScript build info, the build-freshness manifest, and the runtime
- * output of the declaration-only entry (it has no runtime content).
+ * output of the declaration-only entry and of the type-only public types
+ * module (neither has runtime content).
  */
 const EXPECTED_FILES_FIELD = [
   'dist/',
@@ -52,6 +53,7 @@ const EXPECTED_FILES_FIELD = [
   '!dist/*.tsbuildinfo',
   '!dist/.build-inputs.json',
   '!dist/public-api.cjs',
+  '!dist/public-types.cjs',
   'vendor/',
   'docs/getting-started.md',
   'docs/api/',
@@ -60,7 +62,7 @@ const EXPECTED_FILES_FIELD = [
 ];
 
 /** Compiled outputs that exist in dist/ but carry no runtime content, so never ship. */
-const NON_RUNTIME_OUTPUTS = ['dist/public-api.cjs'];
+const NON_RUNTIME_OUTPUTS = ['dist/public-api.cjs', 'dist/public-types.cjs'];
 
 /** Whether a packed path is inside the intended distribution boundary. */
 function distributable(file) {
@@ -276,6 +278,8 @@ describe('packed distributable', () => {
       'index.d.cts',
       'public-api.cjs',
       'public-api.d.cts',
+      'public-types.cjs',
+      'public-types.d.cts',
       'sarif-to-comment.d.ts',
       'tsconfig.tsbuildinfo',
       '.build-inputs.json',

@@ -66,60 +66,11 @@ import type {
 } from './sarif-common.cjs';
 import { MODE, blobSizes, diffHunks, openRepository, readBlobs, readIndexSnapshot, readTree } from './staged-git.cjs';
 import type { IDiffHunk, IGitRepository, IIndexEntry, IIndexSnapshot, ITreeEntry } from './staged-git.cjs';
+import type { IGitHubRepository, IInvalidSarifOutcome, IProblem, ISarifLog } from './public-types.cjs';
 
 // ---------------------------------------------------------------------------
 // Operation input and outcomes
 // ---------------------------------------------------------------------------
-
-/**
- * A SARIF 2.1.0 log as a plain JSON object. The operations in this package
- * return fresh values of this shape, which you own and may change or store.
- *
- * @remarks
- * Only the top-level fields every document has are typed; everything else in
- * SARIF is ordinary JSON.
- *
- * @public
- */
-export interface ISarifLog {
-  /** The SARIF schema URI, when present. */
-  $schema?: string;
-  /** Always `"2.1.0"`. */
-  version: '2.1.0';
-  /** The runs, each with its own tool and results. */
-  runs: object[];
-  /** Any other top-level SARIF property. */
-  [property: string]: unknown;
-}
-
-/**
- * A problem that prevented an operation, with where it is.
- *
- * @public
- */
-export interface IProblem {
-  /** What is wrong and what would fix it, as Markdown. */
-  readonly message: string;
-  /** JSON Pointer into the SARIF document, when the problem is in it. */
-  readonly pointer?: string | undefined;
-  /** Repository-relative path, when the problem concerns a file. */
-  readonly path?: string | undefined;
-}
-
-/**
- * The input is not schema-valid SARIF 2.1.0, or cannot take the requested
- * change. Nothing was produced.
- *
- * @public
- */
-export interface IInvalidSarifOutcome {
-  /** Discriminant: the SARIF input was refused. */
-  readonly status: 'invalid';
-  /** Every problem found. */
-  readonly problems: readonly IProblem[];
-  /** The same problems as a human-readable explanation. */
-  readonly markdown: string;
-}
 
 /**
  * Input to {@link addStagedChangesToSarif}. Unknown fields are refused.
@@ -137,7 +88,7 @@ export interface IAddStagedChangesInput {
   /** Full 40-character commit the staged content is compared with; it must exist locally. */
   readonly reviewedCommit: string;
   /** The GitHub repository recorded as the fixes' source. */
-  readonly repository: IRepositoryIdentity;
+  readonly repository: IGitHubRepository;
   /**
    * Absolute `file:` URI (ending in `/`) of the repository root in the SARIF
    * producer's file system.

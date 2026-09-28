@@ -96,9 +96,10 @@ const PRE_MODE_FILE = path.join('.changeset', 'pre.json');
 
 /**
  * Built files in dist/ that carry no runtime content and never ship: the
- * runtime output of the declaration-only public API entry.
+ * runtime output of the declaration-only public API entry and of the
+ * type-only public types module.
  */
-const NON_RUNTIME_OUTPUTS = ['dist/public-api.cjs'];
+const NON_RUNTIME_OUTPUTS = ['dist/public-api.cjs', 'dist/public-types.cjs'];
 
 /**
  * Whether a packed path is inside the distribution boundary: the built
