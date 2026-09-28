@@ -1,0 +1,44 @@
+{
+  "version": "2.1.0",
+  "properties": { "producerRunId": "ci-42", "note": "log-level metadata" },
+  "inlineExternalProperties": [
+    {
+      "guid": "11111111-2222-4333-8444-555555555555",
+      "results": [
+        { "message": { "text": "a finding kept in external properties" }, "ruleId": "EXT-R1" },
+        { "message": { "text": "a second embedded finding" } }
+      ]
+    },
+    { "properties": { "externalNote": "no results in this one" } }
+  ],
+  "runs": [
+    {
+      "tool": { "driver": { "name": "t" } },
+      "externalPropertyFileReferences": { "results": [{ "location": { "uri": "results.sarif-external-properties.json" }, "itemCount": 10 }] },
+      "artifacts": [{ "location": { "uri": "new.md" }, "contents": { "text": "# New\n", "rendered": { "text": "rendered artifact form" } } }],
+      "results": [
+        {
+          "message": { "text": "m" },
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": { "uri": "f.txt" },
+                  "replacements": [
+                    { "deletedRegion": { "startLine": 1 },
+                      "insertedContent": { "text": "new\n", "properties": { "rationale": "kept?" }, "rendered": { "text": "rendered form" } } },
+                    { "deletedRegion": { "startLine": 2 }, "insertedContent": { "text": "both\n", "binary": "Ym90aAo=" } }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "message": { "text": "Add the page." },
+          "properties": { "sarifToComment": { "proposedFileChanges": [{ "operation": "create", "artifactIndex": 0 }] } }
+        }
+      ]
+    }
+  ]
+}

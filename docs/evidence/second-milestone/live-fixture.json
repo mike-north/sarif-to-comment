@@ -1,0 +1,17 @@
+{
+  "status": "local and GitHub fixtures prepared; product review acceptance not executed",
+  "baseCommit": "e59eeae59556f47b6d9311bb6642e129c2bda89c",
+  "reviewedCommit": "998d7cfc7c858adf3bbcea82ef126a900d51ebc3",
+  "indexBlob": "9b3cf3b2680e5e274c8ce85629d7ba62561ae020",
+  "sourcePath": "fixture/review.txt",
+  "github": {
+    "repository": "mike-north/doc-linter",
+    "pullNumber": 19,
+    "url": "https://github.com/mike-north/doc-linter/pull/19",
+    "baseBranch": "codex/m2-20260928-base",
+    "headBranch": "codex/m2-20260928-reviewed",
+    "defaultBranchBaseline": "0a7b03fe399255a62118311cbc3e1bd6fe64cb23",
+    "owner": "mike-north",
+    "state": "OPEN"
+  }
+}

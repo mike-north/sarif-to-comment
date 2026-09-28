@@ -1,5 +1,17 @@
 # sarif-to-comment
 
+## 0.2.0
+
+### Minor Changes
+
+- Write, inspect and extend SARIF without an analyzer, and turn staged Git changes into suggested fixes.
+
+  - New library functions `createSarifDocument`, `addSarifComment`, `inspectSarif` and `addStagedChangesToSarif`, with TypeScript declarations. They work on ordinary in-memory SARIF, never change their input, and accept SARIF from any producer.
+  - New CLI commands `init`, `add-comment`, `inspect`, `add-staged-changes` and `publish`.
+  - `--format human|json` on every command: JSON mode prints exactly one document for every outcome, errors included.
+  - `add-staged-changes` reads only the Git index, never unstaged working-tree content. It attaches a change to a finding only when the finding's lines lie within the change, and fails with an explanation for changes it cannot represent. An existing output file is preserved under a timestamped `.old.` name.
+  - Publishing is unchanged. The original flag-only command keeps its exact behavior, output and exit statuses.
+
 ## 0.1.1
 
 ### Patch Changes

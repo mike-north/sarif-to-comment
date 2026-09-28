@@ -1,0 +1,504 @@
+{
+  "format": "sarif-to-comment.second-milestone-acceptance-evidence",
+  "note": "Compact, sanitized consolidation. Profile blobs, credentials, process environments and absolute temporary paths are omitted. Each publication lists the working records it was copied from (logs/ is a local, git-ignored working area; this file is the durable copy).",
+  "generator": "logs/opus/m2/build-acceptance-evidence.cjs",
+  "reviewedSource": {
+    "manifest": "docs/evidence/second-milestone/reviewed-source.sha256",
+    "manifestSha256": "823bef633b25c49908aebb6b774aba6462bef9759a2131e0c41dc7223dfc60d7",
+    "entries": 325,
+    "versionOnlyDifferences": [
+      ".changeset/authoring-inspection-staged-changes.md (consumed)",
+      "CHANGELOG.md",
+      "package.json"
+    ],
+    "fullCheck": {
+      "tests": 1806,
+      "suites": 138,
+      "failed": 0,
+      "skipped": 0,
+      "apiPages": 225,
+      "exitCode": 0
+    }
+  },
+  "installedPackage": {
+    "source": "logs/opus/m2/parent-installed-final.json",
+    "version": "0.2.0",
+    "tarball": "sarif-to-comment-0.2.0.tgz",
+    "tarballSha256": "13b75f537f36453968b7720e09d6210571aca500116b5bb77bce7e11e994c1f1",
+    "installedSourceHashesEqualReviewed": true,
+    "installedSourceHashes": {
+      "artifact-files.cjs": "bf3d7e30acba59c62f069db35524b610af49c0345d47d81afdb1a4687dbaefc0",
+      "cli.cjs": "0b8133b7e2d683558efbe01bfa1cddb74088524b1f299fc5b686028803d390ce",
+      "github.cjs": "f43b4e561637aefbaac05f02d17d11b9e8fabedb158aa15a44c3ca25fd73bfa7",
+      "index.cjs": "6b01cda2c541926a190c731cdb3acde68a620c8b8b28f10c21fe0823517bef28",
+      "placement.cjs": "7f0df1a586972162c5496757c29adcf211d566884e2243fd6eb0ba87b44bbefc",
+      "prepare-review.cjs": "9626bc1b2504d8933ea5395f9594a5a58a1f2e61c8b14f8a108abcad1ee91852",
+      "publication.cjs": "71fff07a0cedc52408df3974fd387ff4668260ea4d4b8b35d3d3221c9615e7b8",
+      "replacements.cjs": "71109a561fed6d2ae4b339cc71c12be74300b7638b007b300f2c915652fdd9dd",
+      "sarif-authoring.cjs": "edb7c7b7e2a056ac520a5430a6c71fd9e925efbd671256fe6d0bf31cd582f853",
+      "sarif-common.cjs": "4946e26461a077462200477a0984fa8dc132440cc43e9ac52c42a07993076232",
+      "sarif-inspection.cjs": "bd08dd875742c9d09cc20dfe563a969d6cf0e3047b41cfa818bd2e39f87d8787",
+      "staged-changes.cjs": "e5d03ddc55c4ba0734f53654ea06b1b485db1ac360e9602cc280a7d39aceb84e",
+      "staged-git.cjs": "a54ce8608c0d17bc70ee9b8f5e8672ab421867b5bda06ed50d0a55aeedf002bd"
+    },
+    "registryRelease": "not published; this is the locally packed artifact"
+  },
+  "localAcceptance": {
+    "replacements": {
+      "source": [
+        "logs/opus/m2/parent-local-final.txt",
+        "logs/opus/m2/parent-local-final/local-acceptance.json"
+      ],
+      "status": "passed",
+      "packageVersion": "0.2.0",
+      "reviewedCommit": "998d7cfc7c858adf3bbcea82ef126a900d51ebc3",
+      "paths": [
+        "installed-library",
+        "installed-cli-json",
+        "ordinary-upstream-bypass"
+      ],
+      "remoteAcceptance": "not executed by this runner"
+    },
+    "insertions": {
+      "source": "logs/opus/m2/parent-insertion-final.txt",
+      "status": "local-passed",
+      "mode": "insertions",
+      "reviewedCommit": "998d7cfc7c858adf3bbcea82ef126a900d51ebc3",
+      "tarballSha256": "13b75f537f36453968b7720e09d6210571aca500116b5bb77bce7e11e994c1f1",
+      "independentEditedBytes": true,
+      "unchangedFeedbackSeparate": true
+    }
+  },
+  "publications": [
+    {
+      "mode": "authored-library",
+      "pullNumber": 19,
+      "surface": "installed library: createSarifDocument, addSarifComment x2, inspectSarif, addStagedChangesToSarif, publishSarifReview",
+      "input": "caller-authored findings A (line 2) and B (lines 5-6) from source-oracle.json, enriched from the staged index",
+      "reviewId": 5341773653,
+      "reviewUrl": "https://github.com/mike-north/doc-linter/pull/19#pullrequestreview-5341773653",
+      "marker": "<!-- sarif-to-comment:review:62422603-5ec0-4a1f-91e8-6672ef4259a4 -->",
+      "productOutcome": {
+        "status": "published",
+        "firstSentence": "The draft [review 5341773653](https://github.com/mike-north/doc-linter/pull/19#pullrequestreview-5341773653) on mike-north/doc-linter#19 at commit `998d7cfc7c858adf3bbcea82ef126a900d51ebc3` was already published; its completion is recorded at `<state file>`."
+      },
+      "durableState": {
+        "phase": "completed",
+        "receiptVia": "created",
+        "reviewId": 5341773653
+      },
+      "hostReadback": {
+        "verifier": "logs/opus/m2/live-readback.cjs (independent read-only oracle; asserts, then writes the flags below)",
+        "state": "PENDING",
+        "commitId": "998d7cfc7c858adf3bbcea82ef126a900d51ebc3",
+        "authorLogin": "mike-north",
+        "authorId": 558005,
+        "commentCount": 2,
+        "exactOriginalAnchors": true,
+        "exactExplanations": true,
+        "suggestionPayloads": "exact expected payloads asserted",
+        "onePendingReviewByAuthor": true,
+        "pullReviewListingAtReadback": [
+          {
+            "id": 5341773653,
+            "state": "PENDING"
+          }
+        ]
+      },
+      "comments": [
+        {
+          "id": 4124699985,
+          "path": "fixture/review.txt",
+          "diffSide": "RIGHT",
+          "originalStartLine": null,
+          "originalLine": 2,
+          "originalCommit": "998d7cfc7c858adf3bbcea82ef126a900d51ebc3",
+          "body": "Use the corrected second value.\n\n<sub>— Independent acceptance reviewer</sub>\n\n```suggestion\ncorrected two\n```"
+        },
+        {
+          "id": 4124700004,
+          "path": "fixture/review.txt",
+          "diffSide": "RIGHT",
+          "originalStartLine": 5,
+          "originalLine": 6,
+          "originalCommit": "998d7cfc7c858adf3bbcea82ef126a900d51ebc3",
+          "body": "Combine these two entries without changing the following entries.\n\n<sub>— Independent acceptance reviewer</sub>\n\n```suggestion\ncorrected five and six\n```"
+        }
+      ],
+      "sources": [
+        "logs/opus/m2/parent-live-final/authored-library.json",
+        "logs/opus/m2/parent-live-final/authored-library.state.json",
+        "logs/opus/m2/parent-live-final/authored-library.readback.json",
+        "logs/opus/m2/parent-live-final/authored-library.review.json",
+        "logs/opus/m2/parent-live-final/authored-library.comments.json",
+        "logs/opus/m2/parent-live-final/authored-library.threads.json",
+        "logs/opus/m2/parent-live-final/authored-library.reviews.json",
+        "logs/opus/m2/parent-live-final/authored-library.before-delete.json",
+        "logs/opus/m2/parent-live-final/authored-library.deleted.json",
+        "logs/opus/m2/parent-live-final/authored-library-retry.json"
+      ],
+      "lifecycle": {
+        "action": "pending draft deleted by the parent after readback",
+        "beforeDelete": {
+          "id": 5341773653,
+          "state": "PENDING"
+        },
+        "deleteResponse": {
+          "id": 5341773653,
+          "state": "PENDING"
+        },
+        "absentFromNextListing": {
+          "listingFrom": "upstream-enriched",
+          "ids": [
+            5341790476
+          ],
+          "absent": true
+        }
+      },
+      "retrySameStatePath": {
+        "status": "published",
+        "reviewId": 5341773653,
+        "sameReviewId": true,
+        "message": "The draft [review 5341773653](https://github.com/mike-north/doc-linter/pull/19#pullrequestreview-5341773653) on mike-north/doc-linter#19 at commit `998d7cfc7c858adf3bbcea82ef126a900d51ebc3` was already published; its completion is recorded at `<state file>`. Nothing was sent."
+      },
+      "evidenceGap": "The runner writes <mode>.json on every invocation, so the first-run receipt was overwritten by the retry and holds the retry outcome. Creation by this product is shown by the durable state receipt (via \"created\"), the single review carrying this state marker, and the readback; the first run's own \"Created\" output text is not retained."
+    },
+    {
+      "mode": "upstream-enriched",
+      "pullNumber": 19,
+      "surface": "installed library: inspectSarif, addStagedChangesToSarif, publishSarifReview",
+      "input": "upstream-input.sarif.json (no initialization), enriched from the staged index",
+      "reviewId": 5341790476,
+      "reviewUrl": "https://github.com/mike-north/doc-linter/pull/19#pullrequestreview-5341790476",
+      "marker": "<!-- sarif-to-comment:review:2ba73f83-56b9-4f67-a005-72b0ce441be9 -->",
+      "productOutcome": {
+        "status": "published",
+        "firstSentence": "Created the draft [review 5341790476](https://github.com/mike-north/doc-linter/pull/19#pullrequestreview-5341790476) on mike-north/doc-linter#19 at commit `998d7cfc7c858adf3bbcea82ef126a900d51ebc3`."
+      },
+      "durableState": {
+        "phase": "completed",
+        "receiptVia": "created",
+        "reviewId": 5341790476
+      },
+      "hostReadback": {
+        "verifier": "logs/opus/m2/live-readback.cjs (independent read-only oracle; asserts, then writes the flags below)",
+        "state": "PENDING",
+        "commitId": "998d7cfc7c858adf3bbcea82ef126a900d51ebc3",
+        "authorLogin": "mike-north",
+        "authorId": 558005,
+        "commentCount": 2,
+        "exactOriginalAnchors": true,
+        "exactExplanations": true,
+        "suggestionPayloads": "exact expected payloads asserted",
+        "onePendingReviewByAuthor": true,
+        "pullReviewListingAtReadback": [
+          {
+            "id": 5341790476,
+            "state": "PENDING"
+          }
+        ]
+      },
+      "comments": [
+        {
+          "id": 4124713162,
+          "path": "fixture/review.txt",
+          "diffSide": "RIGHT",
+          "originalStartLine": null,
+          "originalLine": 2,
+          "originalCommit": "998d7cfc7c858adf3bbcea82ef126a900d51ebc3",
+          "body": "**Level:** note\n\nUse the corrected second value.\n\n<sub>— Independent fixture producer 1.0.0 · rule `VALUE`</sub>\n\n```suggestion\ncorrected two\n```"
+        },
+        {
+          "id": 4124713184,
+          "path": "fixture/review.txt",
+          "diffSide": "RIGHT",
+          "originalStartLine": 5,
+          "originalLine": 6,
+          "originalCommit": "998d7cfc7c858adf3bbcea82ef126a900d51ebc3",
+          "body": "**Level:** warning\n\nCombine these two entries without changing the following entries.\n\n<sub>— Independent fixture producer 1.0.0 · rule `COMBINE`</sub>\n\n```suggestion\ncorrected five and six\n```"
+        }
+      ],
+      "sources": [
+        "logs/opus/m2/parent-live-final/upstream-enriched.json",
+        "logs/opus/m2/parent-live-final/upstream-enriched.state.json",
+        "logs/opus/m2/parent-live-final/upstream-enriched.readback.json",
+        "logs/opus/m2/parent-live-final/upstream-enriched.review.json",
+        "logs/opus/m2/parent-live-final/upstream-enriched.comments.json",
+        "logs/opus/m2/parent-live-final/upstream-enriched.threads.json",
+        "logs/opus/m2/parent-live-final/upstream-enriched.reviews.json",
+        "logs/opus/m2/parent-live-final/upstream-enriched.before-delete.json",
+        "logs/opus/m2/parent-live-final/upstream-enriched.deleted.json"
+      ],
+      "lifecycle": {
+        "action": "pending draft deleted by the parent after readback",
+        "beforeDelete": {
+          "id": 5341790476,
+          "state": "PENDING"
+        },
+        "deleteResponse": {
+          "id": 5341790476,
+          "state": "PENDING"
+        },
+        "absentFromNextListing": {
+          "listingFrom": "upstream-direct",
+          "ids": [
+            5341805378
+          ],
+          "absent": true
+        }
+      }
+    },
+    {
+      "mode": "upstream-direct",
+      "pullNumber": 19,
+      "surface": "installed library: publishSarifReview only (no authoring, inspection or extraction call)",
+      "input": "upstream-input.sarif.json as ready SARIF; it carries no fixes",
+      "reviewId": 5341805378,
+      "reviewUrl": "https://github.com/mike-north/doc-linter/pull/19#pullrequestreview-5341805378",
+      "marker": "<!-- sarif-to-comment:review:f84030cf-0f43-4daa-b749-09e713fafd24 -->",
+      "productOutcome": {
+        "status": "published",
+        "firstSentence": "Created the draft [review 5341805378](https://github.com/mike-north/doc-linter/pull/19#pullrequestreview-5341805378) on mike-north/doc-linter#19 at commit `998d7cfc7c858adf3bbcea82ef126a900d51ebc3`."
+      },
+      "durableState": {
+        "phase": "completed",
+        "receiptVia": "created",
+        "reviewId": 5341805378
+      },
+      "hostReadback": {
+        "verifier": "logs/opus/m2/live-readback.cjs (independent read-only oracle; asserts, then writes the flags below)",
+        "state": "PENDING",
+        "commitId": "998d7cfc7c858adf3bbcea82ef126a900d51ebc3",
+        "authorLogin": "mike-north",
+        "authorId": 558005,
+        "commentCount": 2,
+        "exactOriginalAnchors": true,
+        "exactExplanations": true,
+        "suggestionPayloads": "none expected (input has no fixes); absence asserted",
+        "onePendingReviewByAuthor": true,
+        "pullReviewListingAtReadback": [
+          {
+            "id": 5341805378,
+            "state": "PENDING"
+          }
+        ]
+      },
+      "comments": [
+        {
+          "id": 4124724465,
+          "path": "fixture/review.txt",
+          "diffSide": "RIGHT",
+          "originalStartLine": null,
+          "originalLine": 2,
+          "originalCommit": "998d7cfc7c858adf3bbcea82ef126a900d51ebc3",
+          "body": "**Level:** note\n\nUse the corrected second value.\n\n<sub>— Independent fixture producer 1.0.0 · rule `VALUE`</sub>"
+        },
+        {
+          "id": 4124724477,
+          "path": "fixture/review.txt",
+          "diffSide": "RIGHT",
+          "originalStartLine": 5,
+          "originalLine": 6,
+          "originalCommit": "998d7cfc7c858adf3bbcea82ef126a900d51ebc3",
+          "body": "**Level:** warning\n\nCombine these two entries without changing the following entries.\n\n<sub>— Independent fixture producer 1.0.0 · rule `COMBINE`</sub>"
+        }
+      ],
+      "sources": [
+        "logs/opus/m2/parent-live-final/upstream-direct.json",
+        "logs/opus/m2/parent-live-final/upstream-direct.state.json",
+        "logs/opus/m2/parent-live-final/upstream-direct.readback.json",
+        "logs/opus/m2/parent-live-final/upstream-direct.review.json",
+        "logs/opus/m2/parent-live-final/upstream-direct.comments.json",
+        "logs/opus/m2/parent-live-final/upstream-direct.threads.json",
+        "logs/opus/m2/parent-live-final/upstream-direct.reviews.json",
+        "logs/opus/m2/parent-live-final/upstream-direct.before-delete.json",
+        "logs/opus/m2/parent-live-final/upstream-direct.deleted.json"
+      ],
+      "lifecycle": {
+        "action": "pending draft deleted by the parent after readback",
+        "beforeDelete": {
+          "id": 5341805378,
+          "state": "PENDING"
+        },
+        "deleteResponse": {
+          "id": 5341805378,
+          "state": "PENDING"
+        },
+        "absentFromNextListing": {
+          "listingFrom": "authored-cli",
+          "ids": [
+            5341813827
+          ],
+          "absent": true
+        }
+      }
+    },
+    {
+      "mode": "authored-cli",
+      "pullNumber": 19,
+      "surface": "installed executable: publish --format json, on the SARIF produced by installed init, add-comment x2, inspect and add-staged-changes during local acceptance",
+      "input": "cli-enriched.sarif.json from the installed CLI local acceptance run",
+      "reviewId": 5341813827,
+      "reviewUrl": "https://github.com/mike-north/doc-linter/pull/19#pullrequestreview-5341813827",
+      "marker": "<!-- sarif-to-comment:review:2694446b-8648-476c-b4fb-25f04442d8cb -->",
+      "productOutcome": {
+        "status": "published",
+        "firstSentence": "Created the draft [review 5341813827](https://github.com/mike-north/doc-linter/pull/19#pullrequestreview-5341813827) on mike-north/doc-linter#19 at commit `998d7cfc7c858adf3bbcea82ef126a900d51ebc3`."
+      },
+      "durableState": {
+        "phase": "completed",
+        "receiptVia": "created",
+        "reviewId": 5341813827
+      },
+      "hostReadback": {
+        "verifier": "logs/opus/m2/live-readback.cjs (independent read-only oracle; asserts, then writes the flags below)",
+        "state": "PENDING",
+        "commitId": "998d7cfc7c858adf3bbcea82ef126a900d51ebc3",
+        "authorLogin": "mike-north",
+        "authorId": 558005,
+        "commentCount": 2,
+        "exactOriginalAnchors": true,
+        "exactExplanations": true,
+        "suggestionPayloads": "exact expected payloads asserted",
+        "onePendingReviewByAuthor": true,
+        "pullReviewListingAtReadback": [
+          {
+            "id": 5341813827,
+            "state": "PENDING"
+          }
+        ]
+      },
+      "comments": [
+        {
+          "id": 4124730784,
+          "path": "fixture/review.txt",
+          "diffSide": "RIGHT",
+          "originalStartLine": null,
+          "originalLine": 2,
+          "originalCommit": "998d7cfc7c858adf3bbcea82ef126a900d51ebc3",
+          "body": "Use the corrected second value.\n\n<sub>— Independent acceptance reviewer</sub>\n\n```suggestion\ncorrected two\n```"
+        },
+        {
+          "id": 4124730808,
+          "path": "fixture/review.txt",
+          "diffSide": "RIGHT",
+          "originalStartLine": 5,
+          "originalLine": 6,
+          "originalCommit": "998d7cfc7c858adf3bbcea82ef126a900d51ebc3",
+          "body": "Combine these two entries without changing the following entries.\n\n<sub>— Independent acceptance reviewer</sub>\n\n```suggestion\ncorrected five and six\n```"
+        }
+      ],
+      "sources": [
+        "logs/opus/m2/parent-live-final/authored-cli.json",
+        "logs/opus/m2/parent-live-final/authored-cli.state.json",
+        "logs/opus/m2/parent-live-final/authored-cli.readback.json",
+        "logs/opus/m2/parent-live-final/authored-cli.review.json",
+        "logs/opus/m2/parent-live-final/authored-cli.comments.json",
+        "logs/opus/m2/parent-live-final/authored-cli.threads.json",
+        "logs/opus/m2/parent-live-final/authored-cli.reviews.json",
+        "logs/opus/m2/parent-live-final/authored-cli.before-submit.json",
+        "logs/opus/m2/parent-live-final/authored-cli.submitted.json"
+      ],
+      "lifecycle": {
+        "action": "submitted by the parent (required for GitHub Apply) and retained",
+        "beforeSubmit": {
+          "id": 5341813827,
+          "state": "PENDING"
+        },
+        "submitted": {
+          "id": 5341813827,
+          "state": "COMMENTED",
+          "submittedAt": "2026-09-28T16:44:28Z"
+        }
+      }
+    },
+    {
+      "mode": "insertions",
+      "pullNumber": 20,
+      "surface": "installed library: createSarifDocument, addSarifComment, addStagedChangesToSarif, inspectSarif, publishSarifReview",
+      "input": "unchanged-line finding (line 3) from insertion-source-oracle.json plus a staged insertion before line 3 and an end-of-file append",
+      "reviewId": 5341820039,
+      "reviewUrl": "https://github.com/mike-north/doc-linter/pull/20#pullrequestreview-5341820039",
+      "marker": "<!-- sarif-to-comment:review:ae1a1d09-9118-45fa-b962-7664dff9276f -->",
+      "productOutcome": {
+        "status": "published",
+        "firstSentence": "Created the draft [review 5341820039](https://github.com/mike-north/doc-linter/pull/20#pullrequestreview-5341820039) on mike-north/doc-linter#20 at commit `998d7cfc7c858adf3bbcea82ef126a900d51ebc3`."
+      },
+      "durableState": {
+        "phase": "completed",
+        "receiptVia": "created",
+        "reviewId": 5341820039
+      },
+      "hostReadback": {
+        "verifier": "logs/opus/m2/live-readback.cjs (independent read-only oracle; asserts, then writes the flags below)",
+        "state": "PENDING",
+        "commitId": "998d7cfc7c858adf3bbcea82ef126a900d51ebc3",
+        "authorLogin": "mike-north",
+        "authorId": 558005,
+        "commentCount": 3,
+        "exactOriginalAnchors": true,
+        "exactExplanations": true,
+        "suggestionPayloads": "exact expected payloads asserted",
+        "onePendingReviewByAuthor": true,
+        "pullReviewListingAtReadback": [
+          {
+            "id": 5341820039,
+            "state": "PENDING"
+          }
+        ]
+      },
+      "comments": [
+        {
+          "id": 4124735426,
+          "path": "fixture/review.txt",
+          "diffSide": "RIGHT",
+          "originalStartLine": null,
+          "originalLine": 3,
+          "originalCommit": "998d7cfc7c858adf3bbcea82ef126a900d51ebc3",
+          "body": "Preserve the original third entry.\n\n<sub>— Independent insertion acceptance</sub>"
+        },
+        {
+          "id": 4124735430,
+          "path": "fixture/review.txt",
+          "diffSide": "RIGHT",
+          "originalStartLine": null,
+          "originalLine": 3,
+          "originalCommit": "998d7cfc7c858adf3bbcea82ef126a900d51ebc3",
+          "body": "Staged insertion before line 3 of \\`fixture/review.txt\\`. No supplied finding was associated with this change.\n\n<sub>— sarif-to-comment 0.2.0 · rule `staged-change`</sub>\n\n```suggestion\ninserted before third entry\nreviewed three\n```"
+        },
+        {
+          "id": 4124735445,
+          "path": "fixture/review.txt",
+          "diffSide": "RIGHT",
+          "originalStartLine": null,
+          "originalLine": 10,
+          "originalCommit": "998d7cfc7c858adf3bbcea82ef126a900d51ebc3",
+          "body": "Staged insertion at the end of \\`fixture/review.txt\\`. No supplied finding was associated with this change.\n\n<sub>— sarif-to-comment 0.2.0 · rule `staged-change`</sub>\n\n```suggestion\nreviewed ten\nappended after tenth entry\n```"
+        }
+      ],
+      "sources": [
+        "logs/opus/m2/parent-insertion-final/insertions.json",
+        "logs/opus/m2/parent-insertion-final/insertions.state.json",
+        "logs/opus/m2/parent-insertion-final/insertions.readback.json",
+        "logs/opus/m2/parent-insertion-final/insertions.review.json",
+        "logs/opus/m2/parent-insertion-final/insertions.comments.json",
+        "logs/opus/m2/parent-insertion-final/insertions.threads.json",
+        "logs/opus/m2/parent-insertion-final/insertions.reviews.json",
+        "logs/opus/m2/parent-insertion-final/insertions.before-submit.json",
+        "logs/opus/m2/parent-insertion-final/insertions.submitted.json"
+      ],
+      "lifecycle": {
+        "action": "submitted by the parent (required for GitHub Apply) and retained",
+        "beforeSubmit": {
+          "id": 5341820039,
+          "state": "PENDING"
+        },
+        "submitted": {
+          "id": 5341820039,
+          "state": "COMMENTED",
+          "submittedAt": "2026-09-28T16:44:34Z"
+        }
+      }
+    }
+  ]
+}

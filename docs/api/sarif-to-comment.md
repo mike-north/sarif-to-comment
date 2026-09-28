@@ -4,11 +4,23 @@
 
 ## sarif-to-comment package
 
-Publish a ready SARIF 2.1.0 document as one GitHub draft pull request review.
+Author, inspect and extend SARIF 2.1.0, and publish it as one GitHub draft pull request review.
 
 ## Remarks
 
-The package exports a single operation, [publishSarifReview()](./sarif-to-comment.publishsarifreview.md)<!-- -->. The`sarif-to-comment` command-line interface calls the same operation. These declarations describe the CommonJS runtime in `src/index.cjs`<!-- -->; they are written by hand, checked by API Extractor and compiled against CommonJS and ES module consumers by the package tests.
+Five operations work on ordinary in-memory SARIF values:
+
+- [createSarifDocument()](./sarif-to-comment.createsarifdocument.md) and [addSarifComment()](./sarif-to-comment.addsarifcomment.md) optionally author  SARIF for your own findings, on lines or line ranges.
+
+- [inspectSarif()](./sarif-to-comment.inspectsarif.md) shows every finding, location and fix in any SARIF.
+
+- [addStagedChangesToSarif()](./sarif-to-comment.addstagedchangestosarif.md) adds the changes staged in a Git index as  SARIF fixes.
+
+- [publishSarifReview()](./sarif-to-comment.publishsarifreview.md) publishes a ready document as one draft review.
+
+Authoring is optional: SARIF from any producer can be inspected, extended and published directly, and no operation depends on how a document was made. There is no builder, session or private format; each operation that changes a document returns a new one and leaves its input untouched.
+
+The `sarif-to-comment` command-line interface provides the same operations for files (`init`<!-- -->, `add-comment`<!-- -->, `inspect`<!-- -->, `add-staged-changes`<!-- -->,`publish`<!-- -->). These declarations describe the CommonJS runtime in`src/index.cjs`<!-- -->; they are written by hand, checked by API Extractor and compiled against CommonJS and ES module consumers by the package tests.
 
 ## Functions
 
@@ -24,6 +36,50 @@ Description
 
 </th></tr></thead>
 <tbody><tr><td>
+
+[addSarifComment(sarif, comment)](./sarif-to-comment.addsarifcomment.md)
+
+
+</td><td>
+
+Adds one finding on a line or line range to a copy of a SARIF document.
+
+
+</td></tr>
+<tr><td>
+
+[addStagedChangesToSarif(input)](./sarif-to-comment.addstagedchangestosarif.md)
+
+
+</td><td>
+
+Adds the changes staged in a Git index, relative to a reviewed commit, to a copy of a SARIF document as fixes on the findings they belong to.
+
+
+</td></tr>
+<tr><td>
+
+[createSarifDocument(options)](./sarif-to-comment.createsarifdocument.md)
+
+
+</td><td>
+
+Creates a SARIF document with one empty run, ready for[addSarifComment()](./sarif-to-comment.addsarifcomment.md)<!-- -->.
+
+
+</td></tr>
+<tr><td>
+
+[inspectSarif(sarif, options)](./sarif-to-comment.inspectsarif.md)
+
+
+</td><td>
+
+Shows every finding, location and fix in a SARIF document, from any producer, without changing or judging it.
+
+
+</td></tr>
+<tr><td>
 
 [publishSarifReview(input)](./sarif-to-comment.publishsarifreview.md)
 
@@ -51,12 +107,265 @@ Description
 </th></tr></thead>
 <tbody><tr><td>
 
+[IAddedFinding](./sarif-to-comment.iaddedfinding.md)
+
+
+</td><td>
+
+Where a finding was added.
+
+
+</td></tr>
+<tr><td>
+
+[IAddedSarifCommentOutcome](./sarif-to-comment.iaddedsarifcommentoutcome.md)
+
+
+</td><td>
+
+The finding was added to a new copy of the document.
+
+
+</td></tr>
+<tr><td>
+
+[IAddedStagedChangesOutcome](./sarif-to-comment.iaddedstagedchangesoutcome.md)
+
+
+</td><td>
+
+The staged changes were added to a new copy of the document.
+
+
+</td></tr>
+<tr><td>
+
+[IAddStagedChangesInput](./sarif-to-comment.iaddstagedchangesinput.md)
+
+
+</td><td>
+
+Input to [addStagedChangesToSarif()](./sarif-to-comment.addstagedchangestosarif.md)<!-- -->. Unknown fields are refused.
+
+
+</td></tr>
+<tr><td>
+
 [IBlockedOutcome](./sarif-to-comment.iblockedoutcome.md)
 
 
 </td><td>
 
 The document cannot be published faithfully. Nothing was written to GitHub and no state file was created.
+
+
+</td></tr>
+<tr><td>
+
+[ICreateSarifDocumentOptions](./sarif-to-comment.icreatesarifdocumentoptions.md)
+
+
+</td><td>
+
+Options for [createSarifDocument()](./sarif-to-comment.createsarifdocument.md)<!-- -->. Unknown fields are refused.
+
+
+</td></tr>
+<tr><td>
+
+[IFailedStagedChangesOutcome](./sarif-to-comment.ifailedstagedchangesoutcome.md)
+
+
+</td><td>
+
+A staged change cannot be represented faithfully (for example a mode change, a binary file, a conflict, or a supplied fix that disagrees with the staged content). Nothing was produced; the problems say what would let a rerun succeed.
+
+
+</td></tr>
+<tr><td>
+
+[IGitHubRepository](./sarif-to-comment.igithubrepository.md)
+
+
+</td><td>
+
+A GitHub repository.
+
+
+</td></tr>
+<tr><td>
+
+[IInspectedOutcome](./sarif-to-comment.iinspectedoutcome.md)
+
+
+</td><td>
+
+The document was inspected.
+
+
+</td></tr>
+<tr><td>
+
+[IInspectionArtifactChange](./sarif-to-comment.iinspectionartifactchange.md)
+
+
+</td><td>
+
+The replacements a fix makes in one file.
+
+
+</td></tr>
+<tr><td>
+
+[IInspectionDiagnostic](./sarif-to-comment.iinspectiondiagnostic.md)
+
+
+</td><td>
+
+Something inspection could not interpret, such as an unresolvable path.
+
+
+</td></tr>
+<tr><td>
+
+[IInspectionExternalProperties](./sarif-to-comment.iinspectionexternalproperties.md)
+
+
+</td><td>
+
+One entry of the log's `inlineExternalProperties`<!-- -->, shown verbatim.
+
+
+</td></tr>
+<tr><td>
+
+[IInspectionFileProposal](./sarif-to-comment.iinspectionfileproposal.md)
+
+
+</td><td>
+
+A proposed whole-file operation (`create` or `delete`<!-- -->) carried by a finding. The current publisher refuses these.
+
+
+</td></tr>
+<tr><td>
+
+[IInspectionFinding](./sarif-to-comment.iinspectionfinding.md)
+
+
+</td><td>
+
+One finding (SARIF result) with everything it carries.
+
+
+</td></tr>
+<tr><td>
+
+[IInspectionFix](./sarif-to-comment.iinspectionfix.md)
+
+
+</td><td>
+
+One fix of a finding, including alternatives and changes to several files.
+
+
+</td></tr>
+<tr><td>
+
+[IInspectionLocation](./sarif-to-comment.iinspectionlocation.md)
+
+
+</td><td>
+
+A location of a finding, a related location, or a location that could not be resolved to a repository path.
+
+
+</td></tr>
+<tr><td>
+
+[IInspectionMessage](./sarif-to-comment.iinspectionmessage.md)
+
+
+</td><td>
+
+A message, resolved but never shortened.
+
+
+</td></tr>
+<tr><td>
+
+[IInspectionPreview](./sarif-to-comment.iinspectionpreview.md)
+
+
+</td><td>
+
+Proposed text, possibly shortened. Only previews are ever shortened; the text is never annotated, so `state` and the counts are the only signal.
+
+
+</td></tr>
+<tr><td>
+
+[IInspectionReplacement](./sarif-to-comment.iinspectionreplacement.md)
+
+
+</td><td>
+
+One replacement within a fix.
+
+
+</td></tr>
+<tr><td>
+
+[IInspectionRun](./sarif-to-comment.iinspectionrun.md)
+
+
+</td><td>
+
+One run: its tool and declared source.
+
+
+</td></tr>
+<tr><td>
+
+[IInspectSarifOptions](./sarif-to-comment.iinspectsarifoptions.md)
+
+
+</td><td>
+
+Options for [inspectSarif()](./sarif-to-comment.inspectsarif.md)<!-- -->. Unknown fields are refused.
+
+
+</td></tr>
+<tr><td>
+
+[IInvalidSarifOutcome](./sarif-to-comment.iinvalidsarifoutcome.md)
+
+
+</td><td>
+
+The input is not schema-valid SARIF 2.1.0, or cannot take the requested change. Nothing was produced.
+
+
+</td></tr>
+<tr><td>
+
+[INewSarifRun](./sarif-to-comment.inewsarifrun.md)
+
+
+</td><td>
+
+Adds the finding to a new run with its own tool identity, so that feedback added to another producer's SARIF is never attributed to that producer.
+
+
+</td></tr>
+<tr><td>
+
+[IProblem](./sarif-to-comment.iproblem.md)
+
+
+</td><td>
+
+A problem that prevented an operation, with where it is.
 
 
 </td></tr>
@@ -128,6 +437,94 @@ GitHub definitively refused the create-review request (for example because the a
 </td></tr>
 <tr><td>
 
+[ISarifComment](./sarif-to-comment.isarifcomment.md)
+
+
+</td><td>
+
+One finding for [addSarifComment()](./sarif-to-comment.addsarifcomment.md)<!-- -->. Unknown fields are refused.
+
+
+</td></tr>
+<tr><td>
+
+[ISarifInspection](./sarif-to-comment.isarifinspection.md)
+
+
+</td><td>
+
+A simplified, JSON-compatible view of a SARIF document for proofreading. It is complete except for fix previews, and it is not a check that the document can be published.
+
+
+</td></tr>
+<tr><td>
+
+[ISarifLog](./sarif-to-comment.isariflog.md)
+
+
+</td><td>
+
+A SARIF 2.1.0 log as a plain JSON object. The operations in this package return fresh values of this shape, which you own and may change or store.
+
+
+</td></tr>
+<tr><td>
+
+[ISarifSourceBinding](./sarif-to-comment.isarifsourcebinding.md)
+
+
+</td><td>
+
+The repository and reviewed commit a run's locations refer to. The run records it as `versionControlProvenance` with repository URI`https://github.com/OWNER/REPO`<!-- -->.
+
+
+</td></tr>
+<tr><td>
+
+[ISarifToolIdentity](./sarif-to-comment.isariftoolidentity.md)
+
+
+</td><td>
+
+The author of findings, recorded as a run's tool.
+
+
+</td></tr>
+<tr><td>
+
+[IStagedChangeReceipt](./sarif-to-comment.istagedchangereceipt.md)
+
+
+</td><td>
+
+One staged change to a file.
+
+
+</td></tr>
+<tr><td>
+
+[IStagedChangesReceipt](./sarif-to-comment.istagedchangesreceipt.md)
+
+
+</td><td>
+
+What [addStagedChangesToSarif()](./sarif-to-comment.addstagedchangestosarif.md) did.
+
+
+</td></tr>
+<tr><td>
+
+[IStagedReplacementReceipt](./sarif-to-comment.istagedreplacementreceipt.md)
+
+
+</td><td>
+
+One staged edit region and the findings that carry it.
+
+
+</td></tr>
+<tr><td>
+
 [IUncertainOutcome](./sarif-to-comment.iuncertainoutcome.md)
 
 
@@ -153,6 +550,39 @@ Description
 
 </th></tr></thead>
 <tbody><tr><td>
+
+[AddSarifCommentOutcome](./sarif-to-comment.addsarifcommentoutcome.md)
+
+
+</td><td>
+
+Every outcome of [addSarifComment()](./sarif-to-comment.addsarifcomment.md)<!-- -->, discriminated by `status`<!-- -->.
+
+
+</td></tr>
+<tr><td>
+
+[AddStagedChangesOutcome](./sarif-to-comment.addstagedchangesoutcome.md)
+
+
+</td><td>
+
+Every outcome of [addStagedChangesToSarif()](./sarif-to-comment.addstagedchangestosarif.md)<!-- -->, discriminated by `status`<!-- -->.
+
+
+</td></tr>
+<tr><td>
+
+[InspectSarifOutcome](./sarif-to-comment.inspectsarifoutcome.md)
+
+
+</td><td>
+
+Every outcome of [inspectSarif()](./sarif-to-comment.inspectsarif.md)<!-- -->, discriminated by `status`<!-- -->.
+
+
+</td></tr>
+<tr><td>
 
 [PublishSarifReviewOutcome](./sarif-to-comment.publishsarifreviewoutcome.md)
 

@@ -1,0 +1,13 @@
+{
+  "status": "passed",
+  "from": "0.1.1",
+  "to": "0.2.0",
+  "command": "npm run release:version",
+  "changedReviewedFiles": [
+    ".changeset/authoring-inspection-staged-changes.md",
+    "CHANGELOG.md",
+    "package.json"
+  ],
+  "codeTypesAndApiUnchanged": true,
+  "lockfileUnchanged": true
+}

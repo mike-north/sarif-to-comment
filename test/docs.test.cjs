@@ -32,6 +32,7 @@ const { spawnSync } = require('node:child_process');
 
 const { ROOT, packProject, installIntoConsumer } = require('./fixtures/package/installed-package.cjs');
 const { FakeHttpGitHub, REPOSITORY } = require('./fixtures/composition/fake-http-github.cjs');
+const { createGitWorld } = require('./fixtures/authoring-workflow/git-world.cjs');
 
 const README = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
 const GUIDE_PATH = path.join(ROOT, 'docs', 'getting-started.md');
@@ -201,6 +202,124 @@ describe('verified getting-started examples run against the installed package', 
     assert.equal(blocked.status, 2, blocked.stdout + blocked.stderr);
     assert.match(blocked.stdout + blocked.stderr, /blocked/i);
     assert.equal(createPosts(host), 1, 'a blocked document publishes nothing');
+  });
+});
+
+describe('verified authoring examples run against the installed package in a real Git repository', () => {
+  const skip = packProject().error || false;
+
+  /**
+   * The contract's worked example W1 (docs/second-milestone-contract-proposal.md
+   * §7), written by hand: the reviewed src/parse.js, line 2 changed and staged,
+   * and line 3 changed in the working tree only.
+   */
+  const STAGED_LINE = "  const parts = input === '' ? [] : input.split(',');\n";
+  const W1 = {
+    path: 'src/parse.js',
+    base: "function parse(input) {\n  return input.split(',').map(Number);\n}\n",
+    reviewed: "function parse(input) {\n  const parts = input.split(',');\n  return parts.map(Number);\n}\n",
+    staged: `function parse(input) {\n${STAGED_LINE}  return parts.map(Number);\n}\n`,
+    workingTree: `function parse(input) {\n${STAGED_LINE}  return UNSTAGED;\n}\n`,
+  };
+  const MESSAGE = 'Handle the empty-input case.';
+  const DESTINATION = { owner: 'acme', repo: 'widgets', pullNumber: 42 };
+
+  /** The W1 repository with the installed package available to it, a fake GitHub, and the example environment. */
+  function world(label) {
+    const { consumer } = installIntoConsumer();
+    const git = createGitWorld(label, W1, DESTINATION);
+    fs.symlinkSync(path.join(consumer, 'node_modules'), path.join(git.dir, 'node_modules'));
+    const token = 'ghp_AUTHORING_EXAMPLE_token_0123456789';
+    const hostDir = path.join(git.root, 'host');
+    FakeHttpGitHub.create(hostDir, {}, git.repository);
+    const host = new FakeHttpGitHub(hostDir, token);
+    const env = {
+      ...git.env,
+      GH_TOKEN: token,
+      REVIEW_REPOSITORY: `${DESTINATION.owner}/${DESTINATION.repo}`,
+      REVIEW_PULL: String(DESTINATION.pullNumber),
+      REVIEW_COMMIT: git.head,
+      REVIEW_STATE: path.join(git.root, 'review-state.json'),
+      FAKE_HTTP_GITHUB_DIR: hostDir,
+      NODE_OPTIONS: `--require=${PRELOAD}`,
+    };
+    return { ...git, host, env, token };
+  }
+
+  /** One draft review with one suggestion on reviewed line 2 carrying `message`, and nothing unstaged. */
+  function assertW1Review(w, message) {
+    const reviews = w.host.reviews();
+    assert.equal(reviews.length, 1);
+    const [stored] = reviews;
+    assert.equal(stored.state, 'PENDING');
+    assert.equal(stored.request.commit_id, w.head);
+    assert.equal(stored.request.comments.length, 1, JSON.stringify(stored.request.comments));
+    const [comment] = stored.request.comments;
+    assert.equal(comment.path, 'src/parse.js');
+    assert.equal(comment.side, 'RIGHT');
+    assert.equal(comment.line, 2);
+    assert.ok(comment.body.includes(message), comment.body);
+    assert.ok(comment.body.endsWith(`\`\`\`suggestion\n${STAGED_LINE}\`\`\``), comment.body);
+    assert.ok(!JSON.stringify(stored).includes('UNSTAGED'), 'unstaged content never reaches GitHub');
+    assert.ok(w.host.log().every((r) => r.authorized));
+  }
+
+  test('the CLI authoring example publishes the staged change as a suggestion on the finding', { skip, timeout: 300_000 }, () => {
+    const { language, code } = example(GUIDE, 'authoring-cli');
+    assert.equal(language, 'sh');
+    const w = world('docs-authoring-cli');
+    const script = path.join(w.root, 'authoring.sh');
+    fs.writeFileSync(script, code);
+    const result = spawnSync('bash', [script], { cwd: w.dir, env: w.env, encoding: 'utf8', timeout: 180_000 });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.ok(result.stdout.includes(MESSAGE), 'inspect shows the finding');
+    assert.match(result.stdout, /pullrequestreview-\d+/);
+    assert.ok(!(result.stdout + result.stderr).includes(w.token));
+    assertW1Review(w, MESSAGE);
+  });
+
+  test('the library authoring example does the same in memory', { skip, timeout: 300_000 }, () => {
+    const { language, code } = example(GUIDE, 'authoring-library');
+    assert.equal(language, 'js');
+    const w = world('docs-authoring-library');
+    const file = path.join(w.dir, 'review.mjs');
+    fs.writeFileSync(file, code);
+    const result = spawnSync(process.execPath, [file], { cwd: w.dir, env: w.env, encoding: 'utf8', timeout: 180_000 });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.ok(result.stdout.includes(`/runs/0/results/0: ${MESSAGE} (1 fix)`), result.stdout);
+    assertW1Review(w, MESSAGE);
+  });
+
+  test('the analyzer example adds staged changes to SARIF that was never initialized', { skip, timeout: 300_000 }, () => {
+    const { language, code } = example(GUIDE, 'upstream-cli');
+    assert.equal(language, 'sh');
+    const w = world('docs-upstream-cli');
+    const analyzerMessage = 'An empty input string yields one zero instead of no values.';
+    fs.writeFileSync(
+      path.join(w.dir, 'results.sarif'),
+      JSON.stringify({
+        version: '2.1.0',
+        runs: [
+          {
+            tool: { driver: { name: 'example-linter', version: '1.0.0' } },
+            results: [
+              {
+                ruleId: 'empty-input',
+                level: 'warning',
+                message: { text: analyzerMessage },
+                locations: [{ physicalLocation: { artifactLocation: { uri: 'src/parse.js' }, region: { startLine: 2 } } }],
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    const script = path.join(w.root, 'upstream.sh');
+    fs.writeFileSync(script, code);
+    const result = spawnSync('bash', [script], { cwd: w.dir, env: w.env, encoding: 'utf8', timeout: 180_000 });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assertW1Review(w, analyzerMessage);
+    assert.ok(w.host.reviews()[0].request.comments[0].body.includes('example-linter'), 'the analyzer stays credited');
   });
 });
 

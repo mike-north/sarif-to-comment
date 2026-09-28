@@ -1,0 +1,41 @@
+{
+  "status": "passed",
+  "method": "GitHub native Commit suggestions, then independent immutable Git blob readback",
+  "packageVersion": "0.2.0",
+  "tarballSha256": "13b75f537f36453968b7720e09d6210571aca500116b5bb77bce7e11e994c1f1",
+  "localIndexesAndWorkingTreesUnchanged": true,
+  "cases": [
+    {
+      "scenario": "replacements",
+      "pullNumber": 19,
+      "reviewedCommit": "998d7cfc7c858adf3bbcea82ef126a900d51ebc3",
+      "appliedCommit": "c7544bd12a160901baa7d5699f0029c608ba34f6",
+      "path": "fixture/review.txt",
+      "blob": "9b3cf3b2680e5e274c8ce85629d7ba62561ae020",
+      "bytes": 136,
+      "sha256": "9e7dabaee28cefae4897a7cec5f4afa8a5d51bedfa82f88ffbf01389177e030d",
+      "exactIndependentTargetMatch": true,
+      "finalNewlinePreserved": true,
+      "changedPaths": [
+        "fixture/review.txt"
+      ],
+      "actualText": "reviewed one\ncorrected two\nreviewed three\nreviewed four\ncorrected five and six\nreviewed seven\nreviewed eight\nreviewed nine\nreviewed ten\n"
+    },
+    {
+      "scenario": "insertions",
+      "pullNumber": 20,
+      "reviewedCommit": "998d7cfc7c858adf3bbcea82ef126a900d51ebc3",
+      "appliedCommit": "c3971627d0a1ae1f4a0b8c88419dae9ce3a7be31",
+      "path": "fixture/review.txt",
+      "blob": "dd78f964770442a58ea4d1b2fe6a71b98547769a",
+      "bytes": 194,
+      "sha256": "e9e571950f1ea2a9e5b3fe5ffcbccd78d9f5789a9cfa332f9524f827bd50a9b6",
+      "exactIndependentTargetMatch": true,
+      "finalNewlinePreserved": true,
+      "changedPaths": [
+        "fixture/review.txt"
+      ],
+      "actualText": "reviewed one\nreviewed two\ninserted before third entry\nreviewed three\nreviewed four\nreviewed five\nreviewed six\nreviewed seven\nreviewed eight\nreviewed nine\nreviewed ten\nappended after tenth entry\n"
+    }
+  ]
+}

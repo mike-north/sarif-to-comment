@@ -37,6 +37,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const { ROOT, PKG, npm, packProject, installIntoConsumer } = require('./fixtures/package/installed-package.cjs');
+const { UPSTREAM_SARIF_PATH, createGitWorld } = require('./fixtures/authoring-workflow/git-world.cjs');
 
 /** The package.json `files` whitelist: the intended distribution boundary. */
 const EXPECTED_FILES_FIELD = [
@@ -90,6 +91,14 @@ describe('manifest', () => {
     assert.equal(PKG.type, 'commonjs');
   });
 
+  test('the npm description names the optional authoring and inspection as well as publication', () => {
+    // The registry listing is how users discover the package; it must not describe only publication.
+    assert.match(PKG.description, /\bwrite\b/i, 'optional authoring');
+    assert.match(PKG.description, /\binspect\b/i, 'inspection');
+    assert.match(PKG.description, /draft pull request review/, 'publication as one draft review');
+    assert.match(PKG.description, /never-duplicating/, 'durable delivery');
+  });
+
   test('repository metadata names exactly the trusted-publishing repository', () => {
     // npm trusted publishing requires repository.url to match the GitHub
     // repository the OIDC token names (https://docs.npmjs.com/trusted-publishers/).
@@ -107,7 +116,9 @@ describe('manifest', () => {
     });
     const resolved = require.resolve(path.join(ROOT, PKG.exports['.'].default));
     assert.equal(resolved, path.join(ROOT, 'src', 'index.cjs'));
-    assert.deepEqual(Object.keys(require(resolved)), ['publishSarifReview'], 'the runtime exports exactly the declared API');
+    const declared = [...fs.readFileSync(path.join(ROOT, PKG.types), 'utf8').matchAll(/^export declare function (\w+)\(/gm)].map((m) => m[1]);
+    assert.deepEqual(declared.sort(), ['addSarifComment', 'addStagedChangesToSarif', 'createSarifDocument', 'inspectSarif', 'publishSarifReview']);
+    assert.deepEqual(Object.keys(require(resolved)).sort(), declared, 'the runtime exports exactly the declared API');
   });
 
   test('the CLI bin points at an executable Node script', () => {
@@ -334,6 +345,178 @@ describe('installed package', () => {
       { module: 'nodenext', moduleResolution: 'nodenext', target: 'es2022' },
     );
     assert.equal(run.status, 0, run.stdout + run.stderr);
+  });
+
+  /** Typed use of the authoring, inspection and staged-change operations, with misuse that must not compile. */
+  const workflow = ts`
+    let sarif: ISarifLog = createSarifDocument({ tool: { name: 'Review agent', version: '1.0.0' }, source: { owner: 'acme', repo: 'widgets', commit: 'c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de' } });
+    const added: AddSarifCommentOutcome = addSarifComment(sarif, { file: 'src/a.js', line: 2, endLine: 3, message: 'm', messageFormat: 'markdown', level: 'note', run: { toolName: 'Reviewer' } });
+    if (added.status === 'added') { sarif = added.sarif; const ref: string = added.finding.ref; void ref; }
+    else { const problems: readonly IProblem[] = added.problems; void problems; }
+    const inspected = inspectSarif(sarif, { previewLines: null, previewChars: 100 });
+    if (inspected.status === 'inspected') {
+      const view: ISarifInspection = inspected.view;
+      for (const finding of view.findings) {
+        const text: string | undefined = finding.message.text;
+        const where: string | null | undefined = finding.locations[0]?.path;
+        const preview: 'complete' | 'truncated' | 'unavailable' | undefined = finding.fixes[0]?.changes[0]?.replacements[0]?.inserted.state;
+        void text; void where; void preview;
+      }
+    }
+    const staged: AddStagedChangesOutcome = await addStagedChangesToSarif({ sarif, worktree: '/work/widgets', reviewedCommit: 'c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de', repository: { owner: 'acme', repo: 'widgets' } });
+    switch (staged.status) {
+      case 'added': { const changes: readonly IStagedChangeReceipt[] = staged.receipt.changes; const run: number | null = staged.receipt.addedRun; void changes; void run; break; }
+      case 'invalid': case 'failed': { const m: string = staged.markdown; void m; break; }
+      default: { const never: never = staged; void never; }
+    }
+    // @ts-expect-error line must be a number
+    void addSarifComment(sarif, { file: 'a', line: '2', message: 'm' });
+    // @ts-expect-error the message is required
+    void addSarifComment(sarif, { file: 'a', line: 2 });
+    // @ts-expect-error levels are SARIF levels
+    void addSarifComment(sarif, { file: 'a', line: 2, message: 'm', level: 'fatal' });
+    // @ts-expect-error the repository is required
+    void addStagedChangesToSarif({ sarif, worktree: '/w', reviewedCommit: 'c' });
+    // @ts-expect-error a failed extraction has no SARIF
+    if (staged.status === 'failed') void staged.sarif;
+  `;
+
+  test('the installed declarations type the authoring, inspection and staged-change operations', { skip, timeout: 300_000 }, () => {
+    const { consumer } = installIntoConsumer();
+    const imports = ts`import { createSarifDocument, addSarifComment, inspectSarif, addStagedChangesToSarif } from 'sarif-to-comment';
+      import type { ISarifLog, AddSarifCommentOutcome, IProblem, ISarifInspection, AddStagedChangesOutcome, IStagedChangeReceipt } from 'sarif-to-comment';`;
+    const esm = typecheck(
+      consumer,
+      { 'workflow.mts': `${imports}
+export async function main(): Promise<void> { ${workflow} }` },
+      { module: 'nodenext', moduleResolution: 'nodenext', target: 'es2022' },
+    );
+    assert.equal(esm.status, 0, esm.stdout + esm.stderr);
+    const cjs = typecheck(
+      consumer,
+      {
+        'workflow.cts': ts`import sarifToComment = require('sarif-to-comment');
+          const { createSarifDocument, addSarifComment, inspectSarif, addStagedChangesToSarif } = sarifToComment;
+          import type { ISarifLog, AddSarifCommentOutcome, IProblem, ISarifInspection, AddStagedChangesOutcome, IStagedChangeReceipt } from 'sarif-to-comment';
+          export async function main(): Promise<void> { ${workflow} }`,
+      },
+      { module: 'nodenext', moduleResolution: 'nodenext', target: 'es2022' },
+    );
+    assert.equal(cjs.status, 0, cjs.stdout + cjs.stderr);
+  });
+
+  test('the declarations describe every field the installed runtime actually returns', { skip, timeout: 300_000 }, () => {
+    const { consumer } = installIntoConsumer();
+    // Real outcomes from the installed library: rich upstream inspection, authoring, and staged
+    // extraction in real Git repositories (added, failed and invalid).
+    const added = createGitWorld('types-drift-added');
+    const moded = createGitWorld('types-drift-mode');
+    // A pure insertion before a reviewed line and an end-of-file append: their receipts mark `insertion`.
+    const inserted = createGitWorld('types-drift-insertion', {
+      path: 'src/list.txt',
+      base: 'zero\n',
+      reviewed: 'one\ntwo\nthree\n',
+      staged: 'one\ntwo\ninserted\nthree\nfour\n',
+      workingTree: 'one\ntwo\ninserted\nthree\nfour\n',
+    });
+    fs.chmodSync(moded.file, 0o755);
+    assert.equal(spawnSync('git', ['add', '--', '.'], { cwd: moded.dir, env: moded.env }).status, 0);
+    const js = String.raw;
+    const script = js`
+      const fs = require('node:fs');
+      const lib = require('sarif-to-comment');
+      const rich = JSON.parse(fs.readFileSync(process.env.RICH, 'utf8'));
+      const logEvidence = JSON.parse(fs.readFileSync(process.env.LOG_EVIDENCE, 'utf8'));
+      const upstream = JSON.parse(fs.readFileSync(process.env.UPSTREAM, 'utf8'));
+      const notSarif = { version: '2.1.0', runs: [{}] };
+      const repository = { owner: 'octo', repo: 'review-fixture' };
+      (async () => {
+        const doc = lib.createSarifDocument({ tool: { name: 'Review agent' } });
+        const out = {
+          log: doc,
+          commentAdded: lib.addSarifComment(doc, { file: 'a.txt', line: 1, endLine: 2, message: 'm', messageFormat: 'markdown', level: 'note', ruleId: 'R' }),
+          commentInvalid: lib.addSarifComment(notSarif, { file: 'a.txt', line: 1, message: 'm' }),
+          inspected: lib.inspectSarif(rich, { previewLines: 1 }),
+          inspectedUpstream: lib.inspectSarif(upstream),
+          inspectInvalid: lib.inspectSarif(notSarif),
+          inspectedLogEvidence: lib.inspectSarif(logEvidence, { previewLines: 1 }),
+          stagedAdded: await lib.addStagedChangesToSarif({ sarif: upstream, worktree: process.env.ADDED, reviewedCommit: process.env.ADDED_HEAD, repository }),
+          stagedFailed: await lib.addStagedChangesToSarif({ sarif: upstream, worktree: process.env.MODED, reviewedCommit: process.env.MODED_HEAD, repository }),
+          stagedInvalid: await lib.addStagedChangesToSarif({ sarif: notSarif, worktree: process.env.ADDED, reviewedCommit: process.env.ADDED_HEAD, repository }),
+          stagedInsertion: await lib.addStagedChangesToSarif({ sarif: lib.createSarifDocument(), worktree: process.env.INSERTED, reviewedCommit: process.env.INSERTED_HEAD, repository }),
+        };
+        process.stdout.write(JSON.stringify(out));
+      })().catch((err) => { console.error(err); process.exit(1); });
+    `;
+    const run = spawnSync(process.execPath, ['-e', script], {
+      cwd: consumer,
+      encoding: 'utf8',
+      env: {
+        ...added.env,
+        RICH: path.join(ROOT, 'test', 'fixtures', 'sarif-inspection', 'upstream.sarif.json'),
+        LOG_EVIDENCE: path.join(ROOT, 'test', 'fixtures', 'sarif-inspection', 'log-evidence.sarif.json'),
+        INSERTED: inserted.dir,
+        INSERTED_HEAD: inserted.head,
+        UPSTREAM: UPSTREAM_SARIF_PATH,
+        ADDED: added.dir,
+        ADDED_HEAD: added.head,
+        MODED: moded.dir,
+        MODED_HEAD: moded.head,
+      },
+      timeout: 120_000,
+    });
+    assert.equal(run.status, 0, run.stderr);
+    const outcomes = JSON.parse(run.stdout);
+    assert.deepEqual(
+      [outcomes.commentAdded.status, outcomes.commentInvalid.status, outcomes.inspected.status, outcomes.inspectInvalid.status,
+        outcomes.stagedAdded.status, outcomes.stagedFailed.status, outcomes.stagedInvalid.status],
+      ['added', 'invalid', 'inspected', 'invalid', 'added', 'failed', 'invalid'],
+      'each declared outcome variant is exercised',
+    );
+    // The evidence-bearing optional fields really occur, so the literal checks below cover them.
+    const logView = outcomes.inspectedLogEvidence.view;
+    assert.ok(logView.log && logView.externalProperties && logView.summary.externalFindings !== undefined, 'log and external evidence present');
+    assert.ok(JSON.stringify(logView).includes('"otherContent":{"properties":{"rationale"'), 'a preview carries otherContent');
+    assert.equal(outcomes.stagedInsertion.status, 'added', outcomes.stagedInsertion.markdown);
+    assert.ok(outcomes.stagedInsertion.receipt.changes[0].replacements.every((r) => r.insertion === true), 'insertion receipts');
+    const typed = {
+      log: 'ISarifLog',
+      commentAdded: 'AddSarifCommentOutcome',
+      commentInvalid: 'AddSarifCommentOutcome',
+      inspected: 'InspectSarifOutcome',
+      inspectedUpstream: 'InspectSarifOutcome',
+      inspectInvalid: 'InspectSarifOutcome',
+      inspectedLogEvidence: 'InspectSarifOutcome',
+      stagedInsertion: 'AddStagedChangesOutcome',
+      stagedAdded: 'AddStagedChangesOutcome',
+      stagedFailed: 'AddStagedChangesOutcome',
+      stagedInvalid: 'AddStagedChangesOutcome',
+    };
+    // Object literals get excess-property checks: a field the runtime returns but the
+    // declarations lack is a compile error, as is a wrongly typed or missing field.
+    const source = [
+      `import type { ${[...new Set(Object.values(typed))].join(', ')} } from 'sarif-to-comment';`,
+      ...Object.entries(typed).map(([key, type]) => `export const ${key}: ${type} = ${JSON.stringify(outcomes[key])};`),
+    ].join('\n');
+    const check = typecheck(consumer, { 'drift.mts': source }, { module: 'nodenext', moduleResolution: 'nodenext', target: 'es2022' });
+    assert.equal(check.status, 0, check.stdout + check.stderr);
+  });
+
+  test('the installed runtime exports exactly the declared functions', { skip, timeout: 300_000 }, () => {
+    const { consumer } = installIntoConsumer();
+    const probe = spawnSync(
+      process.execPath,
+      ['-e', "const m = require('sarif-to-comment'); process.stdout.write(JSON.stringify(Object.keys(m).sort().map((k) => [k, typeof m[k]])))"],
+      { cwd: consumer, encoding: 'utf8' },
+    );
+    assert.equal(probe.status, 0, probe.stderr);
+    assert.deepEqual(JSON.parse(probe.stdout), [
+      ['addSarifComment', 'function'],
+      ['addStagedChangesToSarif', 'function'],
+      ['createSarifDocument', 'function'],
+      ['inspectSarif', 'function'],
+      ['publishSarifReview', 'function'],
+    ]);
   });
 
   test('control: the type checker does reject a genuine misuse', { skip, timeout: 300_000 }, () => {

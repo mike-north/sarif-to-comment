@@ -1,7 +1,7 @@
 {
   "name": "sarif-to-comment",
-  "version": "0.1.1",
-  "description": "Publish a ready SARIF 2.1.0 document as one GitHub draft pull request review, with durable, never-duplicating delivery.",
+  "version": "0.2.0",
+  "description": "Write, inspect and publish SARIF 2.1.0 findings as one GitHub draft pull request review, with durable, never-duplicating delivery.",
   "keywords": [
     "sarif",
     "github",

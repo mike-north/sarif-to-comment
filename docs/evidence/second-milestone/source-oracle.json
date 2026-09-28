@@ -1,0 +1,32 @@
+{
+  "purpose": "Independently authored source and edit expectations for the second milestone live happy path; no converter output was used to derive these expectations.",
+  "status": "Planned fixture, not executed evidence",
+  "path": "fixture/review.txt",
+  "encoding": "UTF-8",
+  "newline": "LF",
+  "finalNewline": true,
+  "base": "base one\nbase two\nbase three\nbase four\nbase five\nbase six\nbase seven\nbase eight\nbase nine\nbase ten\n",
+  "reviewed": "reviewed one\nreviewed two\nreviewed three\nreviewed four\nreviewed five\nreviewed six\nreviewed seven\nreviewed eight\nreviewed nine\nreviewed ten\n",
+  "staged": "reviewed one\ncorrected two\nreviewed three\nreviewed four\ncorrected five and six\nreviewed seven\nreviewed eight\nreviewed nine\nreviewed ten\n",
+  "workingTree": "reviewed one\ncorrected two\nreviewed three\nreviewed four\ncorrected five and six\nreviewed seven\nreviewed eight\nreviewed nine\nUNSTAGED SENTINEL — must not enter any proposed fix\n",
+  "findings": [
+    {
+      "label": "A",
+      "line": 2,
+      "endLine": 2,
+      "message": "Use the corrected second value.",
+      "reviewedSource": "reviewed two",
+      "replacementLines": ["corrected two"],
+      "expectedHostSide": "RIGHT"
+    },
+    {
+      "label": "B",
+      "line": 5,
+      "endLine": 6,
+      "message": "Combine these two entries without changing the following entries.",
+      "reviewedSource": "reviewed five\nreviewed six",
+      "replacementLines": ["corrected five and six"],
+      "expectedHostSide": "RIGHT"
+    }
+  ]
+}

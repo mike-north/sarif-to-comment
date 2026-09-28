@@ -5,9 +5,234 @@
 ```ts
 
 // @public
+export function addSarifComment(sarif: object, comment: ISarifComment): AddSarifCommentOutcome;
+
+// @public
+export type AddSarifCommentOutcome = IAddedSarifCommentOutcome | IInvalidSarifOutcome;
+
+// @public
+export type AddStagedChangesOutcome = IAddedStagedChangesOutcome | IInvalidSarifOutcome | IFailedStagedChangesOutcome;
+
+// @public
+export function addStagedChangesToSarif(input: IAddStagedChangesInput): Promise<AddStagedChangesOutcome>;
+
+// @public
+export function createSarifDocument(options?: ICreateSarifDocumentOptions): ISarifLog;
+
+// @public
+export interface IAddedFinding {
+    readonly ref: string;
+    readonly resultIndex: number;
+    readonly runIndex: number;
+    readonly tool: string;
+}
+
+// @public
+export interface IAddedSarifCommentOutcome {
+    readonly finding: IAddedFinding;
+    readonly sarif: ISarifLog;
+    readonly status: 'added';
+}
+
+// @public
+export interface IAddedStagedChangesOutcome {
+    readonly receipt: IStagedChangesReceipt;
+    readonly sarif: ISarifLog;
+    readonly status: 'added';
+}
+
+// @public
+export interface IAddStagedChangesInput {
+    readonly repository: IGitHubRepository;
+    readonly reviewedCommit: string;
+    readonly sarif: object;
+    readonly sourceRootUri?: string | undefined;
+    readonly worktree: string;
+}
+
+// @public
 export interface IBlockedOutcome {
     readonly markdown: string;
     readonly status: 'blocked';
+}
+
+// @public
+export interface ICreateSarifDocumentOptions {
+    readonly source?: ISarifSourceBinding | undefined;
+    readonly tool?: ISarifToolIdentity | undefined;
+}
+
+// @public
+export interface IFailedStagedChangesOutcome {
+    readonly markdown: string;
+    readonly problems: readonly IProblem[];
+    readonly status: 'failed';
+}
+
+// @public
+export interface IGitHubRepository {
+    readonly owner: string;
+    readonly repo: string;
+}
+
+// @public
+export interface IInspectedOutcome {
+    readonly status: 'inspected';
+    readonly view: ISarifInspection;
+}
+
+// @public
+export interface IInspectionArtifactChange {
+    readonly artifactLocation: object;
+    readonly otherContent?: Readonly<Record<string, unknown>> | undefined;
+    readonly path: string | null;
+    readonly replacements: readonly IInspectionReplacement[];
+    readonly uri: string;
+}
+
+// @public
+export interface IInspectionDiagnostic {
+    readonly message: string;
+    readonly pointer: string;
+    readonly severity: 'warning';
+}
+
+// @public
+export interface IInspectionExternalProperties {
+    readonly content: Readonly<Record<string, unknown>>;
+    readonly ref: string;
+    readonly results: number;
+}
+
+// @public
+export interface IInspectionFileProposal {
+    readonly artifactIndex?: unknown;
+    readonly content?: IInspectionPreview | undefined;
+    readonly fileMode?: unknown;
+    readonly operation: unknown;
+    readonly otherContent?: Readonly<Record<string, unknown>> | undefined;
+    readonly path: string | null;
+    readonly ref: string;
+}
+
+// @public
+export interface IInspectionFinding {
+    readonly approval?: string | undefined;
+    readonly baselineState?: string | undefined;
+    readonly fileProposals: readonly IInspectionFileProposal[];
+    readonly fixes: readonly IInspectionFix[];
+    readonly kind?: string | undefined;
+    readonly level?: string | undefined;
+    readonly locations: readonly IInspectionLocation[];
+    readonly message: IInspectionMessage;
+    readonly otherContent: Readonly<Record<string, unknown>>;
+    readonly ref: string;
+    readonly relatedLocations: readonly IInspectionLocation[];
+    readonly resultIndex: number;
+    readonly ruleId?: string | undefined;
+    readonly runIndex: number;
+}
+
+// @public
+export interface IInspectionFix {
+    readonly changes: readonly IInspectionArtifactChange[];
+    readonly description?: string | undefined;
+    readonly descriptionContent?: IInspectionMessage | undefined;
+    readonly otherContent?: Readonly<Record<string, unknown>> | undefined;
+    readonly ref: string;
+}
+
+// @public
+export interface IInspectionLocation {
+    readonly artifactLocation?: object | undefined;
+    readonly charLength?: number | undefined;
+    readonly charOffset?: number | undefined;
+    readonly endColumn?: number | undefined;
+    readonly endLine?: number | undefined;
+    readonly logical?: readonly object[] | undefined;
+    readonly message?: string | undefined;
+    readonly messageContent?: IInspectionMessage | undefined;
+    readonly otherContent?: Readonly<Record<string, unknown>> | undefined;
+    readonly path: string | null;
+    readonly snippet?: string | undefined;
+    readonly startColumn?: number | undefined;
+    readonly startLine?: number | undefined;
+    readonly uri?: string | undefined;
+    readonly uriBaseId?: string | undefined;
+}
+
+// @public
+export interface IInspectionMessage {
+    readonly arguments?: readonly string[] | undefined;
+    readonly id?: string | undefined;
+    readonly markdown?: string | undefined;
+    readonly otherContent?: Readonly<Record<string, unknown>> | undefined;
+    readonly resolved: boolean;
+    readonly text?: string | undefined;
+}
+
+// @public
+export interface IInspectionPreview {
+    readonly byteLength?: number | undefined;
+    readonly otherContent?: Readonly<Record<string, unknown>> | undefined;
+    readonly shownChars?: number | undefined;
+    readonly shownLines?: number | undefined;
+    readonly state: 'complete' | 'truncated' | 'unavailable';
+    readonly text?: string | undefined;
+    readonly totalChars?: number | undefined;
+    readonly totalLines?: number | undefined;
+}
+
+// @public
+export interface IInspectionReplacement {
+    readonly deletedRegion: Readonly<Record<string, unknown>>;
+    readonly inserted: IInspectionPreview;
+    readonly otherContent?: Readonly<Record<string, unknown>> | undefined;
+}
+
+// @public
+export interface IInspectionRun {
+    readonly approval?: string | undefined;
+    readonly columnKind?: string | undefined;
+    readonly index: number;
+    readonly otherContent: Readonly<Record<string, unknown>>;
+    readonly ref: string;
+    readonly source: { readonly state: 'unbound' | 'declared'; readonly provenance: readonly object[] };
+    readonly tool: { readonly name: string; readonly version?: string | undefined };
+}
+
+// @public
+export interface IInspectSarifOptions {
+    readonly previewChars?: number | null | undefined;
+    readonly previewLines?: number | null | undefined;
+    readonly sourceRootUri?: string | undefined;
+}
+
+// @public
+export interface IInvalidSarifOutcome {
+    readonly markdown: string;
+    readonly problems: readonly IProblem[];
+    readonly status: 'invalid';
+}
+
+// @public
+export interface INewSarifRun {
+    readonly source?: ISarifSourceBinding | undefined;
+    readonly toolName: string;
+    readonly toolVersion?: string | undefined;
+}
+
+// @public
+export function inspectSarif(sarif: object, options?: IInspectSarifOptions): InspectSarifOutcome;
+
+// @public
+export type InspectSarifOutcome = IInspectedOutcome | IInvalidSarifOutcome;
+
+// @public
+export interface IProblem {
+    readonly message: string;
+    readonly path?: string | undefined;
+    readonly pointer?: string | undefined;
 }
 
 // @public
@@ -53,6 +278,83 @@ export interface IRejectedOutcome {
     readonly markdown: string;
     readonly statePath: string;
     readonly status: 'rejected';
+}
+
+// @public
+export interface ISarifComment {
+    readonly endLine?: number | undefined;
+    readonly file: string;
+    readonly level?: 'none' | 'note' | 'warning' | 'error' | undefined;
+    readonly line: number;
+    readonly message: string;
+    readonly messageFormat?: 'text' | 'markdown' | undefined;
+    readonly ruleId?: string | undefined;
+    readonly run?: number | INewSarifRun | undefined;
+}
+
+// @public
+export interface ISarifInspection {
+    readonly diagnostics: readonly IInspectionDiagnostic[];
+    readonly externalProperties?: readonly IInspectionExternalProperties[] | undefined;
+    readonly findings: readonly IInspectionFinding[];
+    readonly format: 'sarif-to-comment.inspection';
+    readonly log?: { readonly otherContent: Readonly<Record<string, unknown>> } | undefined;
+    readonly runs: readonly IInspectionRun[];
+    readonly summary: {
+        readonly runs: number;
+        readonly findings: number;
+        readonly fixes: number;
+        readonly fileProposals: number;
+        readonly truncatedPreviews: number;
+        readonly externalFindings?: number | undefined;
+    };
+    readonly version: 1;
+}
+
+// @public
+export interface ISarifLog {
+    $schema?: string;
+    [property: string]: unknown;
+    runs: object[];
+    version: '2.1.0';
+}
+
+// @public
+export interface ISarifSourceBinding extends IGitHubRepository {
+    readonly commit: string;
+}
+
+// @public
+export interface ISarifToolIdentity {
+    readonly name: string;
+    readonly version?: string | undefined;
+}
+
+// @public
+export interface IStagedChangeReceipt {
+    readonly associated?: readonly string[] | undefined;
+    readonly explainedBy?: 'finding' | 'existing-proposal' | 'neutral' | undefined;
+    readonly operation: 'edit' | 'create' | 'delete';
+    readonly path: string;
+    readonly replacements?: readonly IStagedReplacementReceipt[] | undefined;
+}
+
+// @public
+export interface IStagedChangesReceipt {
+    readonly addedRun: number | null;
+    readonly boundRuns: readonly number[];
+    readonly changes: readonly IStagedChangeReceipt[];
+    readonly reviewedCommit: string;
+    readonly warnings: readonly IProblem[];
+}
+
+// @public
+export interface IStagedReplacementReceipt {
+    readonly associated: readonly string[];
+    readonly endLine: number;
+    readonly explainedBy: 'finding' | 'existing-fix' | 'neutral';
+    readonly insertion?: true | undefined;
+    readonly startLine: number;
 }
 
 // @public

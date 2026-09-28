@@ -143,3 +143,28 @@ Astra completed the independent review and repair reconciliation. The only post-
 ### Parent final validation and delivery preparation
 
 Parent `pnpm check` passed lint and 1,278/1,278 tests across 81 suites with no skips. Every product source file matches the manifest used for the final live experiments. Final `npm pack` produced the local private tarball with exactly eleven intended files; no registry publication. Remote main was verified at the original initial commit before delivery. The experimental toolsmith staging directory is local research scaffolding and is excluded from the product commit. SSH discovery stalled and was canceled; HTTPS uses the existing GitHub credential helper transiently without changing repository configuration or credentials.
+
+### Second-milestone scope discussion — 2026-09-28
+
+After completion of the ready-SARIF milestone and npm release goal, the user selected staged-change extraction, explicitly excluding suggestion PRs. They then requested SARIF bootstrapping through a CLI command or library call, plus an ergonomic way to add their own comment on a line or line range. Recorded these capabilities, the authoring-boundary extension, and unresolved interface/extraction contracts in second-milestone.md. This is a scope discussion, not authorization inferred for a new autonomous goal, a settled API design, or implementation evidence.
+
+
+### Authoring interface design and independent critique
+
+The user delegated names and asked for sub-agent scrutiny. `/root/authoring_api_review` independently reviewed the existing interfaces, D4/D19/D20 and the proposed second-milestone workflow. Feedback changed `init` to use `--output`, aligned `line`/`endLine` across authoring surfaces, clarified extraction as `add-staged-changes` / `addStagedChangesToSarif`, preserved the legacy publication form, and made finding selection and attached-fix removal explicit. The user then added removal, inspection, optional validation, and equivalent CLI/library surfaces with human-readable and JSON CLI output. They clarified that the product goal is an agent authoring/proofreading loop without needing to understand SARIF or depend on upstream generation, and granted design discretion. D30 and the interface document preserve these additions and separate explicit user requirements from selected design choices. No second-milestone implementation has begun.
+
+
+### Happy-path-first priority correction
+
+While preparing to define an Astra goal, the user explicitly narrowed the next increment: establish findings, see what is present, incorporate staged changes as fixes, and publish to GitHub. They summarized this as “the happy path first.” Updated second-milestone.md and D31; retained the reviewed removal/correction and standalone validation designs as deferred future direction. Basic inspection and CLI/library plus human/JSON parity remain in scope. No goal was created or worker dispatched for implementation by this scope clarification.
+
+
+### Modular authoring boundary
+
+The user explicitly asked for bootstrapping and iterating on SARIF to be freestanding so upstream producers remain first-class. Recorded D32 and updated milestone/interface/specification boundaries: plain SARIF is the shared object/file format; authoring is optional; inspection, staged incorporation and publication cannot require helper initialization, opaque state or helper-only metadata. Added acceptance obligations for upstream SARIF bypassing authoring and ready upstream input publishing directly. This records architecture direction without requiring separate packages or starting implementation.
+
+### Astra second-milestone goal prepared and activation requested
+
+The user asked to prepare a goal for Astra, then explicitly said “Feel free to set the goal, if you can.” Prepared docs/second-milestone-goal.md for the linear happy path, optional freestanding authoring, ordinary upstream SARIF interoperability, CLI/library parity and human/JSON output. Correction/removal, standalone validation and suggestion PRs are deferred. The goal retains tests-first Opus implementation, independent review and concrete installed/live end-to-end evidence. The goal tool and Astra dispatch follow; this record alone is not launch evidence.
+
+The goal tool created the second-milestone goal as ACTIVE on September 28, 2026, with no token budget. Existing Astra lead `/root/astra_milestone_lead` received the brief through a follow-up assignment; a subsequent live agent listing reports it RUNNING. The parent owns final acceptance and Git/release execution. This confirms Astra dispatch, not an Opus worker launch or implementation completion.

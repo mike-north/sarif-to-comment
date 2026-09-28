@@ -1,0 +1,55 @@
+{
+  "purpose": "Independent pure insertion and EOF append oracle prepared after review findings and before their implementation repair. No converter output used.",
+  "status": "Prepared local fixture; no product or remote acceptance yet",
+  "path": "fixture/review.txt",
+  "baseCommit": "e59eeae59556f47b6d9311bb6642e129c2bda89c",
+  "reviewedCommit": "998d7cfc7c858adf3bbcea82ef126a900d51ebc3",
+  "reviewed": "reviewed one\nreviewed two\nreviewed three\nreviewed four\nreviewed five\nreviewed six\nreviewed seven\nreviewed eight\nreviewed nine\nreviewed ten\n",
+  "staged": "reviewed one\nreviewed two\ninserted before third entry\nreviewed three\nreviewed four\nreviewed five\nreviewed six\nreviewed seven\nreviewed eight\nreviewed nine\nreviewed ten\nappended after tenth entry\n",
+  "workingTree": "reviewed one\nreviewed two\ninserted before third entry\nreviewed three\nreviewed four\nreviewed five\nreviewed six\nreviewed seven\nreviewed eight\nreviewed nine\nreviewed ten\nUNSTAGED INSERTION SENTINEL\n",
+  "unchangedLineFinding": {
+    "line": 3,
+    "message": "Preserve the original third entry."
+  },
+  "insertions": [
+    {
+      "beforeReviewedLine": 3,
+      "insertedText": "inserted before third entry\n",
+      "faithfulNativeRenderings": [
+        {
+          "anchor": 2,
+          "lines": [
+            "reviewed two",
+            "inserted before third entry"
+          ]
+        },
+        {
+          "anchor": 3,
+          "lines": [
+            "inserted before third entry",
+            "reviewed three"
+          ]
+        }
+      ]
+    },
+    {
+      "afterReviewedLine": 10,
+      "insertedText": "appended after tenth entry\n",
+      "faithfulNativeRenderings": [
+        {
+          "anchor": 10,
+          "lines": [
+            "reviewed ten",
+            "appended after tenth entry"
+          ]
+        }
+      ]
+    }
+  ],
+  "invariants": [
+    "The unchanged line 3 finding must remain separate and must not explain either insertion.",
+    "Independently applying both raw SARIF fixes to the reviewed source must reproduce the staged bytes.",
+    "Applying both native suggestions must reproduce those same staged bytes.",
+    "No unstaged sentinel may enter SARIF fixes or host comments."
+  ]
+}

@@ -14,15 +14,16 @@ The [decision log](design-decisions.md) governs this draft. Decision identifiers
 
 ## 2. Scope and non-goals
 
-The product supports three composable concerns:
+The product supports the following composable concerns (authoring added for the second milestone under D30):
 
-1. Combining SARIF feedback while preserving its origins.
-2. Optionally enriching feedback with proposed changes derived from a reviewed source snapshot and staged repository state.
-3. Validating and publishing the complete artifact to a review destination.
+1. Authoring and inspecting caller-supplied feedback through CLI and library helpers without requiring direct SARIF manipulation.
+2. Combining SARIF feedback while preserving its origins.
+3. Optionally enriching feedback with proposed changes derived from a reviewed source snapshot and staged repository state.
+4. Validating and publishing the complete artifact to a review destination.
 
-These are responsibilities, not settled packages, commands, or deployment units. Publication MUST also accept supported feedback-only SARIF and supported SARIF with supplied fixes without requiring staged-change extraction. **[D1, D5]**
+These are responsibilities, not settled packages, commands, or deployment units. Under D32, authoring is optional and freestanding: ordinary SARIF is the interchange boundary, and downstream operations must accept supported upstream-produced SARIF without helper initialization or authoring-only state. Publication MUST also accept supported feedback-only SARIF and supported SARIF with supplied fixes without requiring staged-change extraction. **[D1, D5]**
 
-**Input boundary:** Upstream producers MUST supply line-level comments and other non-fix feedback as SARIF. This tool converts staged changes into SARIF fixes or the explicit whole-file proposal representation once that convention is settled. It combines that derived change information with the supplied SARIF; it does not convert arbitrary prose review notes into findings. “SARIF generation and combination” names this tool operation. It starts with supplied SARIF and any staged changes, and ends when the combined output SARIF is produced. It is neither upstream feedback authoring nor a later review step. **[D19; A23]**
+**Input boundary (extended by D30):** Producers may supply existing SARIF, or callers may use the second milestone’s authoring helpers to initialize an artifact and add explicit comment text and source locations. Both paths produce SARIF for preparation and publication. The helpers must not require callers to hand-build SARIF structures. This tool converts staged changes into SARIF fixes or the explicit whole-file proposal representation once that convention is settled. It combines that derived change information with the supplied SARIF; it does not infer findings or source locations from unstructured prose review notes. “SARIF generation and combination” names this tool operation. It starts with supplied or helper-authored SARIF and any staged changes, and ends when the combined output SARIF is produced. It is neither upstream feedback authoring nor a later review step. **[D19, D30; A23]**
 
 GitHub is the concrete destination for the acceptance scenarios. GitLab remains relevant; the initial supported-host set is open. Host-specific eligibility and presentation MUST remain distinguishable from caller policy. **[D3]**
 

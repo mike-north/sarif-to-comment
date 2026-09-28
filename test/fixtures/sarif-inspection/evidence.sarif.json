@@ -1,0 +1,80 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": { "driver": { "name": "EvidenceTool", "version": "3.0.0", "rules": [{ "id": "E1", "shortDescription": { "text": "rule short description" } }] } },
+      "columnKind": "utf16CodeUnits",
+      "invocations": [
+        { "executionSuccessful": true, "toolExecutionNotifications": [{ "level": "warning", "message": { "text": "notification text here" } }] }
+      ],
+      "artifacts": [{ "location": { "uri": "lib/old.js" } }],
+      "results": [
+        {
+          "ruleId": "E1",
+          "message": { "text": "Primary explanation.", "markdown": "Primary **explanation**." },
+          "locations": [
+            {
+              "id": 7,
+              "message": { "text": "short label", "markdown": "Read **critical alternate explanation**" },
+              "physicalLocation": {
+                "artifactLocation": { "uri": "src/app.js", "description": { "text": "artifact description text" } },
+                "region": { "startLine": 3, "sourceLanguage": "javascript" },
+                "contextRegion": { "startLine": 2, "endLine": 4, "snippet": { "text": "context snippet text" } }
+              },
+              "logicalLocations": [
+                { "name": "run", "fullyQualifiedName": "util.run", "decoratedName": "?run@util@@YAXXZ", "kind": "function" }
+              ]
+            }
+          ],
+          "partialFingerprints": { "primaryLocationLineHash": "fingerprint-value" },
+          "codeFlows": [
+            {
+              "threadFlows": [
+                {
+                  "locations": [
+                    { "location": { "message": { "text": "flow step message" }, "physicalLocation": { "artifactLocation": { "uri": "src/app.js" }, "region": { "startLine": 1 } } } }
+                  ]
+                }
+              ]
+            }
+          ],
+          "fixes": [
+            {
+              "description": { "text": "short fix", "markdown": "Retain **critical alternative rationale**" },
+              "properties": { "acme/confidence": "high-confidence-value" },
+              "artifactChanges": [
+                {
+                  "artifactLocation": { "uri": "src/app.js" },
+                  "properties": { "acme/change": "change-property-value" },
+                  "replacements": [
+                    { "deletedRegion": { "startLine": 3 }, "insertedContent": { "text": "fixed line\n" }, "properties": { "acme/replacement": "replacement-property-value" } }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "message": { "id": "nope", "arguments": ["arg-alpha", "arg-beta"] },
+          "locations": [
+            { "message": { "id": "location-nope", "arguments": ["loc-arg"] }, "physicalLocation": { "artifactLocation": { "uri": "src/app.js" }, "region": { "startLine": 1 } } }
+          ]
+        },
+        {
+          "message": { "text": "Needs {0} and {1}", "arguments": ["only-one"] }
+        },
+        {
+          "message": { "text": "Message with metadata.", "properties": { "acme/tag": "message-property-value" } }
+        },
+        {
+          "message": { "text": "Move the module." },
+          "properties": {
+            "sarifToComment": {
+              "proposedFileChanges": [{ "operation": "rename", "artifactIndex": 0, "targetUri": "new/place.js", "reason": "moved-for-layering" }]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

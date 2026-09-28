@@ -24,7 +24,7 @@ Description
 
 </td><td>
 
-Publish a ready SARIF 2.1.0 document as one GitHub draft pull request review.
+Author, inspect and extend SARIF 2.1.0, and publish it as one GitHub draft pull request review.
 
 
 </td></tr>

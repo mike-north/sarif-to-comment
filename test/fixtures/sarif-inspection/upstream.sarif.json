@@ -1,0 +1,182 @@
+{
+  "$schema": "https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "ESLint",
+          "version": "9.1.0",
+          "informationUri": "https://eslint.org",
+          "rules": [
+            { "id": "no-unused-vars", "messageStrings": { "unused": { "text": "'{0}' is defined but never used." } } },
+            { "id": "eqeqeq", "defaultConfiguration": { "level": "error" } }
+          ]
+        },
+        "extensions": [
+          {
+            "name": "security-pack",
+            "version": "1.0.0",
+            "rules": [
+              { "id": "SEC1", "messageStrings": { "m": { "text": "Tainted {0}.", "markdown": "Tainted **{0}**." } } }
+            ]
+          }
+        ]
+      },
+      "columnKind": "utf16CodeUnits",
+      "originalUriBaseIds": {
+        "SRCROOT": { "uri": "file:///work/app/" },
+        "SRC": { "uri": "src/", "uriBaseId": "SRCROOT" }
+      },
+      "artifacts": [
+        { "location": { "uri": "lib/util.js" } },
+        { "location": { "uri": "docs/new.md" }, "contents": { "text": "# New\n\nBody\n" }, "encoding": "utf-8" },
+        { "location": { "uri": "old.txt" } },
+        { "location": { "uri": "assets/logo.png" } }
+      ],
+      "invocations": [{ "executionSuccessful": true }],
+      "properties": { "sarifToComment": { "approval": "ready" } },
+      "results": [
+        {
+          "ruleId": "no-unused-vars",
+          "message": { "id": "unused", "arguments": ["x"] },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "app.js", "uriBaseId": "SRC" },
+                "region": { "startLine": 3, "startColumn": 7, "endColumn": 8, "snippet": { "text": "x" } }
+              }
+            }
+          ],
+          "partialFingerprints": { "primaryLocationLineHash": "abc123:1" },
+          "fixes": [
+            {
+              "description": { "text": "Remove x" },
+              "artifactChanges": [
+                {
+                  "artifactLocation": { "uri": "app.js", "uriBaseId": "SRC" },
+                  "replacements": [{ "deletedRegion": { "startLine": 3, "startColumn": 1, "endLine": 4, "endColumn": 1 } }]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "ruleId": "eqeqeq",
+          "kind": "fail",
+          "message": { "text": "Prefer ===." },
+          "properties": { "sarifToComment": { "approval": "awaiting-approval" } },
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": { "index": 0 },
+                  "replacements": [{ "deletedRegion": { "startLine": 5, "startColumn": 9, "endColumn": 11 }, "insertedContent": { "text": "===" } }]
+                }
+              ]
+            },
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": { "index": 0 },
+                  "replacements": [{ "deletedRegion": { "startLine": 5, "startColumn": 9, "endColumn": 11 }, "insertedContent": { "text": "!==" } }]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "rule": { "id": "SEC1", "toolComponent": { "index": 0 } },
+          "baselineState": "new",
+          "message": { "id": "m", "arguments": ["input"] },
+          "locations": [
+            {
+              "physicalLocation": { "artifactLocation": { "index": 0 }, "region": { "startLine": 10, "endLine": 12 } },
+              "message": { "text": "sink" },
+              "logicalLocations": [{ "fullyQualifiedName": "util.run" }]
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "lib/util.js" },
+                "region": { "startLine": 20 },
+                "contextRegion": { "startLine": 18, "endLine": 22 }
+              }
+            }
+          ],
+          "relatedLocations": [
+            {
+              "id": 1,
+              "physicalLocation": { "artifactLocation": { "uri": "lib/source.js" }, "region": { "startLine": 2 } },
+              "message": { "text": "source" }
+            }
+          ],
+          "codeFlows": [
+            {
+              "threadFlows": [
+                {
+                  "locations": [
+                    { "location": { "physicalLocation": { "artifactLocation": { "uri": "lib/source.js" }, "region": { "startLine": 2 } } } },
+                    { "location": { "physicalLocation": { "artifactLocation": { "uri": "lib/util.js" }, "region": { "startLine": 11 } } } }
+                  ]
+                }
+              ]
+            }
+          ],
+          "suppressions": [{ "kind": "inSource" }]
+        },
+        {
+          "message": { "text": "Update both files." },
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": { "uri": "lib/a.js" },
+                  "replacements": [{ "deletedRegion": { "startLine": 1 }, "insertedContent": { "text": "a\n" } }]
+                },
+                {
+                  "artifactLocation": { "uri": "assets/logo.png" },
+                  "replacements": [{ "deletedRegion": { "byteOffset": 0, "byteLength": 4 }, "insertedContent": { "binary": "iVBORw0KGgo=" } }]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "message": { "text": "Add docs page and drop old file." },
+          "properties": {
+            "sarifToComment": {
+              "proposedFileChanges": [
+                { "operation": "create", "artifactIndex": 1, "fileMode": "100644" },
+                { "operation": "delete", "artifactIndex": 2 },
+                { "operation": "transmogrify", "artifactIndex": 3, "extra": "x" }
+              ]
+            },
+            "acme/score": 3
+          }
+        },
+        {
+          "message": { "id": "missing" },
+          "locations": [
+            { "physicalLocation": { "artifactLocation": { "uri": "file:///elsewhere/x.js" }, "region": { "startLine": 1 } } }
+          ]
+        }
+      ]
+    },
+    {
+      "tool": { "driver": { "name": "Review agent" } },
+      "columnKind": "utf16CodeUnits",
+      "versionControlProvenance": [
+        { "repositoryUri": "https://github.com/acme/widgets", "revisionId": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de" }
+      ],
+      "results": [
+        {
+          "level": "warning",
+          "message": { "text": "Handle the empty-input case.\n\nSecond paragraph." },
+          "locations": [
+            { "physicalLocation": { "artifactLocation": { "uri": "src/parse.js" }, "region": { "startLine": 2, "endLine": 3 } } }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "status": "passed",
+  "checkedAt": "2026-09-28T16:52:22.028197+00:00",
+  "repository": "mike-north/doc-linter",
+  "defaultBranchCommit": "0a7b03fe399255a62118311cbc3e1bd6fe64cb23",
+  "defaultBranchUnchanged": true,
+  "pulls": [
+    {
+      "baseRefName": "codex/m2-20260928-base",
+      "headRefName": "codex/m2-20260928-reviewed",
+      "headRefOid": "c7544bd12a160901baa7d5699f0029c608ba34f6",
+      "mergedAt": null,
+      "number": 19,
+      "state": "CLOSED",
+      "url": "https://github.com/mike-north/doc-linter/pull/19",
+      "retainedReviewId": 5341813827,
+      "retainedReviewState": "COMMENTED",
+      "pendingReviews": 0
+    },
+    {
+      "baseRefName": "codex/m2-insertions-20260928-base",
+      "headRefName": "codex/m2-insertions-20260928-reviewed",
+      "headRefOid": "c3971627d0a1ae1f4a0b8c88419dae9ce3a7be31",
+      "mergedAt": null,
+      "number": 20,
+      "state": "CLOSED",
+      "url": "https://github.com/mike-north/doc-linter/pull/20",
+      "retainedReviewId": 5341820039,
+      "retainedReviewState": "COMMENTED",
+      "pendingReviews": 0
+    }
+  ],
+  "branchesRetainedForEvidence": true
+}

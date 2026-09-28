@@ -185,7 +185,9 @@ The user proposed HTML details and summary elements to keep long document propos
 
 The user explicitly clarified the input boundary: line-level feedback and other feedback that is not a fix are supplied to this tool as SARIF. This tool is responsible for turning staged changes into SARIF fixes and combining them with supplied feedback. The exact encoding of whole-file operations remains D6's representation question.
 
-**Consequences:** Do not imply that this tool accepts raw prose review notes and converts them into findings. The conversation exposed ambiguity in the label “preparation”; the current specification calls this operation **SARIF generation and combination**. It begins with supplied SARIF and any staged changes, and ends with the combined output SARIF. Earlier entries using “preparation” refer to this same operation, not upstream authoring or a later review step. The proposed additional early publication check was introduced by the assistant and is not an agreed feature.
+**Later scope extension:** D30 adds explicit authoring helpers for caller-supplied text and source locations. It supersedes the requirement that every caller already have SARIF; it does not add semantic inference from unstructured notes.
+
+**Original consequences:** Do not imply that this tool accepts raw prose review notes and converts them into findings. The conversation exposed ambiguity in the label “preparation”; the current specification calls this operation **SARIF generation and combination**. It begins with supplied SARIF and any staged changes, and ends with the combined output SARIF. Earlier entries using “preparation” refer to this same operation, not upstream authoring or a later review step. The proposed additional early publication check was introduced by the assistant and is not an agreed feature.
 
 ### D20. Feedback on a proposed new file supplies its association — settled direction
 
@@ -338,6 +340,30 @@ The product takes SARIF to GitHub to create an initial review. It does not maint
 Recovery is limited to establishing and completing the same initial publication without duplicate creation. Reading GitHub for delivery verification does not introduce synchronization. It must not restore original content over human changes or recreate human-deleted content as a maintenance operation. Unresolved delivery can be reported without implementing a human-change reconciliation system. This supersedes any broader continuation-policy implication in the independent model comparison. Previously agreed suggestion cleanup remains a separate, bounded action under D27.
 
 **API evidence:** GitHub's [create-review endpoint](https://docs.github.com/en/rest/pulls/reviews#create-a-review-for-a-pull-request) accepts the review body and an array of inline comments in one request, with the reviewed commit and optional submission event. Omitting the event creates a pending review; specifying an event submits it. Thus review creation need not be a loop of separately created comments. Separate suggestion PRs are outside that request. This documents a single-request capability, not an unverified atomicity guarantee under failures or an unlimited payload promise.
+
+### D30. Agent-friendly SARIF authoring and proofreading — user-selected second milestone
+
+On September 28, 2026 the user selected staged-change extraction without suggestion PRs, then added a self-contained authoring workflow: initialize SARIF, add feedback on lines or line ranges, correct mistakes by removing and recreating feedback, inspect the current findings and fixes, incorporate staged changes as fixes, inspect again, validate readiness, and explicitly publish to GitHub. An agent should not need an upstream SARIF producer or direct knowledge of the format to perform this loop.
+
+Every operation needs CLI commands/subcommands and an equivalent library surface. The CLI must support human-readable and JSON output; the user expects agents to favor JSON. Inspection shows findings, files, lines/ranges and any included fixes, not only fixes eligible as native GitHub suggestions. Fix previews may be truncated; truncation is a property of the view, not a destructive change to the artifact.
+
+This extends D19: callers may still supply ordinary SARIF, but they can also use explicit authoring helpers with caller-provided text and locations. The tool does not invent a critique or infer a source association from arbitrary prose. Optional validation is now user-requested; it is not a mandatory extra approval gate, a publication act or a replacement for publication-time checks. D29's one-way GitHub publication boundary remains intact; local authoring/removal is not review maintenance.
+
+The user delegated naming and design discretion and expressly requested independent sub-agent scrutiny. The [milestone scope](second-milestone.md) and [interface design](second-milestone-interface-design.md) record the selected vocabulary, review feedback and remaining contracts. Detailed choices such as immutable library authoring, complete-finding removal including its attached fixes, and file-output policies are lead-selected designs under that discretion, not separately quoted user decisions.
+
+### D31. Deliver the linear happy path before correction and standalone validation — user-selected priority
+
+Later on September 28, 2026, while scoping the next Astra goal, the user explicitly deferred proofreading/correction and standalone validation in favor of “the happy path first”: establish findings, see what is present, incorporate staged changes as SARIF fixes, and publish to GitHub. Initialization, adding comments, basic read-only inspection, staged incorporation, and publication comprise the next increment. CLI/library equivalence and human-readable/JSON CLI output remain required.
+
+D30 remains the broader desired workflow. Its removal/correction operations and separate validation surface are no longer requirements of this milestone. Existing publication-time validation, faithful representation and safe failure/delivery behavior are preserved. Do not interpret the deferral as permission to publish invalid, incomplete or incorrectly placed content.
+
+### D32. Keep authoring optional and freestanding behind ordinary SARIF boundaries — user-selected architecture
+
+The user explicitly requires bootstrapping SARIF and adding/iterating on comments to be a modular, freestanding concern. Staged-fix incorporation, validation and publication operate on existing SARIF, which may originate in the helper library or an upstream tool. Library consumers exchange ordinary in-memory SARIF; CLI consumers use SARIF files.
+
+Do not make the authoring helpers, their initialization history, an opaque builder/session, helper-specific metadata or a private intermediate representation mandatory for downstream operations. Preserve upstream-produced SARIF → staged incorporation and ready upstream-produced SARIF → direct publication. Required source context and the existing supported-profile checks remain applicable; optional authoring must not obstruct a supported upstream input.
+
+This constrains responsibilities and composition, not deployment units: separate npm packages are not required. Future comment editing belongs to authoring; adding Git/GitHub behavior to a single authoring abstraction through unrelated modes would violate this boundary. Inspection of existing SARIF is shared, not authoring-only. D31's happy path is an example composition, not an enforced workflow state machine.
 
 ## Current concepts
 

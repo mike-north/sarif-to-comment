@@ -1,0 +1,55 @@
+{
+  "$schema": "https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json",
+  "version": "2.1.0",
+  "properties": {
+    "fixturePurpose": "Independent upstream input for the second milestone; this is planned test data, not executed evidence."
+  },
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Independent fixture producer",
+          "version": "1.0.0",
+          "rules": [
+            { "id": "VALUE", "shortDescription": { "text": "Value feedback" } },
+            { "id": "COMBINE", "shortDescription": { "text": "Range feedback" } }
+          ]
+        }
+      },
+      "columnKind": "utf16CodeUnits",
+      "properties": { "producerRunMarker": "preserve-upstream-run" },
+      "results": [
+        {
+          "ruleId": "VALUE",
+          "ruleIndex": 0,
+          "level": "note",
+          "message": { "text": "Use the corrected second value." },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "fixture/review.txt" },
+                "region": { "startLine": 2, "endLine": 2 }
+              }
+            }
+          ],
+          "properties": { "producerFindingMarker": "preserve-upstream-A" }
+        },
+        {
+          "ruleId": "COMBINE",
+          "ruleIndex": 1,
+          "level": "warning",
+          "message": { "text": "Combine these two entries without changing the following entries." },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "fixture/review.txt" },
+                "region": { "startLine": 5, "endLine": 6 }
+              }
+            }
+          ],
+          "properties": { "producerFindingMarker": "preserve-upstream-B" }
+        }
+      ]
+    }
+  ]
+}

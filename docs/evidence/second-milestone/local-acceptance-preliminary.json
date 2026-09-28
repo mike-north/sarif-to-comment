@@ -1,0 +1,49 @@
+{
+  "scope": "preliminary local development package; not final reviewed source or a new npm release",
+  "tarballSha256": "a885c5f0507e2d142c75201780fcbc67dc2f0f9756da7355e0ba6fc950ce4b23",
+  "installedSourceHashes": {
+    "artifact-files.cjs": "bf3d7e30acba59c62f069db35524b610af49c0345d47d81afdb1a4687dbaefc0",
+    "cli.cjs": "e1663c89ef87db2d5605f62f6335ccd63f0a993239dee29ddbcfde67c5949012",
+    "github.cjs": "f43b4e561637aefbaac05f02d17d11b9e8fabedb158aa15a44c3ca25fd73bfa7",
+    "index.cjs": "6b01cda2c541926a190c731cdb3acde68a620c8b8b28f10c21fe0823517bef28",
+    "placement.cjs": "7f0df1a586972162c5496757c29adcf211d566884e2243fd6eb0ba87b44bbefc",
+    "prepare-review.cjs": "9626bc1b2504d8933ea5395f9594a5a58a1f2e61c8b14f8a108abcad1ee91852",
+    "publication.cjs": "71fff07a0cedc52408df3974fd387ff4668260ea4d4b8b35d3d3221c9615e7b8",
+    "replacements.cjs": "71109a561fed6d2ae4b339cc71c12be74300b7638b007b300f2c915652fdd9dd",
+    "sarif-authoring.cjs": "edb7c7b7e2a056ac520a5430a6c71fd9e925efbd671256fe6d0bf31cd582f853",
+    "sarif-common.cjs": "ba645328b239462beddf1478964d8232a9217efc1b3937a1f88897ee87b29446",
+    "sarif-inspection.cjs": "48490eff3bc240d3262b8f0dde6ecaa36bc0369401d2b468e6253cea6fb515fa",
+    "staged-changes.cjs": "57755204caf469700306e3bc75c09b93fae3616b1300d02ee420f6a85cf1be4c",
+    "staged-git.cjs": "b2d4a77a1aee7a13e4f0ac5b1218318c7f2fd79f8ced5ed1d47183403b29e56b"
+  },
+  "result": {
+    "status": "passed",
+    "packageVersion": "0.1.1",
+    "reviewedCommit": "998d7cfc7c858adf3bbcea82ef126a900d51ebc3",
+    "paths": [
+      "installed-library",
+      "installed-cli-json",
+      "ordinary-upstream-bypass"
+    ],
+    "remoteAcceptance": "not executed by this runner"
+  },
+  "oracle": "docs/evidence/second-milestone/source-oracle.json",
+  "runner": "logs/opus/m2/installed-local-acceptance.cjs",
+  "log": "logs/opus/m2/parent-local-acceptance-03.txt",
+  "checks": [
+    "exact caller messages and ranges",
+    "authored CLI/library equality",
+    "independent replacement application reproduces staged bytes",
+    "unstaged sentinel excluded",
+    "ordinary upstream CLI/library bypass",
+    "producer metadata and input preservation",
+    "human inspection messages",
+    "reviewed/index/working-tree bytes unchanged"
+  ],
+  "limitations": [
+    "no GitHub review sent",
+    "no declaration or generated documentation acceptance in this runner",
+    "nested inspection fidelity repair is pending",
+    "final integrated source must be repacked and rerun"
+  ]
+}

@@ -1,15 +1,30 @@
 'use strict';
 
 /**
- * Public library entry point: publish a ready SARIF document as one GitHub
- * draft review (first milestone, docs/first-milestone.md).
+ * Public library entry point.
  *
- * This is the primary consumer interface. It accepts SARIF as an in-memory
- * JSON value (no temporary file) and composes the same private cores the CLI
- * uses: the GitHub client (src/github.cjs), whole-review preparation
- * (src/prepare-review.cjs) and durable initial publication
- * (src/publication.cjs). It adds no rendering, placement or delivery logic of
- * its own; it only validates, captures, sequences and explains.
+ * Five operations, each on ordinary in-memory SARIF 2.1.0 values (no files,
+ * builders, sessions or private formats); the CLI (src/cli.cjs) is a file
+ * transport over exactly these functions:
+ *
+ *   createSarifDocument(options?)          optional authoring: a new document
+ *   addSarifComment(sarif, comment)        optional authoring: one finding
+ *   inspectSarif(sarif, options?)          read-only view of any SARIF
+ *   addStagedChangesToSarif(input)         staged Git changes as SARIF fixes
+ *   publishSarifReview(input, internals?)  one GitHub draft review
+ *
+ * Authoring is optional and freestanding: SARIF from any producer can be
+ * inspected, extended and published without it, and nothing downstream
+ * depends on how a document was made. The first four are implemented in
+ * their own modules (src/sarif-authoring.cjs, src/sarif-inspection.cjs,
+ * src/staged-changes.cjs) and re-exported here unchanged; their contracts are
+ * in those modules and in types/index.d.ts.
+ *
+ * Publication composes private cores: the GitHub client (src/github.cjs),
+ * whole-review preparation (src/prepare-review.cjs) and durable initial
+ * publication (src/publication.cjs). It adds no rendering, placement or
+ * delivery logic of its own; it only validates, captures, sequences and
+ * explains.
  *
  * ---------------------------------------------------------------------------
  * publishSarifReview(input, internals?) -> Promise<Outcome>
@@ -86,6 +101,9 @@ const util = require('node:util');
 const { createGitHubClient: defaultCreateGitHubClient } = require('./github.cjs');
 const { prepareReview } = require('./prepare-review.cjs');
 const { publishPreparedReview, recoverPublication } = require('./publication.cjs');
+const { createSarifDocument, addSarifComment } = require('./sarif-authoring.cjs');
+const { inspectSarif } = require('./sarif-inspection.cjs');
+const { addStagedChangesToSarif } = require('./staged-changes.cjs');
 
 /** Identity-document format of the original input, fixed by the fingerprint spec. */
 const INPUT_FORMAT = 'sarif-to-comment.input';
@@ -511,4 +529,4 @@ async function publishSarifReview(input, internals = {}) {
   return { ...outcome, markdown: redact(outcome.markdown, captured.token) };
 }
 
-module.exports = { publishSarifReview };
+module.exports = { createSarifDocument, addSarifComment, inspectSarif, addStagedChangesToSarif, publishSarifReview };

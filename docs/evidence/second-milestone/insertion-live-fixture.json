@@ -1,0 +1,19 @@
+{
+  "baseCommit": "e59eeae59556f47b6d9311bb6642e129c2bda89c",
+  "reviewedCommit": "998d7cfc7c858adf3bbcea82ef126a900d51ebc3",
+  "indexBlob": "dd78f964770442a58ea4d1b2fe6a71b98547769a",
+  "status": "local and remote fixture prepared; no product acceptance yet",
+  "github": {
+    "repository": "mike-north/doc-linter",
+    "pullNumber": 20,
+    "url": "https://github.com/mike-north/doc-linter/pull/20",
+    "baseBranch": "codex/m2-insertions-20260928-base",
+    "headBranch": "codex/m2-insertions-20260928-reviewed",
+    "author": "mike-north",
+    "state": "OPEN",
+    "defaultBranchBaseline": "0a7b03fe399255a62118311cbc3e1bd6fe64cb23",
+    "changedPaths": [
+      "fixture/review.txt"
+    ]
+  }
+}

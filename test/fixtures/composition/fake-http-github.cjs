@@ -25,6 +25,11 @@
  * Like GitHub, it refuses a second pending review by one author on one pull
  * request with 422 (docs/native-suggestion-fidelity-experiment.md).
  *
+ * A host serves repository.json by default. `create(dir, config, repository)`
+ * may give it a different repository of the same shape (for example one whose
+ * commits are real local Git commits); it is stored in the host directory so a
+ * child process attached to that directory serves the same repository.
+ *
  * State (reviews, request log, behavior) lives in files under `dir`, written
  * atomically, so a CLI child process and the test share one host. The log
  * records method, path and whether the Authorization header carried exactly
@@ -66,11 +71,11 @@ function treeId(label) {
  * Git objects for every snapshot: commit -> root tree, tree -> entries,
  * blob id -> bytes. Directories become nested trees.
  */
-function buildObjects() {
+function buildObjects(repository) {
   const commits = {};
   const trees = {};
   const blobs = {};
-  for (const [commit, files] of Object.entries(REPOSITORY.snapshots)) {
+  for (const [commit, files] of Object.entries(repository.snapshots)) {
     const dirs = new Map([['', new Map()]]);
     for (const [filePath, lines] of Object.entries(files)) {
       const bytes = Buffer.from(lines.join(''), 'utf8');
@@ -96,13 +101,12 @@ function buildObjects() {
   return { commits, trees, blobs };
 }
 
-const OBJECTS = buildObjects();
-
 class FakeHttpGitHub {
-  /** Creates a host rooted at a fresh directory. */
-  static create(dir, config = {}) {
+  /** Creates a host rooted at a fresh directory, serving `repository` (default repository.json). */
+  static create(dir, config = {}, repository = null) {
     fs.mkdirSync(dir, { recursive: true });
     const host = new FakeHttpGitHub(dir);
+    if (repository !== null) host.write('repository.json', repository);
     host.write('config.json', { create: 'ok', shiftThreadLine: null, ...config });
     host.write('reviews.json', []);
     host.write('log.json', []);
@@ -118,6 +122,16 @@ class FakeHttpGitHub {
 
   read(name) {
     return JSON.parse(fs.readFileSync(path.join(this.dir, name), 'utf8'));
+  }
+
+  /** The repository this host serves, and its Git objects (computed once per host object). */
+  served() {
+    if (!this.cached) {
+      const own = path.join(this.dir, 'repository.json');
+      const repository = fs.existsSync(own) ? this.read('repository.json') : REPOSITORY;
+      this.cached = { repository, objects: buildObjects(repository) };
+    }
+    return this.cached;
   }
 
   write(name, value) {
@@ -156,8 +170,9 @@ class FakeHttpGitHub {
   }
 
   route(method, u, init) {
-    const { owner, repo, pullNumber } = REPOSITORY.destination;
-    const { base, head } = REPOSITORY.commits;
+    const { repository, objects } = this.served();
+    const { owner, repo, pullNumber } = repository.destination;
+    const { base, head } = repository.commits;
     const repoPath = `/repos/${owner}/${repo}`;
     const pull = `${repoPath}/pulls/${pullNumber}`;
     const p = u.pathname;
@@ -167,22 +182,22 @@ class FakeHttpGitHub {
 
     if (method === 'GET' && p === '/user') return json(USER);
     if (method === 'GET' && p === pull) {
-      return json({ number: pullNumber, head: { sha: head }, base: { sha: base }, changed_files: REPOSITORY.pullFiles.length });
+      return json({ number: pullNumber, head: { sha: head }, base: { sha: base }, changed_files: repository.pullFiles.length });
     }
     if (method === 'GET' && p === `${pull}/files`) {
-      return json(REPOSITORY.pullFiles.map((f) => ({ ...f, patch: f.patch.join('') })));
+      return json(repository.pullFiles.map((f) => ({ ...f, patch: f.patch.join('') })));
     }
     if (method === 'GET' && p === `${repoPath}/compare/${base}...${head}`) return json({ merge_base_commit: { sha: base } });
     if (method === 'GET' && (m = new RegExp(`^${repoPath}/git/commits/([0-9a-f]{40})$`).exec(p))) {
-      const tree = OBJECTS.commits[m[1]];
+      const tree = objects.commits[m[1]];
       return tree ? json({ sha: m[1], tree: { sha: tree } }) : json({ message: 'Not Found' }, 404);
     }
     if (method === 'GET' && (m = new RegExp(`^${repoPath}/git/trees/([0-9a-f]{40})$`).exec(p))) {
-      const tree = OBJECTS.trees[m[1]];
+      const tree = objects.trees[m[1]];
       return tree ? json({ sha: m[1], truncated: false, tree }) : json({ message: 'Not Found' }, 404);
     }
     if (method === 'GET' && (m = new RegExp(`^${repoPath}/git/blobs/([0-9a-f]{40})$`).exec(p))) {
-      const bytes = OBJECTS.blobs[m[1]];
+      const bytes = objects.blobs[m[1]];
       if (!bytes) return json({ message: 'Not Found' }, 404);
       return json({ sha: m[1], encoding: 'base64', content: bytes.toString('base64'), size: bytes.length });
     }
@@ -225,14 +240,14 @@ class FakeHttpGitHub {
       return json({ message: 'Unprocessable Entity', errors: ['User can only have one pending review per pull request'] }, 422);
     }
     const id = 5000 + reviews.length;
-    const { owner, repo, pullNumber } = REPOSITORY.destination;
+    const { owner, repo, pullNumber } = this.served().repository.destination;
     this.write('reviews.json', [...reviews, { id, request, body: request.body, state: request.event ? 'COMMENTED' : 'PENDING' }]);
     if (config.create === 'lose-response') throw new TypeError('fetch failed: socket hang up');
     return json({ id, html_url: `https://github.com/${owner}/${repo}/pull/${pullNumber}#pullrequestreview-${id}` });
   }
 
   reviewThreads(query, json) {
-    const { owner, repo, pullNumber } = REPOSITORY.destination;
+    const { owner, repo, pullNumber } = this.served().repository.destination;
     const vars = query.variables || {};
     if (vars.owner !== owner || vars.repo !== repo || vars.number !== pullNumber) {
       return json({ errors: [{ type: 'NOT_FOUND', message: 'no such pull request' }] });

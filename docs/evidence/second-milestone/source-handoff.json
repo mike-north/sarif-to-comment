@@ -1,0 +1,38 @@
+{
+  "status": "source-ready-for-parent-acceptance",
+  "packageVersion": "0.1.1",
+  "plannedVersion": "0.2.0",
+  "changeset": ".changeset/authoring-inspection-staged-changes.md",
+  "manifest": "docs/evidence/second-milestone/reviewed-source.sha256",
+  "manifestSha256": "823bef633b25c49908aebb6b774aba6462bef9759a2131e0c41dc7223dfc60d7",
+  "manifestEntries": 325,
+  "liveWorkspaceManifestMismatches": [],
+  "fullCheck": {
+    "command": "npm run check:lint && npm run check:types && npm run check:api && npm run check:release && npm test",
+    "exitCode": 0,
+    "tests": 1806,
+    "suites": 138,
+    "failed": 0,
+    "skipped": 0,
+    "apiPages": 225,
+    "rawLog": "logs/opus/m2/final-lead-check-02.txt",
+    "rawLogSha256": "0ca265830215946cdcc00492760eedd19f891df2e873a5ce61d5779fd4bdd8ce"
+  },
+  "independentReview": {
+    "conversation": "dac76d06-ff9e-486f-a27d-d5f6256ca3b9",
+    "review02ExitCode": 0,
+    "review03ExitCode": 0,
+    "verdict": "No material defect within reviewed scope",
+    "review02FocusedTests": 723,
+    "review02IndependentRandomByteCases": 270,
+    "review03InspectionTests": 59
+  },
+  "parentOwnedRemaining": [
+    "release versioning",
+    "final installed-package acceptance",
+    "actual GitHub publication/readback/application",
+    "fixture cleanup",
+    "Git delivery",
+    "npm release"
+  ]
+}
