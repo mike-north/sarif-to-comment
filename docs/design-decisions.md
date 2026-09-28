@@ -1,6 +1,6 @@
 # SARIF review publication: principles and decisions
 
-Updated: September 27, 2026.
+Updated: September 28, 2026.
 
 This is the working design record for the product-shaping conversation. It records decisions, their reasons, their consequences, and what remains open. It is not an implementation specification. No behavior described here has been implemented or integration-tested in this project.
 
@@ -364,6 +364,18 @@ The user explicitly requires bootstrapping SARIF and adding/iterating on comment
 Do not make the authoring helpers, their initialization history, an opaque builder/session, helper-specific metadata or a private intermediate representation mandatory for downstream operations. Preserve upstream-produced SARIF → staged incorporation and ready upstream-produced SARIF → direct publication. Required source context and the existing supported-profile checks remain applicable; optional authoring must not obstruct a supported upstream input.
 
 This constrains responsibilities and composition, not deployment units: separate npm packages are not required. Future comment editing belongs to authoring; adding Git/GitHub behavior to a single authoring abstraction through unrelated modes would violate this boundary. Inspection of existing SARIF is shared, not authoring-only. D31's happy path is an example composition, not an enforced workflow state machine.
+
+### D33. Maintain the implementation in strict TypeScript and distribute generated CommonJS — settled engineering decision
+
+The implementation is strict TypeScript: runtime modules are `src/*.cts`, compiled by `tsc` into flat CommonJS `dist/*.cjs`, one directory below the package root as before. The public declarations are generated from that implementation: `tsc` emits per-module declarations and API Extractor rolls up those reachable from the declaration entry (`src/public-api.cts`) into the single shipped `dist/sarif-to-comment.d.ts`, with the API report and reference documentation derived from it. There is no hand-written declaration file.
+
+The runtime entry (`src/index.cts`) stays a plain `module.exports` object of the five public functions, produced with `export =` and `import x = require()` so that no `__esModule` marker is emitted. A compile-time check proves that object has exactly the functions and types of the declaration entry. Private injection seams (a second argument to `publishSarifReview`, preparation and publication internals, the CLI's `main(io, internals)` through the shipped executable) keep their runtime behavior but are absent from the public declarations: the public function has one declared overload, and in-repository callers inject through internal functions. The seams remain unsupported test hooks, not a contract.
+
+Tests, fixture helpers and build, check and release tooling are `.mts` files that Node runs directly by type stripping, and the tests exercise the built `dist/`, the artifact that ships. A content manifest of every build input and output makes tests and the manual-publish backstop refuse a missing, incomplete or stale `dist/`. Consumer `engines` stays `>=22`; the development floor of Node 22.18.0, the first release that runs `.mts` without flags, is enforced only for development through `devEngines`.
+
+**Reason:** Declarations generated from the implementation cannot drift from it, and strict typing makes unchecked boundaries explicit. Consumers must see no difference from 0.2.0: the same public API, CLI behavior and CommonJS, ES module and bundler interop. A standard ES-module-syntax entry would emit an `__esModule` marker that changes the ES module namespace keys and bundler default-import behavior, and the seams were observable runtime behavior of the published package.
+
+**Consequences:** `pnpm run build` is a prerequisite of `pnpm run check`, the tests and publication; there is no `prepack`, so the published tarball is exactly what was checked. Packaged runtime files moved from `src/` and `bin/` to `dist/`; `main`, `types` and `bin` point there, and the `exports` map, which exposes only the package entry and `package.json`, is unchanged. Removing or narrowing the seams, and consolidating duplicated helpers, are separate future decisions. Runtime validation of inputs stays in place even where the types appear to make it unnecessary, because JavaScript callers are unconstrained.
 
 ## Current concepts
 
