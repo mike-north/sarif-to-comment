@@ -131,7 +131,11 @@
  *   `receipt` is present exactly when phase is 'completed'; `rejection` exactly
  *   when phase is 'rejected' (status: integer 400-499 except 408; message: at
  *   most 1000 characters). The version stays 1 while the format is unreleased;
- *   any shape other than these is corrupt. requestFingerprint
+ *   any shape other than these is corrupt. As in 0.2.0, a phase that is a
+ *   JSON array whose string form names a phase (['sending'], [['rejected']])
+ *   is also read: its record must carry that phase's field set, its receipt or
+ *   rejection value is never validated or answered from, and it is
+ *   investigated like an intent (see ParsedPhase). requestFingerprint
  *   is 'sha256:' + hex SHA-256 of the request as canonical JSON (object keys
  *   sorted recursively, no insignificant whitespace, UTF-8).
  */
@@ -300,8 +304,44 @@ interface IRejectedRecord extends IStateRecordBase {
   readonly rejection: IRejection;
 }
 
-/** A state record that passed every consistency check in recordProblem. */
+/** A state record this module writes: its phase fixes its exact field set. */
 type StateRecord = ISendingRecord | ICompletedRecord | IRejectedRecord;
+
+/**
+ * A non-string phase that state validation accepts: a one-element JSON array
+ * holding a phase name or, recursively, another such array. 0.2.0 looked a
+ * record's phase up as a property key, and property-key coercion turns these
+ * arrays (and only these, among JSON values) into a phase name, so state files
+ * with them were accepted. Parsing keeps accepting them so that every state
+ * file keeps its 0.2.0 handling; this module never writes one.
+ */
+type CoercedPhase = readonly [ParsedPhase];
+
+/** A phase value as parsed from a state file (see CoercedPhase). */
+type ParsedPhase = RecordPhase | CoercedPhase;
+
+/**
+ * A parsed record whose phase is a CoercedPhase. Validation matched its field
+ * set to the coerced phase name, so it holds a `receipt` when that name is
+ * 'completed' and a `rejection` when it is 'rejected', but it checked their
+ * contents only for a string phase. They are therefore unknown here, and such
+ * a record is never answered from them: only a string phase selects the
+ * receipt or rejection branch, so this record is investigated like an intent.
+ */
+interface ICoercedPhaseRecord extends IStateRecordBase {
+  readonly phase: CoercedPhase;
+  readonly receipt?: unknown;
+  readonly rejection?: unknown;
+}
+
+/**
+ * A state record that passed every consistency check in recordProblem. It is
+ * wider than StateRecord only by the historical coerced-phase forms.
+ */
+type ParsedStateRecord = StateRecord | ICoercedPhaseRecord;
+
+/** A parsed record that continueExisting investigates rather than answering from. */
+type InvestigatedRecord = ISendingRecord | ICoercedPhaseRecord;
 
 /** A review the host verifiably holds for this publication. */
 interface IReviewRef {
@@ -708,6 +748,20 @@ function isRecordPhase(phase: string): phase is RecordPhase {
   return phase === 'sending' || phase === 'completed' || phase === 'rejected';
 }
 
+/**
+ * Whether `phase` has the shape of a CoercedPhase: nested one-element arrays
+ * around a phase name. Unwrapped iteratively, so nesting depth costs no stack.
+ */
+function isCoercedPhase(phase: unknown): phase is CoercedPhase {
+  let inner: unknown = phase;
+  if (!isList(inner)) return false;
+  while (isList(inner)) {
+    if (inner.length !== 1) return false;
+    inner = inner[0];
+  }
+  return typeof inner === 'string' && isRecordPhase(inner);
+}
+
 /** Why a parsed value is not a consistent v1 state record, or null. */
 function recordProblem(record: unknown): string | null {
   if (!isPlainObject(record)) return 'record is not a JSON object';
@@ -719,9 +773,14 @@ function recordProblem(record: unknown): string | null {
     rejected: REJECTED_KEYS,
   };
   // The phase is looked up as a property key, which coerces a parsed JSON
-  // value to its string form.
-  const phaseKey = String(record['phase']);
+  // value to its string form (0.2.0 behavior, kept for existing state files).
+  const phase = record['phase'];
+  const phaseKey = String(phase);
   if (!isRecordPhase(phaseKey)) return 'unknown record phase';
+  // Among JSON values only a CoercedPhase coerces to a phase name, so this
+  // refuses nothing JSON.parse can produce; it establishes the parsed phase
+  // type from the value itself rather than from its coercion.
+  if (typeof phase !== 'string' && !isCoercedPhase(phase)) return 'unknown record phase';
   if (!hasExactKeys(record, keysByPhase[phaseKey])) return 'record fields do not match its phase';
   const marker = record['marker'];
   if (typeof marker !== 'string' || !MARKER_PATTERN.test(marker)) return 'malformed marker';
@@ -768,14 +827,16 @@ function recordProblem(record: unknown): string | null {
   }
   if (requestFingerprint !== fingerprintOf(request)) return 'saved request does not match its fingerprint';
 
-  if (record['phase'] === 'completed') {
+  // Receipt and rejection contents are checked for a string phase only, and
+  // only a string phase is ever answered from them (see ICoercedPhaseRecord).
+  if (phase === 'completed') {
     const receipt = record['receipt'];
     if (!isPlainObject(receipt) || !hasExactKeys(receipt, RECEIPT_KEYS)) return 'malformed receipt';
     if (!isPositiveInteger(receipt['reviewId'])) return 'malformed receipt reviewId';
     if (!isNonEmptyString(receipt['htmlUrl'])) return 'malformed receipt htmlUrl';
     if (receipt['via'] !== 'created' && receipt['via'] !== 'recovered') return 'malformed receipt via';
   }
-  if (record['phase'] === 'rejected') {
+  if (phase === 'rejected') {
     const rejection = record['rejection'];
     if (!isPlainObject(rejection) || !hasExactKeys(rejection, REJECTION_KEYS)) return 'malformed rejection';
     if (!isRefusalStatus(rejection['status'])) return 'rejection status is not a definitive refusal';
@@ -788,7 +849,7 @@ function recordProblem(record: unknown): string | null {
 }
 
 /** Whether a parsed value is a consistent v1 state record (see recordProblem). */
-function isStateRecord(record: unknown): record is StateRecord {
+function isStateRecord(record: unknown): record is ParsedStateRecord {
   return recordProblem(record) === null;
 }
 
@@ -797,7 +858,7 @@ function isStateRecord(record: unknown): record is StateRecord {
  * other condition — empty, truncated, unparsable, inconsistent — is corrupt
  * and must never be mistaken for absence.
  */
-function readState(fs: IPublicationFs, statePath: string): StateRecord | null {
+function readState(fs: IPublicationFs, statePath: string): ParsedStateRecord | null {
   let text: string;
   try {
     text = fs.readFileSync(statePath, 'utf8');
@@ -1236,7 +1297,7 @@ interface ISettleContext {
 async function settle(
   fs: IPublicationFs,
   statePath: string,
-  record: ISendingRecord,
+  record: InvestigatedRecord,
   transport: IPublicationTransport,
   { responseId, sendCause }: ISettleContext = {},
 ): Promise<IPublishedOutcome | IUncertainOutcome> {
@@ -1250,6 +1311,9 @@ async function settle(
     });
   }
   const via = responseId !== undefined ? 'created' : 'recovered';
+  // Every other field is copied, as 0.2.0 did: a coerced-phase record's
+  // unvalidated `rejection` therefore survives beside the new receipt, and
+  // that record fails the exact-field check when it is next read.
   const completed: ICompletedRecord = {
     ...record,
     phase: 'completed',
@@ -1290,7 +1354,7 @@ function mismatch(statePath: string, what: string): PublicationStateError {
 }
 
 /** Throws state-mismatch unless the record belongs to this destination, commit and original input. */
-function assertSameIdentity(record: StateRecord, input: IPublicationIdentity): void {
+function assertSameIdentity(record: IStateRecordBase, input: IPublicationIdentity): void {
   const d = input.destination;
   if (
     record.destination.owner !== d.owner ||
@@ -1307,10 +1371,12 @@ function assertSameIdentity(record: StateRecord, input: IPublicationIdentity): v
  * Continues an existing publication identity without ever sending: a
  * completed receipt or a persisted refusal returns immediately with no
  * transport call; a sending intent is investigated using its saved request.
+ * The branches compare the phase strictly, so a record with a coerced
+ * (array) phase is investigated like an intent whatever phase it names.
  */
 async function continueExisting(
   fs: IPublicationFs,
-  record: StateRecord,
+  record: ParsedStateRecord,
   input: IPublicationIdentity,
 ): Promise<PublicationOutcome> {
   assertSameIdentity(record, input);
@@ -1402,3 +1468,6 @@ async function recoverPublication(
 }
 
 export { publishPreparedReview, recoverPublication, PublicationStateError };
+// For compile-time checks of state parsing (test/publication-state.types.mts);
+// not part of the package's public API.
+export type { ParsedStateRecord };
