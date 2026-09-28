@@ -229,7 +229,7 @@ If that comparison can't establish the old side, you may pass `oldSourceCommit` 
 ```sh
 pnpm install
 pnpm run build             # build dist/ and regenerate api-report/ and docs/api/
-pnpm test                  # refuse a missing or stale dist/, then node --test test/*.test.cjs test/*.test.mts
+pnpm test                  # refuse a missing or stale dist/, then node --test "test/**/*.test.mts"
 pnpm run check             # lint, types, API report/docs freshness, release plan, tests (read-only)
 pnpm changeset             # describe a change for the next release
 ```

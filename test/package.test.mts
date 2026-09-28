@@ -251,7 +251,7 @@ describe('manifest', () => {
   test('scripts are purpose-named and checks are read-only', () => {
     const scripts = SCRIPTS;
     // The suite exercises the built dist/, so it first refuses a missing or stale build.
-    assert.equal(scripts['test'], 'npm run check:build && node --test test/*.test.cjs test/*.test.mts');
+    assert.equal(scripts['test'], 'npm run check:build && node --test "test/**/*.test.mts"');
     assert.equal(scripts['check:build'], 'node scripts/build-manifest.mts verify');
     assert.match(scripts['check:lint'] || '', /^eslint\b/);
     assert.ok(scripts['check'], 'an aggregate read-only check script exists');

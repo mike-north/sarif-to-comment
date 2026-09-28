@@ -66,7 +66,7 @@
     "check:types": "node scripts/check-types.mts",
     "check:api": "node scripts/api-docs.mts check",
     "check:release": "node scripts/release-guard.mts plan",
-    "test": "npm run check:build && node --test test/*.test.cjs test/*.test.mts",
+    "test": "npm run check:build && node --test \"test/**/*.test.mts\"",
     "release:version": "node scripts/release-guard.mts version",
     "prepublishOnly": "node scripts/release-guard.mts check-version"
   },

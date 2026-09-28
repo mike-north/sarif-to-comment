@@ -20,7 +20,7 @@
  * projectRoot defaults to this repository.
  */
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -154,6 +154,24 @@ function run(argv: readonly string[]): number {
   return 2;
 }
 
-if (import.meta.main) {
+/**
+ * Whether Node was started with this file (the command line), not imported by
+ * a test or the release guard. Compared by real path rather than
+ * import.meta.main, which is missing on Node versions below the development
+ * floor; there it would silently skip verification instead of running it.
+ */
+function isCommandLine(): boolean {
+  const entry = process.argv[1];
+  if (entry === undefined) {
+    return false;
+  }
+  try {
+    return realpathSync(entry) === realpathSync(import.meta.filename);
+  } catch {
+    return false;
+  }
+}
+
+if (isCommandLine()) {
   process.exitCode = run(process.argv.slice(2));
 }
