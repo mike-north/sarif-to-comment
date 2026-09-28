@@ -45,5 +45,9 @@ jobs:
       - name: Install exactly the locked dependencies
         run: pnpm install --frozen-lockfile
 
+      # The tests exercise the built dist/ and refuse a missing or stale one.
+      - name: Build dist/ and the API reference
+        run: pnpm run build
+
       - name: Lint, type-check, API/docs freshness, release plan and tests
         run: pnpm run check

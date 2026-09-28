@@ -12,7 +12,7 @@
  *   main with the process and sets process.exitCode.
  */
 
-const { main } = require('../src/cli.cjs');
+const { main } = require('./cli.cjs');
 
 if (require.main === module) {
   main({ argv: process.argv.slice(2), env: process.env, stdout: process.stdout, stderr: process.stderr }).then(

@@ -1,0 +1,23 @@
+{
+  "//": "Compiler settings shared by every TypeScript project (src, test, scripts): strict mode plus every additional safety flag. No esModuleInterop, allowSyntheticDefaultImports or skipLibCheck: CommonJS interop stays explicit and every dependency's declarations are type-checked. Node types come from @types/node@22, matching the consumer engines range, so no newer Node API can creep in.",
+  "compilerOptions": {
+    "target": "es2022",
+    "lib": ["es2022"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "strict": true,
+    "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": false,
+    "noEmitOnError": true,
+    "types": ["node"]
+  }
+}

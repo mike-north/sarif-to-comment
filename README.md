@@ -228,11 +228,13 @@ If that comparison can't establish the old side, you may pass `oldSourceCommit` 
 
 ```sh
 pnpm install
-pnpm test                  # node --test test/*.test.cjs
+pnpm run build             # build dist/ and regenerate api-report/ and docs/api/
+pnpm test                  # refuse a missing or stale dist/, then node --test test/*.test.cjs
 pnpm run check             # lint, types, API report/docs freshness, release plan, tests (read-only)
-pnpm run build             # regenerate api-report/ and docs/api/ after changing types/index.d.ts
 pnpm changeset             # describe a change for the next release
 ```
+
+Development needs Node 22.18.0 or later (`devEngines` in `package.json`), because the build and check tooling is TypeScript that Node runs directly by type stripping; the published package still supports Node 22 and later. The tests and the package both use the built `dist/`, so run `pnpm run build` after changing sources: `pnpm test` refuses a `dist/` that is missing or was built from different sources, configuration or declarations.
 
 The public TypeScript declarations are written by hand in `types/index.d.ts` and must match the CommonJS runtime in `src/index.cjs`. API Extractor checks them and writes a reviewable API report (`api-report/`) and a doc model. API Documenter renders the doc model as the Markdown reference in `docs/api/`. `pnpm run check` fails when either is out of date.
 
@@ -247,7 +249,7 @@ Releases use [Changesets](https://changesets.dev/) for versioning and [npm trust
 - **`pnpm run check`** (run in CI on every pull request) fails if a pending changeset would reach 1.0.0. A `major` changeset is refused with an explanation. It is never quietly converted to a smaller bump; choose `minor` yourself if the change shouldn't start 1.0.
 - **`pnpm run release:version`** refuses the same plans before `changeset version` changes any file.
 - **What counts as the plan.** The guard doesn't parse changeset files itself. It runs the real `changeset version` in a throwaway copy and judges the version and changelog entry Changesets produces, so any front matter Changesets accepts is judged by its actual effect. That includes quoted values such as `"sarif-to-comment": "major"`. A changeset Changesets can't read is refused, not ignored.
-- **The publish workflow** refuses any `package.json` version of 1.0.0 or higher, and so does the `prepublishOnly` backstop for a manual publish.
+- **The publish workflow** refuses any `package.json` version of 1.0.0 or higher, and so does the `prepublishOnly` backstop for a manual publish, which also refuses a missing or stale `dist/`.
 
 Changesets pre mode (prereleases) is not part of this release path.
 
@@ -270,8 +272,8 @@ Changesets pre mode (prereleases) is not part of this release path.
      - pre mode is off;
      - the package metadata is publishable, with the exact repository URL;
      - the commit is on `main`;
-     - npm is at least 11.5.1 and Node at least 22.14.0.
-   - **When allowed:** it runs `pnpm run check`, packs the tarball, verifies it contains exactly the distribution files, and publishes that tarball.
+     - npm is at least 11.5.1 and Node at least 22.18.0.
+   - **When allowed:** it builds `dist/`, runs `pnpm run check`, packs the tarball, verifies it contains exactly the distribution files, and publishes that tarball.
 
    Publishes never overlap, and a publish in progress is never cancelled.
 4. **If publishing fails**, what to do depends on where the cause is. A version npm has already accepted can never be republished.

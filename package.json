@@ -19,22 +19,24 @@
   "author": "",
   "license": "ISC",
   "type": "commonjs",
-  "main": "./src/index.cjs",
-  "types": "./types/index.d.ts",
+  "main": "./dist/index.cjs",
+  "types": "./dist/sarif-to-comment.d.ts",
   "exports": {
     ".": {
-      "types": "./types/index.d.ts",
-      "default": "./src/index.cjs"
+      "types": "./dist/sarif-to-comment.d.ts",
+      "default": "./dist/index.cjs"
     },
     "./package.json": "./package.json"
   },
   "bin": {
-    "sarif-to-comment": "bin/sarif-to-comment.cjs"
+    "sarif-to-comment": "dist/sarif-to-comment.cjs"
   },
   "files": [
-    "src/",
-    "bin/",
-    "types/",
+    "dist/",
+    "!dist/*.d.cts",
+    "!dist/*.tsbuildinfo",
+    "!dist/.build-inputs.json",
+    "!dist/public-api.cjs",
     "vendor/",
     "docs/getting-started.md",
     "docs/api/",
@@ -44,18 +46,26 @@
   "engines": {
     "node": ">=22"
   },
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": ">=22.18.0",
+      "onFail": "error"
+    }
+  },
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
-    "build": "node scripts/api-docs.cjs build",
+    "build": "node scripts/build.mts",
     "check": "npm run check:lint && npm run check:types && npm run check:api && npm run check:release && npm test",
+    "check:build": "node scripts/build-manifest.mts verify",
     "check:lint": "eslint .",
-    "check:types": "tsc -p tsconfig.json",
+    "check:types": "node scripts/check-types.mts",
     "check:api": "node scripts/api-docs.cjs check",
     "check:release": "node scripts/release-guard.cjs plan",
-    "test": "node --test test/*.test.cjs",
+    "test": "npm run check:build && node --test test/*.test.cjs",
     "release:version": "node scripts/release-guard.cjs version",
     "prepublishOnly": "node scripts/release-guard.cjs check-version"
   },
@@ -63,9 +73,11 @@
     "@changesets/cli": "^3.0.3",
     "@microsoft/api-documenter": "^7.30.16",
     "@microsoft/api-extractor": "^7.59.2",
+    "@types/node": "22.20.4",
     "eslint": "^10.11.0",
     "prettier": "^3.9.9",
-    "typescript": "~5.9.3"
+    "typescript": "~5.9.3",
+    "typescript-eslint": "8.70.1"
   },
   "dependencies": {
     "ajv": "^8.20.0",

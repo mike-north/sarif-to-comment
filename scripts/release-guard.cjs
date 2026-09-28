@@ -32,9 +32,9 @@
  *                        (publish=false). Otherwise it must be stable, under
  *                        the ceiling, produced by Changesets (newest CHANGELOG
  *                        entry), outside pre mode, publishable with the exact
- *                        repository URL, built with npm >= 11.5.1 and Node >=
- *                        22.14.0 (trusted publishing minimums), from a commit
- *                        on main (default origin/main). Writes publish=true or
+ *                        repository URL, run with npm >= 11.5.1 and Node >=
+ *                        22.18.0 (see MIN_NODE), from a commit on main
+ *                        (default origin/main). Writes publish=true or
  *                        publish=false to $GITHUB_OUTPUT. An unreachable
  *                        registry is a failure, never "unpublished".
  *   verify-pack PACK_JSON
@@ -43,7 +43,9 @@
  *                        package.json says.
  *   check-version        prepublishOnly backstop for a manual directory
  *                        publish: package.json is stable, under the ceiling
- *                        and publishable.
+ *                        and publishable, and dist/ is a complete build of
+ *                        the current sources (scripts/build-manifest.mts), so
+ *                        a missing or stale build is never published.
  *
  * @see https://changesets.dev/guide/cli
  * @see https://docs.npmjs.com/trusted-publishers/
@@ -67,9 +69,21 @@ const PACKAGE_NAME = 'sarif-to-comment';
 /** repository.url must equal this exactly for npm to accept the OIDC identity. */
 const EXPECTED_REPOSITORY_URL = 'git+https://github.com/mike-north/sarif-to-comment.git';
 
-/** Minimum tool versions npm documents for trusted publishing. */
+/** Minimum npm version npm documents for trusted publishing. */
 const MIN_NPM = '11.5.1';
-const MIN_NODE = '22.14.0';
+
+/**
+ * Minimum Node version for a release. Trusted publishing needs 22.14.0, but
+ * the release also runs the TypeScript build tooling (scripts/*.mts) through
+ * Node's native type stripping, which first works without flags or warnings
+ * in 22.18.0; requiring it here explains a too-old runner up front instead of
+ * letting the build fail on syntax. Consumers of the package are unaffected
+ * (package.json engines stays >=22).
+ */
+const MIN_NODE = '22.18.0';
+
+/** The build-freshness checker (scripts/build-manifest.mts). */
+const BUILD_MANIFEST_TOOL = path.join(__dirname, 'build-manifest.mts');
 
 /** A stable semantic version: MAJOR.MINOR.PATCH without prerelease or build. */
 const STABLE_SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
@@ -81,9 +95,18 @@ const ANY_SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)
 const PRE_MODE_FILE = path.join('.changeset', 'pre.json');
 
 /**
- * Whether a packed path is inside the distribution boundary: runtime sources,
- * CLI, type declarations, vendored schema, README, CHANGELOG, an optional
- * LICENSE, the getting-started guide and the generated API reference.
+ * Built files in dist/ that carry no runtime content and never ship: the
+ * runtime output of the declaration-only public API entry.
+ */
+const NON_RUNTIME_OUTPUTS = ['dist/public-api.cjs'];
+
+/**
+ * Whether a packed path is inside the distribution boundary: the built
+ * runtime (flat dist/*.cjs, including the executable), the rolled-up public
+ * declarations, vendored schema, README, CHANGELOG, an optional LICENSE, the
+ * getting-started guide and the generated API reference. Sources, nested
+ * build directories, per-module declarations, source maps, build info and
+ * the build-freshness manifest are outside it.
  */
 function isDistributable(file) {
   return (
@@ -91,9 +114,8 @@ function isDistributable(file) {
     file === 'README.md' ||
     file === 'CHANGELOG.md' ||
     /^LICENSE(\.md|\.txt)?$/.test(file) ||
-    file === 'bin/sarif-to-comment.cjs' ||
-    /^src\/[^/]+\.cjs$/.test(file) ||
-    file === 'types/index.d.ts' ||
+    (/^dist\/[^/]+\.cjs$/.test(file) && !NON_RUNTIME_OUTPUTS.includes(file)) ||
+    file === 'dist/sarif-to-comment.d.ts' ||
     /^vendor\/[^/]+$/.test(file) ||
     file === 'docs/getting-started.md' ||
     /^docs\/api\/[^/]+\.md$/.test(file)
@@ -105,9 +127,9 @@ const REQUIRED_FILES = [
   'package.json',
   'README.md',
   'CHANGELOG.md',
-  'bin/sarif-to-comment.cjs',
-  'src/index.cjs',
-  'types/index.d.ts',
+  'dist/sarif-to-comment.cjs',
+  'dist/index.cjs',
+  'dist/sarif-to-comment.d.ts',
   'vendor/sarif-schema-2.1.0.json',
   'docs/getting-started.md',
   'docs/api/index.md',
@@ -241,7 +263,9 @@ function decidePublish(facts) {
   }
   if (preMode) problems.push(`Changesets pre mode is active (${PRE_MODE_FILE}); prereleases are not published.`);
   if (!atLeast(npmVersion, MIN_NPM)) problems.push(`npm ${npmVersion} is too old; trusted publishing needs npm >= ${MIN_NPM}.`);
-  if (!atLeast(nodeVersion, MIN_NODE)) problems.push(`Node ${nodeVersion} is too old; trusted publishing needs Node >= ${MIN_NODE}.`);
+  if (!atLeast(nodeVersion, MIN_NODE)) {
+    problems.push(`Node ${nodeVersion} is too old; releasing needs Node >= ${MIN_NODE} (the build tooling runs TypeScript by type stripping).`);
+  }
   if (!onMain) problems.push('The commit is not on main; only commits on main are released.');
   return { publish: problems.length === 0, problems };
 }
@@ -400,6 +424,17 @@ function isOnMain(sha, mainRef) {
   return spawnSync('git', ['merge-base', '--is-ancestor', sha, mainRef]).status === 0;
 }
 
+/**
+ * Why dist/ in `projectDir` is not a complete build of its current sources
+ * (empty when it is), as scripts/build-manifest.mts judges it.
+ */
+function buildProblems(projectDir = process.cwd()) {
+  const run = spawnSync(process.execPath, [BUILD_MANIFEST_TOOL, 'verify', projectDir], { encoding: 'utf8' });
+  if (run.status === 0) return [];
+  const detail = `${run.stderr || ''}${run.stdout || ''}`.trim() || `exit ${run.status}`;
+  return [`dist/ is not a fresh build; run \`pnpm run build\` before publishing. ${detail}`];
+}
+
 function npmVersion() {
   const run = spawnSync('npm', ['--version'], { encoding: 'utf8' });
   return run.status === 0 ? run.stdout.trim() : undefined;
@@ -488,7 +523,11 @@ const COMMANDS = {
 
   'check-version'() {
     const packageJson = readManifest();
-    const problems = [...versionProblems(packageJson.version, 'package.json version'), ...manifestProblems(packageJson)];
+    const problems = [
+      ...versionProblems(packageJson.version, 'package.json version'),
+      ...manifestProblems(packageJson),
+      ...buildProblems(),
+    ];
     if (problems.length > 0) throw new RefusedError(problems);
     return 0;
   },
@@ -520,6 +559,7 @@ module.exports = {
   decidePublish,
   checkPackedTarball,
   isDistributable,
+  REQUIRED_FILES,
   MAXIMUM_RELEASE_MAJOR,
   EXPECTED_REPOSITORY_URL,
   MIN_NPM,

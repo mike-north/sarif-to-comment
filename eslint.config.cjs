@@ -3,15 +3,29 @@
 /**
  * ESLint flat configuration: correctness rules only, no stylistic rules.
  *
- * The rules catch defects (undefined or unused bindings, unreachable code,
- * unsafe comparisons, duplicate keys, accidental fallthrough) rather than
- * enforce formatting, so linting never causes churn in files owned by other
- * authors. The rule set and Node globals are listed explicitly because the
- * project adds no lint plugins or shared-config dependencies.
+ * JavaScript (.cjs/.js): the rules catch defects (undefined or unused
+ * bindings, unreachable code, unsafe comparisons, duplicate keys, accidental
+ * fallthrough) rather than enforce formatting, so linting never causes churn
+ * in files owned by other authors. The rule set and Node globals are listed
+ * explicitly because JavaScript linting uses no plugin or shared config.
+ *
+ * TypeScript (.cts/.mts): typescript-eslint's strict, type-aware rule set
+ * enforces the type-safety policy the compiler cannot: no `any`, no non-null
+ * or type assertions (const assertions excepted), no unsafe use of untyped
+ * values, and a written reason on every `@ts-expect-error`. Every
+ * `eslint-disable` directive must also carry a `-- reason` (checked by
+ * test/source-policy.test.cjs) and must still be needed
+ * (reportUnusedDisableDirectives).
+ *
+ * dist/ is build output and is not linted.
  *
  * @see https://eslint.org/docs/latest/use/configure/configuration-files
  * @see https://eslint.org/docs/latest/rules/
+ * @see https://typescript-eslint.io/users/configs#strict-type-checked
  */
+
+const { defineConfig } = require('eslint/config');
+const tseslint = require('typescript-eslint');
 
 /** Globals of the supported Node runtime (engines: node >= 22) used by this code. */
 const NODE_GLOBALS = Object.fromEntries(
@@ -47,9 +61,9 @@ const NODE_GLOBALS = Object.fromEntries(
   ].map((name) => [name, 'readonly']),
 );
 
-module.exports = [
+module.exports = defineConfig([
   {
-    ignores: ['node_modules/', 'logs/', 'docs/', 'vendor/', '.claude/', 'scratch/', 'scratch*', 'temp/'],
+    ignores: ['node_modules/', 'logs/', 'docs/', 'vendor/', '.claude/', 'scratch/', 'scratch*', 'temp/', 'dist/'],
   },
   {
     files: ['**/*.cjs', '**/*.js'],
@@ -102,4 +116,47 @@ module.exports = [
       'no-var': 'error',
     },
   },
-];
+  {
+    files: ['**/*.cts', '**/*.mts'],
+    extends: [tseslint.configs.strictTypeChecked],
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: __dirname,
+      },
+    },
+    linterOptions: {
+      reportUnusedDisableDirectives: 'error',
+    },
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/no-non-null-assertion': 'error',
+      // Type assertions are unchecked claims; narrow with a guard instead.
+      // `as const` stays allowed: it only narrows literal types.
+      '@typescript-eslint/consistent-type-assertions': ['error', { assertionStyle: 'never' }],
+      '@typescript-eslint/ban-ts-comment': [
+        'error',
+        {
+          'ts-expect-error': 'allow-with-description',
+          'ts-ignore': true,
+          'ts-nocheck': true,
+          'ts-check': false,
+          minimumDescriptionLength: 10,
+        },
+      ],
+      '@typescript-eslint/switch-exhaustiveness-check': 'error',
+      '@typescript-eslint/consistent-type-imports': 'error',
+      // `import x = require()` is the CommonJS import form a .cts module needs
+      // (an ES import would make tsc mark the module with __esModule, which
+      // changes how consumers see the package entry). A bare require() stays
+      // forbidden except the documented lazy loads of the ajv plugins, which
+      // defer their cost until a SARIF document is first validated.
+      '@typescript-eslint/no-require-imports': ['error', { allowAsImport: true, allow: ['^ajv-draft-04$', '^ajv-formats$'] }],
+      // node:test's test()/describe()/it() return promises the runner tracks itself.
+      '@typescript-eslint/no-floating-promises': [
+        'error',
+        { allowForKnownSafeCalls: [{ from: 'package', package: 'node:test', name: ['test', 'describe', 'it', 'suite'] }] },
+      ],
+    },
+  },
+]);

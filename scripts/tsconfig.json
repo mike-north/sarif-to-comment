@@ -1,0 +1,12 @@
+{
+  "//": "Type-checked only (never emitted): Node runs these .mts files directly by type stripping, which erasableSyntaxOnly guarantees is possible.",
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "rootDir": ".."
+  },
+  "include": ["./**/*.mts"],
+  "references": [{ "path": "../src" }]
+}

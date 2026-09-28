@@ -70,7 +70,7 @@ describe('captureJson: the publisher\'s capture discipline', () => {
     negativeZero: () => ({ a: -0 }),
     bigint: () => ({ a: 1n }),
     classInstance: () => ({ a: new Date(0) }),
-    hole: () => ({ a: [1, , 3] }), // eslint-disable-line no-sparse-arrays
+    hole: () => ({ a: [1, , 3] }), // eslint-disable-line no-sparse-arrays -- the array hole is the input under test
     symbolKey: () => ({ [Symbol('s')]: 1 }),
     nonEnumerable: () => Object.defineProperty({}, 'hidden', { value: 1, enumerable: false }),
     tooDeep: () => { let v = 'leaf'; for (let i = 0; i < 600; i += 1) v = [v]; return v; },

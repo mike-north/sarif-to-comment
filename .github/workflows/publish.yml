@@ -13,9 +13,11 @@
 # first: an already-published version is a no-op; otherwise it refuses a
 # version of 1.0.0 or higher (MAXIMUM_RELEASE_MAJOR), a prerelease, a version
 # without a Changesets CHANGELOG entry, pre mode, unpublishable metadata, a
-# commit not on main, and npm or Node too old for trusted publishing. Every
-# later step runs only when it says publish: the full check, then the exact
-# tarball that was packed and verified is published.
+# commit not on main, and npm or Node too old for trusted publishing or the
+# build tooling. Every later step runs only when it says publish: the build,
+# the full check of that build, then the exact tarball that was packed and
+# verified is published. There is no prepack, so the tarball holds exactly
+# the dist/ that was checked.
 #
 # Provenance: OIDC trusted publishing works from a private or public
 # repository, but npm attaches a provenance attestation automatically only
@@ -72,6 +74,10 @@ jobs:
       - name: Decide whether this version must be published (release guard)
         id: preflight
         run: node scripts/release-guard.cjs publish-preflight
+
+      - name: Build dist/ and the API reference
+        if: steps.preflight.outputs.publish == 'true'
+        run: pnpm run build
 
       - name: Lint, type-check, API/docs freshness, release plan and tests
         if: steps.preflight.outputs.publish == 'true'

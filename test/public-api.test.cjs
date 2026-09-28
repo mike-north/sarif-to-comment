@@ -285,7 +285,7 @@ describe('input is validated and captured before any remote read', () => {
     'function value': inRun(() => 1),
     'undefined property value': inRun(undefined),
     'undefined array element': inRun([1, undefined]),
-    'sparse array hole': inRun([1, , 3]), // eslint-disable-line no-sparse-arrays
+    'sparse array hole': inRun([1, , 3]), // eslint-disable-line no-sparse-arrays -- the array hole is the input under test
     'NaN': inRun(Number.NaN),
     'Infinity': inRun(Number.POSITIVE_INFINITY),
     'negative zero': inRun(-0),

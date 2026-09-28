@@ -1,23 +1,5 @@
 {
-  "//": "Type-checks the hand-authored public declarations (types/) and the in-repository declaration tests. Nothing is emitted; the runtime is CommonJS JavaScript in src/.",
-  "compilerOptions": {
-    "target": "es2022",
-    "module": "nodenext",
-    "moduleResolution": "nodenext",
-    "strict": true,
-    "noImplicitAny": true,
-    "strictNullChecks": true,
-    "strictFunctionTypes": true,
-    "strictBindCallApply": true,
-    "strictPropertyInitialization": true,
-    "noImplicitThis": true,
-    "alwaysStrict": true,
-    "exactOptionalPropertyTypes": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noEmit": true,
-    "noEmitOnError": true,
-    "types": []
-  },
-  "files": ["types/index.d.ts"]
+  "//": "Solution file for editors: it only references the projects. Builds and type checks run per project (scripts/build.mts, scripts/check-types.mts) because a solution-wide `tsc -b` would write build info into test/ and scripts/.",
+  "files": [],
+  "references": [{ "path": "./src" }, { "path": "./test" }, { "path": "./scripts" }]
 }

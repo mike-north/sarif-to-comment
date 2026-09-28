@@ -1,0 +1,11 @@
+{
+  "//": "The runtime: flat src/*.cts compiled to dist/*.cjs with per-module declarations (dist/*.d.cts, never shipped) that API Extractor rolls up into the public declaration file. No allowJs: tsc reprints JavaScript rather than copying it, so modules still written in JavaScript are byte-copied into dist/ by scripts/build.mts instead.",
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": ".",
+    "outDir": "../dist",
+    "declaration": true
+  },
+  "include": ["./**/*.cts"]
+}

@@ -27,8 +27,12 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-/** Files and folders the generators read or write, relative to the project. */
-const INPUTS = ['package.json', 'api-extractor.json', 'tsconfig.json', 'types'];
+/**
+ * Files and folders the generators read or write, relative to the project.
+ * types/ holds both the declarations and the tsconfig API Extractor compiles
+ * them with (api-extractor.json).
+ */
+const INPUTS = ['package.json', 'api-extractor.json', 'types'];
 const REPORT = path.join('api-report', 'sarif-to-comment.api.md');
 const DOCS = path.join('docs', 'api');
 
