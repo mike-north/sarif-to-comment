@@ -1,5 +1,3 @@
-'use strict';
-
 /**
  * File handling for the CLI's local SARIF artifacts. The library never touches
  * files; the command-line interface uses this module so that every receipt it
@@ -37,12 +35,83 @@
  * that name the paths involved.
  */
 
-const crypto = require('node:crypto');
-const fs = require('node:fs');
-const path = require('node:path');
+import * as crypto from 'node:crypto';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 /** A file problem the user must resolve; the message names the paths. */
-class ArtifactError extends Error {}
+export class ArtifactError extends Error {}
+
+/** A UTF-8 text file as read: its decoded text and the exact bytes (for change detection). */
+export interface ITextFile {
+  /** The decoded content, without a leading byte-order mark. */
+  readonly text: string;
+  /** The bytes as read from disk. */
+  readonly bytes: Buffer;
+}
+
+/** A UTF-8 JSON file as read: the parsed value (not yet validated) and the exact bytes. */
+export interface IJsonFile {
+  /** The parsed JSON; `unknown` until the caller captures and validates it. */
+  readonly value: unknown;
+  /** The bytes as read from disk. */
+  readonly bytes: Buffer;
+}
+
+/** Test-only hook of {@link createExclusive}; not part of any supported contract. */
+export interface ICreateExclusiveHooks {
+  /** Runs after the temporary file is complete, before it is linked into place. */
+  readonly beforeLink?: () => void;
+}
+
+/** Test-only hook of {@link replaceIfUnchanged}; not part of any supported contract. */
+export interface IReplaceIfUnchangedHooks {
+  /** Runs after the temporary file is complete, before the re-read and rename. */
+  readonly beforeReplace?: () => void;
+}
+
+/** The stat times {@link archiveExisting} reads to stamp an archive name. */
+export interface IArchiveStat {
+  /** Birth time in milliseconds; 0 or non-finite when the platform reports none. */
+  readonly birthtimeMs: number;
+  /** Modification time in milliseconds. */
+  readonly mtimeMs: number;
+}
+
+/** Options of {@link archiveExisting}. `stat` is a test-only replacement for fs.statSync. */
+export interface IArchiveOptions {
+  readonly stat?: (file: string) => IArchiveStat;
+}
+
+/** Which stat time named an archive. */
+export type ArchiveTimeSource = 'birth' | 'modified';
+
+/** Where {@link archiveExisting} moved an existing output. */
+export interface IArchivedOutput {
+  /** The archive's path. */
+  readonly path: string;
+  /** The output's original path. */
+  readonly from: string;
+  /** The stat time the archive name records. */
+  readonly timeSource: ArchiveTimeSource;
+}
+
+/** Removes the ownership marker {@link acquireOwnership} created, if it is still ours. */
+export type ReleaseOwnership = () => void;
+
+/**
+ * A caught failure's `message`, read as a template would read `err.message`.
+ * Node's file-system calls throw Errors (SystemError), so this is their
+ * message; a value without one reads as "undefined".
+ */
+function messageOf(err: unknown): string {
+  return String(typeof err === 'object' && err !== null && 'message' in err ? err.message : undefined);
+}
+
+/** A caught failure's Node error `code` (such as `EEXIST`), or undefined when it has none. */
+function codeOf(err: unknown): unknown {
+  return typeof err === 'object' && err !== null && 'code' in err ? err.code : undefined;
+}
 
 /**
  * Decoder for UTF-8 text files: `fatal` refuses invalid bytes instead of
@@ -51,12 +120,12 @@ class ArtifactError extends Error {}
 const UTF8 = new TextDecoder('utf-8', { fatal: true, ignoreBOM: false });
 
 /** Reads a UTF-8 text file; `label` names it in errors (e.g. "message file"). */
-function readTextFile(file, label) {
-  let bytes;
+export function readTextFile(file: string, label: string): ITextFile {
+  let bytes: Buffer;
   try {
     bytes = fs.readFileSync(file);
   } catch (err) {
-    throw new ArtifactError(`cannot read ${label} ${file}: ${err.message}`);
+    throw new ArtifactError(`cannot read ${label} ${file}: ${messageOf(err)}`);
   }
   try {
     return { text: UTF8.decode(bytes), bytes };
@@ -66,18 +135,19 @@ function readTextFile(file, label) {
 }
 
 /** Reads a UTF-8 JSON file: { value, bytes } (the bytes as read, for change detection). */
-function readJsonFile(file, label) {
+export function readJsonFile(file: string, label: string): IJsonFile {
   const { text, bytes } = readTextFile(file, label);
   try {
-    return { value: JSON.parse(text), bytes };
+    const value: unknown = JSON.parse(text);
+    return { value, bytes };
   } catch (err) {
-    throw new ArtifactError(`${label} ${file} is not valid JSON: ${err.message}`);
+    throw new ArtifactError(`${label} ${file} is not valid JSON: ${messageOf(err)}`);
   }
 }
 
 /** Flushes a directory entry change (best effort where directories cannot be opened). */
-function syncDirectory(dir) {
-  let fd;
+function syncDirectory(dir: string): void {
+  let fd: number | undefined;
   try {
     fd = fs.openSync(dir, 'r');
     fs.fsyncSync(fd);
@@ -89,8 +159,8 @@ function syncDirectory(dir) {
 }
 
 /** Writes and flushes `text` to a new uniquely named temporary sibling of `file`. */
-function writeTemporarySibling(file, text, mode) {
-  const temporary = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.${crypto.randomUUID()}.tmp`);
+function writeTemporarySibling(file: string, text: string, mode?: number): string {
+  const temporary = path.join(path.dirname(file), `.${path.basename(file)}.${String(process.pid)}.${crypto.randomUUID()}.tmp`);
   const fd = fs.openSync(temporary, 'wx', mode ?? 0o666);
   try {
     fs.writeFileSync(fd, text);
@@ -103,7 +173,7 @@ function writeTemporarySibling(file, text, mode) {
 }
 
 /** Removes a temporary file if it is still present. */
-function discard(temporary) {
+function discard(temporary: string): void {
   try {
     fs.unlinkSync(temporary);
   } catch {
@@ -115,17 +185,17 @@ function discard(temporary) {
  * Creates `file` with `text` only if it does not exist. `hooks.beforeLink`
  * (tests only) runs after the temporary file is complete.
  */
-function createExclusive(file, text, hooks = {}) {
+export function createExclusive(file: string, text: string, hooks: ICreateExclusiveHooks = {}): void {
   const temporary = writeTemporarySibling(file, text);
   try {
     if (hooks.beforeLink) hooks.beforeLink();
     try {
       fs.linkSync(temporary, file);
     } catch (err) {
-      if (err.code === 'EEXIST') {
+      if (codeOf(err) === 'EEXIST') {
         throw new ArtifactError(`${file} already exists (it may have been created by another program); it was left unchanged.`);
       }
-      throw new ArtifactError(`cannot create ${file}: ${err.message}`);
+      throw new ArtifactError(`cannot create ${file}: ${messageOf(err)}`);
     }
   } finally {
     discard(temporary);
@@ -134,7 +204,7 @@ function createExclusive(file, text, hooks = {}) {
 }
 
 /** The ownership marker for an artifact: `.<name>.sarif-to-comment-lock` in its directory. */
-function ownershipMarkerFor(file) {
+export function ownershipMarkerFor(file: string): string {
   return path.join(path.dirname(file), `.${path.basename(file)}.sarif-to-comment-lock`);
 }
 
@@ -143,21 +213,21 @@ function ownershipMarkerFor(file) {
  * exist). Returns a release function. Throws ArtifactError if another owner
  * holds it.
  */
-function acquireOwnership(file) {
+export function acquireOwnership(file: string): ReleaseOwnership {
   const marker = ownershipMarkerFor(file);
-  const token = `${process.pid} ${new Date().toISOString()} ${crypto.randomUUID()}\n`;
+  const token = `${String(process.pid)} ${new Date().toISOString()} ${crypto.randomUUID()}\n`;
   try {
     fs.writeFileSync(marker, token, { flag: 'wx' });
   } catch (err) {
-    if (err.code === 'EEXIST') {
+    if (codeOf(err) === 'EEXIST') {
       throw new ArtifactError(
         `${file} is being written by another sarif-to-comment command (ownership marker ${marker}). ` +
           `Wait for it to finish. If no such command is running, the marker is stale: delete ${marker} and run again.`,
       );
     }
-    throw new ArtifactError(`cannot take ownership of ${file} (marker ${marker}): ${err.message}`);
+    throw new ArtifactError(`cannot take ownership of ${file} (marker ${marker}): ${messageOf(err)}`);
   }
-  return function release() {
+  return function release(): void {
     // Remove only our own marker: never delete one another process created.
     try {
       if (fs.readFileSync(marker, 'utf8') === token) fs.unlinkSync(marker);
@@ -172,16 +242,16 @@ function acquireOwnership(file) {
  * `expectedBytes` immediately before the rename. `hooks.beforeReplace` (tests
  * only) runs after the temporary file is complete.
  */
-function replaceIfUnchanged(file, expectedBytes, text, hooks = {}) {
+export function replaceIfUnchanged(file: string, expectedBytes: Uint8Array, text: string, hooks: IReplaceIfUnchangedHooks = {}): void {
   const { mode } = fs.statSync(file);
   const temporary = writeTemporarySibling(file, text, mode & 0o7777);
   try {
     if (hooks.beforeReplace) hooks.beforeReplace();
-    let current;
+    let current: Buffer;
     try {
       current = fs.readFileSync(file);
     } catch (err) {
-      throw new ArtifactError(`${file} could not be re-read before replacement (${err.message}); it was not changed.`);
+      throw new ArtifactError(`${file} could not be re-read before replacement (${messageOf(err)}); it was not changed.`);
     }
     if (!current.equals(expectedBytes)) {
       throw new ArtifactError(`${file} changed while this command was running; it was not overwritten. Run the command again.`);
@@ -194,7 +264,7 @@ function replaceIfUnchanged(file, expectedBytes, text, hooks = {}) {
 }
 
 /** A stat time as the archive stamp, `YYYY-MM-DDTHH-mm-ss.SSSZ` (colons are not portable in names). */
-function archiveStamp(milliseconds) {
+function archiveStamp(milliseconds: number): string {
   return new Date(milliseconds).toISOString().replace(/:/g, '-');
 }
 
@@ -203,25 +273,25 @@ function archiveStamp(milliseconds) {
  * { path, from, timeSource: 'birth' | 'modified' }, or null if `file` does not
  * exist. `options.stat` (tests only) replaces fs.statSync.
  */
-function archiveExisting(file, { stat = fs.statSync } = {}) {
-  let info;
+export function archiveExisting(file: string, { stat = fs.statSync }: IArchiveOptions = {}): IArchivedOutput | null {
+  let info: IArchiveStat;
   try {
     info = stat(file);
   } catch (err) {
-    if (err.code === 'ENOENT') return null;
-    throw new ArtifactError(`cannot examine existing output ${file}: ${err.message}`);
+    if (codeOf(err) === 'ENOENT') return null;
+    throw new ArtifactError(`cannot examine existing output ${file}: ${messageOf(err)}`);
   }
   const birth = Number.isFinite(info.birthtimeMs) && info.birthtimeMs > 0;
   const stamp = archiveStamp(birth ? info.birthtimeMs : info.mtimeMs);
   const dir = path.dirname(file);
   const name = path.basename(file);
   for (let n = 1; ; n += 1) {
-    const archive = path.join(dir, `${stamp}${n === 1 ? '' : `-${n}`}.old.${name}`);
+    const archive = path.join(dir, `${stamp}${n === 1 ? '' : `-${String(n)}`}.old.${name}`);
     try {
       fs.linkSync(file, archive);
     } catch (err) {
-      if (err.code === 'EEXIST') continue;
-      throw new ArtifactError(`cannot archive existing output ${file} as ${archive}: ${err.message}`);
+      if (codeOf(err) === 'EEXIST') continue;
+      throw new ArtifactError(`cannot archive existing output ${file} as ${archive}: ${messageOf(err)}`);
     }
     fs.unlinkSync(file);
     syncDirectory(dir);
@@ -230,9 +300,9 @@ function archiveExisting(file, { stat = fs.statSync } = {}) {
 }
 
 /** True when two existing paths name the same file (including symbolic and hard links). */
-function sameExistingFile(a, b) {
-  let sa;
-  let sb;
+export function sameExistingFile(a: string, b: string): boolean {
+  let sa: fs.Stats;
+  let sb: fs.Stats;
   try {
     sa = fs.statSync(a);
     sb = fs.statSync(b);
@@ -241,15 +311,3 @@ function sameExistingFile(a, b) {
   }
   return sa.dev === sb.dev && sa.ino === sb.ino;
 }
-
-module.exports = {
-  ArtifactError,
-  readTextFile,
-  readJsonFile,
-  createExclusive,
-  ownershipMarkerFor,
-  acquireOwnership,
-  replaceIfUnchanged,
-  archiveExisting,
-  sameExistingFile,
-};
