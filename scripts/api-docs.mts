@@ -1,6 +1,3 @@
-#!/usr/bin/env node
-'use strict';
-
 /**
  * Generates, and checks the freshness of, the rolled-up public declarations,
  * the API report and the Markdown API reference.
@@ -24,10 +21,10 @@
  *          file; a failure of either tool is also exit 1.
  */
 
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const { spawnSync } = require('node:child_process');
+import { spawnSync } from 'node:child_process';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 
 /**
  * Files and folders the generators read or write, relative to the project.
@@ -37,21 +34,21 @@ const { spawnSync } = require('node:child_process');
  * tsconfig.base.json); the root tsconfig.json is how API Extractor locates the
  * project folder.
  */
-const INPUTS = ['package.json', 'api-extractor.json', 'tsconfig.json', 'tsconfig.base.json', 'src', 'dist'];
+const INPUTS: readonly string[] = ['package.json', 'api-extractor.json', 'tsconfig.json', 'tsconfig.base.json', 'src', 'dist'];
 const REPORT = path.join('api-report', 'sarif-to-comment.api.md');
 const DOCS = path.join('docs', 'api');
 
 /** Runs a tool from the project's node_modules/.bin, failing loudly. */
-function tool(projectDir, name, args) {
+function tool(projectDir: string, name: string, args: readonly string[]): void {
   const run = spawnSync(path.join(projectDir, 'node_modules', '.bin', name), args, { cwd: projectDir, encoding: 'utf8' });
   if (run.status !== 0) {
-    process.stderr.write(`${name} ${args.join(' ')} failed (exit ${run.status}):\n${run.stdout}${run.stderr}`);
+    process.stderr.write(`${name} ${args.join(' ')} failed (exit ${String(run.status)}):\n${run.stdout}${run.stderr}`);
     process.exit(1);
   }
 }
 
 /** Regenerates the report and the Markdown reference inside `projectDir`. */
-function generate(projectDir) {
+function generate(projectDir: string): void {
   fs.mkdirSync(path.join(projectDir, 'api-report'), { recursive: true });
   // --local accepts report changes (writing the new report) instead of failing,
   // so that `check` can report every difference itself.
@@ -60,14 +57,14 @@ function generate(projectDir) {
 }
 
 /** Relative paths and contents of every file under `dir` (empty when missing). */
-function snapshot(dir) {
-  const files = new Map();
+function snapshot(dir: string): Map<string, string> {
+  const files = new Map<string, string>();
   if (!fs.existsSync(dir)) return files;
   for (const name of fs.readdirSync(dir)) files.set(name, fs.readFileSync(path.join(dir, name), 'utf8'));
   return files;
 }
 
-function check(projectDir) {
+function check(projectDir: string): number {
   if (!fs.existsSync(path.join(projectDir, 'dist', 'public-api.d.cts'))) {
     process.stderr.write('dist/ holds no compiled declarations to check the API report against. Run `pnpm run build` first.\n');
     return 1;
@@ -78,8 +75,8 @@ function check(projectDir) {
     fs.symlinkSync(fs.realpathSync(path.join(projectDir, 'node_modules')), path.join(sandbox, 'node_modules'), 'dir');
     generate(sandbox);
 
-    const stale = [];
-    const read = (file) => (fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : undefined);
+    const stale: string[] = [];
+    const read = (file: string): string | undefined => (fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : undefined);
     if (read(path.join(projectDir, REPORT)) !== read(path.join(sandbox, REPORT))) stale.push(REPORT);
     const committed = snapshot(path.join(projectDir, DOCS));
     const fresh = snapshot(path.join(sandbox, DOCS));
@@ -94,7 +91,7 @@ function check(projectDir) {
       );
       return 1;
     }
-    process.stdout.write(`API report and ${fresh.size} reference pages are up to date.\n`);
+    process.stdout.write(`API report and ${String(fresh.size)} reference pages are up to date.\n`);
     return 0;
   } finally {
     fs.rmSync(sandbox, { recursive: true, force: true });
@@ -108,6 +105,6 @@ if (command === 'build') {
 } else if (command === 'check') {
   process.exitCode = check(process.cwd());
 } else {
-  process.stderr.write('Usage: api-docs.cjs build | check\n');
+  process.stderr.write('Usage: api-docs.mts build | check\n');
   process.exitCode = 2;
 }

@@ -14,7 +14,7 @@
  * or type assertions (const assertions excepted), no unsafe use of untyped
  * values, and a written reason on every `@ts-expect-error`. Every
  * `eslint-disable` directive must also carry a `-- reason` (checked by
- * test/source-policy.test.cjs) and must still be needed
+ * test/source-policy.test.mts) and must still be needed
  * (reportUnusedDisableDirectives).
  *
  * dist/ is build output and is not linted.

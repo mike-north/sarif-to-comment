@@ -9,7 +9,7 @@
 # job's OIDC token for a short-lived publish credential. See README.md,
 # "Releasing".
 #
-# The release guard (scripts/release-guard.cjs publish-preflight) decides
+# The release guard (scripts/release-guard.mts publish-preflight) decides
 # first: an already-published version is a no-op; otherwise it refuses a
 # version of 1.0.0 or higher (MAXIMUM_RELEASE_MAJOR), a prerelease, a version
 # without a Changesets CHANGELOG entry, pre mode, unpublishable metadata, a
@@ -58,7 +58,7 @@ jobs:
         with:
           # Exact pnpm release (npm dist-tag latest-11). pnpm's installer refuses
           # releases the registry marks as broken, as it did 11.12.0; keep both
-          # workflows on the same verified pin (test/release.test.cjs,
+          # workflows on the same verified pin (test/release.test.mts,
           # test/fixtures/release/pnpm-releases.json).
           version: 11.27.1
 
@@ -73,7 +73,7 @@ jobs:
 
       - name: Decide whether this version must be published (release guard)
         id: preflight
-        run: node scripts/release-guard.cjs publish-preflight
+        run: node scripts/release-guard.mts publish-preflight
 
       - name: Build dist/ and the API reference
         if: steps.preflight.outputs.publish == 'true'
@@ -94,7 +94,7 @@ jobs:
 
       - name: Verify the tarball is exactly the distribution boundary
         if: steps.preflight.outputs.publish == 'true'
-        run: node scripts/release-guard.cjs verify-pack "$RUNNER_TEMP/pack.json"
+        run: node scripts/release-guard.mts verify-pack "$RUNNER_TEMP/pack.json"
 
       - name: Publish the verified tarball
         if: steps.preflight.outputs.publish == 'true'

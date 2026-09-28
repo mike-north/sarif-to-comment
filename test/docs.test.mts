@@ -1,5 +1,3 @@
-'use strict';
-
 /**
  * Documentation tests: README, getting-started guide and generated API
  * reference are accurate, reachable and executable.
@@ -22,17 +20,20 @@
  * @see https://docs.npmjs.com/cli/v11/configuring-npm/package-json#repository
  */
 
-const test = require('node:test');
-const { describe } = test;
-const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const { spawnSync } = require('node:child_process');
+import { AssertionError } from 'node:assert';
+import * as assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import type { SpawnSyncReturns } from 'node:child_process';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { describe, test } from 'node:test';
 
-const { ROOT, packProject, installIntoConsumer } = require('./fixtures/package/installed-package.mts');
-const { FakeHttpGitHub, REPOSITORY } = require('./fixtures/composition/fake-http-github.mts');
-const { createGitWorld } = require('./fixtures/authoring-workflow/git-world.mts');
+import { createGitWorld } from './fixtures/authoring-workflow/git-world.mts';
+import type { IGitWorld } from './fixtures/authoring-workflow/git-world.mts';
+import { FakeHttpGitHub, REPOSITORY } from './fixtures/composition/fake-http-github.mts';
+import { ROOT, installIntoConsumer, packProject, requirePackedProject } from './fixtures/package/installed-package.mts';
+import { expectType, isArray, isShape, isUnknown, readJson } from './support/runtime-types.mts';
 
 const README = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
 const GUIDE_PATH = path.join(ROOT, 'docs', 'getting-started.md');
@@ -41,17 +42,23 @@ const API_DIR = path.join(ROOT, 'docs', 'api');
 const PRELOAD = path.join(ROOT, 'test', 'fixtures', 'docs', 'fake-fetch-preload.mts');
 const PACKAGE_DOCS_BASE = 'https://unpkg.com/sarif-to-comment/';
 
+/** `value`, which the assertions before it establish is present; fails naming `what` otherwise. */
+function present<T>(value: T | undefined, what: string): T {
+  if (value === undefined) throw new AssertionError({ message: `expected ${what}`, actual: value, operator: 'present' });
+  return value;
+}
+
 /** Every Markdown link target in `text` (inline links; code spans and fences excluded). */
-function linkTargets(text) {
+function linkTargets(text: string): string[] {
   const prose = text.replace(/```[\s\S]*?```/g, '').replace(/`[^`\n]*`/g, '');
-  return [...prose.matchAll(/\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g)].map((m) => m[1]);
+  return [...prose.matchAll(/\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g)].map((m) => m[1] ?? '');
 }
 
 /** The fenced code block that follows `<!-- verified-example: name -->`. */
-function example(text, name) {
+function example(text: string, name: string): { language: string; code: string } {
   const match = new RegExp(`<!-- verified-example: ${name} -->\\s*\\n\`\`\`(\\w+)\\n([\\s\\S]*?)\\n\`\`\``).exec(text);
   assert.ok(match, `the guide has a verified ${name} example`);
-  return { language: match[1], code: match[2] };
+  return { language: match[1] ?? '', code: match[2] ?? '' };
 }
 
 describe('README', () => {
@@ -67,7 +74,7 @@ describe('README', () => {
   test('in-page anchors name real headings', () => {
     const slugs = new Set(
       [...README.matchAll(/^#{1,6} (.+)$/gm)].map((m) =>
-        m[1].trim().toLowerCase().replace(/[^\w\- ]/g, '').replace(/ /g, '-'),
+        (m[1] ?? '').trim().toLowerCase().replace(/[^\w\- ]/g, '').replace(/ /g, '-'),
       ),
     );
     for (const target of linkTargets(README).filter((t) => t.startsWith('#'))) {
@@ -76,7 +83,7 @@ describe('README', () => {
   });
 
   test('links to packaged documents point at files in the tarball', { skip: packProject().error || false }, () => {
-    const files = new Set(packProject().result.files.map((f) => f.path));
+    const files = new Set(requirePackedProject().result.files.map((f) => f.path));
     const packaged = linkTargets(README).filter((t) => t.startsWith(PACKAGE_DOCS_BASE));
     assert.ok(packaged.some((t) => t.endsWith('docs/getting-started.md')), 'README links the getting-started guide');
     assert.ok(packaged.some((t) => t.endsWith('docs/api/index.md')), 'README links the API reference');
@@ -133,14 +140,14 @@ describe('verified getting-started examples run against the installed package', 
   const skip = packProject().error || false;
 
   /** A fresh fake GitHub serving the composition repository, plus the example environment. */
-  function world() {
+  function world(): { root: string; host: FakeHttpGitHub; env: NodeJS.ProcessEnv; token: string } {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'docs-example-'));
     const token = 'ghp_EXAMPLE_token_for_docs_tests_0123456789';
     FakeHttpGitHub.create(path.join(root, 'host'));
     const host = new FakeHttpGitHub(path.join(root, 'host'), token);
     const { owner, repo, pullNumber } = REPOSITORY.destination;
     const env = {
-      PATH: process.env.PATH,
+      PATH: process.env['PATH'],
       HOME: root,
       GH_TOKEN: token,
       REVIEW_REPOSITORY: `${owner}/${repo}`,
@@ -153,7 +160,7 @@ describe('verified getting-started examples run against the installed package', 
     return { root, host, env, token };
   }
 
-  const createPosts = (host) => host.log().filter((r) => r.method === 'POST' && r.path.endsWith('/reviews')).length;
+  const createPosts = (host: FakeHttpGitHub): number => host.log().filter((r) => r.method === 'POST' && r.path.endsWith('/reviews')).length;
 
   test('the library example publishes one draft, and a retry does not publish again', { skip, timeout: 300_000 }, () => {
     const { consumer } = installIntoConsumer();
@@ -167,7 +174,7 @@ describe('verified getting-started examples run against the installed package', 
     assert.equal(first.status, 0, first.stdout + first.stderr);
     const [stored] = host.reviews();
     assert.ok(stored, 'a review was created');
-    assert.ok(first.stdout.includes(`#pullrequestreview-${stored.id}`), first.stdout);
+    assert.ok(first.stdout.includes(`#pullrequestreview-${String(stored.id)}`), first.stdout);
     assert.equal(stored.request.commit_id, REPOSITORY.commits.head);
     assert.equal(Object.hasOwn(stored.request, 'event'), false, 'a draft');
     assert.ok(host.log().every((r) => r.authorized), 'the example authenticates with GH_TOKEN');
@@ -224,8 +231,15 @@ describe('verified authoring examples run against the installed package in a rea
   const MESSAGE = 'Handle the empty-input case.';
   const DESTINATION = { owner: 'acme', repo: 'widgets', pullNumber: 42 };
 
+  /** The W1 repository with the installed package available to it, a fake GitHub, and its example environment. */
+  interface IExampleWorld extends IGitWorld {
+    readonly host: FakeHttpGitHub;
+    readonly env: NodeJS.ProcessEnv;
+    readonly token: string;
+  }
+
   /** The W1 repository with the installed package available to it, a fake GitHub, and the example environment. */
-  function world(label) {
+  function world(label: string): IExampleWorld {
     const { consumer } = installIntoConsumer();
     const git = createGitWorld(label, W1, DESTINATION);
     fs.symlinkSync(path.join(consumer, 'node_modules'), path.join(git.dir, 'node_modules'));
@@ -247,14 +261,14 @@ describe('verified authoring examples run against the installed package in a rea
   }
 
   /** One draft review with one suggestion on reviewed line 2 carrying `message`, and nothing unstaged. */
-  function assertW1Review(w, message) {
+  function assertW1Review(w: IExampleWorld, message: string): void {
     const reviews = w.host.reviews();
     assert.equal(reviews.length, 1);
-    const [stored] = reviews;
+    const stored = present(reviews[0], 'the review');
     assert.equal(stored.state, 'PENDING');
     assert.equal(stored.request.commit_id, w.head);
     assert.equal(stored.request.comments.length, 1, JSON.stringify(stored.request.comments));
-    const [comment] = stored.request.comments;
+    const comment = present(stored.request.comments[0], 'its comment');
     assert.equal(comment.path, 'src/parse.js');
     assert.equal(comment.side, 'RIGHT');
     assert.equal(comment.line, 2);
@@ -319,7 +333,7 @@ describe('verified authoring examples run against the installed package in a rea
     const result = spawnSync('bash', [script], { cwd: w.dir, env: w.env, encoding: 'utf8', timeout: 180_000 });
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assertW1Review(w, analyzerMessage);
-    assert.ok(w.host.reviews()[0].request.comments[0].body.includes('example-linter'), 'the analyzer stays credited');
+    assert.ok((w.host.reviews()[0]?.request.comments[0]?.body ?? '').includes('example-linter'), 'the analyzer stays credited');
   });
 });
 
@@ -330,13 +344,13 @@ describe('the published outcome is described as a completed publication', () => 
   // no document may promise that it currently exists or is still a draft.
   // The shipped public declarations, generated from the TypeScript sources.
   const DECLARATIONS = fs.readFileSync(path.join(ROOT, 'dist', 'sarif-to-comment.d.ts'), 'utf8');
-  const sources = {
+  const sources: Readonly<Record<string, string>> = {
     'dist/sarif-to-comment.d.ts': DECLARATIONS,
     'docs/getting-started.md': GUIDE,
     'README.md': README,
     ...Object.fromEntries(
       fs.existsSync(API_DIR)
-        ? fs.readdirSync(API_DIR).map((p) => [`docs/api/${p}`, fs.readFileSync(path.join(API_DIR, p), 'utf8')])
+        ? fs.readdirSync(API_DIR).map((p) => [`docs/api/${p}`, fs.readFileSync(path.join(API_DIR, p), 'utf8')] as const)
         : [],
     ),
   };
@@ -350,9 +364,10 @@ describe('the published outcome is described as a completed publication', () => 
   test('the declaration explains the receipt path and that the tool does not check again', () => {
     const doc = /\/\*\*((?:(?!\*\/)[\s\S])*?)\*\/\s*export declare interface IPublishedOutcome/.exec(DECLARATIONS);
     assert.ok(doc, 'IPublishedOutcome has a doc comment');
-    assert.match(doc[1], /recorded as complete/i);
-    assert.match(doc[1], /submitted, edited or deleted/i);
-    assert.match(doc[1], /does not check/i);
+    const comment = doc[1] ?? '';
+    assert.match(comment, /recorded as complete/i);
+    assert.match(comment, /submitted, edited or deleted/i);
+    assert.match(comment, /does not check/i);
   });
 
   test('the generated reference carries the same wording', () => {
@@ -426,16 +441,27 @@ describe('provenance and release-commit statements match what npm actually recor
   const WORKFLOW = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'publish.yml'), 'utf8');
 
   test('the evidence the docs rely on: an attested 0.1.0 commit, and no gitHead in the registry metadata', () => {
-    const statement = JSON.parse(fs.readFileSync(path.join(ROOT, 'docs/evidence/npm-release/provenance-statement.json'), 'utf8'));
+    const statement = expectType(
+      readJson(path.join(ROOT, 'docs/evidence/npm-release/provenance-statement.json')),
+      isShape({
+        predicate: isShape({
+          buildDefinition: isShape({
+            resolvedDependencies: isArray,
+            externalParameters: isShape({ workflow: isShape({ path: isUnknown }) }),
+          }),
+        }),
+      }),
+      'an in-toto provenance statement',
+    );
     const [source] = statement.predicate.buildDefinition.resolvedDependencies;
-    assert.equal(source.digest.gitCommit, '3797ca6efe2156d4c952fad7fed10b569f1dcbbb');
+    assert.equal(expectType(source, isShape({ digest: isShape({ gitCommit: isUnknown }) }), 'a source dependency').digest.gitCommit, '3797ca6efe2156d4c952fad7fed10b569f1dcbbb');
     assert.equal(statement.predicate.buildDefinition.externalParameters.workflow.path, '.github/workflows/publish.yml');
     const metadata = fs.readFileSync(path.join(ROOT, 'docs/evidence/npm-release/registry-metadata.json'), 'utf8');
     assert.doesNotMatch(metadata, /gitHead/);
   });
 
   test('no document claims every release lacks provenance or that the repository is (still) private', () => {
-    for (const [name, text] of [['README.md', README], ['publish.yml', WORKFLOW]]) {
+    for (const [name, text] of [['README.md', README], ['publish.yml', WORKFLOW]] as const) {
       assert.doesNotMatch(text, /(its|every|all) releases carry no (npm )?provenance/i, name);
       assert.doesNotMatch(text, /(the source|this) repository is private/i, name);
     }
@@ -472,11 +498,11 @@ describe('provenance and release-commit statements match what npm actually recor
 });
 
 describe('release tooling comments are accurate and durable', () => {
-  const GUARD_TEXT = fs.readFileSync(path.join(ROOT, 'scripts', 'release-guard.cjs'), 'utf8');
-  const RELEASE_TESTS = fs.readFileSync(path.join(ROOT, 'test', 'release.test.cjs'), 'utf8');
+  const GUARD_TEXT = fs.readFileSync(path.join(ROOT, 'scripts', 'release-guard.mts'), 'utf8');
+  const RELEASE_TESTS = fs.readFileSync(path.join(ROOT, 'test', 'release.test.mts'), 'utf8');
 
   test('plans are described as the sandboxed `changeset version` result, not `changeset status --output`', () => {
-    for (const [name, text] of [['scripts/release-guard.cjs', GUARD_TEXT], ['test/release.test.cjs', RELEASE_TESTS]]) {
+    for (const [name, text] of [['scripts/release-guard.mts', GUARD_TEXT], ['test/release.test.mts', RELEASE_TESTS]] as const) {
       assert.doesNotMatch(text, /(written by|A) `changeset status --output`/, name);
     }
     assert.match(GUARD_TEXT, /`plan` is the result of computeReleasePlan/);
@@ -485,13 +511,16 @@ describe('release tooling comments are accurate and durable', () => {
   test('code comments and test names carry no task-specific review labels', () => {
     // Owned sources in every language they are written in, so the scan keeps
     // covering them as JavaScript is converted to TypeScript.
-    const scanned = ['scripts', 'test', 'src'].map((dir) => [
-      dir,
-      fs
-        .readdirSync(path.join(ROOT, dir))
-        .filter((f) => /\.([cm]?js|[cm]?ts)$/.test(f))
-        .map((f) => path.join(dir, f)),
-    ]);
+    const scanned = ['scripts', 'test', 'src'].map(
+      (dir) =>
+        [
+          dir,
+          fs
+            .readdirSync(path.join(ROOT, dir))
+            .filter((f) => /\.([cm]?js|[cm]?ts)$/.test(f))
+            .map((f) => path.join(dir, f)),
+        ] as const,
+    );
     for (const [dir, found] of scanned) assert.ok(found.length > 0, `the scan finds sources in ${dir}/`);
     const files = scanned.flatMap(([, found]) => found);
     assert.ok(files.some((f) => /^scripts\/.*\.mts$/.test(f)), 'the scan covers TypeScript tooling');
@@ -507,7 +536,7 @@ describe('generated API reference', () => {
   const pages = fs.existsSync(API_DIR) ? fs.readdirSync(API_DIR).filter((f) => f.endsWith('.md')) : [];
 
   test('is generated by API Documenter, not hand-written', () => {
-    assert.ok(pages.includes('index.md') && pages.length >= 3, `pages: ${pages}`);
+    assert.ok(pages.includes('index.md') && pages.length >= 3, `pages: ${pages.join(',')}`);
     for (const page of pages) {
       assert.match(
         fs.readFileSync(path.join(API_DIR, page), 'utf8'),
@@ -544,7 +573,8 @@ describe('generated API reference', () => {
       fs.cpSync(path.join(ROOT, entry), path.join(copy, entry), { recursive: true });
     }
     fs.symlinkSync(path.join(ROOT, 'node_modules'), path.join(copy, 'node_modules'), 'dir');
-    const check = () => spawnSync(process.execPath, ['scripts/api-docs.cjs', 'check'], { cwd: copy, encoding: 'utf8', timeout: 240_000 });
+    const check = (): SpawnSyncReturns<string> =>
+      spawnSync(process.execPath, ['scripts/api-docs.mts', 'check'], { cwd: copy, encoding: 'utf8', timeout: 240_000 });
 
     const fresh = check();
     assert.equal(fresh.status, 0, fresh.stdout + fresh.stderr);

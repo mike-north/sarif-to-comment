@@ -1,5 +1,3 @@
-'use strict';
-
 /**
  * Release tests: Changesets versioning, the major-version ceiling, the publish
  * decision, the package boundary, and the GitHub Actions workflows that
@@ -41,36 +39,54 @@
  * @see https://semver.org/spec/v2.0.0.html
  */
 
-const test = require('node:test');
-const { describe } = test;
-const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const http = require('node:http');
-const os = require('node:os');
-const path = require('node:path');
-const { spawn, spawnSync } = require('node:child_process');
+import * as assert from 'node:assert/strict';
+import { spawn, spawnSync } from 'node:child_process';
+import type { SpawnSyncReturns } from 'node:child_process';
+import * as fs from 'node:fs';
+import * as http from 'node:http';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { describe, test } from 'node:test';
 
-const ROOT = path.resolve(__dirname, '..');
-const GUARD = path.join(ROOT, 'scripts', 'release-guard.cjs');
+import * as guard from '../scripts/release-guard.mts';
+import type { IPackageManifest, IPlannedRelease, IPublishFacts, IReleasePlan } from '../scripts/release-guard.mts';
+import {
+  asRecord,
+  expectType,
+  isBoolean,
+  isEither,
+  isNull,
+  isOptional,
+  isRecordOf,
+  isShape,
+  isString,
+  readJson,
+} from './support/runtime-types.mts';
+
+const ROOT = path.resolve(import.meta.dirname, '..');
+const GUARD = path.join(ROOT, 'scripts', 'release-guard.mts');
 const CHANGESET_BIN = path.join(ROOT, 'node_modules', '.bin', 'changeset');
-const PKG = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-const guard = require('../scripts/release-guard.cjs');
+const PKG = expectType(
+  readJson(path.join(ROOT, 'package.json')),
+  isShape({ version: isString, scripts: isRecordOf(isString) }),
+  'package.json with scripts',
+);
 const MANIFEST_TOOL = path.join(ROOT, 'scripts', 'build-manifest.mts');
 
 const TRUSTED_URL = 'git+https://github.com/mike-north/sarif-to-comment.git';
 
 /** A publishable manifest at `version`; tests break one property at a time. */
-function manifest(version = '0.1.0', overrides = {}) {
+function manifest(version = '0.1.0', overrides: Readonly<Record<string, unknown>> = {}): IPackageManifest {
   return { name: 'sarif-to-comment', version, repository: { type: 'git', url: TRUSTED_URL }, ...overrides };
 }
 
 /** A Changesets-produced CHANGELOG whose newest entry is `version`. */
-function changelog(version = '0.1.0') {
+function changelog(version = '0.1.0'): string {
   return `# sarif-to-comment\n\n## ${version}\n\n### Minor Changes\n\n- abc1234: First release\n\n## 0.0.9\n\n- older\n`;
 }
 
 /** Facts for a correct publish of 0.1.0; tests break one fact at a time. */
-function publishFacts(overrides = {}) {
+function publishFacts(overrides: Partial<IPublishFacts> = {}): IPublishFacts {
   return {
     packageJson: manifest(),
     changelog: changelog(),
@@ -83,16 +99,30 @@ function publishFacts(overrides = {}) {
   };
 }
 
+/** A release plan as these tests write it: the guard's plan shape, with each release naming its changesets. */
+interface ITestReleasePlan extends IReleasePlan {
+  readonly changesets: readonly unknown[];
+  readonly releases: readonly (IPlannedRelease & { readonly changesets: readonly string[] })[];
+}
+
 /** A release plan in the shape computeReleasePlan returns, releasing sarif-to-comment. */
-function plan(type, oldVersion, newVersion) {
+function plan(type: string, oldVersion: string, newVersion: string): ITestReleasePlan {
   return {
     changesets: [{ id: 'c1', summary: 's', releases: [{ name: 'sarif-to-comment', type }] }],
     releases: [{ name: 'sarif-to-comment', type, oldVersion, newVersion, changesets: ['c1'] }],
   };
 }
 
+/** One `npm pack --json` entry, as the tests build and break it. */
+interface IPackResult {
+  name: string;
+  version: string;
+  filename: string;
+  files: { path: string }[];
+}
+
 /** `npm pack --json` result for a correct tarball of `version`. */
-function packResult(version = '0.1.0', extra = []) {
+function packResult(version = '0.1.0', extra: readonly string[] = []): IPackResult {
   return {
     name: 'sarif-to-comment',
     version,
@@ -152,7 +182,7 @@ describe('release plan (pending changesets) never exceeds the ceiling', () => {
     assert.deepEqual(guard.checkReleasePlan({ changesets: [], releases: [] }, { preMode: false }), []);
   });
 
-  const refusals = {
+  const refusals: Readonly<Record<string, readonly [ITestReleasePlan, RegExp]>> = {
     'a requested major (never silently reduced)': [plan('major', '0.1.0', '1.0.0'), /major/],
     'a plan reaching 1.0.0 by any route': [plan('minor', '0.9.0', '1.0.0'), /1\.0\.0/],
     'a 1.x prerelease': [plan('major', '0.1.0', '1.0.0-next.0'), /1\.0\.0-next\.0/],
@@ -183,8 +213,8 @@ describe('release plan (pending changesets) never exceeds the ceiling', () => {
 
   test('explains how a major is released instead of converting it', () => {
     const [message] = guard.checkReleasePlan(plan('major', '0.1.0', '1.0.0'), { preMode: false });
-    assert.match(message, /MAXIMUM_RELEASE_MAJOR/);
-    assert.match(message, /minor/, 'it names the alternative the author may choose deliberately');
+    assert.match(message ?? '', /MAXIMUM_RELEASE_MAJOR/);
+    assert.match(message ?? '', /minor/, 'it names the alternative the author may choose deliberately');
   });
 });
 
@@ -203,7 +233,7 @@ describe('publish decision', () => {
     assert.equal(guard.decidePublish(publishFacts({ publishedVersions: [] })).publish, true);
   });
 
-  const refusals = {
+  const refusals: Readonly<Record<string, readonly [Partial<IPublishFacts>, RegExp]>> = {
     'version 1.0.0': [{ packageJson: manifest('1.0.0'), changelog: changelog('1.0.0') }, /1\.0\.0/],
     'version 2.3.4': [{ packageJson: manifest('2.3.4'), changelog: changelog('2.3.4') }, /2\.3\.4/],
     'a 1.x prerelease': [{ packageJson: manifest('1.0.0-rc.1'), changelog: changelog('1.0.0-rc.1') }, /1\.0\.0-rc\.1/],
@@ -255,7 +285,7 @@ describe('the packed tarball is exactly the distribution boundary', () => {
     assert.deepEqual(guard.checkPackedTarball(packResult(), manifest()), []);
   });
 
-  const bad = {
+  const bad: Readonly<Record<string, (p: IPackResult) => void>> = {
     'a test file': (p) => p.files.push({ path: 'test/publication.test.cjs' }),
     'a log': (p) => p.files.push({ path: 'logs/opus/x.txt' }),
     'agent configuration': (p) => p.files.push({ path: '.claude/settings.json' }),
@@ -336,7 +366,7 @@ describe('the packed tarball is exactly the distribution boundary', () => {
 // ===========================================================================
 
 describe('guarded versioning with the real Changesets CLI', () => {
-  const env = { PATH: process.env.PATH, GIT_CONFIG_NOSYSTEM: '1', NO_COLOR: '1' };
+  const env = { PATH: process.env['PATH'], GIT_CONFIG_NOSYSTEM: '1', NO_COLOR: '1' };
 
   /**
    * A temporary git repository with this project's Changesets config and a
@@ -344,9 +374,9 @@ describe('guarded versioning with the real Changesets CLI', () => {
    * package name quoted and the type bare, as `changeset add` does) or the
    * complete file text, for front matter written by hand.
    */
-  function makeRepository(version, changesets = {}) {
+  function makeRepository(version: string, changesets: Readonly<Record<string, string | readonly [string, string]>> = {}): string {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'release-changesets-'));
-    const git = (...args) => {
+    const git = (...args: string[]): string => {
       const r = spawnSync('git', args, { cwd: dir, encoding: 'utf8', env: { ...env, HOME: dir } });
       assert.equal(r.status, 0, r.stderr);
       return r.stdout.trim();
@@ -366,9 +396,10 @@ describe('guarded versioning with the real Changesets CLI', () => {
     return dir;
   }
 
-  const runGuard = (dir, ...args) =>
+  const runGuard = (dir: string, ...args: string[]): SpawnSyncReturns<string> =>
     spawnSync(process.execPath, [GUARD, ...args], { cwd: dir, encoding: 'utf8', env: { ...env, HOME: dir }, timeout: 120_000 });
-  const version = (dir) => JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8')).version;
+  const version = (dir: string): string =>
+    expectType(readJson(path.join(dir, 'package.json')), isShape({ version: isString }), 'a versioned package.json').version;
 
   test('control: raw `changeset version` turns a major changeset on 0.x into 1.0.0', () => {
     const dir = makeRepository('0.1.0', { big: ['major', 'Breaking change'] });
@@ -421,7 +452,7 @@ describe('guarded versioning with the real Changesets CLI', () => {
   // that parsed front matter itself would miss YAML-quoted values Changesets
   // accepts: a quoted "major" would pass `plan` and `version` while
   // `changeset version` produced 1.0.0.
-  const quoted = (type, quote = '"') => `---\n"sarif-to-comment": ${quote}${type}${quote}\n---\n\nQuoted ${type}.\n`;
+  const quoted = (type: string, quote = '"'): string => `---\n"sarif-to-comment": ${quote}${type}${quote}\n---\n\nQuoted ${type}.\n`;
 
   test('control: Changesets itself accepts a YAML-quoted "major" and would release 1.0.0', () => {
     const dir = makeRepository('0.0.0', { q: quoted('major') });
@@ -434,7 +465,7 @@ describe('guarded versioning with the real Changesets CLI', () => {
     ['double-quoted "major"', quoted('major')],
     ["single-quoted 'major'", quoted('major', "'")],
     ['quoted package name and quoted major with extra spacing', `---\n'sarif-to-comment' :   "major"\n---\n\nSpaced.\n`],
-  ]) {
+  ] as const) {
     test(`a ${label} changeset is refused by plan and version, before any file changes`, () => {
       const dir = makeRepository('0.0.0', { q: file });
       const plan = runGuard(dir, 'plan');
@@ -454,7 +485,7 @@ describe('guarded versioning with the real Changesets CLI', () => {
     assert.equal(version(dir), '0.1.0');
   });
 
-  for (const [type, from, to] of [['minor', '0.0.0', '0.1.0'], ['patch', '0.1.0', '0.1.1']]) {
+  for (const [type, from, to] of [['minor', '0.0.0', '0.1.0'], ['patch', '0.1.0', '0.1.1']] as const) {
     test(`a quoted "${type}" changeset is a real pending release: ${from} becomes ${to}`, () => {
       const dir = makeRepository(from, { q: quoted(type) });
       const plan = runGuard(dir, 'plan');
@@ -483,7 +514,7 @@ describe('guarded versioning with the real Changesets CLI', () => {
   for (const [label, file] of [
     ['a "none" changeset', '---\n"sarif-to-comment": none\n---\n\nNo release needed.\n'],
     ['an empty changeset', '---\n---\n\nNo release needed.\n'],
-  ]) {
+  ] as const) {
     test(`${label} is allowed, releases nothing, and is consumed by release:version as Changesets does`, () => {
       const dir = makeRepository('0.1.0', { quiet: file });
       const plan = runGuard(dir, 'plan');
@@ -513,15 +544,15 @@ describe('guarded versioning with the real Changesets CLI', () => {
   // The documented deliberate step — raising MAXIMUM_RELEASE_MAJOR — must
   // actually permit that major, and only that one.
   /** The repository with its guard copied in and the ceiling raised to `ceiling`. */
-  function withRaisedCeiling(dir, ceiling) {
+  function withRaisedCeiling(dir: string, ceiling: number): (...args: string[]) => SpawnSyncReturns<string> {
     const text = fs.readFileSync(GUARD, 'utf8');
-    const raised = text.replace('const MAXIMUM_RELEASE_MAJOR = 0;', `const MAXIMUM_RELEASE_MAJOR = ${ceiling};`);
+    const raised = text.replace('const MAXIMUM_RELEASE_MAJOR = 0;', `const MAXIMUM_RELEASE_MAJOR = ${String(ceiling)};`);
     assert.notEqual(raised, text, 'control: the ceiling constant was found');
-    const guardCopy = path.join(dir, 'release-guard.cjs');
+    const guardCopy = path.join(dir, 'release-guard.mts');
     fs.writeFileSync(guardCopy, raised);
     // check-version also verifies the build with the freshness tool beside the guard.
     fs.copyFileSync(MANIFEST_TOOL, path.join(dir, 'build-manifest.mts'));
-    return (...args) =>
+    return (...args: string[]): SpawnSyncReturns<string> =>
       spawnSync(process.execPath, [guardCopy, ...args], { cwd: dir, encoding: 'utf8', env: { ...env, HOME: dir }, timeout: 120_000 });
   }
 
@@ -578,11 +609,11 @@ describe('this repository’s own release state', () => {
   });
 
   test('Changesets is configured for this public package with a real changelog', () => {
-    const config = JSON.parse(fs.readFileSync(path.join(ROOT, '.changeset', 'config.json'), 'utf8'));
-    assert.equal(config.changelog, '@changesets/cli/changelog');
-    assert.equal(config.access, 'public');
-    assert.equal(config.baseBranch, 'main');
-    assert.equal(config.commit, false);
+    const config = asRecord(readJson(path.join(ROOT, '.changeset', 'config.json')), 'the Changesets config');
+    assert.equal(config['changelog'], '@changesets/cli/changelog');
+    assert.equal(config['access'], 'public');
+    assert.equal(config['baseBranch'], 'main');
+    assert.equal(config['commit'], false);
     assert.match(fs.readFileSync(path.join(ROOT, 'CHANGELOG.md'), 'utf8'), /^# sarif-to-comment\n/);
   });
 
@@ -602,14 +633,14 @@ describe('this repository’s own release state', () => {
 
 describe('publish preflight (as the workflow runs it)', () => {
   /** Starts a registry that knows `versions` of sarif-to-comment (null: package absent; 'down': 500). */
-  async function startRegistry(versions) {
+  async function startRegistry(versions: readonly string[] | null | 'down'): Promise<{ server: http.Server; url: string }> {
     const server = http.createServer((req, res) => {
       if (versions === 'down') {
         res.writeHead(500, { 'content-type': 'application/json' });
         res.end('{"error":"unavailable"}');
         return;
       }
-      if (versions === null || !req.url.startsWith('/sarif-to-comment')) {
+      if (versions === null || !(req.url ?? '').startsWith('/sarif-to-comment')) {
         res.writeHead(404, { 'content-type': 'application/json' });
         res.end('{"error":"Not found"}');
         return;
@@ -618,17 +649,33 @@ describe('publish preflight (as the workflow runs it)', () => {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ name: 'sarif-to-comment', 'dist-tags': { latest: versions.at(-1) }, versions: all }));
     });
-    await new Promise((resolve) => {
+    await new Promise<void>((resolve) => {
       server.listen(0, '127.0.0.1', resolve);
     });
-    return { server, url: `http://127.0.0.1:${server.address().port}/` };
+    const address = server.address();
+    if (address === null || typeof address === 'string') throw new Error(`the registry listens on a TCP port, not ${String(address)}`);
+    return { server, url: `http://127.0.0.1:${String(address.port)}/` };
+  }
+
+  /** A release commit in a temporary repository. */
+  interface IRelease {
+    readonly dir: string;
+    readonly sha: string;
+  }
+
+  /** What a preflight run printed, exited with and wrote to $GITHUB_OUTPUT. */
+  interface IPreflightRun {
+    readonly status: number | null;
+    readonly stdout: string;
+    readonly stderr: string;
+    readonly output: string;
   }
 
   /** A temp git repository on main holding a package release at `version`. */
-  function makeRelease(version, { changelogVersion = version } = {}) {
+  function makeRelease(version: string, { changelogVersion = version } = {}): IRelease {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'release-preflight-'));
-    const git = (...args) => {
-      const r = spawnSync('git', args, { cwd: dir, encoding: 'utf8', env: { PATH: process.env.PATH, HOME: dir, GIT_CONFIG_NOSYSTEM: '1' } });
+    const git = (...args: string[]): string => {
+      const r = spawnSync('git', args, { cwd: dir, encoding: 'utf8', env: { PATH: process.env['PATH'], HOME: dir, GIT_CONFIG_NOSYSTEM: '1' } });
       assert.equal(r.status, 0, r.stderr);
       return r.stdout.trim();
     };
@@ -654,20 +701,20 @@ describe('publish preflight (as the workflow runs it)', () => {
    * Node running them (CI's Node 22 job bundles npm 10, which the guard
    * rightly refuses for publishing).
    */
-  function npmReporting(version) {
+  function npmReporting(version: string): string {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'npm-shim-'));
     const shim = path.join(dir, 'npm');
     fs.writeFileSync(shim, `#!/bin/sh\nif [ "$1" = "--version" ]; then echo ${version}; exit 0; fi\nexec "${REAL_NPM}" "$@"\n`, { mode: 0o755 });
     return dir;
   }
 
-  function preflight(release, registryUrl, { npmVersion = guard.MIN_NPM } = {}) {
+  function preflight(release: IRelease, registryUrl: string, { npmVersion = guard.MIN_NPM }: { npmVersion?: string } = {}): Promise<IPreflightRun> {
     const outputFile = path.join(release.dir, 'github-output');
     fs.writeFileSync(outputFile, '');
     const work = fs.mkdtempSync(path.join(os.tmpdir(), 'npm-home-'));
     fs.writeFileSync(path.join(work, 'npmrc'), '');
     const env = {
-      PATH: `${npmReporting(npmVersion)}${path.delimiter}${process.env.PATH}`,
+      PATH: `${npmReporting(npmVersion)}${path.delimiter}${process.env['PATH'] ?? ''}`,
       HOME: work,
       GITHUB_SHA: release.sha,
       GITHUB_OUTPUT: outputFile,
@@ -681,9 +728,11 @@ describe('publish preflight (as the workflow runs it)', () => {
       const child = spawn(process.execPath, [GUARD, 'publish-preflight', '--main-ref', 'main'], { cwd: release.dir, env });
       let stdout = '';
       let stderr = '';
-      child.stdout.on('data', (d) => (stdout += d));
-      child.stderr.on('data', (d) => (stderr += d));
-      child.on('close', (status) => resolve({ status, stdout, stderr, output: fs.readFileSync(outputFile, 'utf8') }));
+      child.stdout.on('data', (d: Buffer) => (stdout += d.toString()));
+      child.stderr.on('data', (d: Buffer) => (stderr += d.toString()));
+      child.on('close', (status) => {
+        resolve({ status, stdout, stderr, output: fs.readFileSync(outputFile, 'utf8') });
+      });
     });
   }
 
@@ -773,7 +822,7 @@ describe('guard command line', () => {
    * A minimal project at `version` whose dist/ is a complete, fresh build as
    * the build records it (the build-freshness manifest written last).
    */
-  function builtProject(version) {
+  function builtProject(version: string): string {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'check-version-'));
     fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify(manifest(version)));
     fs.mkdirSync(path.join(dir, 'src'));
@@ -786,7 +835,7 @@ describe('guard command line', () => {
   }
 
   test('check-version (the manual-publish backstop) refuses 1.0.0 and accepts 0.x', () => {
-    for (const [version, status] of [['0.1.0', 0], ['1.0.0', 1], ['1.0.0-rc.0', 1]]) {
+    for (const [version, status] of [['0.1.0', 0], ['1.0.0', 1], ['1.0.0-rc.0', 1]] as const) {
       const dir = builtProject(version);
       const run = spawnSync(process.execPath, [GUARD, 'check-version'], { cwd: dir, encoding: 'utf8' });
       assert.equal(run.status, status, `${version}: ${run.stderr}`);
@@ -794,7 +843,7 @@ describe('guard command line', () => {
   });
 
   test('check-version refuses a missing or stale build, so a manual publish cannot ship outdated dist/', () => {
-    const run = (dir) => spawnSync(process.execPath, [GUARD, 'check-version'], { cwd: dir, encoding: 'utf8' });
+    const run = (dir: string): SpawnSyncReturns<string> => spawnSync(process.execPath, [GUARD, 'check-version'], { cwd: dir, encoding: 'utf8' });
 
     const fresh = builtProject('0.1.0');
     assert.equal(run(fresh).status, 0, 'control: a fresh build is accepted');
@@ -823,12 +872,12 @@ describe('guard command line', () => {
 // ===========================================================================
 
 describe('package scripts', () => {
-  const scripts = PKG.scripts || {};
+  const scripts = PKG.scripts;
 
   test('versioning goes through the guard; manual directory publishes hit the backstop', () => {
-    assert.equal(scripts['release:version'], 'node scripts/release-guard.cjs version');
-    assert.equal(scripts.prepublishOnly, 'node scripts/release-guard.cjs check-version');
-    assert.equal(scripts['check:release'], 'node scripts/release-guard.cjs plan');
+    assert.equal(scripts['release:version'], 'node scripts/release-guard.mts version');
+    assert.equal(scripts['prepublishOnly'], 'node scripts/release-guard.mts check-version');
+    assert.equal(scripts['check:release'], 'node scripts/release-guard.mts plan');
     assert.equal(Object.hasOwn(scripts, 'version'), false, 'no npm `version` lifecycle hook that bypasses Changesets');
   });
 
@@ -839,10 +888,11 @@ describe('package scripts', () => {
   });
 
   test('check runs the release, API, type, lint and test checks read-only', () => {
+    const check = scripts['check'] ?? '';
     for (const part of ['check:release', 'check:api', 'check:types', 'check:lint']) {
-      assert.ok(scripts.check.includes(part), `check must run ${part}`);
+      assert.ok(check.includes(part), `check must run ${part}`);
     }
-    assert.match(scripts.check, /\btest\b/);
+    assert.match(check, /\btest\b/);
     for (const [name, command] of Object.entries(scripts)) {
       if (name === 'check' || name.startsWith('check:')) assert.doesNotMatch(command, /--fix\b|--write\b|--local\b/, name);
     }
@@ -864,8 +914,9 @@ describe('publish workflow', () => {
   test('runs only for main pushes that change package.json (the merged Changesets version)', () => {
     const on = /^on:\n((?: {2}.*\n|\n)+)/m.exec(config);
     assert.ok(on);
-    assert.match(on[1], /^ {2}push:\n {4}branches: \[main\]\n {4}paths:\n {6}- package\.json\n/m);
-    assert.doesNotMatch(on[1], /tags|pull_request|schedule|workflow_run|release:|workflow_dispatch/);
+    const trigger = on[1] ?? '';
+    assert.match(trigger, /^ {2}push:\n {4}branches: \[main\]\n {4}paths:\n {6}- package\.json\n/m);
+    assert.doesNotMatch(trigger, /tags|pull_request|schedule|workflow_run|release:|workflow_dispatch/);
   });
 
   test('authenticates by OIDC only, with read-only contents and no npm token', () => {
@@ -886,17 +937,17 @@ describe('publish workflow', () => {
     const order = [
       /fetch-depth: 0/,
       /pnpm install --frozen-lockfile/,
-      /id: preflight\n\s+run: node scripts\/release-guard\.cjs publish-preflight/,
+      /id: preflight\n\s+run: node scripts\/release-guard\.mts publish-preflight/,
       /run: pnpm run build\n/,
       /run: pnpm run check\n/,
       /npm pack --json/,
-      /node scripts\/release-guard\.cjs verify-pack/,
+      /node scripts\/release-guard\.mts verify-pack/,
       /npm publish "\$\{\{ steps\.pack\.outputs\.tarball \}\}"/,
     ];
     let at = 0;
     for (const step of order) {
       const index = config.slice(at).search(step);
-      assert.ok(index >= 0, `missing or out of order: ${step}`);
+      assert.ok(index >= 0, `missing or out of order: ${String(step)}`);
       at += index;
     }
     assert.equal((config.match(/npm publish/g) || []).length, 1);
@@ -910,14 +961,14 @@ describe('publish workflow', () => {
     const decisionAt = steps.findIndex((s) => /id: preflight/.test(s));
     assert.ok(decisionAt >= 0);
     for (const step of steps.slice(decisionAt + 1)) {
-      assert.match(step, /if: steps\.preflight\.outputs\.publish == 'true'/, `ungated step: ${step.split('\n')[0]}`);
+      assert.match(step, /if: steps\.preflight\.outputs\.publish == 'true'/, `ungated step: ${step.split('\n')[0] ?? ''}`);
     }
   });
 
   test('Node 24 (bundled npm supports trusted publishing); no forced provenance; pinned actions', () => {
     assert.match(config, /node-version: 24/);
     assert.doesNotMatch(config, /--provenance|NPM_CONFIG_PROVENANCE/i);
-    for (const ref of [...config.matchAll(/uses: (\S+)/g)].map((m) => m[1])) assert.match(ref, /@[0-9a-f]{40}$/, ref);
+    for (const ref of [...config.matchAll(/uses: (\S+)/g)].map((m) => m[1] ?? '')) assert.match(ref, /@[0-9a-f]{40}$/, ref);
   });
 });
 
@@ -938,7 +989,7 @@ describe('continuous integration workflow', () => {
     let at = 0;
     for (const step of [/run: pnpm install --frozen-lockfile\n/, /run: pnpm run build\n/, /run: pnpm run check\n/]) {
       const index = text.slice(at).search(step);
-      assert.ok(index >= 0, `missing or out of order: ${step}`);
+      assert.ok(index >= 0, `missing or out of order: ${String(step)}`);
       at += index;
     }
   });
@@ -951,27 +1002,40 @@ describe('the pnpm version the workflows install is a usable release', () => {
   // publishing before any check ran. Registry facts are recorded in
   // test/fixtures/release/pnpm-releases.json (refresh with the commands it
   // lists when changing the pin) so this runs offline.
-  const RELEASES = JSON.parse(fs.readFileSync(path.join(ROOT, 'test', 'fixtures', 'release', 'pnpm-releases.json'), 'utf8'));
-  const WORKFLOWS = ['ci.yml', 'publish.yml'].map((name) => [
-    name,
-    fs.readFileSync(path.join(ROOT, '.github', 'workflows', name), 'utf8'),
-  ]);
+  const RELEASES = expectType(
+    readJson(path.join(ROOT, 'test', 'fixtures', 'release', 'pnpm-releases.json')),
+    isShape({
+      releases: isRecordOf(
+        isShape({
+          pnpmDeprecated: isEither(isString, isNull),
+          exePublished: isBoolean,
+          exeDeprecated: isEither(isString, isNull),
+          nodeEngine: isOptional(isString),
+        }),
+      ),
+    }),
+    'the recorded pnpm registry facts',
+  );
+  const WORKFLOWS = [
+    ['ci.yml', fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'ci.yml'), 'utf8')],
+    ['publish.yml', fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'publish.yml'), 'utf8')],
+  ] as const;
 
   /** The pnpm version a workflow passes to pnpm/action-setup. */
-  function pinnedPnpm(text) {
+  function pinnedPnpm(text: string): string | undefined {
     // The `with:` block may carry comment lines before `version:`.
     const match = /uses: pnpm\/action-setup@[0-9a-f]{40}[^\n]*\n\s+with:\n(?:\s*#[^\n]*\n)*\s+version: (\S+)\n/.exec(text);
-    return match && match[1];
+    return match?.[1];
   }
 
   /** Why the recorded registry facts make `version` unusable as a pin (empty when usable). */
-  function pinProblems(version) {
-    const facts = RELEASES.releases[version];
-    if (!facts) return [`no registry facts recorded for pnpm ${version}`];
-    const problems = [];
-    if (facts.pnpmDeprecated) problems.push(`pnpm@${version} is deprecated: ${facts.pnpmDeprecated}`);
-    if (!facts.exePublished) problems.push(`@pnpm/exe@${version} is not published`);
-    if (facts.exeDeprecated) problems.push(`@pnpm/exe@${version} is deprecated: ${facts.exeDeprecated}`);
+  function pinProblems(version: string | undefined): string[] {
+    const facts = version === undefined ? undefined : RELEASES.releases[version];
+    if (!facts) return [`no registry facts recorded for pnpm ${String(version)}`];
+    const problems: string[] = [];
+    if (facts.pnpmDeprecated) problems.push(`pnpm@${String(version)} is deprecated: ${facts.pnpmDeprecated}`);
+    if (!facts.exePublished) problems.push(`@pnpm/exe@${String(version)} is not published`);
+    if (facts.exeDeprecated) problems.push(`@pnpm/exe@${String(version)} is deprecated: ${facts.exeDeprecated}`);
     return problems;
   }
 
@@ -980,8 +1044,8 @@ describe('the pnpm version the workflows install is a usable release', () => {
   });
 
   test('both workflows pin the same exact pnpm version', () => {
-    const pins = WORKFLOWS.map(([name, text]) => [name, pinnedPnpm(text)]);
-    for (const [name, pin] of pins) assert.match(pin || '', /^\d+\.\d+\.\d+$/, `${name} pins an exact version`);
+    const pins = WORKFLOWS.map(([name, text]) => [name, pinnedPnpm(text)] as const);
+    for (const [name, pin] of pins) assert.match(pin ?? '', /^\d+\.\d+\.\d+$/, `${name} pins an exact version`);
     assert.equal(new Set(pins.map(([, pin]) => pin)).size, 1, JSON.stringify(pins));
   });
 
@@ -992,7 +1056,7 @@ describe('the pnpm version the workflows install is a usable release', () => {
 
   test('the pinned pnpm supports every Node version the workflows use', () => {
     const pin = pinnedPnpm(WORKFLOWS[0][1]);
-    assert.equal(RELEASES.releases[pin].nodeEngine, '>=22.13');
+    assert.equal(RELEASES.releases[pin ?? '']?.nodeEngine, '>=22.13');
     // CI runs Node 22 and 24 (setup-node resolves the latest release of each
     // major, which satisfies >=22.13); publishing runs Node 24.
     assert.match(WORKFLOWS[0][1], /node: \[22, 24\]/);
@@ -1001,14 +1065,14 @@ describe('the pnpm version the workflows install is a usable release', () => {
 
   test('the pin stays on the major the lockfile was produced and verified with', () => {
     const pin = pinnedPnpm(WORKFLOWS[0][1]);
-    assert.equal(pin.split('.')[0], '11');
+    assert.equal((pin ?? '').split('.')[0], '11');
     assert.match(fs.readFileSync(path.join(ROOT, 'pnpm-lock.yaml'), 'utf8'), /^lockfileVersion: '9\.0'/);
   });
 });
 
 describe('superseded tag-triggered release machinery is gone', () => {
   test('the guard no longer offers the tag preflight', () => {
-    assert.equal(guard.checkRelease, undefined);
+    assert.equal(Reflect.get(guard, 'checkRelease'), undefined);
     const run = spawnSync(process.execPath, [GUARD, 'preflight'], { encoding: 'utf8' });
     assert.equal(run.status, 2);
   });

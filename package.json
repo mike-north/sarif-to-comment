@@ -64,11 +64,11 @@
     "check:build": "node scripts/build-manifest.mts verify",
     "check:lint": "eslint .",
     "check:types": "node scripts/check-types.mts",
-    "check:api": "node scripts/api-docs.cjs check",
-    "check:release": "node scripts/release-guard.cjs plan",
+    "check:api": "node scripts/api-docs.mts check",
+    "check:release": "node scripts/release-guard.mts plan",
     "test": "npm run check:build && node --test test/*.test.cjs test/*.test.mts",
-    "release:version": "node scripts/release-guard.cjs version",
-    "prepublishOnly": "node scripts/release-guard.cjs check-version"
+    "release:version": "node scripts/release-guard.mts version",
+    "prepublishOnly": "node scripts/release-guard.mts check-version"
   },
   "devDependencies": {
     "@changesets/cli": "^3.0.3",

@@ -1,5 +1,3 @@
-'use strict';
-
 /**
  * Tests for the clean-consumer installation harness
  * (test/fixtures/package/installed-package.mts), which the package, type and
@@ -25,19 +23,43 @@
  * @see https://docs.npmjs.com/cli/v11/using-npm/logging#logs-dir
  */
 
-const test = require('node:test');
-const { describe } = test;
-const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const { spawnSync } = require('node:child_process');
+import * as assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { describe, test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 
-const ROOT = path.resolve(__dirname, '..');
+import { dependencyTarball, runtimeDependencyDirs } from './fixtures/package/installed-package.mts';
+import { expectType, isBoolean, isOptional, isShape, isString, parseJson } from './support/runtime-types.mts';
+
+const ROOT = path.resolve(import.meta.dirname, '..');
 const HARNESS = path.join(ROOT, 'test', 'fixtures', 'package', 'installed-package.mts');
 const REAL_NPM = spawnSync('sh', ['-c', 'command -v npm'], { encoding: 'utf8' }).stdout.trim();
 const RUNNER_ERROR = 'npm error Exit handler never called!';
 const DEBUG_SENTINEL = 'verbose stack SENTINEL-root-cause-from-npm-debug-log';
+
+/** A generated `npm` shim and the invocations it recorded. */
+interface INpmShim {
+  readonly dir: string;
+  readonly calls: () => string[];
+}
+
+/** One attempt of the harness in the child process. */
+interface IAttempt {
+  readonly ok: boolean;
+  readonly packageDir?: string | undefined;
+  readonly installed?: boolean | undefined;
+  readonly message?: string | undefined;
+}
+
+const isAttempt = isShape({
+  ok: isBoolean,
+  packageDir: isOptional(isString),
+  installed: isOptional(isBoolean),
+  message: isOptional(isString),
+});
 
 /**
  * A directory containing an `npm` shim. `fail` is 'dependency-pack' (fail
@@ -46,7 +68,7 @@ const DEBUG_SENTINEL = 'verbose stack SENTINEL-root-cause-from-npm-debug-log';
  * npm debug log to $npm_config_logs_dir containing DEBUG_SENTINEL and name it
  * on stderr, as npm does. Every invocation is appended to `calls.log`.
  */
-function npmShim(fail) {
+function npmShim(fail: 'dependency-pack' | 'product-pack'): INpmShim {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'npm-harness-shim-'));
   const log = path.join(dir, 'calls.log');
   const sh = String.raw;
@@ -79,7 +101,7 @@ exec '${REAL_NPM}' "$@"
 }
 
 /** Runs the harness in a fresh child process with `shim` first on PATH. */
-function runHarness(shim, { twice = false } = {}) {
+function runHarness(shim: INpmShim, { twice = false } = {}): { first: IAttempt; second?: IAttempt | undefined } {
   const js = String.raw;
   const script = js`
     const fs = require('node:fs');
@@ -94,26 +116,27 @@ function runHarness(shim, { twice = false } = {}) {
       }
     };
     const first = attempt();
-    const second = ${twice} ? attempt() : undefined;
+    const second = ${String(twice)} ? attempt() : undefined;
     process.stdout.write(JSON.stringify({ first, second }));
   `;
   const run = spawnSync(process.execPath, ['-e', script], {
     cwd: ROOT,
     encoding: 'utf8',
     timeout: 300_000,
-    env: { ...process.env, PATH: `${shim.dir}${path.delimiter}${process.env.PATH}` },
+    env: { ...process.env, PATH: `${shim.dir}${path.delimiter}${process.env['PATH'] ?? ''}` },
   });
   assert.equal(run.status, 0, run.stderr);
-  return JSON.parse(run.stdout);
+  return expectType(parseJson(run.stdout), isShape({ first: isAttempt, second: isOptional(isAttempt) }), 'the harness attempts');
 }
 
 describe('clean-consumer installation harness', () => {
   test('control: the shim reproduces the runner failure for `npm pack` of an installed dependency', () => {
     const shim = npmShim('dependency-pack');
-    const ajv = fs.realpathSync(path.dirname(require.resolve('ajv/package.json', { paths: [ROOT] })));
+    // Resolved from this file, inside ROOT, as `require.resolve(…, { paths: [ROOT] })` would.
+    const ajv = fs.realpathSync(path.dirname(fileURLToPath(import.meta.resolve('ajv/package.json'))));
     const run = spawnSync('npm', ['pack', '--json', ajv], {
       encoding: 'utf8',
-      env: { PATH: `${shim.dir}${path.delimiter}${process.env.PATH}`, npm_config_logs_dir: path.join(shim.dir, 'logs') },
+      env: { PATH: `${shim.dir}${path.delimiter}${process.env['PATH'] ?? ''}`, npm_config_logs_dir: path.join(shim.dir, 'logs') },
     });
     assert.equal(run.status, 1);
     assert.ok(run.stderr.includes(RUNNER_ERROR));
@@ -130,17 +153,16 @@ describe('clean-consumer installation harness', () => {
   });
 
   test('dependency tarballs contain exactly the installed files of each runtime dependency', { timeout: 300_000 }, () => {
-    const harness = require(HARNESS);
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dep-tarball-'));
-    for (const dir of harness.runtimeDependencyDirs()) {
-      const tarball = harness.dependencyTarball(dir, out);
+    for (const dir of runtimeDependencyDirs()) {
+      const tarball = dependencyTarball(dir, out);
       const listed = spawnSync('tar', ['-tzf', tarball], { encoding: 'utf8' })
         .stdout.split('\n')
         .filter((entry) => entry && !entry.endsWith('/'))
         .map((entry) => entry.replace(/^package\//, ''))
         .sort();
-      const expected = [];
-      const walk = (rel) => {
+      const expected: string[] = [];
+      const walk = (rel: string): void => {
         for (const entry of fs.readdirSync(path.join(dir, rel), { withFileTypes: true })) {
           const relPath = rel ? `${rel}/${entry.name}` : entry.name;
           if (entry.isDirectory()) {
@@ -161,15 +183,16 @@ describe('clean-consumer installation harness', () => {
     const shim = npmShim('product-pack');
     const { first } = runHarness(shim);
     assert.equal(first.ok, false);
-    assert.ok(first.message.includes(RUNNER_ERROR), first.message);
-    assert.ok(first.message.includes(DEBUG_SENTINEL), `the debug log is included: ${first.message}`);
+    const message = first.message ?? '';
+    assert.ok(message.includes(RUNNER_ERROR), message);
+    assert.ok(message.includes(DEBUG_SENTINEL), `the debug log is included: ${message}`);
   });
 
   test('a failed installation is reported to every caller without repeating the npm work', { timeout: 300_000 }, () => {
     const shim = npmShim('product-pack');
     const { first, second } = runHarness(shim, { twice: true });
     assert.equal(first.ok, false);
-    assert.equal(second.ok, false);
+    assert.equal(second?.ok, false);
     assert.equal(second.message, first.message);
     assert.equal(shim.calls().filter((c) => /^pack /.test(c)).length, 1, 'npm pack ran once');
   });
