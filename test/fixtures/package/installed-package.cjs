@@ -5,13 +5,21 @@
  * package, type and documentation tests.
  *
  * `npm pack` produces the distributable tarball; `npm install` puts it,
- * together with locally packed tarballs of its runtime dependency closure,
- * into a clean temporary consumer project. npm runs isolated from the
+ * together with tarballs of its runtime dependency closure, into a clean
+ * temporary consumer project. The dependency tarballs contain exactly the
+ * files the lockfile installed, in npm's `package/` layout, and are built
+ * with `tar` rather than `npm pack`: third-party packages are not under test,
+ * and asking npm to repack them out of pnpm's virtual store failed on the
+ * GitHub-hosted Ubuntu runner (Node 24.21.0, npm 11.19.0: "Exit handler never
+ * called!"). The product itself is always packed and installed by real npm. npm runs isolated from the
  * developer's machine (private cache, logs and empty config under a temp
  * directory, offline, no lifecycle scripts), so no registry, network or
  * personal npm configuration is involved and nothing is published.
  *
- * Results are memoized per process: each test file packs and installs once.
+ * Results are memoized per process: each test file packs and installs once,
+ * and a failure is recorded once and reported to every caller. A failed npm
+ * command's error includes the tail of npm's own debug log, so a failure on a
+ * remote runner names its cause.
  *
  * @see https://docs.npmjs.com/cli/v11/commands/npm-pack
  * @see https://docs.npmjs.com/cli/v11/commands/npm-install
@@ -59,6 +67,47 @@ function npm(args, { cwd, env }) {
   return spawnSync('npm', args, { cwd, env, encoding: 'utf8', timeout: 180_000 });
 }
 
+/** Lines of npm's debug log kept in a failure message. */
+const DEBUG_LOG_TAIL_LINES = 80;
+
+/**
+ * An Error describing a failed npm command: its output, and the tail of the
+ * debug log npm names ("A complete log of this run can be found in: …"),
+ * which records the cause npm's one-line summary omits.
+ */
+function npmFailure(what, run) {
+  const output = `${run.stdout || ''}${run.stderr || ''}`.trim();
+  const named = /A complete log of this run can be found in:\s*(\S+)/.exec(output);
+  let debug = '';
+  if (named && fs.existsSync(named[1])) {
+    const lines = fs.readFileSync(named[1], 'utf8').trimEnd().split('\n');
+    debug = `\n--- npm debug log (${named[1]}), last ${Math.min(lines.length, DEBUG_LOG_TAIL_LINES)} lines ---\n${lines.slice(-DEBUG_LOG_TAIL_LINES).join('\n')}`;
+  }
+  const signal = run.signal ? ` (signal ${run.signal})` : '';
+  return new assert.AssertionError({ message: `${what} failed (exit ${run.status}${signal}): ${output}${debug}` });
+}
+
+/**
+ * An npm-format tarball (`package/…`) of the installed dependency in `dir`,
+ * written to `destDir`: every installed file (symlinks resolved), excluding a
+ * nested node_modules, whose packages are supplied as their own tarballs.
+ */
+function dependencyTarball(dir, destDir) {
+  const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'));
+  const staging = fs.mkdtempSync(path.join(os.tmpdir(), 'dependency-'));
+  const packageRoot = path.join(staging, 'package');
+  fs.cpSync(dir, packageRoot, {
+    recursive: true,
+    dereference: true,
+    filter: (source) => path.relative(dir, source) !== 'node_modules',
+  });
+  const tarball = path.join(destDir, `${manifest.name.replace(/^@/, '').replace(/\//g, '-')}-${manifest.version}.tgz`);
+  const run = spawnSync('tar', ['-czf', tarball, '-C', staging, 'package'], { encoding: 'utf8' });
+  fs.rmSync(staging, { recursive: true, force: true });
+  if (run.status !== 0) throw npmFailure(`tar of dependency ${dir}`, run);
+  return tarball;
+}
+
 /**
  * Directories of every runtime dependency, transitively (dependencies and
  * peer dependencies), as installed for this workspace.
@@ -79,12 +128,15 @@ function runtimeDependencyDirs() {
 }
 
 let packed;
+let packFailure;
 
 /**
  * The packed tarball of this checkout: { work, env, packDir, result, tarball,
- * error }. `error` is set (and nothing else is usable) when npm cannot run.
+ * error }. `error` is set (and nothing else is usable) when npm cannot run at
+ * all; a failed `npm pack` throws, and keeps throwing the same error.
  */
 function packProject() {
+  if (packFailure) throw packFailure;
   if (packed) return packed;
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'sarif-to-comment-pack-'));
   const env = isolatedNpmEnv(work);
@@ -95,40 +147,61 @@ function packProject() {
     packed = { error: `npm could not run: ${run.error.message}` };
     return packed;
   }
-  assert.equal(run.status, 0, `npm pack failed: ${run.stderr}`);
+  if (run.status !== 0) {
+    packFailure = npmFailure('npm pack', run);
+    throw packFailure;
+  }
   const [result] = JSON.parse(run.stdout);
   packed = { work, env, packDir, result, tarball: path.join(packDir, result.filename) };
   return packed;
 }
 
 let installed;
+let installFailure;
 
 /**
  * A clean consumer project with the packed package installed by npm:
  * { consumer, packageDir, bin, env } (env is the isolated npm environment).
+ * A failure is thrown, and the same error is thrown to every later caller.
  */
 function installIntoConsumer() {
+  if (installFailure) throw installFailure;
   if (installed) return installed;
-  const { work, env, packDir, tarball } = packProject();
-  const dependencyTarballs = runtimeDependencyDirs().map((dir) => {
-    const run = npm(['pack', '--json', '--pack-destination', packDir, dir], { cwd: work, env });
-    assert.equal(run.status, 0, `packing dependency ${dir} failed: ${run.stderr}`);
-    return path.join(packDir, JSON.parse(run.stdout)[0].filename);
-  });
+  try {
+    installed = install();
+    return installed;
+  } catch (err) {
+    installFailure = err;
+    throw err;
+  }
+}
+
+function install() {
+  const { work, env, tarball } = packProject();
+  const dependencyDir = fs.mkdtempSync(path.join(work, 'dependencies-'));
+  const dependencyTarballs = runtimeDependencyDirs().map((dir) => dependencyTarball(dir, dependencyDir));
   const consumer = fs.mkdtempSync(path.join(work, 'consumer-'));
   fs.writeFileSync(
     path.join(consumer, 'package.json'),
     JSON.stringify({ name: 'consumer', version: '1.0.0', private: true }, null, 2),
   );
-  const install = npm(['install', '--no-save', tarball, ...dependencyTarballs], { cwd: consumer, env });
-  assert.equal(install.status, 0, `npm install failed:\n${install.stdout}\n${install.stderr}`);
-  installed = {
+  const run = npm(['install', '--no-save', tarball, ...dependencyTarballs], { cwd: consumer, env });
+  if (run.status !== 0) throw npmFailure('npm install', run);
+  return {
     consumer,
     packageDir: path.join(consumer, 'node_modules', 'sarif-to-comment'),
     bin: path.join(consumer, 'node_modules', '.bin', 'sarif-to-comment'),
     env,
   };
-  return installed;
 }
 
-module.exports = { ROOT, PKG, isolatedNpmEnv, npm, packProject, installIntoConsumer };
+module.exports = {
+  ROOT,
+  PKG,
+  isolatedNpmEnv,
+  npm,
+  packProject,
+  installIntoConsumer,
+  runtimeDependencyDirs,
+  dependencyTarball,
+};
