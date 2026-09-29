@@ -884,14 +884,23 @@ describe('client construction', () => {
     assert.equal(typeof createGitHubClient({ token: TOKEN }).getAuthenticatedUser, 'function');
   });
 
-  test('the client exposes exactly the transport methods and fetchContext', () => {
+  test('the client exposes exactly the transport methods, fetchContext and the suggestion pull request transport', () => {
     const c = client(new FakeHost());
     assert.deepEqual(Object.keys(c).sort(), [
+      'addLabel',
+      'createBranch',
+      'createProposalCommit',
+      'createPullRequest',
       'createReview',
       'fetchContext',
+      'findLabel',
       'getAuthenticatedUser',
+      'getBranch',
+      'listBranchPullRequests',
+      'listLabels',
       'listReviewComments',
       'listReviews',
+      'readSuggestionTarget',
     ]);
   });
 
