@@ -1,6 +1,6 @@
 # Suggestion pull request cleanup: contract
 
-Proposal awaiting owner acceptance · September 29, 2026. On-demand cleanup closes this tool's own open companion suggestion pull requests once their original pull request has merged or closed. It is implemented under the conservative options below. Every decision in [Decisions awaiting acceptance](#4-decisions-awaiting-acceptance) is provisional until the owner accepts or replaces it.
+Proposal awaiting owner acceptance · September 29, 2026. On-demand cleanup closes this tool's own open companion suggestion pull requests once their original pull request has merged or closed. It is implemented under the conservative options below and verified against live GitHub in the [live evidence](suggestion-cleanup-e2e-evidence.md). Every decision in [Decisions awaiting acceptance](#4-decisions-awaiting-acceptance) is provisional until the owner accepts or replaces it.
 
 **Sources.** [Issue #6](https://github.com/mike-north/sarif-to-comment/issues/6); [specification](specification.md) R16 (cleanup paragraph), A31 and A36, with R14 and the deferred fork case (A34); [decisions](design-decisions.md) D21, D25, D27, D28 and D29; the [companion suggestion PR contract](companion-suggestion-pr-contract.md), especially §2.6–§2.7 and §5 (what cleanup can rely on); the [lifecycle experiment](companion-pr-lifecycle-experiment.md); [status](status.md).
 
@@ -71,7 +71,7 @@ Each candidate pull request gets exactly one `result`, decided in this order:
 
 | # | Condition | `result` | Closed? |
 | --- | --- | --- | --- |
-| 1 | No marker (targeted mode: and no label) | not reported: an ordinary reference | no |
+| 1 | Targeted mode: no marker and no label | not reported: an ordinary reference | no |
 | 2 | No marker but the label; several markers; a non-canonical marker | `not-ours` | no |
 | 3 | The marker names another repository (compared case-insensitively) | `not-ours` | no |
 | 4 | Targeted mode: the marker names a different original | `not-ours` | no |
@@ -139,7 +139,7 @@ The library resolves (it does not reject) once discovery has completed:
   - `incomplete` when any suggestion is `failed` or `unverified`, or a targeted original is `unverified`: something could not be established; running again is safe;
   - otherwise `permission-limited` when any suggestion is `permission-limited`: someone with the right to close them can finish;
   - otherwise `complete`, including a dry run and a run with nothing to do.
-- `markdown` says what was checked, each original's state, each suggestion's result, that no branch is deleted, and, when relevant, that a rerun is safe or who can close the rest.
+- `markdown` says what was checked, each original's state, each suggestion's result, that no branch is deleted, and, when relevant, that a rerun is safe or who can close the rest. Its form is shown in §3: a title naming the status (`complete`, `: dry run`, `limited by permissions`, `incomplete`), the scope, `Original pull requests:` with one line per original (`open`, `merged`, `closed without merging`, `could not be verified (<reason>)`), `Suggestion pull requests:` with one line per result (`closed`; `would be closed`; `already closed`; `left open, because the original is still open`; `left open, because the original could not be verified`; `left open, not permitted to close it: <reason>`; `not closed, the close failed: <reason>` or `not closed, it could not be read again before closing: <reason>`; `skipped, not one of this tool's suggestion pull requests: <reason>`; ``skipped, it does not carry the label `<label>` ``), then the dry-run, rerun and permission notes that apply, and last `Closing never deletes a branch: each proposal branch is left in place.`
 
 It rejects with a `TypeError` for invalid input, and with an `Error` for an operational failure during discovery (before any write). Neither contains the token.
 
@@ -160,7 +160,31 @@ Delete or update a branch; reopen, edit, label or comment on anything; write to 
 
 `octo/widgets` has open labeled suggestions #40 (marker original #37) and #38, #39 (marker original #36). #37 was closed without merging; #36 is open; one more labeled pull request, #41, has no marker.
 
-`close-suggestion-prs --repo octo/widgets --dry-run`: originals #36 `open` and #37 `closed`; #38 and #39 `left-open`, #40 `would-close`, #41 `not-ours`; status `complete`, exit 0, no write. Without `--dry-run`, #40 is `closed`: one `PATCH`, and its branch `sarif-to-comment/suggestions/37/<id>` still exists. A rerun no longer lists #40 (it is not open): #38 and #39 `left-open`, exit 0. `--original 37` then finds #40 through #37's backlinks and reports it `already-closed`.
+`close-suggestion-prs --repo octo/widgets --dry-run`: originals #36 `open` and #37 `closed`; #38 and #39 `left-open`, #40 `would-close`, #41 `not-ours`; status `complete`, exit 0, no write. The Markdown:
+
+```markdown
+## Suggestion pull request cleanup: dry run
+
+Checked the open pull requests labeled `suggestion` in octo/widgets.
+
+Original pull requests:
+
+- #36: open
+- #37: closed without merging
+
+Suggestion pull requests:
+
+- #38 (for #36): left open, because the original is still open
+- #39 (for #36): left open, because the original is still open
+- #40 (for #37): would be closed
+- #41: skipped, not one of this tool's suggestion pull requests: it has the label but no suggestion marker
+
+This was a dry run: nothing was closed.
+
+Closing never deletes a branch: each proposal branch is left in place.
+```
+
+Without `--dry-run`, #40 is `closed`: one `PATCH`, and its branch `sarif-to-comment/suggestions/37/<id>` still exists. The title is `## Suggestion pull request cleanup complete`, #40's line reads `- #40 (for #37): closed`, and there is no dry-run note. A rerun no longer lists #40 (it is not open): #38 and #39 `left-open`, exit 0. `--original 37` then finds #40 through #37's backlinks and reports it `already-closed`.
 
 ## 4. Decisions awaiting acceptance
 
@@ -174,12 +198,14 @@ Delete or update a branch; reopen, edit, label or comment on anything; write to 
 
 ## 5. Verification
 
-| Requirement | Tests | Live evidence |
+| Requirement | Tests | [Live evidence](suggestion-cleanup-e2e-evidence.md) |
 | --- | --- | --- |
-| Open, merged, closed-unmerged and inaccessible originals (A36) | `test/cleanup-composition.test.mts` | [live evidence](suggestion-cleanup-e2e-evidence.md) (open, closed-unmerged; merged and inaccessible probed read-only) |
-| Pagination, duplicate references, title changes (A31) | `test/cleanup-composition.test.mts`, `test/github-cleanup.test.mts` | |
-| Permission-limited apart from failed; no completion inferred from a failed lookup | `test/cleanup-composition.test.mts` | |
-| Already-closed suggestions tolerated | `test/cleanup-composition.test.mts` | rerun |
-| Targeted discovery, dry run, comma labels | `test/cleanup-composition.test.mts`, `test/close-suggestion-pull-requests.test.mts` | targeted runs |
-| Marker recognition | `test/suggestion-marker.test.mts` | |
-| CLI and library through the installed package | `test/installed-cleanup.test.mts` | |
+| Open, merged, closed-unmerged and inaccessible originals (A36) | `test/cleanup-composition.test.mts` | open and closed-unmerged with suggestions; merged, closed and missing originals probed read-only |
+| Pagination, duplicate references, title changes (A31) | `test/cleanup-composition.test.mts`, `test/github-cleanup.test.mts` | single page only |
+| Permission-limited apart from failed; no completion inferred from a failed lookup | `test/cleanup-composition.test.mts`, `test/github-cleanup.test.mts` | missing original `unverified` (exit 3) |
+| Already-closed suggestions tolerated | `test/cleanup-composition.test.mts` | sweep and targeted reruns |
+| Targeted discovery, dry run | `test/cleanup-composition.test.mts` | targeted and dry runs |
+| Commas refused in labels | `test/cleanup-composition.test.mts`, `test/companion-composition.test.mts`, `test/github-cleanup.test.mts` | |
+| Marker recognition | `test/suggestion-marker.test.mts` | live marker of #38 |
+| Public types | `test/close-suggestion-pull-requests.types.mts` | |
+| CLI and library through the installed package | `test/installed-cleanup.test.mts`, `test/cli-commands.test.mts` | |

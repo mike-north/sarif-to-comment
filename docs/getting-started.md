@@ -74,6 +74,7 @@ Add `options: { suggestionPullRequests: true }` (library) or `--suggestion-prs` 
 - It is off by default: every created pull request is visible to the repository and can trigger its CI and notifications.
 - The label `suggestion` (or `suggestionLabel` / `--suggestion-label`) must already exist, your token needs *Contents: Read and write*, and the reviewed commit must be the pull request's head.
 - Keep the state file **and** the files created beside it (`<state>.suggestion-1-branch`, …, `<state>.review`); a retry uses them to continue without sending anything twice.
+- After the original pull request merges or closes, `sarif-to-comment close-suggestion-prs --repo OWNER/REPO` (library: [`closeSuggestionPullRequests`](./api/sarif-to-comment.closesuggestionpullrequests.md)) closes its suggestion pull requests that are still open. Try it with `--dry-run` first. It only closes pull requests: branches are never deleted, and an original it can't read is never treated as ended.
 
 ## Library: publish SARIF from memory
 
