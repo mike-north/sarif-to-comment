@@ -195,13 +195,14 @@ function internalsFor(world: IWorld): { readonly createGitHubClient: (options: I
 
 const ENABLED: Json = { suggestionPullRequests: true };
 
-function input(sarif: Json, options?: Json, reviewedCommit = HEAD): Json {
+/** Library input; `options` null omits the field (the default: suggestion pull requests disabled). */
+function input(sarif: Json, options: Json | null, reviewedCommit = HEAD): Json {
   return {
     sarif,
     destination: { owner: OWNER, repo: REPO, pullNumber: PULL },
     reviewedCommit,
     token: TOKEN,
-    ...(options === undefined ? {} : { options }),
+    ...(options === null ? {} : { options }),
   };
 }
 
@@ -212,9 +213,9 @@ async function callLibrary(name: 'publishSarifReview' | 'validateSarifReview', v
   return asRecord(outcome, `the ${name} outcome`);
 }
 
-const publish = (world: IWorld, sarif: Json, options: Json | undefined = ENABLED, reviewedCommit = HEAD): Promise<Json> =>
+const publish = (world: IWorld, sarif: Json, options: Json | null = ENABLED, reviewedCommit = HEAD): Promise<Json> =>
   callLibrary('publishSarifReview', { ...input(sarif, options, reviewedCommit), statePath: world.statePath }, world);
-const validate = (world: IWorld, sarif: Json, options: Json | undefined = ENABLED, reviewedCommit = HEAD): Promise<Json> =>
+const validate = (world: IWorld, sarif: Json, options: Json | null = ENABLED, reviewedCommit = HEAD): Promise<Json> =>
   callLibrary('validateSarifReview', input(sarif, options, reviewedCommit), world);
 
 const count = (world: IWorld, method: string, pattern: RegExp): number =>
@@ -376,7 +377,7 @@ function blockedMarkdown(lines: readonly string[]): string {
 }
 
 /** Publish and validate block with identical Markdown and write nothing. */
-async function assertBlockedEverywhere(world: IWorld, sarif: Json, lines: readonly string[], options: Json | undefined = ENABLED, reviewedCommit = HEAD): Promise<void> {
+async function assertBlockedEverywhere(world: IWorld, sarif: Json, lines: readonly string[], options: Json | null = ENABLED, reviewedCommit = HEAD): Promise<void> {
   const assessed = await validate(world, sarif, options, reviewedCommit);
   const published = await publish(world, sarif, options, reviewedCommit);
   assert.equal(status(assessed), 'blocked', markdown(assessed));
@@ -431,7 +432,7 @@ describe('grouped code and test changes (A29)', () => {
 
   test('disabled (the default): blocked, naming the setting, with nothing split or written (A30)', async () => {
     const world = makeWorld();
-    await assertBlockedEverywhere(world, groupedCodeAndTest(), [GROUP_REQUIRES('retry-with-test', '/runs/0/results/0')], undefined);
+    await assertBlockedEverywhere(world, groupedCodeAndTest(), [GROUP_REQUIRES('retry-with-test', '/runs/0/results/0')], null);
     await assertBlockedEverywhere(makeWorld(), groupedCodeAndTest(), [GROUP_REQUIRES('retry-with-test', '/runs/0/results/0')], { suggestionPullRequests: false });
   });
 
@@ -488,7 +489,7 @@ describe('grouped additions (A32)', () => {
   });
 
   test('disabled: blocked, with no separate creation sections substituted', async () => {
-    await assertBlockedEverywhere(makeWorld(), groupedAdditions(), [GROUP_REQUIRES('docs-pair', '/runs/0/results/0')], undefined);
+    await assertBlockedEverywhere(makeWorld(), groupedAdditions(), [GROUP_REQUIRES('docs-pair', '/runs/0/results/0')], null);
   });
 });
 
@@ -535,8 +536,6 @@ describe('standalone file operations (A28)', () => {
       '',
       `- Deleted file [obsolete.txt at ${SHORT}](${blob('obsolete.txt')}): the whole file is removed`,
       '',
-      `**Source:** [obsolete.txt at ${SHORT}](${blob('obsolete.txt')})`,
-      '',
       'Obsolete.',
       '',
       attribution,
@@ -556,7 +555,7 @@ describe('standalone file operations (A28)', () => {
 
   test('disabled: the review-body presentation of the file-operation contract, with no branch or pull request', async () => {
     const world = makeWorld();
-    const outcome = await publish(world, standaloneOperations(), undefined);
+    const outcome = await publish(world, standaloneOperations(), null);
     assert.equal(status(outcome), 'published', markdown(outcome));
     assert.equal(Object.hasOwn(outcome, 'suggestions'), false);
     assert.deepEqual(writes(world), [REVIEW_PATH]);
@@ -576,7 +575,7 @@ describe('default-off behavior is unchanged', () => {
 
   test('omitted and false settings send the identical review request and read no repository or label', async () => {
     const bodies: string[] = [];
-    for (const options of [undefined, { suggestionPullRequests: false }]) {
+    for (const options of [null, { suggestionPullRequests: false }]) {
       const world = makeWorld();
       assert.equal(status(await publish(world, standaloneOperations(), options)), 'published');
       const [review] = world.host.reviews();
@@ -591,7 +590,7 @@ describe('default-off behavior is unchanged', () => {
   test('enabled but needing no suggestion pull request: the same review and a version-1 state record', async () => {
     const disabled = makeWorld();
     const enabled = makeWorld();
-    assert.equal(status(await publish(disabled, plain(), undefined)), 'published');
+    assert.equal(status(await publish(disabled, plain(), null)), 'published');
     assert.equal(status(await publish(enabled, plain())), 'published');
     const [a] = disabled.host.reviews();
     const [b] = enabled.host.reviews();
@@ -888,7 +887,7 @@ describe('durable identity and recovery (§2.9–§2.10)', () => {
     world.host.hide({ pulls: 1 });
     assert.equal(status(await publish(world, groupedCodeAndTest())), 'uncertain');
     const before = world.host.log().length;
-    await assert.rejects(publish(world, groupedCodeAndTest(), undefined), /state-mismatch|different original input/);
+    await assert.rejects(publish(world, groupedCodeAndTest(), null), /state-mismatch|different original input/);
     await assert.rejects(publish(world, groupedCodeAndTest(), { suggestionPullRequests: true, suggestionLabel: 'bug' }), /different original input/);
     await assert.rejects(publish(world, groupedCodeAndTest(), { suggestionPullRequests: true, submit: true }), /records a draft review/);
     assert.equal(world.host.log().length, before);
