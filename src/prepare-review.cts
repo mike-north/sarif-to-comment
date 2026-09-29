@@ -2455,10 +2455,19 @@ function renderProposalSection(operation: PreparedFileOperation, items: readonly
   return `**Proposed new file:** ${codeSpan(operation.path)}\n\n**File details:** ${facts.join(' · ')}${block}\n\n${rendered.join(SEPARATOR)}`;
 }
 
+/**
+ * One URL path segment for a Markdown link destination: encodeURIComponent
+ * leaves ( ) ! ' * unencoded, and an unbalanced parenthesis would end the
+ * destination early, so those are percent-encoded too (RFC 3986 permits it).
+ */
+function encodeLinkSegment(segment: string): string {
+  return encodeURIComponent(segment).replace(/[()!'*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+}
+
 /** GitHub permalink to an exact revision, path and optional line range. */
 function permalink(context: IPreparationContext, source: EvidenceSource): string {
-  const encodedPath = source.path.split('/').map(encodeURIComponent).join('/');
-  const base = `https://${GITHUB_HOST}/${encodeURIComponent(context.owner)}/${encodeURIComponent(context.repo)}/blob/${source.commit}/${encodedPath}`;
+  const encodedPath = source.path.split('/').map(encodeLinkSegment).join('/');
+  const base = `https://${GITHUB_HOST}/${encodeLinkSegment(context.owner)}/${encodeLinkSegment(context.repo)}/blob/${source.commit}/${encodedPath}`;
   if (source.startLine === undefined) return base;
   return `${base}#L${String(source.startLine)}${source.endLine !== source.startLine ? `-L${String(source.endLine)}` : ''}`;
 }

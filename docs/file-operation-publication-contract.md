@@ -40,7 +40,7 @@ The whole file is removed; this is not a proposal to empty it.
 ITEMS
 ```
 
-- `PERMALINK` is `https://github.com/OWNER/REPO/blob/REVIEWED_COMMIT/PATH`, the exact file at the reviewed commit. `SHORT` is the commit's first seven characters. No permalink is ever produced for a created path.
+- `PERMALINK` is `https://github.com/OWNER/REPO/blob/REVIEWED_COMMIT/PATH`, the exact file at the reviewed commit. Each path segment is percent-encoded, including `(`, `)`, `!`, `'` and `*`, so the link destination can never end early; `/` separators are kept. `SHORT` is the commit's first seven characters. No permalink is ever produced for a created path.
 - `ITEMS` are the findings joined by `\n\n---\n\n`, as in a shared suggestion comment. Each item is the ordinary rendered finding (message, location message, status and attribution). It is preceded by its location when the finding has a region:
   - on a created file: `**Location:** line N of the proposed file` (or `lines N-M`), then a blank line. The content is already shown, so it is not quoted again.
   - on a deleted file: the existing general-feedback source quote, `**Source:** [PATH line N at SHORT](PERMALINK#LN)` followed by a fenced quote of those lines at the reviewed commit.
