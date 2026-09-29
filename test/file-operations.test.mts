@@ -47,6 +47,7 @@ const SNAPSHOT: Readonly<Record<string, SnapshotFile>> = {
   'src/app.js': 'a\nc\n',
   'assets/logo.png': { refuse: 'undecodable-source' },
   'data/huge.csv': { refuse: 'source-too-large' },
+  'odd dir/weird).(x) #1%.txt': 'odd\n',
 };
 const BASE_SNAPSHOT: Readonly<Record<string, string>> = { 'src/app.js': 'a\nb\n' };
 
@@ -424,6 +425,23 @@ describe('two findings on one proposal (R8, R1)', () => {
     const { outcome } = await prepare(oneCreation('sep.md', 'a\n\n---\n\nb\n'));
     assertReady(outcome);
     assert.match(outcome.markdown, /0 inline comment\(s\) and 1 general section\(s\)/);
+  });
+});
+
+describe('deletion permalinks for paths with URL- and Markdown-significant characters', () => {
+  // Regression: parentheses were left unencoded in the permalink, so an
+  // unbalanced `)` ended the Markdown link destination early.
+  test('a path with parentheses, a space, # and % links as one GFM link destination', async () => {
+    const uri = 'odd%20dir/weird%29.%28x%29%20%231%25.txt';
+    const { outcome } = await prepare(log(run([carrying('Remove it.', [deleteOp(0)])], [deleted(uri)])));
+    assertReady(outcome);
+    const destination = `https://github.com/acme/widgets/blob/${R}/odd%20dir/weird%29.%28x%29%20%231%25.txt`;
+    assert.equal(outcome.review.body,
+      `**Proposed file deletion:** [odd dir/weird).(x) \\#1%.txt at ${SHORT}](${destination})\n\n`
+      + `The whole file is removed; this is not a proposal to empty it.\n\n${item('Remove it.')}`);
+    // GFM: a destination not in <...> ends at the first space or unbalanced ')'.
+    const link = /\]\(([^\s()]*)\)/.exec(outcome.review.body);
+    assert.equal(link?.[1], destination);
   });
 });
 
