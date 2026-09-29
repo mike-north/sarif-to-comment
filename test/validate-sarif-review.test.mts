@@ -41,8 +41,8 @@ import * as util from 'node:util';
 import library from '../dist/index.cjs';
 import type { IPublishSarifReviewInput, PublishSarifReviewOutcome } from '../dist/publish-sarif-review.cjs';
 import { FakeGitHubRemote } from './fixtures/publication/fake-github.mts';
-import { REPOSITORY, createFakeClientFactory, setAdapterConfig } from './fixtures/public-api/fake-adapter.mts';
-import type { ContextMode, FakeClientFactory } from './fixtures/public-api/fake-adapter.mts';
+import { REPOSITORY, createFakeClientFactory, readSource, setAdapterConfig, trustedContext } from './fixtures/public-api/fake-adapter.mts';
+import type { ContextMode } from './fixtures/public-api/fake-adapter.mts';
 import { asArray, asRecord, asString, readJson } from './support/runtime-types.mts';
 
 // ---------------------------------------------------------------------------
@@ -202,11 +202,14 @@ function asAssessment(value: unknown): IAssessment {
 // World and helpers
 // ---------------------------------------------------------------------------
 
+/** The client factory injected through the private seam; the product checks every answer itself. */
+type ClientFactory = (options: { readonly token: string; readonly fetch?: unknown }) => object;
+
 interface IWorld {
   readonly root: string;
   readonly statePath: string;
   readonly remote: FakeGitHubRemote;
-  readonly createGitHubClient: FakeClientFactory;
+  readonly createGitHubClient: ClientFactory;
 }
 
 function makeWorld(context: ContextMode = 'ok'): IWorld {
@@ -456,6 +459,38 @@ describe('incomplete: the assessment could not be completed, which is never read
       assertNothingWritten(world);
     });
   }
+});
+
+describe('internal invariant failures are defects, not incomplete assessments', () => {
+  /**
+   * A world whose client answers for exactly the requested pull request and
+   * commit, but without the diff the internal client contract always
+   * carries: preparation refuses it as caller misuse (TypeError). That is a
+   * defect in the package's own client boundary, not a transient condition,
+   * so assessment must reject as publication does rather than advise a retry.
+   */
+  function contractBreakingWorld(): IWorld {
+    const world = makeWorld();
+    const context = Object.fromEntries(Object.entries(trustedContext()).filter(([key]) => key !== 'diff'));
+    // eslint-disable-next-line @typescript-eslint/require-await -- fetchContext is async by contract
+    const fetchContext = async (): Promise<{ context: unknown; readSource: typeof readSource }> => ({ context, readSource });
+    const createGitHubClient: ClientFactory = (options) => ({ ...world.createGitHubClient(options), fetchContext });
+    return { ...world, createGitHubClient };
+  }
+
+  test('a client answer that breaks the internal contract rejects, as publication does, instead of returning incomplete', async () => {
+    const assessed = contractBreakingWorld();
+    await assert.rejects(validate(assessed, assessmentInput(READY)), (err) => {
+      assert.ok(err instanceof TypeError, String(err));
+      assert.match(err.message, /context\.diff/);
+      return true;
+    });
+    assertNothingWritten(assessed);
+
+    const published = contractBreakingWorld();
+    await assert.rejects(publish(published, READY), /context\.diff/);
+    assert.deepEqual(published.remote.writeCalls(), []);
+  });
 });
 
 describe('parity with the publisher on the same input and remote', () => {
