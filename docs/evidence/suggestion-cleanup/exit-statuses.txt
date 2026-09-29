@@ -1,0 +1,10 @@
+03-sweep-dry-run: exit 0; stderr bytes 0
+04-original-36-dry-run: exit 0; stderr bytes 0
+05-original-5-merged-dry-run: exit 0; stderr bytes 0
+06-original-10-closed-dry-run: exit 0; stderr bytes 0
+07-original-9999-missing-dry-run: exit 3; stderr bytes 0
+09-sweep-dry-run-after-close: exit 0; stderr bytes 0
+10-sweep-cleanup: exit 0; stderr bytes 0
+13-sweep-rerun: exit 0; stderr bytes 0
+14-original-37-rerun: exit 0; stderr bytes 0
+15-original-36: exit 0; stderr bytes 0

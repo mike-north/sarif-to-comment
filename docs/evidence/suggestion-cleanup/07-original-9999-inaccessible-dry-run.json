@@ -1,0 +1,14 @@
+{
+  "command": "close-suggestion-prs",
+  "status": "incomplete",
+  "dryRun": true,
+  "originals": [
+    {
+      "number": 9999,
+      "state": "unverified",
+      "reason": "GitHub answered the pull request read with HTTP 404: Not Found"
+    }
+  ],
+  "suggestions": [],
+  "message": "## Suggestion pull request cleanup incomplete\n\nChecked the pull requests that reference #9999 in mike-north/doc-linter.\n\nOriginal pull requests:\n\n- #9999: could not be verified (GitHub answered the pull request read with HTTP 404: Not Found)\n\nNo suggestion pull requests were found.\n\nThis was a dry run: nothing was closed.\n\nSome results could not be established. Running the cleanup again is safe: it closes only suggestion pull requests that are still open and eligible.\n\nClosing never deletes a branch: each proposal branch is left in place."
+}

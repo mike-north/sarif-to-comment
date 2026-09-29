@@ -1,0 +1,21 @@
+{
+  "command": "close-suggestion-prs",
+  "status": "complete",
+  "dryRun": true,
+  "originals": [
+    {
+      "number": 5,
+      "state": "merged"
+    }
+  ],
+  "suggestions": [
+    {
+      "number": 6,
+      "url": "https://github.com/mike-north/doc-linter/pull/6",
+      "original": null,
+      "result": "not-ours",
+      "reason": "it has the label but no suggestion marker"
+    }
+  ],
+  "message": "## Suggestion pull request cleanup: dry run\n\nChecked the pull requests that reference #5 in mike-north/doc-linter.\n\nOriginal pull requests:\n\n- #5: merged\n\nSuggestion pull requests:\n\n- #6: skipped, not one of this tool's suggestion pull requests: it has the label but no suggestion marker\n\nThis was a dry run: nothing was closed.\n\nClosing never deletes a branch: each proposal branch is left in place."
+}

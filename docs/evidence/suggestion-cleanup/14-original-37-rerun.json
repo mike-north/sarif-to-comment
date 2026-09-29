@@ -1,0 +1,20 @@
+{
+  "command": "close-suggestion-prs",
+  "status": "complete",
+  "dryRun": false,
+  "originals": [
+    {
+      "number": 37,
+      "state": "closed"
+    }
+  ],
+  "suggestions": [
+    {
+      "number": 40,
+      "url": "https://github.com/mike-north/doc-linter/pull/40",
+      "original": 37,
+      "result": "already-closed"
+    }
+  ],
+  "message": "## Suggestion pull request cleanup complete\n\nChecked the pull requests that reference #37 in mike-north/doc-linter.\n\nOriginal pull requests:\n\n- #37: closed without merging\n\nSuggestion pull requests:\n\n- #40 (for #37): already closed\n\nClosing never deletes a branch: each proposal branch is left in place."
+}
