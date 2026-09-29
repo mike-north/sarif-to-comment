@@ -369,6 +369,8 @@ For each replacement X on path p, each eligible finding F on p is handled as fol
 
 **Publisher consequence.** Inspection shows every proposal, and publication blocks the whole review with `file-operation-unsupported`. Nothing is dropped. The receipt warns about this. **[F]**
 
+*Later:* publication now presents each creation and deletion in the review body, and the receipt no longer warns; see the [file-operation publication contract](file-operation-publication-contract.md).
+
 ### 4.8 Neutral results
 
 Unexplained changes are appended as a new run for each invocation, and only when needed:
