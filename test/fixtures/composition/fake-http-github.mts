@@ -22,6 +22,12 @@
  *                                                  submitted: with REST anchors
  *   POST /graphql                                  reviewThreads with the
  *                                                  original anchors
+ * and the branches, pull requests and labels of companion suggestion pull
+ * requests (fake-http-companion.mts). The pull request reports its head
+ * branch (`pull.headRef`, default `feature`), base branch and repositories;
+ * the repository reports its default branch (default `main`), the account's
+ * push permission (`push`, default true) and its labels (`labels`, default
+ * `suggestion`).
  * Like GitHub, it refuses a second pending review by one author on one pull
  * request with 422 (docs/native-suggestion-fidelity-experiment.md), and
  * refuses a submitted create the same way while a pending review exists.
@@ -52,6 +58,7 @@
  *   failTreeReads?: boolean          answer 502 to every Git tree read (an
  *                                    operational failure of any source read
  *                                    or existence check)
+ *   companion?: see fake-http-companion.mts
  *
  * Every document the host reads back (its repository, config, reviews, log
  * and the create-review request body) is checked against the shape it was
@@ -87,6 +94,15 @@ import {
   readJson,
 } from '../../support/runtime-types.mts';
 import type { Guard, UnknownRecord } from '../../support/runtime-types.mts';
+import {
+  EMPTY_COMPANION_STATE,
+  companionRoute,
+  fileOnBranch,
+  filesOnBranch,
+  isCompanionConfig,
+  isCompanionState,
+} from './fake-http-companion.mts';
+import type { ICompanionConfig, ICompanionHost, ICompanionRepository, ICompanionState, IStoredPull } from './fake-http-companion.mts';
 
 /** A pull request by owner, repository and number. */
 export interface IHttpDestination {
@@ -118,8 +134,23 @@ export interface IHttpRepository {
    */
   readonly rawFiles?: Readonly<Record<string, Readonly<Record<string, IHttpRawFile>>>> | undefined;
   readonly pullFiles: readonly IHttpPullFile[];
+  /** The pull request's branches and repositories (defaults: head `feature`, base `main`, same repository). */
+  readonly pull?: IHttpPullBranches | undefined;
+  /** The repository's default branch (default `main`). */
+  readonly defaultBranch?: string | undefined;
+  /** Whether the authenticated account may push (default true). */
+  readonly push?: boolean | undefined;
+  /** The repository's labels (default: `suggestion`). */
+  readonly labels?: readonly string[] | undefined;
   /** Hand-authored expectations for tests (repository.json only); the host does not read them. */
   readonly expected?: unknown;
+}
+
+/** The pull request's branches; `headRepo` null models a deleted fork. */
+export interface IHttpPullBranches {
+  readonly headRef?: string | undefined;
+  readonly baseRef?: string | undefined;
+  readonly headRepo?: string | null | undefined;
 }
 
 /** A file given as exact bytes. */
@@ -135,6 +166,7 @@ export interface IHttpHostConfig {
   readonly onlyCredential?: string | undefined;
   readonly failBlobReads?: boolean | undefined;
   readonly failTreeReads?: boolean | undefined;
+  readonly companion?: ICompanionConfig | undefined;
 }
 
 /** One inline comment of a create-review request body (GitHub's wire format). */
@@ -203,6 +235,10 @@ const isHttpRepository: Guard<IHttpRepository> = isShape({
   pullFiles: isArrayOf(
     isShape({ filename: isString, status: isString, additions: isNumber, deletions: isNumber, patch: isArrayOf(isString) }),
   ),
+  pull: isOptional(isShape({ headRef: isOptional(isString), baseRef: isOptional(isString), headRepo: isOptional(isEither(isString, isNull)) })),
+  defaultBranch: isOptional(isString),
+  push: isOptional(isBoolean),
+  labels: isOptional(isArrayOf(isString)),
   expected: isUnknown,
 });
 
@@ -212,6 +248,7 @@ const isHostConfig: Guard<IHttpHostConfig> = isShape({
   onlyCredential: isOptional(isString),
   failBlobReads: isOptional(isBoolean),
   failTreeReads: isOptional(isBoolean),
+  companion: isOptional(isCompanionConfig),
 });
 
 const isWireReviewRequest: Guard<IWireReviewRequest> = isShape({
@@ -325,6 +362,7 @@ export class FakeHttpGitHub {
     host.write('config.json', { create: 'ok', shiftThreadLine: null, ...config });
     host.write('reviews.json', []);
     host.write('log.json', []);
+    host.write('companion.json', EMPTY_COMPANION_STATE);
     return host;
   }
 
@@ -413,7 +451,15 @@ export class FakeHttpGitHub {
 
     if (method === 'GET' && p === '/user') return json(USER);
     if (method === 'GET' && p === pull) {
-      return json({ number: pullNumber, head: { sha: head }, base: { sha: base }, changed_files: repository.pullFiles.length });
+      const branches = repository.pull ?? {};
+      const fullName = `${owner}/${repo}`;
+      const headRepo = branches.headRepo === undefined ? fullName : branches.headRepo;
+      return json({
+        number: pullNumber,
+        head: { sha: head, ref: branches.headRef ?? 'feature', repo: headRepo === null ? null : { full_name: headRepo } },
+        base: { sha: base, ref: branches.baseRef ?? 'main', repo: { full_name: fullName } },
+        changed_files: repository.pullFiles.length,
+      });
     }
     if (method === 'GET' && p === `${pull}/files`) {
       return json(repository.pullFiles.map((f) => ({ ...f, patch: f.patch.join('') })));
@@ -422,18 +468,23 @@ export class FakeHttpGitHub {
     if (method === 'GET' && (m = new RegExp(`^${repoPath}/git/commits/([0-9a-f]{40})$`).exec(p))) {
       const sha = captured(m);
       const tree = objects.commits[sha];
-      return tree ? json({ sha, tree: { sha: tree } }) : json({ message: 'Not Found' }, 404);
+      if (tree) return json({ sha, tree: { sha: tree } });
+      const created = this.companion().commits[sha];
+      return created
+        ? json({ sha, tree: { sha: created.tree }, parents: created.parents.map((s) => ({ sha: s })), message: created.message })
+        : json({ message: 'Not Found' }, 404);
     }
     if (method === 'GET' && (m = new RegExp(`^${repoPath}/git/trees/([0-9a-f]{40})$`).exec(p))) {
       if (this.config().failTreeReads === true) return json({ message: 'Server Error' }, 502);
       const sha = captured(m);
-      const tree = objects.trees[sha];
+      const tree = objects.trees[sha] ?? this.companion().trees[sha];
       return tree ? json({ sha, truncated: false, tree }) : json({ message: 'Not Found' }, 404);
     }
     if (method === 'GET' && (m = new RegExp(`^${repoPath}/git/blobs/([0-9a-f]{40})$`).exec(p))) {
       if (this.config().failBlobReads === true) return json({ message: 'Server Error' }, 502);
       const sha = captured(m);
-      const bytes = objects.blobs[sha];
+      const createdBlob = this.companion().blobs[sha];
+      const bytes = objects.blobs[sha] ?? (createdBlob === undefined ? undefined : Buffer.from(createdBlob, 'base64'));
       if (!bytes) return json({ message: 'Not Found' }, 404);
       return json({ sha, encoding: 'base64', content: bytes.toString('base64'), size: bytes.length });
     }
@@ -478,7 +529,87 @@ export class FakeHttpGitHub {
       );
     }
     if (method === 'POST' && p === '/graphql') return this.reviewThreads(parseJson(bodyText(init)), json);
+    const companion = companionRoute(this.companionHost(), method, u, () => bodyText(init), json);
+    if (companion) return companion;
     return json({ message: `fake host: no route for ${method} ${p}` }, 404);
+  }
+
+  /** Everything the companion routes have stored (companion.json). */
+  companion(): ICompanionState {
+    return expectType(this.read('companion.json'), isCompanionState, `the companion state in ${this.dir}`);
+  }
+
+  /** Created suggestion pull requests, in creation order. */
+  pulls(): readonly IStoredPull[] {
+    return this.companion().pulls;
+  }
+
+  /** The repository facts companion routes answer with. */
+  companionRepository(): ICompanionRepository {
+    const { repository, objects } = this.served();
+    return {
+      owner: repository.destination.owner,
+      repo: repository.destination.repo,
+      defaultBranch: repository.defaultBranch ?? 'main',
+      headRef: repository.pull?.headRef ?? 'feature',
+      push: repository.push ?? true,
+      labels: repository.labels ?? ['suggestion'],
+      snapshotCommits: objects.commits,
+      snapshotTrees: objects.trees,
+      snapshotBlobs: objects.blobs,
+    };
+  }
+
+  /** The exact bytes of a file on a branch, or null when the branch's commit has no such file. */
+  fileOnBranch(branch: string, filePath: string): Buffer | null {
+    return fileOnBranch(this.companionRepository(), this.companion(), branch, filePath);
+  }
+
+  /** Every file on a branch: path -> mode. */
+  filesOnBranch(branch: string): Map<string, string> {
+    return filesOnBranch(this.companionRepository(), this.companion(), branch);
+  }
+
+  /** A person moves (sha) or deletes (null) a branch. */
+  setRef(branch: string, sha: string | null): void {
+    const state = this.companion();
+    const refs = Object.fromEntries(Object.entries(state.refs).filter(([name]) => name !== branch));
+    this.write('companion.json', { ...state, refs: sha === null ? refs : { ...refs, [branch]: sha } });
+  }
+
+  /** A person edits, closes or merges a suggestion pull request. */
+  editPull(number: number, change: Partial<Pick<IStoredPull, 'title' | 'body' | 'state' | 'merged'>>): void {
+    const state = this.companion();
+    if (!state.pulls.some((pr) => pr.number === number)) throw new Error(`fake host: no pull request ${String(number)}`);
+    this.write('companion.json', { ...state, pulls: state.pulls.map((pr) => (pr.number === number ? { ...pr, ...change } : pr)) });
+  }
+
+  /** A person removes a label from a suggestion pull request. */
+  removeLabel(number: number, name: string): void {
+    const state = this.companion();
+    this.write('companion.json', {
+      ...state,
+      pulls: state.pulls.map((pr) => (pr.number === number ? { ...pr, labels: pr.labels.filter((l) => l !== name) } : pr)),
+    });
+  }
+
+  /** Delayed visibility: the next N reads of branches, pull request listings or labels see nothing new. */
+  hide(counts: Partial<ICompanionState['hidden']>): void {
+    const state = this.companion();
+    this.write('companion.json', { ...state, hidden: { ...state.hidden, ...counts } });
+  }
+
+  /** The host facade the companion routes use. */
+  private companionHost(): ICompanionHost {
+    return {
+      user: USER,
+      config: () => this.config().companion ?? {},
+      state: () => this.companion(),
+      save: (state) => {
+        this.write('companion.json', state);
+      },
+      repository: () => this.companionRepository(),
+    };
   }
 
   createReview(request: IWireReviewRequest, json: (body: unknown, status?: number) => Response): Response {
