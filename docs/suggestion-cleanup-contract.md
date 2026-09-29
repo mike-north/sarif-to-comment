@@ -47,6 +47,8 @@ The command's name is its intent, as with `publish` and `validate`: it closes el
 
 **All discovery and verification completes before any close.** Closing a pull request removes it from the `state=open` listing, which would shift later pages; reading everything first also means an operational failure during discovery leaves nothing half done.
 
+**The window this leaves.** An original's state is read once, during discovery, and is not read again before its suggestions are closed. If someone reopens an original while a long sweep is still reading, its suggestions can still be closed on the strength of the earlier read (and a suggestion is re-read during verification, not immediately before its close). This is accepted rather than narrowed with a second read, which would only shrink the window: closing is reversible (a closed pull request can be reopened on GitHub, and its proposal branch, commits, body and label are all left untouched), so a suggestion closed this way is restored by reopening it.
+
 ### 2.4 Discovery
 
 **Sweep (the default).** Every page of `GET /repos/{owner}/{repo}/issues?labels={label}&state=open`, following validated `Link: rel="next"` pagination (at most 100 pages of 100). Entries without a `pull_request` object are issues and are ignored. A pull request listed twice (pages can shift while being read) counts once. The issues listing is used because it filters by label on the host; the search API is not used (index lag, a 1,000-result cap and a separate rate limit).
