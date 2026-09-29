@@ -18,4 +18,4 @@
 - `src/publication.cts`
 - `test/publication-state.types.mts`
 - `test/publication.test.mts`
-- <working-logs>/typescript/wt/integration/scripts/check-types.mts
+- `<working-logs>/typescript/wt/integration/scripts/check-types.mts`
