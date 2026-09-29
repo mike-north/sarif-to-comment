@@ -8,7 +8,7 @@ Author, inspect and extend SARIF 2.1.0, and publish it as one GitHub draft pull 
 
 ## Remarks
 
-Six operations work on ordinary in-memory SARIF values:
+Seven operations work on ordinary in-memory SARIF values:
 
 - [createSarifDocument()](./sarif-to-comment.createsarifdocument.md) and [addSarifComment()](./sarif-to-comment.addsarifcomment.md) optionally author  SARIF for your own findings, on lines or line ranges, and  [removeSarifComment()](./sarif-to-comment.removesarifcomment.md) removes a finding selected through inspection,  so a finding can be corrected by removing it and adding it again.
 
@@ -16,11 +16,13 @@ Six operations work on ordinary in-memory SARIF values:
 
 - [addStagedChangesToSarif()](./sarif-to-comment.addstagedchangestosarif.md) adds the changes staged in a Git index as  SARIF fixes.
 
+- [validateSarifReview()](./sarif-to-comment.validatesarifreview.md) optionally checks, without publishing, that a  complete document can be published faithfully to its pull request.
+
 - [publishSarifReview()](./sarif-to-comment.publishsarifreview.md) publishes a ready document as one draft review.
 
 Authoring is optional: SARIF from any producer can be inspected, extended and published directly, and no operation depends on how a document was made. There is no builder, session or private format; each operation that changes a document returns a new one and leaves its input untouched.
 
-The `sarif-to-comment` command-line interface provides the same operations for files (`init`<!-- -->, `add-comment`<!-- -->, `remove-comment`<!-- -->, `inspect`<!-- -->,`add-staged-changes`<!-- -->, `publish`<!-- -->). These declarations describe the package's CommonJS runtime entry; they are generated from its TypeScript implementation, checked by API Extractor and compiled against CommonJS and ES module consumers by the package tests.
+The `sarif-to-comment` command-line interface provides the same operations for files (`init`<!-- -->, `add-comment`<!-- -->, `remove-comment`<!-- -->, `inspect`<!-- -->,`add-staged-changes`<!-- -->, `validate`<!-- -->, `publish`<!-- -->). These declarations describe the package's CommonJS runtime entry; they are generated from its TypeScript implementation, checked by API Extractor and compiled against CommonJS and ES module consumers by the package tests.
 
 ## Functions
 
@@ -101,6 +103,17 @@ Removes one finding, with the fixes attached to it, from a copy of a SARIF docum
 
 
 </td></tr>
+<tr><td>
+
+[validateSarifReview(input)](./sarif-to-comment.validatesarifreview.md)
+
+
+</td><td>
+
+Checks whether a complete SARIF document can be published faithfully as one draft review of a pull request, without publishing anything.
+
+
+</td></tr>
 </tbody></table>
 
 ## Interfaces
@@ -162,6 +175,17 @@ Input to [addStagedChangesToSarif()](./sarif-to-comment.addstagedchangestosarif.
 </td></tr>
 <tr><td>
 
+[IBlockedAssessment](./sarif-to-comment.iblockedassessment.md)
+
+
+</td><td>
+
+Publication of this document would be blocked. Nothing was published and nothing was written.
+
+
+</td></tr>
+<tr><td>
+
 [IBlockedOutcome](./sarif-to-comment.iblockedoutcome.md)
 
 
@@ -201,6 +225,17 @@ A staged change cannot be represented faithfully (for example a mode change, a b
 </td><td>
 
 A GitHub repository.
+
+
+</td></tr>
+<tr><td>
+
+[IIncompleteAssessment](./sarif-to-comment.iincompleteassessment.md)
+
+
+</td><td>
+
+The assessment could not be completed (for example a refused credential, a network failure, a failed source read or a pull request that does not match the request). This is no verdict on the document; publication would refuse at the same point without writing. Nothing was published and nothing was written.
 
 
 </td></tr>
@@ -437,6 +472,17 @@ The pull request that receives the review.
 </td></tr>
 <tr><td>
 
+[IReadyAssessment](./sarif-to-comment.ireadyassessment.md)
+
+
+</td><td>
+
+Publication of this document would proceed to its single create-review request. Nothing was published and nothing was written.
+
+
+</td></tr>
+<tr><td>
+
 [IRejectedOutcome](./sarif-to-comment.irejectedoutcome.md)
 
 
@@ -578,6 +624,17 @@ Delivery could not be confirmed. Retry later with the same state path; it only c
 
 
 </td></tr>
+<tr><td>
+
+[IValidateSarifReviewInput](./sarif-to-comment.ivalidatesarifreviewinput.md)
+
+
+</td><td>
+
+Input to [validateSarifReview()](./sarif-to-comment.validatesarifreview.md)<!-- -->: the input of `publishSarifReview` without a state path. Unknown fields, including `statePath`<!-- -->, are refused.
+
+
+</td></tr>
 </tbody></table>
 
 ## Type Aliases
@@ -645,6 +702,17 @@ Every outcome of [publishSarifReview()](./sarif-to-comment.publishsarifreview.md
 </td><td>
 
 Every outcome of [removeSarifComment()](./sarif-to-comment.removesarifcomment.md)<!-- -->, discriminated by `status`<!-- -->.
+
+
+</td></tr>
+<tr><td>
+
+[ValidateSarifReviewOutcome](./sarif-to-comment.validatesarifreviewoutcome.md)
+
+
+</td><td>
+
+Every outcome of [validateSarifReview()](./sarif-to-comment.validatesarifreview.md)<!-- -->, discriminated by `status`<!-- -->.
 
 
 </td></tr>

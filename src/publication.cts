@@ -661,6 +661,11 @@ function validateIdentity(input: unknown): asserts input is IPublicationIdentity
   );
 }
 
+/**
+ * Refuses a prepared review publication could not send (TypeError). Also run
+ * by readiness assessment, so the shape publication checks before claiming an
+ * identity is checked there too.
+ */
 function validatePreparedReview(prepared: unknown): asserts prepared is IPreparedReview {
   requireInput(isPlainObject(prepared), 'preparedReview must be an object');
   requireInput(typeof prepared['body'] === 'string', 'preparedReview.body must be a string');
@@ -1337,7 +1342,13 @@ async function settle(
 // ---------------------------------------------------------------------------
 
 /** The authenticated user's stable numeric id (login is mutable and unused). */
-async function authenticatedUserId(transport: IPublicationTransport): Promise<number> {
+/**
+ * The authenticated account's numeric id, which the state record binds and
+ * delivery evidence compares. Also run by readiness assessment, so an account
+ * publication would refuse (no numeric id: not user/PAT authentication) is
+ * never assessed as ready.
+ */
+async function authenticatedUserId(transport: Pick<IPublicationTransport, 'getAuthenticatedUser'>): Promise<number> {
   const user = await transport.getAuthenticatedUser();
   if (!isPlainObject(user) || !isPositiveInteger(user['id'])) {
     throw new TypeError('The transport did not report a numeric authenticated user id.');
@@ -1468,6 +1479,9 @@ async function recoverPublication(
 }
 
 export { publishPreparedReview, recoverPublication, PublicationStateError };
+// The pre-send checks that readiness assessment runs unchanged
+// (src/validate-sarif-review.cts); not part of the package's public API.
+export { authenticatedUserId, validatePreparedReview };
 // For compile-time checks of state parsing (test/publication-state.types.mts);
 // not part of the package's public API.
 export type { ParsedStateRecord };

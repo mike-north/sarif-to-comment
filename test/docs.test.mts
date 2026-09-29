@@ -212,6 +212,46 @@ describe('verified getting-started examples run against the installed package', 
   });
 });
 
+describe('the verified readiness example runs against the installed package', () => {
+  const skip = packProject().error || false;
+
+  test('the validate example reports ready without writing, then blocked for a document publication would refuse', { skip, timeout: 300_000 }, () => {
+    const { consumer } = installIntoConsumer();
+    const { language, code } = example(GUIDE, 'validate');
+    assert.equal(language, 'sh');
+    const script = path.join(consumer, 'validate-review.sh');
+    fs.writeFileSync(script, code);
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'docs-validate-'));
+    const token = 'ghp_EXAMPLE_validate_token_0123456789';
+    FakeHttpGitHub.create(path.join(root, 'host'));
+    const host = new FakeHttpGitHub(path.join(root, 'host'), token);
+    const { owner, repo, pullNumber } = REPOSITORY.destination;
+    const env = {
+      PATH: process.env['PATH'],
+      HOME: root,
+      GH_TOKEN: token,
+      REVIEW_REPOSITORY: `${owner}/${repo}`,
+      REVIEW_PULL: String(pullNumber),
+      REVIEW_COMMIT: REPOSITORY.commits.head,
+      FAKE_HTTP_GITHUB_DIR: host.dir,
+      NODE_OPTIONS: `--require=${PRELOAD}`,
+    };
+    fs.copyFileSync(path.join(ROOT, 'test', 'fixtures', 'composition', 'review.sarif.json'), path.join(consumer, 'results.sarif'));
+
+    const ready = spawnSync('bash', [script], { cwd: consumer, env, encoding: 'utf8', timeout: 120_000 });
+    assert.equal(ready.status, 0, ready.stdout + ready.stderr);
+    assert.match(ready.stdout, /Ready: publish would create the review\./);
+    assert.deepEqual([...new Set(host.log().map((r) => r.method))], ['GET'], 'the example only reads GitHub');
+    assert.deepEqual(host.reviews(), []);
+
+    fs.writeFileSync(path.join(consumer, 'results.sarif'), JSON.stringify({ version: '2.1.0', runs: [{}] }));
+    const blocked = spawnSync('bash', [script], { cwd: consumer, env, encoding: 'utf8', timeout: 120_000 });
+    assert.equal(blocked.status, 2, blocked.stdout + blocked.stderr);
+    assert.match(blocked.stdout, /Blocked: fix the SARIF file/);
+    assert.deepEqual(host.reviews(), [], 'nothing was published');
+  });
+});
+
 describe('verified authoring examples run against the installed package in a real Git repository', () => {
   const skip = packProject().error || false;
 

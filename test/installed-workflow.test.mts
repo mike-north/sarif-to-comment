@@ -157,6 +157,32 @@ function assertStagedFidelity(sarifText: string): void {
   assert.equal(applyReplacements(ORACLE.reviewed, edits), ORACLE.staged);
 }
 
+/**
+ * The upstream SARIF made ready for direct publication: each finding carries
+ * its intended replacement of its own lines, written by hand from the oracle.
+ */
+function readyUpstreamSarif(): unknown {
+  const ready = expectType(
+    structuredClone(UPSTREAM),
+    isShape({ runs: isArrayOf(isShape({ results: isArrayOf(isRecord) })) }),
+    'upstream SARIF with results',
+  );
+  const [a, b] = present(ready.runs[0], 'the upstream run').results;
+  const fix = (line: number, endLine: number, text: string): unknown[] => [
+    {
+      artifactChanges: [
+        {
+          artifactLocation: { uri: ORACLE.path },
+          replacements: [{ deletedRegion: { startLine: line, startColumn: 1, endLine: endLine + 1, endColumn: 1 }, insertedContent: { text } }],
+        },
+      ],
+    },
+  ];
+  present(a, 'upstream finding A')['fixes'] = fix(FINDING_A.line, FINDING_A.endLine, `${FINDING_A.replacementLines.join('\n')}\n`);
+  present(b, 'upstream finding B')['fixes'] = fix(FINDING_B.line, FINDING_B.endLine, `${FINDING_B.replacementLines.join('\n')}\n`);
+  return ready;
+}
+
 describe('the installed package runs the complete workflow', () => {
   const skip = packProject().error || false;
 
@@ -542,27 +568,8 @@ describe('the installed package runs the complete workflow', () => {
   test('ready upstream SARIF publishes directly, with no authoring or staged step', { skip, timeout: 300_000 }, () => {
     const { consumer, bin } = installIntoConsumer();
     const w = world('installed-direct');
-    const ready = expectType(
-      structuredClone(UPSTREAM),
-      isShape({ runs: isArrayOf(isShape({ results: isArrayOf(isRecord) })) }),
-      'upstream SARIF with results',
-    );
-    const [a, b] = present(ready.runs[0], 'the upstream run').results;
-    const fix = (line: number, endLine: number, text: string): unknown[] => [
-      {
-        artifactChanges: [
-          {
-            artifactLocation: { uri: ORACLE.path },
-            replacements: [{ deletedRegion: { startLine: line, startColumn: 1, endLine: endLine + 1, endColumn: 1 }, insertedContent: { text } }],
-          },
-        ],
-      },
-    ];
-    // Written by hand from the oracle: each finding's intended replacement of its own lines.
-    present(a, 'upstream finding A')['fixes'] = fix(FINDING_A.line, FINDING_A.endLine, `${FINDING_A.replacementLines.join('\n')}\n`);
-    present(b, 'upstream finding B')['fixes'] = fix(FINDING_B.line, FINDING_B.endLine, `${FINDING_B.replacementLines.join('\n')}\n`);
     const file = path.join(w.root, 'ready.sarif');
-    fs.writeFileSync(file, JSON.stringify(ready));
+    fs.writeFileSync(file, JSON.stringify(readyUpstreamSarif()));
     const result = spawnSync(
       bin,
       ['--sarif', file, '--repo', w.repoFlag, '--pull', w.pull, '--commit', w.head, '--state', path.join(w.root, 'state.json')],
@@ -570,6 +577,67 @@ describe('the installed package runs the complete workflow', () => {
     );
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.match(result.stdout, /pullrequestreview-\d+/, 'the flag-only form prints the library Markdown');
+    assertOracleReview(w.host, w);
+  });
+  test('validate before publishing: the installed CLI and library assess without writing, and publish still checks', { skip, timeout: 300_000 }, () => {
+    const { consumer, bin } = installIntoConsumer();
+    const w = world('installed-validate');
+    const ready = path.join(w.root, 'ready.sarif');
+    fs.writeFileSync(ready, JSON.stringify(readyUpstreamSarif()));
+    const held = path.join(w.root, 'held.sarif');
+    const holding = asRecord(readyUpstreamSarif(), 'the ready SARIF');
+    const firstRun = asRecord(asArray(holding['runs'], 'runs')[0], 'the first run');
+    firstRun['properties'] = { sarifToComment: { approval: 'awaiting-approval' } };
+    fs.writeFileSync(held, JSON.stringify(holding));
+    const destination = ['--repo', w.repoFlag, '--pull', w.pull, '--commit', w.head];
+    const filesBefore = fs.readdirSync(w.root).sort();
+    const cli = (args: readonly string[]): SpawnSyncReturns<string> => {
+      const result = spawnSync(bin, args, { cwd: consumer, env: w.env, encoding: 'utf8', timeout: 120_000 });
+      for (const text of [result.stdout, result.stderr]) assert.ok(!text.includes(TOKEN), 'the token never appears');
+      return result;
+    };
+    const assessment = (args: readonly string[], exit: number): unknown => {
+      const result = cli(['validate', ...args, ...destination, '--format', 'json']);
+      assert.equal(result.status, exit, result.stdout + result.stderr);
+      assert.equal(result.stderr, '');
+      return parseJson(result.stdout);
+    };
+
+    const readyDoc = expectType(assessment(['--sarif', ready], 0), isOutcome, 'the ready assessment');
+    assert.equal(readyDoc.status, 'ready', readyDoc.message);
+    const blockedDoc = expectType(assessment(['--sarif', held], 2), isShape({ status: isUnknown, problems: isArrayOf(isRecord) }), 'the blocked assessment');
+    assert.equal(blockedDoc.status, 'blocked');
+    assert.ok(blockedDoc.problems.length > 0, 'the hold is a reason');
+
+    const js = String.raw;
+    const script = js`
+      import { validateSarifReview } from 'sarif-to-comment';
+      import { readFileSync } from 'node:fs';
+      const [owner, repo] = process.env.REVIEW_REPOSITORY.split('/');
+      const outcome = await validateSarifReview({
+        sarif: JSON.parse(readFileSync(process.env.REVIEW_SARIF, 'utf8')),
+        destination: { owner, repo, pullNumber: Number(process.env.REVIEW_PULL) },
+        reviewedCommit: process.env.REVIEW_COMMIT,
+        token: process.env.GH_TOKEN,
+      });
+      process.stdout.write(JSON.stringify(outcome));
+    `;
+    const file = path.join(consumer, 'validate-library.mjs');
+    fs.writeFileSync(file, script);
+    const env = { ...w.env, REVIEW_REPOSITORY: w.repoFlag, REVIEW_COMMIT: w.head, REVIEW_PULL: w.pull, REVIEW_SARIF: ready };
+    const library = spawnSync(process.execPath, [file], { cwd: consumer, env, encoding: 'utf8', timeout: 120_000 });
+    assert.equal(library.status, 0, library.stdout + library.stderr);
+    const libraryOutcome = expectType(parseJson(library.stdout), isOutcome, 'the library assessment');
+    assert.equal(libraryOutcome.status, 'ready', libraryOutcome.markdown);
+    assert.equal(libraryOutcome.markdown, readyDoc.message, 'the CLI carries the library Markdown');
+
+    assert.deepEqual([...new Set(w.host.log().map((r) => r.method))], ['GET'], 'assessment issued only GET requests');
+    assert.deepEqual(w.host.reviews(), [], 'no review was created');
+    assert.deepEqual(fs.readdirSync(w.root).sort(), filesBefore, 'no file was written beside the artifacts');
+
+    const published = cli(['publish', '--sarif', ready, ...destination, '--state', path.join(w.root, 'state.json'), '--format', 'json']);
+    assert.equal(published.status, 0, published.stdout + published.stderr);
+    assert.equal(createPosts(w.host), 1);
     assertOracleReview(w.host, w);
   });
 });

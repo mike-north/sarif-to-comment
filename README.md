@@ -12,7 +12,8 @@ The SARIF can come from any analyzer. Or you can write it yourself, with no anal
 - create a document and add findings on lines or line ranges;
 - correct a finding by removing it and adding it again;
 - add the changes you staged with Git as suggested fixes on those findings;
-- inspect the result before publishing.
+- inspect the result before publishing;
+- check that the complete document can be published to its pull request, without publishing it.
 
 Every step reads and writes ordinary SARIF and is optional. SARIF from an analyzer can be inspected, given staged changes or published directly, without any setup step.
 
@@ -103,6 +104,7 @@ GH_TOKEN=... npx sarif-to-comment \
 ```
 
 - **Optional flags:** `--source-root FILE_URI`, `--old-source-commit FULLSHA`, `--ignore-approval-hold` and `--format human|json`. Run `sarif-to-comment --help` for details; it needs no token and makes no request.
+- **Checking first:** `sarif-to-comment validate` takes the same flags without `--state` and runs the same checks without publishing; see [Checking readiness without publishing](#checking-readiness-without-publishing).
 - **Command form:** `sarif-to-comment publish` followed by the same flags does exactly the same thing. With `--format json` either form prints one JSON document (`status`, `review`, `statePath` and the Markdown `message`), with the same exit status.
 - **Same core as the library:** the CLI reads the file, calls the same `publishSarifReview`, and prints the same Markdown to stdout.
 - **File encoding:** the SARIF file must be UTF-8 JSON.
@@ -126,6 +128,8 @@ npx sarif-to-comment add-comment --sarif review.sarif --file src/parse.js --line
 npx sarif-to-comment add-staged-changes --sarif review.sarif --output review.staged.sarif \
   --worktree . --repo acme/widgets --commit c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de
 npx sarif-to-comment inspect --sarif review.staged.sarif
+GH_TOKEN=... npx sarif-to-comment validate --sarif review.staged.sarif --repo acme/widgets --pull 42 \
+  --commit c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de
 GH_TOKEN=... npx sarif-to-comment publish --sarif review.staged.sarif --repo acme/widgets --pull 42 \
   --commit c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de --state /var/lib/reviews/acme-widgets-42.json
 ```
@@ -138,7 +142,7 @@ npx sarif-to-comment remove-comment --sarif review.sarif --finding '/runs/0/resu
 npx sarif-to-comment add-comment --sarif review.sarif --file src/parse.js --line 2 --message "…"
 ```
 
-The library has the same operations for in-memory SARIF: `createSarifDocument`, `addSarifComment`, `removeSarifComment`, `inspectSarif`, `addStagedChangesToSarif` and `publishSarifReview`. Each returns a new document or a view and never changes its input.
+The library has the same operations for in-memory SARIF: `createSarifDocument`, `addSarifComment`, `removeSarifComment`, `inspectSarif`, `addStagedChangesToSarif`, `validateSarifReview` and `publishSarifReview`. Each returns a new document or a view and never changes its input.
 
 - **Line numbers** refer to the reviewed commit. For a file the reviewed commit doesn't have, they refer to its staged content.
 - **Associating changes with findings.** Only the staged index is read. A staged change becomes a fix on a finding only when the finding's lines lie within the lines the change replaces; neither is enlarged.
@@ -149,10 +153,26 @@ The library has the same operations for in-memory SARIF: `createSarifDocument`, 
 - **Files.** `init` refuses to overwrite an existing file. `add-comment` and `remove-comment` update their SARIF file in place, atomically. `add-staged-changes` writes a separate output; if that output file already exists, it's first renamed to `<UTC time>.old.<name>`, and a failed run writes no output.
 - **Output.** `inspect` shows every finding in full, with its locations and fixes, plus log-level and inline external properties verbatim. Only fix previews are shortened, visibly. It doesn't check whether the file can be published.
   - `--format json` on any command prints one JSON document for every outcome, errors included. Exit statuses are the same in both formats.
-  - Exit statuses: 0 success; 2 content refused (not valid SARIF, a stale finding selector, or a staged change that can't be represented); 1 usage or operational error. `publish` keeps the exit statuses below.
+  - Exit statuses: 0 success; 2 content refused (not valid SARIF, a stale finding selector, or a staged change that can't be represented); 1 usage or operational error. `publish` keeps the exit statuses below, and `validate` has its own (see [Checking readiness without publishing](#checking-readiness-without-publishing)).
 - **Changes that can't be represented.** Staged edits to UTF-8 text files become fixes. Publication still checks native-suggestion compatibility: empty reviewed files, or files containing only a byte-order mark, have no source line for an inline suggestion and are blocked. File creations and deletions become proposed file operations: `inspect` shows them, but `publish` doesn't support them yet and blocks the review. `add-staged-changes` fails, naming the path, for mode changes, symbolic links, submodules, binary or non-UTF-8 files, conflicts and intent-to-add entries.
 
 See the [getting-started guide](https://unpkg.com/sarif-to-comment/docs/getting-started.md#write-a-review-yourself) for complete, tested examples of both surfaces and of SARIF from an analyzer.
+
+## Checking readiness without publishing
+
+`validate` (`validateSarifReview`) is optional. It answers one question: can this complete document be published faithfully to this pull request, at this reviewed commit? It runs the publisher's own checks, in the publisher's own code: the schema, approval holds, source consistency, supported representation, placement, product limits, and the authenticated account. It then stops before publishing.
+
+- **Read-only.** It reads the pull request, its source and the authenticated user from GitHub. It never writes to GitHub, takes no state path, and writes no file.
+- **Not an approval.** A `ready` result carries nothing that `publish` accepts. `publish` repeats every check against the pull request as it is then, so a branch that moved in between is caught by `publish` itself. GitHub can also still refuse the review, for example when your account already has a pending review on the pull request, which only `publish` discovers.
+- **Input.** The same as `publishSarifReview` without `statePath`, which is refused. The CLI takes the `publish` flags without `--state`.
+
+| Library `status` | CLI exit | Meaning |
+| --- | --- | --- |
+| `ready` | 0 | Publication would proceed to its single create request. |
+| `blocked` | 2 | Publication would be blocked. `problems` lists each problem, with a JSON Pointer where it has one, and `markdown` is exactly what `publish` would say. |
+| `incomplete` | 1 | The check could not be completed, for example because of a refused credential, a network failure, a failed source read, or a pull request that does not match. This is not a verdict. |
+
+Invalid input rejects with a `TypeError` before any request, as it does for `publishSarifReview`. With `--format json`, the CLI prints `{ command, status, problems?, message }`.
 
 ## Credentials
 
@@ -231,7 +251,7 @@ If that comparison can't establish the old side, you may pass `oldSourceCommit` 
 - The durability steps (write, flush, then send) are ordered for crash safety, but that has not been tested against power loss.
 - GitHub Enterprise Server and GitHub App installation tokens are not supported.
 - There is no review maintenance, re-review or synchronisation back to SARIF.
-- A finding is corrected by removing it and adding it again, not edited in place. There's no standalone check that a document can be published; `publish` performs every check. Staged file creations and deletions can be recorded in SARIF, but can't be published yet.
+- A finding is corrected by removing it and adding it again, not edited in place. Staged file creations and deletions can be recorded in SARIF, but can't be published yet.
 - npm attaches a provenance attestation only when the source repository is public at publish time. A release published while the repository is private has no provenance attestation (see [Releasing](#releasing)).
 
 ## Development

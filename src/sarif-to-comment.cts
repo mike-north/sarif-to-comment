@@ -6,8 +6,8 @@
  *
  * main({ argv, env, stdout, stderr, stdin?, cwd? }, internals?) -> Promise<exitCode>
  *   Exported for the test wrappers; `internals` is passed through to
- *   publishSarifReview (private test seam). Running this file directly calls
- *   main with the process and sets process.exitCode.
+ *   publishSarifReview and validateSarifReview (private test seam). Running
+ *   this file directly calls main with the process and sets process.exitCode.
  *
  * `export =` keeps the module shape the executable has always had
  * (`module.exports = { main }`, no `__esModule` marker), and the CLI is

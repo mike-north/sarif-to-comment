@@ -35,7 +35,7 @@ This is a responsibility boundary, not a requirement for separate npm packages o
 
 - Comment removal and correction by removal/recreation. (Delivered after this milestone under [the finding removal contract](finding-removal-contract.md).)
 - A broader proofreading/correction loop.
-- A standalone `validate` command and library readiness-assessment function.
+- A standalone `validate` command and library readiness-assessment function. It has since been implemented after this milestone; see the [readiness assessment contract](readiness-assessment-contract.md).
 - Suggestion PRs and review maintenance.
 
 Deferring standalone validation does not remove schema/source checks required for correct authoring or extraction, weaken the existing publisher's safety checks, or permit silently wrong placement or dropped content. Happy-path-first is a product-scope decision, not permission to ignore errors.

@@ -3,10 +3,11 @@
  * review (the fifth public operation; the package entry re-exports it).
  *
  * Publication composes private cores: the GitHub client (src/github.cts),
- * whole-review preparation (src/prepare-review.cts) and durable initial
- * publication (src/publication.cts). It adds no rendering, placement or
- * delivery logic of its own; it only validates, captures, sequences and
- * explains.
+ * the review preflight shared with readiness assessment
+ * (src/review-preflight.cts: input capture, context verification and
+ * whole-review preparation) and durable initial publication
+ * (src/publication.cts). It adds no rendering, placement or delivery logic
+ * of its own; it only sequences, identifies and explains.
  *
  * ---------------------------------------------------------------------------
  * publishSarifReview(input, internals?) -> Promise<Outcome>
@@ -48,7 +49,8 @@
  * never exposes the token: an error that mentions it anywhere (message,
  * causes, extra properties) is replaced by a redacted error without cause.
  *
- * Sequence:
+ * Sequence (steps 1 and 4 up to preparation are the review preflight,
+ * src/review-preflight.cts, which readiness assessment runs unchanged):
  *   1. Validate input and synchronously capture a deep JSON copy of `sarif`
  *      from own data properties only — caller getters never run — refusing
  *      cycles and non-JSON values rather than dropping or coercing them, so
@@ -78,14 +80,22 @@
 
 import * as crypto from 'node:crypto';
 import * as path from 'node:path';
-import * as util from 'node:util';
 
 import { createGitHubClient as defaultCreateGitHubClient } from './github.cjs';
-import type { ICreateGitHubClientOptions, IFetchContextRequest } from './github.cjs';
-import { prepareReview } from './prepare-review.cjs';
+import type { ICreateGitHubClientOptions } from './github.cjs';
 import type { IReadyOutcome } from './prepare-review.cjs';
 import { publishPreparedReview, recoverPublication } from './publication.cjs';
-import type { IJsonObject, IPlainObject, JsonValue } from './sarif-common.cjs';
+import {
+  blockedReviewMarkdown,
+  captureReviewInput,
+  destinationLabel,
+  prepareForDestination,
+  redact,
+  templateText,
+  withoutCredential,
+} from './review-preflight.cjs';
+import type { ICapturedReview, IContextClient, IReviewInputSpec } from './review-preflight.cjs';
+import type { IJsonObject, JsonValue } from './sarif-common.cjs';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -264,18 +274,11 @@ export type PublishSarifReviewOutcome = IPublishedOutcome | IBlockedOutcome | IU
 // Private seam and internal types
 
 /**
- * What the publication sequence needs from a GitHub client besides the
- * publication transport (which src/publication.cts validates itself): the
- * review context and its source reader. Both answers are checked where they
- * are used (verifyContext here, the caller boundary of prepareReview), so
- * they are `unknown` until then.
+ * Creates the GitHub client for one publication; src/github.cts by default.
+ * Beyond the review context the preflight uses, the client is the
+ * publication transport, which src/publication.cts validates itself.
  */
-interface IPublishingClient {
-  readonly fetchContext: (request: IFetchContextRequest) => Promise<{ readonly context: unknown; readonly readSource: unknown }>;
-}
-
-/** Creates the GitHub client for one publication; src/github.cts by default. */
-type CreatePublishingClient = (options: ICreateGitHubClientOptions) => IPublishingClient;
+type CreatePublishingClient = (options: ICreateGitHubClientOptions) => IContextClient;
 
 /**
  * The private test seam of {@link publishSarifReview}: tests (including the
@@ -288,15 +291,8 @@ export interface IPublishSarifReviewInternals {
 }
 
 /** Everything the operation uses, captured and validated before the first await. */
-interface ICapturedInput {
-  readonly sarif: IJsonObject;
-  readonly destination: IPullRequestDestination;
-  readonly reviewedCommit: string;
-  readonly oldSourceCommit: string | undefined;
+interface ICapturedInput extends ICapturedReview {
   readonly statePath: string;
-  readonly token: string;
-  readonly sourceRootUri: string | undefined;
-  readonly ignoreApprovalHold: boolean | undefined;
 }
 
 /** Every outcome of the publication core (publish, or a recover that found a record). */
@@ -315,233 +311,22 @@ type RejectedResult = Extract<PublicationResult, { readonly status: 'rejected' }
 const INPUT_FORMAT = 'sarif-to-comment.input';
 const INPUT_VERSION = 1;
 
-/** Every accepted top-level input field; anything else is a caller mistake. */
-const INPUT_KEYS: ReadonlySet<string> = new Set([
-  'sarif',
-  'destination',
-  'reviewedCommit',
-  'statePath',
-  'token',
-  'sourceRootUri',
-  'oldSourceCommit',
-  'options',
-]);
-
-/** Every accepted option. Only the approval-hold override exists in this milestone. */
-const OPTION_KEYS: ReadonlySet<string> = new Set(['ignoreApprovalHold']);
-
-/** A full, immutable, lowercase Git commit id. */
-const COMMIT_PATTERN = /^[0-9a-f]{40}$/;
-
-/** GitHub account names: alphanumerics and single interior hyphens. */
-const OWNER_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/;
-
-/** GitHub repository names: letters, digits, '.', '_' and '-' (never '.' or '..'). */
-const REPO_PATTERN = /^[A-Za-z0-9._-]+$/;
-
-/** Nesting bound for captured JSON, so hostile depth fails as input, not a stack overflow. */
-const MAX_JSON_DEPTH = 512;
-
-/** Replacement text for a credential found in anything shown to a person. */
-const REDACTED = '[redacted]';
-
-// ---------------------------------------------------------------------------
-// Input validation and capture (synchronous, before any remote read)
-// ---------------------------------------------------------------------------
-
-function invalid(message: string): TypeError {
-  return new TypeError(`Invalid publishSarifReview input: ${message}`);
-}
-
-function isPlainObject(value: unknown): value is IPlainObject {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
-  const proto: unknown = Object.getPrototypeOf(value);
-  return proto === Object.prototype || proto === null;
-}
-
 /**
- * A value interpolated into a message exactly as a template literal converts
- * it, including values of any type returned by an injected client.
+ * Publication's input: the shared review fields (src/review-preflight.cts)
+ * plus the durable state path, checked where it always was (after the
+ * commits, before the token).
  */
-function templateText(value: unknown): string {
-  // eslint-disable-next-line @typescript-eslint/restrict-template-expressions -- reproduces template-literal string conversion of an arbitrary host-supplied value in an error message; String() would differ for symbols
-  return `${value}`;
-}
-
-/** An own data property's value, refusing accessors (whose getters are never run). */
-function dataValue(object: object, key: string, where: string): unknown {
-  const descriptor = Object.getOwnPropertyDescriptor(object, key);
-  if (!descriptor) return undefined;
-  if (!Object.hasOwn(descriptor, 'value')) throw invalid(`${where} is an accessor property; only plain JSON data is accepted`);
-  return descriptor.value;
-}
-
-/**
- * A deep copy of `value` restricted to what JSON represents faithfully:
- * plain objects with enumerable string-keyed data properties, dense arrays,
- * strings, finite numbers (not -0), booleans and null. Anything else — cycles,
- * accessors, symbols, undefined, functions, BigInt, class instances, holes —
- * is refused rather than dropped or coerced, so the fingerprint and the
- * rendered review can only ever describe the same document.
- */
-function captureJson(value: unknown, where: string, ancestors: Set<object> = new Set(), depth = 0): JsonValue {
-  if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
-  if (typeof value === 'number') {
-    if (!Number.isFinite(value) || Object.is(value, -0)) throw invalid(`${where} is not a finite JSON number`);
-    return value;
-  }
-  if (typeof value !== 'object') throw invalid(`${where} is a ${typeof value}, which JSON cannot represent`);
-  if (depth > MAX_JSON_DEPTH) throw invalid(`${where} is nested more than ${String(MAX_JSON_DEPTH)} levels deep`);
-  if (ancestors.has(value)) throw invalid(`${where} contains a cycle`);
-  ancestors.add(value);
-  try {
-    if (Array.isArray(value)) {
-      if (Object.getPrototypeOf(value) !== Array.prototype) throw invalid(`${where} is not a plain array`);
-      const keys = Reflect.ownKeys(value);
-      const length = dataValue(value, 'length', `${where}.length`);
-      // An array's own `length` is always a number; the typeof test only
-      // lets the comparison below be typed.
-      if (typeof length !== 'number' || keys.length !== length + 1) throw invalid(`${where} has holes or extra properties`);
-      const copy = new Array<JsonValue>(length);
-      for (let i = 0; i < length; i += 1) {
-        if (!Object.hasOwn(value, i)) throw invalid(`${where}[${String(i)}] is a hole`);
-        copy[i] = captureJson(dataValue(value, String(i), `${where}[${String(i)}]`), `${where}[${String(i)}]`, ancestors, depth + 1);
-      }
-      return copy;
+const PUBLISH_INPUT: IReviewInputSpec<{ readonly statePath: string }> = {
+  operation: 'publishSarifReview',
+  ownKeys: ['statePath'],
+  captureOwn: (field, invalid) => {
+    const statePath = field('statePath');
+    if (typeof statePath !== 'string' || !path.isAbsolute(statePath)) {
+      throw invalid('statePath must be an absolute file path chosen by the caller');
     }
-    return captureObject(value, where, ancestors, depth);
-  } finally {
-    ancestors.delete(value);
-  }
-}
-
-/**
- * The object step of {@link captureJson}: `value` is already on the
- * ancestor path at `depth`. Separate only so that a capture known to start
- * at a plain object (captureRoot) is typed as producing an object.
- */
-function captureObject(value: object, where: string, ancestors: Set<object>, depth: number): IJsonObject {
-  if (!isPlainObject(value)) throw invalid(`${where} is not a plain JSON object`);
-  const copy: Record<string, JsonValue> = {};
-  for (const key of Reflect.ownKeys(value)) {
-    if (typeof key === 'symbol') throw invalid(`${where} has a symbol-keyed property`);
-    const descriptor = Object.getOwnPropertyDescriptor(value, key);
-    // A key reported by Reflect.ownKeys always has a descriptor.
-    if (!descriptor?.enumerable) throw invalid(`${where}.${key} is not enumerable`);
-    const item = captureJson(dataValue(value, key, `${where}.${key}`), `${where}.${key}`, ancestors, depth + 1);
-    Object.defineProperty(copy, key, { value: item, enumerable: true, writable: true, configurable: true });
-  }
-  return copy;
-}
-
-/**
- * {@link captureJson} of a top-level plain object: the same checks in the
- * same order (at depth 0 with no ancestors, only the object step can refuse
- * it), typed as the JSON object it produces.
- */
-function captureRoot(value: IPlainObject, where: string): IJsonObject {
-  return captureObject(value, where, new Set<object>([value]), 0);
-}
-
-function isCommit(value: unknown): value is string {
-  return typeof value === 'string' && COMMIT_PATTERN.test(value);
-}
-
-/** Whether `value` is an absolute file: URI naming a directory (ending in "/"). */
-function isFileRootUri(value: unknown): value is string {
-  if (typeof value !== 'string' || !value.startsWith('file:') || !value.endsWith('/')) return false;
-  try {
-    const url = new URL(value);
-    return url.protocol === 'file:' && url.search === '' && url.hash === '';
-  } catch {
-    return false;
-  }
-}
-
-/** Whether a captured destination names a GitHub account as its owner. */
-function hasOwner(destination: IJsonObject): destination is IJsonObject & { readonly owner: string } {
-  const owner = destination['owner'];
-  return typeof owner === 'string' && OWNER_PATTERN.test(owner);
-}
-
-/** Whether a captured destination names a GitHub repository (never '.' or '..'). */
-function hasRepo(destination: IJsonObject): destination is IJsonObject & { readonly repo: string } {
-  const repo = destination['repo'];
-  return typeof repo === 'string' && REPO_PATTERN.test(repo) && !/^\.\.?$/.test(repo);
-}
-
-/** Whether a captured destination's pull request number is a positive safe integer. */
-function hasPullNumber(destination: IJsonObject): destination is IJsonObject & { readonly pullNumber: number } {
-  const pullNumber = destination['pullNumber'];
-  return typeof pullNumber === 'number' && Number.isSafeInteger(pullNumber) && pullNumber >= 1;
-}
-
-/**
- * Validates `input` and returns an independent snapshot of everything the
- * operation will use. Runs synchronously, before the first await.
- */
-function captureInput(input: unknown): ICapturedInput {
-  if (!isPlainObject(input)) throw invalid('input must be a plain object');
-  for (const key of Reflect.ownKeys(input)) {
-    if (typeof key === 'symbol' || !INPUT_KEYS.has(key)) throw invalid(`unknown field ${String(key)}`);
-  }
-  const field = (key: string): unknown => dataValue(input, key, key);
-
-  const sarifValue = field('sarif');
-  if (!isPlainObject(sarifValue)) throw invalid('sarif must be a parsed SARIF object (not text or an array)');
-  const sarif = captureRoot(sarifValue, 'sarif');
-
-  const destinationValue = field('destination');
-  if (!isPlainObject(destinationValue)) throw invalid('destination must be { owner, repo, pullNumber }');
-  const destination = captureRoot(destinationValue, 'destination');
-  const destinationKeys = Object.keys(destination).sort().join(',');
-  if (destinationKeys !== 'owner,pullNumber,repo') throw invalid('destination must have exactly owner, repo and pullNumber');
-  if (!hasOwner(destination)) {
-    throw invalid('destination.owner must be a GitHub account name');
-  }
-  if (!hasRepo(destination)) {
-    throw invalid('destination.repo must be a GitHub repository name');
-  }
-  if (!hasPullNumber(destination)) {
-    throw invalid('destination.pullNumber must be a positive integer');
-  }
-
-  const reviewedCommit = field('reviewedCommit');
-  if (!isCommit(reviewedCommit)) throw invalid('reviewedCommit must be a full 40-character lowercase commit SHA');
-
-  const oldSourceCommit = field('oldSourceCommit');
-  if (oldSourceCommit !== undefined && !isCommit(oldSourceCommit)) {
-    throw invalid('oldSourceCommit must be a full 40-character lowercase commit SHA');
-  }
-
-  const statePath = field('statePath');
-  if (typeof statePath !== 'string' || !path.isAbsolute(statePath)) {
-    throw invalid('statePath must be an absolute file path chosen by the caller');
-  }
-
-  const token = field('token');
-  if (typeof token !== 'string' || token.length === 0) throw invalid('token must be a non-empty string');
-
-  const sourceRootUri = field('sourceRootUri');
-  if (sourceRootUri !== undefined && !isFileRootUri(sourceRootUri)) {
-    throw invalid('sourceRootUri must be an absolute file: URI ending in "/"');
-  }
-
-  const optionsValue = field('options');
-  let ignoreApprovalHold: boolean | undefined;
-  if (optionsValue !== undefined) {
-    if (!isPlainObject(optionsValue)) throw invalid('options must be a plain object');
-    const options = captureRoot(optionsValue, 'options');
-    for (const key of Object.keys(options)) if (!OPTION_KEYS.has(key)) throw invalid(`unknown option ${key}`);
-    const ignoreHold = options['ignoreApprovalHold'];
-    if (ignoreHold !== undefined && typeof ignoreHold !== 'boolean') {
-      throw invalid('options.ignoreApprovalHold must be a boolean');
-    }
-    ignoreApprovalHold = ignoreHold;
-  }
-
-  return { sarif, destination, reviewedCommit, oldSourceCommit, statePath, token, sourceRootUri, ignoreApprovalHold };
-}
+    return { statePath };
+  },
+};
 
 // ---------------------------------------------------------------------------
 // Original-input identity
@@ -586,82 +371,11 @@ function inputFingerprintOf(captured: ICapturedInput): string {
 }
 
 // ---------------------------------------------------------------------------
-// Credential safety
-// ---------------------------------------------------------------------------
-
-/** `text` with every occurrence of the credential replaced. */
-function redact(text: string, token: string): string {
-  return text.split(token).join(REDACTED);
-}
-
-/** The message of `err` followed by its cause chain, as plain text. */
-function messageChain(err: unknown): string {
-  const parts: string[] = [];
-  const seen = new Set<unknown>();
-  let current: unknown = err;
-  while (current !== undefined && current !== null && !seen.has(current)) {
-    seen.add(current);
-    if (!(current instanceof Error)) {
-      // eslint-disable-next-line @typescript-eslint/no-base-to-string -- a thrown non-Error of any type is described by String(), the deliberate total coercion
-      parts.push(String(current));
-      break;
-    }
-    parts.push(current.message);
-    current = current.cause;
-  }
-  return parts.join(' (caused by: ') + ')'.repeat(parts.length - 1);
-}
-
-/**
- * `err` unchanged when nothing inspectable about it mentions the token;
- * otherwise a new error of the same name carrying only the redacted message
- * chain and no cause or extra properties.
- */
-function withoutCredential(err: unknown, token: string): unknown {
-  const inspected = util.inspect(err, { depth: null, showHidden: true });
-  if (!inspected.includes(token)) return err;
-  const safe = new Error(redact(messageChain(err), token));
-  safe.name = err instanceof Error ? err.name : 'Error';
-  return safe;
-}
-
-// ---------------------------------------------------------------------------
-// Context verification
-// ---------------------------------------------------------------------------
-
-/**
- * Refuses a context that is not for exactly the requested pull request and
- * reviewed commit. The review is never retargeted to another pull request or
- * to the pull request's current head.
- */
-function verifyContext(context: unknown, captured: ICapturedInput): asserts context is IPlainObject {
-  const { owner, repo, pullNumber } = captured.destination;
-  const wanted = `${owner}/${repo}#${String(pullNumber)}`;
-  if (!isPlainObject(context)) throw new Error(`GitHub returned no usable review context for ${wanted}.`);
-  const sameName = (a: unknown, b: string): boolean => typeof a === 'string' && a.toLowerCase() === b.toLowerCase();
-  if (!sameName(context['owner'], owner) || !sameName(context['repo'], repo) || context['pullNumber'] !== pullNumber) {
-    throw new Error(
-      `GitHub returned review context for pull request ${templateText(context['owner'])}/${templateText(context['repo'])}#${templateText(context['pullNumber'])}, not the requested pull request ${wanted}.`,
-    );
-  }
-  if (context['reviewedCommit'] !== captured.reviewedCommit) {
-    throw new Error(
-      `GitHub returned review context for reviewed commit ${templateText(context['reviewedCommit'])}, not the requested reviewed commit ${captured.reviewedCommit}. A review is never retargeted to another commit.`,
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Markdown presentation
 // ---------------------------------------------------------------------------
 
 function code(text: string): string {
   return `\`${text.replace(/`/g, "'")}\``;
-}
-
-function destinationLabel(captured: ICapturedInput): string {
-  const { owner, repo, pullNumber } = captured.destination;
-  return `${owner}/${repo}#${String(pullNumber)}`;
 }
 
 function publishedMarkdown(result: PublishedResult, captured: ICapturedInput, prepared: IReadyOutcome | undefined): string {
@@ -717,12 +431,6 @@ function rejectedMarkdown(result: RejectedResult, captured: ICapturedInput): str
   return lines.join('\n');
 }
 
-function blockedMarkdown(prepared: { readonly markdown: string }): string {
-  return ['## Review blocked', '', 'Nothing was published and no publication state was written.', '', prepared.markdown.trim()].join(
-    '\n',
-  );
-}
-
 /** The public outcome for a publication-core result. */
 function present(result: PublicationResult, captured: ICapturedInput, prepared?: IReadyOutcome): PublishSarifReviewOutcome {
   const { statePath } = captured;
@@ -764,26 +472,8 @@ async function run(captured: ICapturedInput, createGitHubClient: CreatePublishin
   const existing = await recoverPublication(identity);
   if (existing.status !== 'missing') return present(existing, captured);
 
-  const contextRequest: IFetchContextRequest = {
-    destination: captured.destination,
-    reviewedCommit: captured.reviewedCommit,
-    ...(captured.oldSourceCommit === undefined ? {} : { oldSourceCommit: captured.oldSourceCommit }),
-  };
-  const { context, readSource } = await client.fetchContext(contextRequest);
-  verifyContext(context, captured);
-
-  const prepareInput = {
-    sarif: captured.sarif,
-    context: captured.sourceRootUri === undefined ? context : { ...context, sourceRootUri: captured.sourceRootUri },
-    readSource,
-    ...(captured.ignoreApprovalHold === undefined ? {} : { options: { ignoreApprovalHold: captured.ignoreApprovalHold } }),
-  };
-  const prepared = await prepareReview(prepareInput);
-  if (prepared.status === 'blocked') return { status: 'blocked', markdown: blockedMarkdown(prepared) };
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- the typed core returns only 'ready' here; the status test is kept as the durable refusal to publish any other outcome
-  if (prepared.status !== 'ready' || prepared.review.commitId !== captured.reviewedCommit) {
-    throw new Error('Review preparation returned an unexpected outcome; nothing was published.');
-  }
+  const prepared = await prepareForDestination(captured, client);
+  if (prepared.status === 'blocked') return { status: 'blocked', markdown: blockedReviewMarkdown(prepared) };
 
   const result = await publishPreparedReview({
     ...identity,
@@ -848,7 +538,7 @@ export async function publishSarifReviewWithInternals(
   input: unknown,
   internals: IPublishSarifReviewInternals = {},
 ): Promise<PublishSarifReviewOutcome> {
-  const captured = captureInput(input);
+  const captured = captureReviewInput(input, PUBLISH_INPUT);
   const createGitHubClient = internals.createGitHubClient || defaultCreateGitHubClient;
   let outcome: PublishSarifReviewOutcome;
   try {

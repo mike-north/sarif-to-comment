@@ -58,6 +58,8 @@ Selected staged-operation help sentence: “Add proposed changes from the Git in
 
 ## Deferred: standalone validation versus inspection
 
+This was deferred from the second milestone and has since been implemented. The [readiness assessment contract](readiness-assessment-contract.md) records the outcomes, CLI output and exit statuses, and the decisions still awaiting acceptance.
+
 Inspection answers “What have I authored, and what fixes are included?” It does not require the document to be supported for publication. Validation answers “Can this complete artifact be published faithfully to this intended review under the selected policy?” It must use the publisher's readiness rules, including source consistency and host constraints, rather than treating schema validity alone as readiness.
 
 Validation may require authenticated GitHub reads. It must perform no remote writes, create no durable publication record, and issue no reusable approval stamp. It is optional and never bypasses the publisher's own checks: remote source and review context can change after validation. A valid proposed edit is not a claim that the code is correct or the critique is worthwhile. The user requested this assessment; it is not a revival of the assistant-invented mandatory early approval gate rejected under D19.
