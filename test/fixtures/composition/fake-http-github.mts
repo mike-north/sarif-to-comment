@@ -38,6 +38,11 @@
  *                                    fails the fetch as a network error
  *   shiftThreadLine: null | index    readback reports that comment one line
  *                                    lower than stored (an unfaithful host)
+ *   refuseUnauthorized?: boolean     answer 401 Bad credentials, as GitHub
+ *                                    does, to a request that does not carry
+ *                                    exactly the expected credential
+ *   failBlobReads?: boolean          answer 502 to every Git blob read (an
+ *                                    operational source-read failure)
  *
  * Every document the host reads back (its repository, config, reviews, log
  * and the create-review request body) is checked against the shape it was
@@ -107,6 +112,8 @@ export interface IHttpRepository {
 export interface IHttpHostConfig {
   readonly create: 'ok' | 'lose-response';
   readonly shiftThreadLine: number | null;
+  readonly refuseUnauthorized?: boolean | undefined;
+  readonly failBlobReads?: boolean | undefined;
 }
 
 /** One inline comment of a create-review request body (GitHub's wire format). */
@@ -180,6 +187,8 @@ const isHttpRepository: Guard<IHttpRepository> = isShape({
 const isHostConfig: Guard<IHttpHostConfig> = isShape({
   create: isOneOf('ok', 'lose-response'),
   shiftThreadLine: isEither(isNumber, isNull),
+  refuseUnauthorized: isOptional(isBoolean),
+  failBlobReads: isOptional(isBoolean),
 });
 
 const isWireReviewRequest: Guard<IWireReviewRequest> = isShape({
@@ -354,6 +363,12 @@ export class FakeHttpGitHub {
     const authorized = this.expectedToken === null ? auth !== null : auth === `Bearer ${this.expectedToken}`;
     this.write('log.json', [...this.log(), { method, path: u.pathname, authorized }]);
     if (u.origin !== API) throw new Error(`fake host: unexpected origin ${u.origin}`);
+    if (!authorized && this.config().refuseUnauthorized === true) {
+      return new Response(JSON.stringify({ message: 'Bad credentials', status: '401' }), {
+        status: 401,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
     return this.route(method, u, init);
   }
 
@@ -387,6 +402,7 @@ export class FakeHttpGitHub {
       return tree ? json({ sha, truncated: false, tree }) : json({ message: 'Not Found' }, 404);
     }
     if (method === 'GET' && (m = new RegExp(`^${repoPath}/git/blobs/([0-9a-f]{40})$`).exec(p))) {
+      if (this.config().failBlobReads === true) return json({ message: 'Server Error' }, 502);
       const sha = captured(m);
       const bytes = objects.blobs[sha];
       if (!bytes) return json({ message: 'Not Found' }, 404);

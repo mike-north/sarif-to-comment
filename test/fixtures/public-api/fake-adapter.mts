@@ -28,6 +28,10 @@
  *                                     properties carry the token
  *            'wrong-commit'           context for another reviewed commit
  *            'wrong-pull'             context for another pull request
+ *            'unauthorized'           GitHub refuses the credential (HTTP 401),
+ *                                     as the real client reports it
+ *            'source-read-fails'      the context is served, but every source
+ *                                     read fails operationally (HTTP 502)
  *   network: 'up' | 'down'   // 'down': every host method throws
  *   user:    { id, login }   // authenticated identity
  *
@@ -38,6 +42,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+import { GitHubError } from '../../../dist/github.cjs';
 import { DEFAULT_USER, FakeGitHubRemote } from '../publication/fake-github.mts';
 import type { IFakeTransport, IFakeUser } from '../publication/fake-github.mts';
 import {
@@ -61,7 +66,9 @@ export type ContextMode =
   | 'throw-with-token'
   | 'throw-with-token-cause'
   | 'wrong-commit'
-  | 'wrong-pull';
+  | 'wrong-pull'
+  | 'unauthorized'
+  | 'source-read-fails';
 
 /** Adapter behavior, persisted per remote in adapter-config.json. */
 export interface IAdapterConfig {
@@ -179,7 +186,17 @@ const isAdapterRepository: Guard<IAdapterRepository> = isShape({
 
 /** A stored adapter-config.json (setAdapterConfig always writes the complete configuration). */
 const isStoredAdapterConfig: Guard<IAdapterConfig> = isShape({
-  context: isOneOf('ok', 'historical', 'throw', 'throw-with-token', 'throw-with-token-cause', 'wrong-commit', 'wrong-pull'),
+  context: isOneOf(
+    'ok',
+    'historical',
+    'throw',
+    'throw-with-token',
+    'throw-with-token-cause',
+    'wrong-commit',
+    'wrong-pull',
+    'unauthorized',
+    'source-read-fails',
+  ),
   network: isOneOf('up', 'down'),
   user: isShape({ id: isNumber, login: isOptional(isString) }),
 });
@@ -300,6 +317,20 @@ export function createFakeClientFactory(remoteDir: string): FakeClientFactory {
             context.pullNumber += 1;
             return { context, readSource };
           }
+          case 'unauthorized':
+            throw new GitHubError('http-status', 'GitHub answered HTTP 401 (Bad credentials) for GET /repos/acme/gizmos/pulls/7.', {
+              status: 401,
+            });
+          case 'source-read-fails':
+            return {
+              context: trustedContext({ oldSourceCommit }),
+              readSource: async (commit, filePath) => {
+                remote.logCall('adapter:readSource', { commit, path: filePath });
+                throw new GitHubError('http-status', `GitHub answered HTTP 502 (Bad Gateway) reading ${filePath} at ${commit}.`, {
+                  status: 502,
+                });
+              },
+            };
         }
       },
     };

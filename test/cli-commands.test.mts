@@ -1,6 +1,7 @@
 /**
  * User-acceptance tests for the command CLI: `init`, `add-comment`,
- * `inspect`, `add-staged-changes` and `publish`, in human and JSON formats.
+ * `inspect`, `add-staged-changes`, `validate` and `publish`, in human and
+ * JSON formats.
  *
  * Every test runs the real executable (dist/sarif-to-comment.cjs) in a child
  * process. Publication tests run it through the existing wrapper that replaces
@@ -18,7 +19,9 @@
  * independent assertions prove the content.
  *
  * Exit statuses (§5): 0 success, 1 usage or operational error, 2 content
- * refusal (`invalid` / `failed`); `publish` keeps 0/1/2/3.
+ * refusal (`invalid` / `failed`); `publish` keeps 0/1/2/3. `validate`
+ * follows docs/readiness-assessment-contract.md: 0 ready, 2 blocked, 1
+ * incomplete or error.
  *
  * @see https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/sarif-v2.1.0-errata01-os-complete.html
  * @see https://www.rfc-editor.org/rfc/rfc6901 (JSON Pointer, used for finding refs)
@@ -36,7 +39,7 @@ import { describe, test } from 'node:test';
 import library from '../dist/index.cjs';
 import { FakeGitHubRemote } from './fixtures/publication/fake-github.mts';
 import type { IFakeRemoteConfig } from './fixtures/publication/fake-github.mts';
-import { REPOSITORY, setAdapterConfig } from './fixtures/public-api/fake-adapter.mts';
+import { REPOSITORY, createFakeClientFactory, setAdapterConfig } from './fixtures/public-api/fake-adapter.mts';
 import {
   ORACLE,
   UPSTREAM_SARIF_PATH,
@@ -198,7 +201,7 @@ describe('command dispatch and help', () => {
     const result = run(['--help']);
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stderr, '');
-    for (const command of ['init', 'add-comment', 'remove-comment', 'inspect', 'add-staged-changes', 'publish']) {
+    for (const command of ['init', 'add-comment', 'remove-comment', 'inspect', 'add-staged-changes', 'validate', 'publish']) {
       assert.match(result.stdout, new RegExp(`\\b${command}\\b`), `help omits ${command}`);
     }
     assert.match(result.stdout, /--format human\|json/);
@@ -214,6 +217,7 @@ describe('command dispatch and help', () => {
     ['remove-comment', ['--sarif', '--finding', '--format']],
     ['inspect', ['--sarif', '--preview-lines', '--preview-chars', '--source-root', '--format']],
     ['add-staged-changes', ['--sarif', '--output', '--worktree', '--repo', '--commit', '--source-root', '--format']],
+    ['validate', ['--sarif', '--repo', '--pull', '--commit', '--source-root', '--old-source-commit', '--ignore-approval-hold', '--format']],
     ['publish', ['--sarif', '--repo', '--pull', '--commit', '--state', '--source-root', '--old-source-commit', '--ignore-approval-hold', '--format']],
   ];
   for (const [command, flags] of commands) {
@@ -1334,36 +1338,46 @@ describe('add-staged-changes', () => {
 // publish (§3.5)
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Commands that read GitHub: publish and validate
+// ---------------------------------------------------------------------------
+
+/** A world for a command that reads GitHub: a fake remote, the input file and the state path. */
+interface IPublishWorld {
+  readonly root: string;
+  readonly remote: FakeGitHubRemote;
+  readonly sarifPath: string;
+  readonly statePath: string;
+}
+
+function publishWorld(sarif: unknown = READY, hostConfig: Partial<IFakeRemoteConfig> = {}): IPublishWorld {
+  const root = tempDir('publish');
+  const remote = FakeGitHubRemote.create(path.join(root, 'remote'), hostConfig);
+  const sarifPath = path.join(root, 'input.sarif.json');
+  writeJson(sarifPath, sarif);
+  return { root, remote, sarifPath, statePath: path.join(root, 'review.publication.json') };
+}
+
+/** The destination flags shared by publish and validate (no --state). */
+function destinationFlags(world: IPublishWorld): string[] {
+  const { owner, repo, pullNumber } = REPOSITORY.destination;
+  return ['--sarif', world.sarifPath, '--repo', `${owner}/${repo}`, '--pull', String(pullNumber), '--commit', REPOSITORY.commits.head];
+}
+
+/** Runs the real CLI through the wrapper that replaces only the GitHub adapter; the token never appears. */
+function runPublish(world: IPublishWorld, argv: readonly string[], env: Readonly<Record<string, string>> = { GH_TOKEN: TOKEN }): IRun {
+  const result = spawnSync(process.execPath, [WRAPPER, ...argv], {
+    encoding: 'utf8',
+    timeout: 60_000,
+    env: { PATH: process.env['PATH'], FAKE_GITHUB_DIR: world.remote.dir, ...env },
+  });
+  for (const text of [result.stdout, result.stderr]) assert.equal(text.includes(TOKEN), false, 'the token never appears');
+  return { status: result.status, stdout: result.stdout, stderr: result.stderr };
+}
+
 describe('publish', () => {
-  /** A publication world: a fake remote, the input file and the state path. */
-  interface IPublishWorld {
-    readonly root: string;
-    readonly remote: FakeGitHubRemote;
-    readonly sarifPath: string;
-    readonly statePath: string;
-  }
-
-  function publishWorld(sarif: unknown = READY, hostConfig: Partial<IFakeRemoteConfig> = {}): IPublishWorld {
-    const root = tempDir('publish');
-    const remote = FakeGitHubRemote.create(path.join(root, 'remote'), hostConfig);
-    const sarifPath = path.join(root, 'input.sarif.json');
-    writeJson(sarifPath, sarif);
-    return { root, remote, sarifPath, statePath: path.join(root, 'review.publication.json') };
-  }
-
   function flags(world: IPublishWorld): string[] {
-    const { owner, repo, pullNumber } = REPOSITORY.destination;
-    return ['--sarif', world.sarifPath, '--repo', `${owner}/${repo}`, '--pull', String(pullNumber), '--commit', REPOSITORY.commits.head, '--state', world.statePath];
-  }
-
-  function runPublish(world: IPublishWorld, argv: readonly string[], env: Readonly<Record<string, string>> = { GH_TOKEN: TOKEN }): IRun {
-    const result = spawnSync(process.execPath, [WRAPPER, ...argv], {
-      encoding: 'utf8',
-      timeout: 60_000,
-      env: { PATH: process.env['PATH'], FAKE_GITHUB_DIR: world.remote.dir, ...env },
-    });
-    for (const text of [result.stdout, result.stderr]) assert.equal(text.includes(TOKEN), false, 'the token never appears');
-    return { status: result.status, stdout: result.stdout, stderr: result.stderr };
+    return [...destinationFlags(world), '--state', world.statePath];
   }
 
   const normalize = (text: string, world: IPublishWorld): string => text.split(world.statePath).join('<STATE>');
@@ -1476,5 +1490,161 @@ describe('publish', () => {
     const doc = json(result);
     assert.equal(doc.status, 'error');
     assert.match(asString(doc.message), /\[redacted\]/);
+  });
+});
+
+describe('validate', () => {
+  /** Files in a world other than the fake remote's own directory. */
+  const localFiles = (world: IPublishWorld): string[] => fs.readdirSync(world.root).filter((name) => name !== 'remote').sort();
+
+  /** Zero remote writes and nothing new on disk (contract: Guarantees). */
+  function assertNothingWritten(world: IPublishWorld): void {
+    assert.deepEqual(world.remote.writeCalls(), [], 'no remote write');
+    assert.deepEqual(world.remote.reviews(), [], 'no review');
+    assert.equal(fs.existsSync(world.statePath), false, 'no publication state');
+    assert.deepEqual(localFiles(world), ['input.sarif.json'], 'only the input file exists');
+  }
+
+  test('--help documents the publish flags without --state, needs no token and names the exit statuses', () => {
+    const result = run(['validate', '--help']);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout.includes('--state'), false, 'assessment has no state path');
+    assert.match(result.stdout, /0\s+ready/);
+    assert.match(result.stdout, /2\s+blocked/);
+    assert.match(result.stdout, /1\s+incomplete/);
+  });
+
+  test('ready in human form: exit 0, the library Markdown on stdout, nothing written', async () => {
+    const world = publishWorld();
+    const result = runPublish(world, ['validate', ...destinationFlags(world)]);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(result.stderr, '');
+    assert.match(result.stdout, /1 inline comment/);
+    assert.match(result.stdout, /repeats every check/i);
+    assertNothingWritten(world);
+    // Delegation: the human output is the library outcome's Markdown for the same input and remote.
+    const direct = publishWorld();
+    const validateSarifReview: unknown = Reflect.get(library, 'validateSarifReview');
+    if (typeof validateSarifReview !== 'function') throw new AssertionError({ message: 'the package exports validateSarifReview' });
+    const outcome = asRecord(
+      await Reflect.apply(validateSarifReview, undefined, [
+        { sarif: READY, destination: { ...REPOSITORY.destination }, reviewedCommit: REPOSITORY.commits.head, token: TOKEN },
+        { createGitHubClient: createFakeClientFactory(direct.remote.dir) },
+      ]),
+      'the library outcome',
+    );
+    assert.equal(result.stdout, `${asString(outcome['markdown'])}\n`);
+  });
+
+  test('ready in JSON: exit 0 and { command, status, message } in that order', () => {
+    const world = publishWorld();
+    const result = runPublish(world, ['validate', ...destinationFlags(world), '--format', 'json']);
+    assert.equal(result.status, 0, result.stdout);
+    const doc = json(result);
+    assert.deepEqual(Object.keys(doc), ['command', 'status', 'message']);
+    assert.equal(doc.command, 'validate');
+    assert.equal(doc.status, 'ready');
+    assertNothingWritten(world);
+  });
+
+  test('blocked in JSON: exit 2 with the problems and the message, nothing written', () => {
+    const world = publishWorld(INVALID_PUBLICATION);
+    const result = runPublish(world, ['validate', ...destinationFlags(world), '--format', 'json']);
+    assert.equal(result.status, 2, result.stdout);
+    const doc = json(result);
+    assert.deepEqual(Object.keys(doc), ['command', 'status', 'problems', 'message']);
+    assert.equal(doc.status, 'blocked');
+    const problems = asArray(doc.problems, 'problems');
+    assert.ok(problems.length > 0);
+    for (const problem of problems) assert.ok(asString(doc.message).includes(asString(asRecord(problem)['message'])));
+    assertNothingWritten(world);
+  });
+
+  test('blocked in human form prints exactly what publish prints for the same input', () => {
+    const assessed = publishWorld(INVALID_PUBLICATION);
+    const validated = runPublish(assessed, ['validate', ...destinationFlags(assessed)]);
+    const published = publishWorld(INVALID_PUBLICATION);
+    const publication = runPublish(published, ['publish', ...destinationFlags(published), '--state', published.statePath]);
+    assert.equal(validated.status, 2);
+    assert.equal(publication.status, 2);
+    assert.equal(validated.stdout, publication.stdout, 'the same blocked explanation');
+    assert.equal(validated.stderr, '');
+    assertNothingWritten(assessed);
+  });
+
+  test('an approval hold is blocked; --ignore-approval-hold makes it ready', () => {
+    const held = asRecord(readJson(path.join(ROOT, 'test', 'fixtures', 'public-api', 'held.sarif.json')), 'held.sarif.json');
+    const world = publishWorld(held);
+    assert.equal(json(runPublish(world, ['validate', ...destinationFlags(world), '--format', 'json'])).status, 'blocked');
+    const overridden = json(runPublish(world, ['validate', ...destinationFlags(world), '--ignore-approval-hold', '--format', 'json']));
+    assert.equal(overridden.status, 'ready');
+    assertNothingWritten(world);
+  });
+
+  test('incomplete in JSON: exit 1, the cause (redacted), and no verdict', () => {
+    const world = publishWorld();
+    setAdapterConfig(world.remote.dir, { context: 'throw-with-token' });
+    const result = runPublish(world, ['validate', ...destinationFlags(world), '--format', 'json']);
+    assert.equal(result.status, 1, result.stdout);
+    const doc = json(result);
+    assert.deepEqual(Object.keys(doc), ['command', 'status', 'message']);
+    assert.equal(doc.status, 'incomplete');
+    assert.match(asString(doc.message), /\[redacted\]/);
+    assert.match(asString(doc.message), /not a verdict/i);
+    assertNothingWritten(world);
+  });
+
+  test('a source-read failure in human form: exit 1 with the explanation on stdout', () => {
+    const world = publishWorld();
+    setAdapterConfig(world.remote.dir, { context: 'source-read-fails' });
+    const result = runPublish(world, ['validate', ...destinationFlags(world)]);
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stdout, /502/);
+    assert.match(result.stdout, /not a verdict/i);
+    assert.equal(result.stderr, '');
+    assertNothingWritten(world);
+  });
+
+  test('--state is refused as a usage error before any request', () => {
+    const world = publishWorld();
+    const result = runPublish(world, ['validate', ...destinationFlags(world), '--state', world.statePath, '--format', 'json']);
+    assert.equal(result.status, 1);
+    const doc = json(result);
+    assert.equal(doc.command, 'validate');
+    assert.equal(doc.status, 'usage-error');
+    assert.match(asString(doc.message), /unknown option --state/);
+    assert.deepEqual(world.remote.calls('adapter:create'), []);
+    assertNothingWritten(world);
+  });
+
+  test('a missing token is an error document naming the variables', () => {
+    const world = publishWorld();
+    const result = runPublish(world, ['validate', ...destinationFlags(world), '--format', 'json'], {});
+    assert.equal(result.status, 1);
+    const doc = json(result);
+    assert.equal(doc.status, 'error');
+    assert.match(asString(doc.message), /GH_TOKEN/);
+    assert.deepEqual(world.remote.calls('adapter:create'), []);
+  });
+
+  test('an unreadable SARIF file is an error, and nothing is contacted', () => {
+    const world = publishWorld();
+    fs.writeFileSync(world.sarifPath, '{ not json');
+    const result = runPublish(world, ['validate', ...destinationFlags(world), '--format', 'json']);
+    assert.equal(result.status, 1);
+    assert.equal(json(result).status, 'error');
+    assert.deepEqual(world.remote.calls('adapter:create'), []);
+  });
+
+  test('a later publish still checks: the pull request advanced after a ready assessment', () => {
+    const world = publishWorld();
+    assert.equal(json(runPublish(world, ['validate', ...destinationFlags(world), '--format', 'json'])).status, 'ready');
+    setAdapterConfig(world.remote.dir, { context: 'wrong-commit' });
+    const result = runPublish(world, ['publish', ...destinationFlags(world), '--state', world.statePath, '--format', 'json']);
+    assert.equal(result.status, 1);
+    assert.equal(json(result).status, 'error');
+    assert.equal(world.remote.calls('adapter:fetchContext').length, 2, 'publication fetched the context itself');
+    assert.deepEqual(world.remote.writeCalls(), []);
+    assert.equal(fs.existsSync(world.statePath), false);
   });
 });

@@ -196,7 +196,13 @@ describe('manifest', () => {
     const declarations = fs.readFileSync(path.join(ROOT, asString(PKG['types'], 'package.json types')), 'utf8');
     const declared = [...declarations.matchAll(/^export declare function (\w+)\(/gm)].map((m) => m[1] ?? '');
     assert.deepEqual(declared.sort(), [
-      'addSarifComment', 'addStagedChangesToSarif', 'createSarifDocument', 'inspectSarif', 'publishSarifReview', 'removeSarifComment',
+      'addSarifComment',
+      'addStagedChangesToSarif',
+      'createSarifDocument',
+      'inspectSarif',
+      'publishSarifReview',
+      'removeSarifComment',
+      'validateSarifReview',
     ]);
     const loaded: unknown = require(resolved);
     assert.deepEqual(Object.keys(asRecord(loaded, 'the module.exports object')).sort(), declared, 'the runtime exports exactly the declared API');
@@ -690,12 +696,13 @@ export async function main(): Promise<void> { ${workflow} }` },
       ['inspectSarif', 'function'],
       ['publishSarifReview', 'function'],
       ['removeSarifComment', 'function'],
+      ['validateSarifReview', 'function'],
     ]);
   });
 
-  test('CommonJS and ES module consumers see the same six functions with no __esModule marker', { skip, timeout: 300_000 }, () => {
+  test('CommonJS and ES module consumers see the same seven functions with no __esModule marker', { skip, timeout: 300_000 }, () => {
     // Interop shape of 0.2.0 (plain `module.exports = { ... }`): require()
-    // yields the six functions in the documented order (src/index.cjs module
+    // yields the functions in the documented order (src/index.cjs module
     // doc); import() yields a namespace whose default export is that very
     // object and whose named exports are exactly those functions. No
     // __esModule marker exists, so bundlers and esModuleInterop consumers keep
@@ -703,7 +710,7 @@ export async function main(): Promise<void> { ${workflow} }` },
     // 'module.exports' namespace key (Node 22 does not); it is the same object.
     const { consumer } = installIntoConsumer();
     // 0.2.0's five in their shipped order; later additions are appended, so that order is kept.
-    const names = ['createSarifDocument', 'addSarifComment', 'inspectSarif', 'addStagedChangesToSarif', 'publishSarifReview', 'removeSarifComment'];
+    const names = ['createSarifDocument', 'addSarifComment', 'inspectSarif', 'addStagedChangesToSarif', 'publishSarifReview', 'removeSarifComment', 'validateSarifReview'];
     fs.writeFileSync(
       path.join(consumer, 'interop-probe.mjs'),
       [
@@ -746,7 +753,7 @@ export async function main(): Promise<void> { ${workflow} }` },
     assert.deepEqual(
       seen.namespaceKeys.filter((k) => k !== 'default' && k !== 'module.exports'),
       [...names].sort(),
-      'named exports are exactly the six functions',
+      'named exports are exactly the seven functions',
     );
     assert.ok(seen.namespaceKeys.includes('default'));
     assert.equal(seen.defaultIsRequire, true, 'the default export is the require() object itself');
@@ -760,6 +767,64 @@ export async function main(): Promise<void> { ${workflow} }` },
     });
     assert.equal(cjs.status, 0, cjs.stderr);
     assert.equal(cjs.stdout, 'undefined');
+  });
+
+  test('the installed validateSarifReview returns exactly its declared outcomes, and its declarations reject misuse', { skip, timeout: 300_000 }, () => {
+    const { consumer } = installIntoConsumer();
+    const js = String.raw;
+    const script = js`
+      const fs = require('node:fs');
+      const os = require('node:os');
+      const path = require('node:path');
+      const { validateSarifReview } = require('sarif-to-comment');
+      const { FakeGitHubRemote } = require(${JSON.stringify(path.join(ROOT, 'test/fixtures/publication/fake-github.mts'))});
+      const { createFakeClientFactory, setAdapterConfig, REPOSITORY } = require(${JSON.stringify(path.join(ROOT, 'test/fixtures/public-api/fake-adapter.mts'))});
+      const load = (name) => JSON.parse(fs.readFileSync(path.join(${JSON.stringify(path.join(ROOT, 'test/fixtures/public-api'))}, name), 'utf8'));
+      const assess = async (sarif, context) => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'consumer-validate-'));
+        const remote = FakeGitHubRemote.create(path.join(root, 'remote'));
+        if (context) setAdapterConfig(remote.dir, { context });
+        const input = { sarif, destination: REPOSITORY.destination, reviewedCommit: REPOSITORY.commits.head, token: 'ghp_consumer_validate_token' };
+        return validateSarifReview(input, { createGitHubClient: createFakeClientFactory(remote.dir) });
+      };
+      (async () => {
+        process.stdout.write(JSON.stringify({
+          ready: await assess(load('ready.sarif.json')),
+          blocked: await assess(load('held.sarif.json')),
+          incomplete: await assess(load('ready.sarif.json'), 'unauthorized'),
+        }));
+      })().catch((err) => { console.error(err); process.exit(1); });
+    `;
+    const run = spawnSync(process.execPath, ['-e', script], { cwd: consumer, encoding: 'utf8', timeout: 120_000 });
+    assert.equal(run.status, 0, run.stderr);
+    const outcomes = asRecord(parseJson(run.stdout), 'the installed assessment outcomes');
+    for (const status of ['ready', 'blocked', 'incomplete']) {
+      assert.equal(expectType(outcomes[status], isShape({ status: isUnknown }), `the ${status} outcome`).status, status);
+    }
+    // Object literals get excess-property checks: a runtime field the declarations lack is a compile error.
+    const source = [
+      "import { validateSarifReview } from 'sarif-to-comment';",
+      "import type { ValidateSarifReviewOutcome, IValidateSarifReviewInput } from 'sarif-to-comment';",
+      ...['ready', 'blocked', 'incomplete'].map((key) => `export const ${key}: ValidateSarifReviewOutcome = ${JSON.stringify(outcomes[key])};`),
+      ts`export async function use(input: IValidateSarifReviewInput): Promise<string> {
+        const outcome = await validateSarifReview(input);
+        switch (outcome.status) {
+          case 'ready': return outcome.markdown;
+          case 'blocked': return outcome.problems.map((p) => p.message + (p.pointer ?? '')).join(outcome.markdown);
+          case 'incomplete': return outcome.markdown;
+          default: { const never: never = outcome; return never; }
+        }
+      }
+      const base = { sarif: {}, destination: { owner: 'a', repo: 'b', pullNumber: 1 }, reviewedCommit: 'x', token: 't' };
+      // @ts-expect-error assessment takes no state path
+      void validateSarifReview({ ...base, statePath: '/s' } satisfies IValidateSarifReviewInput);
+      // @ts-expect-error token is required
+      void validateSarifReview({ sarif: {}, destination: { owner: 'a', repo: 'b', pullNumber: 1 }, reviewedCommit: 'x' });
+      // @ts-expect-error a ready outcome has no problems
+      void ((o: ValidateSarifReviewOutcome) => o.status === 'ready' && o.problems);`,
+    ].join('\n');
+    const check = typecheck(consumer, { 'validate.mts': source }, { module: 'nodenext', moduleResolution: 'nodenext', target: 'es2022' });
+    assert.equal(check.status, 0, check.stdout + check.stderr);
   });
 
   test('control: the type checker does reject a genuine misuse', { skip, timeout: 300_000 }, () => {
