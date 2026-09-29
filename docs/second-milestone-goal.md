@@ -1,5 +1,7 @@
 # Astra goal: deliver the happy path from findings to a GitHub review
 
+> **Historical assignment record (reconciled September 28, 2026).** This goal was met and released as 0.2.0. Its deferred items (removal, standalone validation) have since been merged. For current status, see [Current status and reconciliation](status.md).
+
 Prepared and activated at the user's request on September 28, 2026. This is the assignment boundary for the second milestone. It supersedes the broader earlier authoring/correction/validation scope wherever they conflict.
 
 ## Goal

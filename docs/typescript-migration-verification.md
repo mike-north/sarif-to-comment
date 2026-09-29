@@ -1,5 +1,7 @@
 # TypeScript migration: independent acceptance
 
+> **Dated acceptance record (September 28, 2026).** For current status, see [Current status and reconciliation](status.md).
+
 The migration is accepted and released as 0.2.1. Local integration, guarded patch preparation, exact-commit remote CI, trusted npm publication and clean registry verification are complete. No implementation or release acceptance blocker remains. The [release verification report](typescript-migration-release-verification.md) records the published identity, provenance and installed acceptance.
 
 Accepted branch: `typescript-migration`, worktree `logs/opus/typescript/wt/integration`, commit **`dc5dfeed61f7ef5c0a774fa0d2256887d2193ef2`**. The full final checks ran at `a058c24ecdcff347f52f9731ed90ec85bf1a6c79`; the only later change is one checkpoint line in `docs/typescript-migration-plan.md`. The sole uncommitted worktree change is the harness-added `.claude/*.local.*` ignore rule, which is excluded from acceptance and must remain uncommitted.

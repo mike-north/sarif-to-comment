@@ -1,5 +1,7 @@
 # First-milestone release audit
 
+> **Historical audit (reconciled September 28, 2026).** The npm deferral and "package remains private" statements below were later superseded by the 0.1.0 and 0.1.1 releases and by the owner's decision to keep the repository public. For current status, see [Current status and reconciliation](status.md).
+
 This is the parent lead's independent completion audit against the active user goal. It records evidence, not implementation instructions or a substitute scope. A row stays unverified until its evidence has been inspected. Passing a narrower test does not establish a broader claim.
 
 The selected scope in [first-milestone.md](first-milestone.md) governs which parts of the broader [specification](specification.md) apply now. Settled decisions D3–D5, D11–D14, D26 and D29 govern source association, attribution, whole-review validation, durable initial publication and draft behavior. Staged extraction, file proposals and suggestion-PR requirements in the broader specification are future scope, not missing features in this increment. The engineering contract defines a bounded profile but cannot override those requirements. SARIF's normative coordinate and message rules govern interpretation of supported inputs.

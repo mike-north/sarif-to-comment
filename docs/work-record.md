@@ -1,5 +1,7 @@
 # Design work record
 
+> **Historical work record (reconciled September 28, 2026).** Deferrals and "not yet" statements below describe their dates. In particular, npm publication was later authorized and performed. For current status, see [Current status and reconciliation](status.md).
+
 ## September 27, 2026
 
 The user authorized repository work as their delegate, including settings, branch-protection changes, GitHub workflow changes and direct pushes to the default branch. This is authority to perform work when needed, not a requirement to modify those settings. NPM publication is explicitly deferred.

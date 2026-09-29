@@ -1,5 +1,7 @@
 # Second milestone engineering plan and work record
 
+> **Historical work record (reconciled September 28, 2026).** The milestone was released as 0.2.0. For current status, see [Current status and reconciliation](status.md).
+
 September 28, 2026. Governing assignment: [second-milestone-goal.md](second-milestone-goal.md). Baseline: npm 0.1.1, repository commit `bedc5b8b8efb47dcf07ea8f629ee8537fc2f37ce`. Existing planning-document edits and `.claude/` scaffolding are intentional or pre-existing and must be preserved.
 
 ## Outcome and sequence

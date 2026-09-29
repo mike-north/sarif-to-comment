@@ -1,5 +1,7 @@
 # First milestone engineering plan
 
+> **Historical engineering plan (reconciled September 28, 2026).** The npm deferral below was later superseded by the 0.1.0 and 0.1.1 releases. For current status, see [Current status and reconciliation](status.md).
+
 Astra leads contracts, integration and independent verification. Persistent Claude Code Opus writes behavioral tests before implementation and repairs its own work. Governing scope is docs/first-milestone.md and D29: initial one-way draft publication, one body-plus-comments create request, whole-review validation, durable identity before any uncertain create. NPM publication is deferred.
 
 ## Consumer boundary

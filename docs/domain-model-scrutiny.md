@@ -1,5 +1,7 @@
 # Domain model scrutiny
 
+> **Historical design record (reconciled September 28, 2026).** This analysis predates implementation. For current status, see [Current status and reconciliation](status.md).
+
 Candidate reasoning record · September 27, 2026 · Before milestone or implementation design
 
 ## Consumer statement and status

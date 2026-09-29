@@ -1,5 +1,7 @@
 # SARIF to review comments: product brief
 
+> **Historical design record (reconciled September 28, 2026).** "Not implemented" statements are historical; the product has shipped within a bounded profile. For current status, see [Current status and reconciliation](status.md).
+
 Status: draft synthesis of the design conversation, September 27, 2026. This describes intended outcomes, not implemented behavior. The [decision log](design-decisions.md) contains rationale, scope boundaries, and unresolved details. The [behavioral specification](specification.md) defines requirements and acceptance scenarios.
 
 ## Product goal

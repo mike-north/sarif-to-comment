@@ -1,5 +1,7 @@
 # TypeScript migration work record
 
+> **Historical work record (reconciled September 28, 2026).** The migration was released as 0.2.1. For current status, see [Current status and reconciliation](status.md).
+
 The user requested conversion of this repository to TypeScript and specifically asked for an Opus 5.5 engineering lead. This is an implementation-language migration of the released 0.2.0 behavior, not a new product milestone or an extension of the deferred feature set.
 
 Baseline: repository commit `2829530de8ebeee1a0c144307a3d964ab716a454`; release commit `da3c138897d45deaf90817bf10afbb426717cda5`; npm `sarif-to-comment@0.2.0`. The accepted baseline passed 1,806 tests in 138 suites, Node 22/24 CI, installed public-interface acceptance and actual GitHub source/fix fidelity checks. See `second-milestone-release-verification.md`. The existing registry consumer is retained in the ignored working records for independent comparison.

@@ -1,5 +1,7 @@
 # SARIF review publication: principles and decisions
 
+> **Status note (reconciled September 28, 2026).** This log remains the authoritative decision record. Its statement that no behavior has been implemented is historical. For current status, see [Current status and reconciliation](status.md).
+
 Updated: September 28, 2026.
 
 This is the working design record for the product-shaping conversation. It records decisions, their reasons, their consequences, and what remains open. It is not an implementation specification. No behavior described here has been implemented or integration-tested in this project.

@@ -1,5 +1,7 @@
 # Second-milestone contract notes
 
+> **Historical analysis (reconciled September 28, 2026).** These notes were superseded by the [accepted engineering contract](second-milestone-contract-proposal.md) and the 0.2.0 release. For current status, see [Current status and reconciliation](status.md).
+
 September 28, 2026. This is Astra's local contract analysis while the authorized Opus launch awaits approval reconsideration. It distinguishes settled constraints from proposed engineering defaults. It is not an adopted implementation contract and does not claim software progress. The [goal](second-milestone-goal.md), current scope and interface design govern; the forthcoming complete contract must settle argument/result types before dependent implementation.
 
 ## Settled constraints and scope interpretations

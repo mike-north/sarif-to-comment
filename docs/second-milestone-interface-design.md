@@ -1,5 +1,7 @@
 # Second-milestone interface design
 
+> **Historical design record (reconciled September 28, 2026).** Names selected here shipped in 0.2.0. The removal and validation designs marked deferred have since been merged under provisional contracts. For current status, see [Current status and reconciliation](status.md).
+
 Design proposal · September 28, 2026. The user delegated command and function naming and requested independent sub-agent scrutiny. This document designs the vocabulary and visible operation boundaries for [the second milestone](second-milestone.md); it is not an implemented API or a complete extraction specification.
 
 ## Current delivery boundary — happy path first

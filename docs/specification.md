@@ -1,5 +1,7 @@
 # SARIF generation, combination, and review publication
 
+> **Historical status (reconciled September 28, 2026).** This specification was written before any implementation. Its requirements still govern the broader product, but its status statements (such as "No product implementation exists") are historical. The product has since shipped through 0.2.1, and the §11 open contracts O1–O11 are mapped to shipped evidence, issues, decisions or non-goals in [the reconciliation](status.md#reconciliation-of-the-first-specifications-open-contracts-o1o11). The latest release evidence is [TypeScript migration release verification](typescript-migration-release-verification.md).
+
 First behavioral specification · September 27, 2026 · Draft for review
 
 ## 1. Purpose and authority

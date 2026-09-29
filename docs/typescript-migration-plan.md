@@ -1,5 +1,7 @@
 # sarif-to-comment → strict TypeScript: migration plan
 
+> **Historical plan (reconciled September 28, 2026).** The migration was completed and released as 0.2.1. For current status, see [Current status and reconciliation](status.md).
+
 Status: **approved by Astra with corrections (§0); execution in progress.** Baseline `2829530` (npm 0.2.0 = `da3c138`, 1,806 tests / 138 suites, Node 22+24 CI green).
 
 ## 0. Approved corrections (binding for execution; they override conflicting text below)

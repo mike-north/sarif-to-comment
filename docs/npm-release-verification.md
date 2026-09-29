@@ -1,5 +1,7 @@
 # npm release verification
 
+> **Historical release record (reconciled September 28, 2026).** The latest release is 0.2.1. The latest release evidence is [TypeScript migration release verification](typescript-migration-release-verification.md). For current status, see [Current status and reconciliation](status.md).
+
 The current verified release is [0.2.0](second-milestone-release-verification.md). The record below preserves the initial release-setup and 0.1.1 verification history.
 
 `sarif-to-comment@0.1.1` is published and verified from a clean public-registry installation. Trusted publishing, Changesets, the pre-1.0 guard, API Extractor and API Documenter, and the shipped CLI/library guides are complete. On 2026-09-28 the user explicitly instructed “Keep it public,” superseding the original private-visibility constraint. The repository remains public; no agent changed its visibility.

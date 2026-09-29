@@ -1,5 +1,7 @@
 # Second milestone: accepted engineering contract
 
+> **Status note (reconciled September 28, 2026).** This contract was implemented and released in 0.2.0. Its "no implementation claimed" statement is historical. For current status, see [Current status and reconciliation](status.md).
+
 Accepted by Astra after parent review on September 28, 2026. This defines the selected five-operation increment. Implementation algorithms remain the authors' responsibility. No second-milestone implementation or passing tests are claimed by this document. The historical filename retains the design proposal's provenance.
 
 **Governing documents:** [goal](second-milestone-goal.md), [scope](second-milestone.md), [interface design](second-milestone-interface-design.md), [lead's contract notes](second-milestone-contract-notes.md), [decisions](design-decisions.md) (D1–D10, D19–D20, D23, D31–D32), and the [specification](specification.md) (R1–R9, O2–O3).

@@ -1,5 +1,7 @@
 # Second-milestone live acceptance plan
 
+> **Historical plan (reconciled September 28, 2026).** It was carried out; see [live evidence](second-milestone-e2e-evidence.md). For current status, see [Current status and reconciliation](status.md).
+
 Prepared independently by the parent before second-milestone implementation. This is an oracle and planned experiment, not evidence of a running test, a created PR, or a passing product. The parent owns this plan and live coordination; Astra owns implementation contracts and integration.
 
 ## Purpose and boundaries

@@ -1,5 +1,7 @@
 # Second-milestone acceptance audit
 
+> **Historical audit (reconciled September 28, 2026).** Items it lists as deferred (removal and correction, standalone validation, file-operation publication) have since been merged, unreleased. For current status, see [Current status and reconciliation](status.md).
+
 This ledger follows [the active assignment](second-milestone-goal.md), D31 and D32. It records observed evidence rather than treating plans or green subsystem tests as integrated completion. The first-milestone and npm-release evidence remains the baseline, not proof of the new workflow.
 
 Statuses below reflect the final evidence of September 28, 2026: the reviewed source, the packed 0.2.0 artifact, installed acceptance and five live publications (see [the end-to-end evidence](second-milestone-e2e-evidence.md) and [acceptance-evidence.json](evidence/second-milestone/acceptance-evidence.json)). The earlier interim statuses are preserved under [Historical record](#historical-record).
