@@ -220,12 +220,24 @@ function readState(world: IWorld): StateRecord {
   return expectType(readJson(world.statePath), isStateRecord, `the publication state in ${world.statePath}`);
 }
 
-/** Checks the one stored review against the authored expectations. */
-function assertExpectedReview(world: IWorld): void {
+/**
+ * Checks the one stored review against the authored expectations. A draft
+ * carries no event and stays PENDING; a submitted review carries exactly
+ * event COMMENT and is COMMENTED (docs/submitted-review-contract.md §2.3).
+ */
+function assertExpectedReview(world: IWorld, mode: 'draft' | 'submitted' = 'draft'): void {
   const reviews = world.host.reviews();
   assert.equal(reviews.length, 1);
-  const wire = at(reviews, 0).request;
-  assert.deepEqual(Object.keys(wire).sort(), ['body', 'comment' + 's', 'commit_id'].sort(), 'no event: the review stays a draft');
+  const stored = at(reviews, 0);
+  const wire = stored.request;
+  if (mode === 'draft') {
+    assert.deepEqual(Object.keys(wire).sort(), ['body', 'comment' + 's', 'commit_id'].sort(), 'no event: the review stays a draft');
+    assert.equal(stored.state, 'PENDING');
+  } else {
+    assert.deepEqual(Object.keys(wire).sort(), ['body', 'comment' + 's', 'commit_id', 'event'].sort());
+    assert.equal(wire.event, 'COMMENT');
+    assert.equal(stored.state, 'COMMENTED');
+  }
   assert.equal(wire.commit_id, HEAD);
 
   const expected = EXPECTED;
@@ -398,5 +410,43 @@ describe('CLI + real GitHub client over HTTP', () => {
     assert.equal(result.stdout.includes(TOKEN), false);
     assert.equal(result.stderr.includes(TOKEN), false);
     assert.ok(world.host.log().every((r) => r.authorized));
+  });
+});
+
+describe('submitted review: library and CLI + real GitHub client over HTTP (docs/submitted-review-contract.md)', () => {
+  test('options.submit sends one COMMENT create with the same authored content, confirmed by the real readback', async () => {
+    const world = makeWorld();
+    const outcome = await run(world, { options: { submit: true } });
+    assert.equal(outcome.status, 'published', outcome.markdown);
+    assert.equal(posts(world).length, 1);
+    assertExpectedReview(world, 'submitted');
+    assert.match(outcome.markdown, /^## Review submitted\n/);
+    const record = readState(world);
+    assert.equal(record.phase, 'completed');
+    assert.equal(record.receipt?.via, 'created');
+  });
+
+  test('a lost submitted create response is recovered through the real readback without a second create', async () => {
+    const world = makeWorld({ create: 'lose-response' });
+    const outcome = await run(world, { options: { submit: true } });
+    assert.equal(outcome.status, 'published', outcome.markdown);
+    assert.equal(posts(world).length, 1);
+    assertExpectedReview(world, 'submitted');
+    assert.equal(readState(world).receipt?.via, 'recovered');
+  });
+
+  test('the CLI --submit flag publishes the same authored review, submitted', () => {
+    const world = makeWorld();
+    const sarifPath = path.join(world.root, 'review.sarif');
+    fs.writeFileSync(sarifPath, JSON.stringify(SARIF));
+    const result = spawnSync(
+      process.execPath,
+      [CLI, 'publish', '--sarif', sarifPath, '--repo', `${OWNER}/${REPO}`, '--pull', String(PULL), '--commit', HEAD, '--state', world.statePath, '--submit'],
+      { encoding: 'utf8', timeout: 60_000, env: { PATH: process.env['PATH'], GH_TOKEN: TOKEN, FAKE_HTTP_GITHUB_DIR: world.host.dir } },
+    );
+    assert.equal(result.status, 0, result.stderr);
+    assertExpectedReview(world, 'submitted');
+    assert.match(result.stdout, /^## Review submitted\n/);
+    assert.equal(result.stdout.includes(TOKEN), false);
   });
 });

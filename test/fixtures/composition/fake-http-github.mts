@@ -13,15 +13,18 @@
  *   GET  /repos/{o}/{r}/compare/{base}...{head}    merge base = base commit
  *   GET  /repos/{o}/{r}/git/commits|trees|blobs/*  real git object ids (blob
  *                                                  SHA-1 over "blob <n>\0")
- *   POST /repos/{o}/{r}/pulls/{n}/reviews          stores a pending review
+ *   POST /repos/{o}/{r}/pulls/{n}/reviews          stores a pending review, or a
+ *                                                  COMMENTED one for event COMMENT
  *   GET  /repos/{o}/{r}/pulls/{n}/reviews          review list
  *   GET  /repos/{o}/{r}/pulls/{n}/reviews/{id}/comments
  *                                                  pending comments: like the
- *                                                  live probe, line/side null
+ *                                                  live probe, line/side null;
+ *                                                  submitted: with REST anchors
  *   POST /graphql                                  reviewThreads with the
  *                                                  original anchors
  * Like GitHub, it refuses a second pending review by one author on one pull
- * request with 422 (docs/native-suggestion-fidelity-experiment.md).
+ * request with 422 (docs/native-suggestion-fidelity-experiment.md), and
+ * refuses a submitted create the same way while a pending review exists.
  *
  * A host serves repository.json by default. `create(dir, config, repository)`
  * may give it a different repository of the same shape (for example one whose
@@ -461,8 +464,16 @@ export class FakeHttpGitHub {
           path: c.path,
           body: c.body,
           original_commit_id: review.request.commit_id,
-          line: null,
-          side: null,
+          // Pending comments read back without an anchor (as probed live);
+          // a submitted review's comments carry their REST anchor.
+          ...(review.state === 'PENDING'
+            ? { line: null, side: null }
+            : {
+                line: c.line,
+                side: c.side,
+                original_line: c.line,
+                ...(c.start_line === undefined ? {} : { start_line: c.start_line, original_start_line: c.start_line, start_side: c.start_side }),
+              }),
         })),
       );
     }

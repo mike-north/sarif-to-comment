@@ -217,8 +217,8 @@ describe('command dispatch and help', () => {
     ['remove-comment', ['--sarif', '--finding', '--format']],
     ['inspect', ['--sarif', '--preview-lines', '--preview-chars', '--source-root', '--format']],
     ['add-staged-changes', ['--sarif', '--output', '--worktree', '--repo', '--commit', '--source-root', '--format']],
-    ['validate', ['--sarif', '--repo', '--pull', '--commit', '--source-root', '--old-source-commit', '--ignore-approval-hold', '--format']],
-    ['publish', ['--sarif', '--repo', '--pull', '--commit', '--state', '--source-root', '--old-source-commit', '--ignore-approval-hold', '--format']],
+    ['validate', ['--sarif', '--repo', '--pull', '--commit', '--source-root', '--old-source-commit', '--ignore-approval-hold', '--submit', '--format']],
+    ['publish', ['--sarif', '--repo', '--pull', '--commit', '--state', '--source-root', '--old-source-commit', '--ignore-approval-hold', '--submit', '--format']],
   ];
   for (const [command, flags] of commands) {
     test(`${command} --help documents its options and needs no token`, () => {
@@ -1647,4 +1647,87 @@ describe('validate', () => {
     assert.deepEqual(world.remote.writeCalls(), []);
     assert.equal(fs.existsSync(world.statePath), false);
   });
+});
+
+describe('--submit: an explicitly submitted comment review (docs/submitted-review-contract.md)', () => {
+  function flags(world: IPublishWorld): string[] {
+    return [...destinationFlags(world), '--state', world.statePath];
+  }
+
+  test('publish --submit: one COMMENT create, exit 0, the submitted explanation in human form', () => {
+    const world = publishWorld();
+    const result = runPublish(world, ['publish', ...flags(world), '--submit']);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(result.stderr, '');
+    const creates = world.remote.calls('createReview');
+    assert.equal(creates.length, 1);
+    assert.equal(item(creates, 0).args['event'], 'COMMENT');
+    const stored = item(world.remote.reviews(), 0);
+    assert.equal(stored.state, 'COMMENTED');
+    assert.match(result.stdout, /^## Review submitted\n\nCreated and submitted the comment \[review \d+\]\(/);
+    assert.ok(result.stdout.includes(stored.htmlUrl));
+  });
+
+  test('publish --submit in JSON: the same document shape as a draft; exit 0', () => {
+    const world = publishWorld();
+    const doc = json(runPublish(world, ['publish', ...flags(world), '--submit', '--format', 'json']));
+    assert.deepEqual(Object.keys(doc), ['command', 'status', 'review', 'statePath', 'message']);
+    assert.equal(doc.status, 'published');
+    assert.match(asString(doc.message), /^## Review submitted\n/);
+  });
+
+  test('the flag-only publisher accepts --submit as well', () => {
+    const world = publishWorld();
+    const result = runPublish(world, [...flags(world), '--submit']);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(item(world.remote.reviews(), 0).state, 'COMMENTED');
+  });
+
+  test('without --submit the request carries no event and the review stays a draft', () => {
+    const world = publishWorld();
+    const result = runPublish(world, ['publish', ...flags(world)]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(Object.hasOwn(item(world.remote.calls('createReview'), 0).args, 'event'), false);
+    assert.equal(item(world.remote.reviews(), 0).state, 'PENDING');
+    assert.match(result.stdout, /^## Draft review published\n/);
+  });
+
+  test('retrying a draft state path with --submit is an operational error (exit 1) naming the mode; nothing is sent', () => {
+    const world = publishWorld();
+    assert.equal(runPublish(world, ['publish', ...flags(world)]).status, 0);
+    const human = runPublish(world, ['publish', ...flags(world), '--submit']);
+    assert.equal(human.status, 1);
+    assert.equal(human.stdout, '');
+    assert.match(human.stderr, /records a draft review, but a submitted review was requested/);
+    const doc = json(runPublish(world, ['publish', ...flags(world), '--submit', '--format', 'json']));
+    assert.equal(doc.status, 'error');
+    assert.match(asString(doc.message), /records a draft review, but a submitted review was requested/);
+    assert.equal(world.remote.calls('createReview').length, 1);
+  });
+
+  test('validate --submit: ready for a submitted comment review, nothing written; exit 0', () => {
+    const world = publishWorld();
+    const result = runPublish(world, ['validate', ...destinationFlags(world), '--submit']);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, / as a submitted comment review\./);
+    assert.deepEqual(world.remote.writeCalls(), []);
+    assert.equal(fs.existsSync(world.statePath), false);
+    const doc = json(runPublish(world, ['validate', ...destinationFlags(world), '--submit', '--format', 'json']));
+    assert.equal(doc.status, 'ready');
+  });
+
+  for (const [command, extra] of [
+    ['publish', ['--state', '/tmp/unused-state.json']],
+    ['validate', []],
+  ] as const) {
+    test(`${command}: a valued or repeated --submit is a usage error (exit 1) with no request`, () => {
+      const world = publishWorld();
+      for (const bad of [['--submit=yes'], ['--submit', '--submit']]) {
+        const result = runPublish(world, [command, ...destinationFlags(world), ...extra, ...bad]);
+        assert.equal(result.status, 1, result.stdout + result.stderr);
+        assert.match(result.stderr, /--submit/);
+      }
+      assert.deepEqual(world.remote.calls(), []);
+    });
+  }
 });
