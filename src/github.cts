@@ -252,11 +252,13 @@
  *     Every page of a GraphQL query of the pull request's timelineItems
  *     restricted to CROSS_REFERENCED_EVENT, following each event's source
  *     through a PullRequest fragment (variables { owner, repo, number, after }).
- *     Sources that are not pull requests are left out; sources in any
- *     repository are answered with that repository (`owner/name`). A source
- *     with more than 100 labels has its labels read in full with listLabels
- *     in its own repository. Timeline order; not deduplicated. Pagination is
- *     checked as for review threads.
+ *     Sources that are not pull requests, and sources in any other repository
+ *     (compared case-insensitively), are left out before their state or
+ *     labels are read or checked, so a foreign repository can never stop the
+ *     traversal. `repository` is the source's repository as GitHub names it.
+ *     A source with more than 100 labels has its labels read in full with
+ *     listLabels. Timeline order; not deduplicated. Pagination is checked as
+ *     for review threads.
  *   closePullRequest({ owner, repo, pullNumber })
  *     PATCH pull with exactly { state: 'closed' }; the answer must name the
  *     pull request as closed ('malformed-response' otherwise). A 429, or a 403
@@ -629,7 +631,7 @@ export interface IPullRequestSnapshot {
 export interface ICrossReferencingPullRequest {
   readonly number: number;
   readonly htmlUrl: string;
-  /** The repository holding it (`owner/name`), which may be another repository. */
+  /** The repository holding it (`owner/name`), as GitHub names it: always the requested one, possibly in another letter case. */
   readonly repository: string;
   readonly state: 'open' | 'closed' | 'merged';
   /** The description ('' when it has none). */
@@ -2219,23 +2221,26 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
     };
   }
 
-  /** One cross-reference timeline node as a pull request source, or null when its source is not a pull request. */
-  async function crossReferenceSource(node: unknown): Promise<ICrossReferencingPullRequest | null> {
+  /**
+   * One cross-reference timeline node as a pull request source of `owner/repo`,
+   * or null when its source is not a pull request or is in another
+   * repository. A foreign source is left out before anything else about it is
+   * read or checked: its labels may be unreadable (a private repository
+   * refuses their listing) or absent, and it is never a suggestion here (D25).
+   */
+  async function crossReferenceSource(node: unknown, owner: string, repo: string): Promise<ICrossReferencingPullRequest | null> {
     const source = optionalMember(node, 'source');
     if (!isPlainObject(source) || source['__typename'] !== 'PullRequest') return null;
     const number = source['number'];
     if (!isPositiveInteger(number)) throw new GitHubError('malformed-response', 'A cross-referencing pull request has no number.');
     const what = `cross-referencing pull request ${String(number)}`;
+    const repository = hostString(optionalMember(source, 'repository', 'nameWithOwner'), `${what}'s repository`);
+    if (repository.toLowerCase() !== `${owner}/${repo}`.toLowerCase()) return null;
     const state = GRAPHQL_PULL_STATES.get(source['state']);
     if (state === undefined) throw new GitHubError('malformed-response', `The ${what} has no valid state.`);
-    const repository = hostString(optionalMember(source, 'repository', 'nameWithOwner'), `${what}'s repository`);
     const labels = source['labels'];
     const more = optionalMember(labels, 'pageInfo', 'hasNextPage');
     if (!isPlainObject(labels) || typeof more !== 'boolean') throw new GitHubError('malformed-response', `The ${what} has no label connection.`);
-    const [labelOwner, labelRepo, ...rest] = repository.split('/');
-    if (!isRepoName(labelOwner) || !isRepoName(labelRepo) || rest.length > 0) {
-      throw new GitHubError('malformed-response', `The ${what} names no repository.`);
-    }
     return {
       number,
       htmlUrl: hostString(source['url'], `${what}'s URL`),
@@ -2243,8 +2248,8 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
       state,
       body: bodyText(source['body'], what),
       // A source with more labels than the connection holds is read in full
-      // from its own repository's REST listing.
-      labels: more ? await listLabels({ owner: labelOwner, repo: labelRepo, number }) : labelNames(labels['nodes'], what),
+      // from this repository's REST listing.
+      labels: more ? await listLabels({ owner, repo, number }) : labelNames(labels['nodes'], what),
     };
   }
 
@@ -2276,7 +2281,7 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
         throw new GitHubError('malformed-response', 'The cross-reference query returned no timeline connection.');
       }
       for (const node of items['nodes']) {
-        const source = await crossReferenceSource(node);
+        const source = await crossReferenceSource(node, owner, repo);
         if (source !== null) found.push(source);
       }
       const { hasNextPage, endCursor } = items['pageInfo'];
