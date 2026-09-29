@@ -1,0 +1,28 @@
+── [4130248688] docs/sarif-issue7-fixture.md:4 (mike-north) ──
+Typo: 'teh' should be 'the'.
+
+<sub>— Review agent</sub>
+
+```suggestion
+It has a sentence with a typo: the result.
+```
+
+── [4130248700] docs/sarif-issue7-fixture.md:7 (mike-north) ──
+These two lines are placeholders; say what the pair demonstrates.
+
+<sub>— Review agent</sub>
+
+── [4130251273] docs/sarif-issue7-fixture.md:4 (mike-north) ──
+Typo: 'teh' should be 'the'.
+
+<sub>— Review agent</sub>
+
+```suggestion
+It has a sentence with a typo: the result.
+```
+
+── [4130251281] docs/sarif-issue7-fixture.md:7 (mike-north) ──
+These two lines are placeholders; say what the pair demonstrates.
+
+<sub>— Review agent</sub>
+

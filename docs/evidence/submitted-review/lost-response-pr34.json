@@ -1,0 +1,79 @@
+{
+  "outcome": {
+    "status": "published",
+    "review": {
+      "id": 5348460479,
+      "url": "https://github.com/mike-north/doc-linter/pull/34#pullrequestreview-5348460479"
+    },
+    "statePath": "<state-dir>/pr34-lost.json",
+    "markdown": "## Review submitted\n\nThe submitted comment [review 5348460479](https://github.com/mike-north/doc-linter/pull/34#pullrequestreview-5348460479) on mike-north/doc-linter#34 at commit `05f323760807c1c30aa7e9efa280d12b8717d7f3` was confirmed on GitHub for this publication; nothing was resent."
+  },
+  "createRequests": 1,
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/repos/mike-north/doc-linter/pulls/34",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/repos/mike-north/doc-linter/pulls/34/files",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/repos/mike-north/doc-linter/pulls/34",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/repos/mike-north/doc-linter/compare/0a7b03fe399255a62118311cbc3e1bd6fe64cb23...05f323760807c1c30aa7e9efa280d12b8717d7f3",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/repos/mike-north/doc-linter/git/commits/05f323760807c1c30aa7e9efa280d12b8717d7f3",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/repos/mike-north/doc-linter/git/trees/b82a5510c6f8fbafe1824b46499481630bba7d16",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/repos/mike-north/doc-linter/git/trees/0dd2b41f7b9e0d46c94b6bf569ff80846d833ff7",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/repos/mike-north/doc-linter/git/blobs/f680dfc74812cc2acdabde0072e1d833dc59a119",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/user",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/repos/mike-north/doc-linter/pulls/34/reviews",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/repos/mike-north/doc-linter/pulls/34/reviews",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/repos/mike-north/doc-linter/pulls/34/reviews/5348460479/comments",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/graphql",
+      "status": 200
+    }
+  ]
+}

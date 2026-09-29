@@ -1,0 +1,10 @@
+{
+  "command": "publish",
+  "status": "published",
+  "review": {
+    "id": 5348457465,
+    "url": "https://github.com/mike-north/doc-linter/pull/34#pullrequestreview-5348457465"
+  },
+  "statePath": "<state-dir>/pr34-submit.json",
+  "message": "## Review submitted\n\nCreated and submitted the comment [review 5348457465](https://github.com/mike-north/doc-linter/pull/34#pullrequestreview-5348457465) on mike-north/doc-linter#34 at commit `05f323760807c1c30aa7e9efa280d12b8717d7f3`. It is visible on the pull request now."
+}

@@ -1,0 +1,5 @@
+{
+  "command": "publish",
+  "status": "error",
+  "message": "Publication state at <state-dir>/pr34-submit.json records a submitted review, but a draft review was requested. A publication's mode is fixed when it starts: retry with the mode it started with, or use a new state path for a separate review."
+}
