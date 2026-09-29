@@ -7,7 +7,10 @@
  *     (getAuthenticatedUser, createReview, listReviews, listReviewComments),
  *     normalizing host readback into that module's private shapes; and
  *   - the trusted review context and source-snapshot boundary consumed by
- *     src/prepare-review.cts (fetchContext, and the readSource it returns).
+ *     src/prepare-review.cts (fetchContext, and the readSource it returns);
+ *   - the companion suggestion pull request transport consumed by
+ *     src/review-preflight.cts and src/companion-publication.cts (see
+ *     "Companion suggestion pull requests" below).
  *
  * It never decides placement, rendering, or delivery; it never retries a
  * write, never submits an existing review, edits or deletes a review, and
@@ -46,8 +49,11 @@
  *     /repos/{owner}/{repo} or /repositories/{id}), no query parameters other
  *     than per_page=100 and page exactly one greater. The next request is
  *     rebuilt canonically under /repos/{owner}/{repo}. At most `maxPages`.
- *   - The only non-GET requests are the single create-review POST and GraphQL
- *     POSTs whose document is a query (never a mutation).
+ *   - The only non-GET requests are the single create-review POST, GraphQL
+ *     POSTs whose document is a query (never a mutation), and the companion
+ *     writes below (Git blobs, trees and commits, one branch, one pull
+ *     request, one label). Nothing here ever updates or deletes a branch,
+ *     pull request, label or review.
  *
  * Errors: GitHubError { code, status?, hostRejected, message, cause? }.
  *   hostRejected is true only when the create-review POST received one of the
@@ -176,6 +182,49 @@
  *     commit (the pull head, the reviewed commit, historical provenance) are
  *     direct.
  *
+ * ---------------------------------------------------------------------------
+ * Companion suggestion pull requests (docs/companion-suggestion-pr-contract.md)
+ *
+ *   readSuggestionTarget({ owner, repo, pullNumber })
+ *       -> { headSha, headRef, headRepository, baseRepository, defaultBranch,
+ *            canPush }
+ *     GET pull, GET repository. headRepository is null when the head
+ *     repository was deleted; canPush is the account role's permissions.push.
+ *   findLabel({ owner, repo, name }) -> the label's name as GitHub reports
+ *     it, or null for 404 (GET labels/{name}, name percent-encoded)
+ *   createProposalCommit({ owner, repo, parent, message, changes })
+ *       -> { commit }
+ *     changes: [{ operation: 'create', path, text, fileMode } |
+ *               { operation: 'edit', path, text } | { operation: 'delete', path }]
+ *     A created path must be absent at `parent`; an edited or deleted path
+ *     must be a regular file there, whose mode an edit keeps. One POST
+ *     git/blobs { content (base64 of the UTF-8 text), encoding: 'base64' }
+ *     per created or edited file, whose answered sha must equal the blob id
+ *     computed locally; one POST git/trees { base_tree: parent's tree, tree:
+ *     [{ path, mode, type: 'blob', sha | null }] }; one POST git/commits
+ *     { message, tree, parents: [parent] }. The commit is then read back: its
+ *     tree and only parent, and every changed path (blob and mode, or
+ *     absence) must be exactly as proposed, else 'blob-integrity'. These
+ *     writes are never hostRejected: they are invisible until a branch names
+ *     them, and repeating them creates nothing new.
+ *   getBranch({ owner, repo, branch }) -> commit or null (404)
+ *     GET git/ref/heads/{branch}, each segment percent-encoded.
+ *   createBranch({ owner, repo, branch, commit })
+ *     POST git/refs { ref: 'refs/heads/' + branch, sha }. Never force.
+ *   createPullRequest({ owner, repo, title, head, base, body })
+ *       -> { number, htmlUrl }
+ *     POST pulls { title, head, base, body, draft: true }.
+ *   listBranchPullRequests({ owner, repo, branch })
+ *       -> [{ number, htmlUrl, body, authorId, headRef, headRepository, baseRef }]
+ *     Every page of GET pulls?head={owner}:{branch}&state=all.
+ *   addLabel({ owner, repo, number, label })
+ *     POST issues/{number}/labels { labels: [label] }.
+ *   listLabels({ owner, repo, number }) -> names
+ *     Every page of GET issues/{number}/labels.
+ *   The three writes a person can see (createBranch, createPullRequest,
+ *   addLabel) classify their answers like create-review: hostRejected only
+ *   for the understood refusal statuses.
+ *
  * @see https://docs.github.com/en/rest/using-the-rest-api/getting-started-with-the-rest-api
  * @see https://docs.github.com/en/rest/using-the-rest-api/using-pagination-in-the-rest-api
  * @see https://docs.github.com/en/rest/pulls/pulls#get-a-pull-request
@@ -184,6 +233,14 @@
  * @see https://docs.github.com/en/rest/repos/contents#get-repository-content
  * @see https://docs.github.com/en/rest/pulls/reviews
  * @see https://docs.github.com/en/graphql/reference/objects#pullrequestreviewthread
+ * @see https://docs.github.com/en/rest/git/blobs#create-a-blob
+ * @see https://docs.github.com/en/rest/git/trees#create-a-tree
+ * @see https://docs.github.com/en/rest/git/commits#create-a-commit
+ * @see https://docs.github.com/en/rest/git/refs
+ * @see https://docs.github.com/en/rest/pulls/pulls#create-a-pull-request
+ * @see https://docs.github.com/en/rest/pulls/pulls#list-pull-requests
+ * @see https://docs.github.com/en/rest/issues/labels
+ * @see https://docs.github.com/en/rest/repos/repos#get-a-repository
  */
 
 import * as crypto from 'node:crypto';
@@ -440,10 +497,66 @@ export interface IFetchedContext {
   readonly fileExists: FileExists;
 }
 
+/** The branches and permissions a suggestion pull request depends on (read only when one is needed). */
+export interface ISuggestionTarget {
+  /** The pull request's current head commit. */
+  readonly headSha: string;
+  /** The pull request's head branch, which suggestion pull requests target. */
+  readonly headRef: string;
+  /** The head branch's repository (`owner/repo`), or null when it was deleted. */
+  readonly headRepository: string | null;
+  /** The pull request's own repository (`owner/repo`). */
+  readonly baseRepository: string;
+  readonly defaultBranch: string;
+  /** Whether the authenticated account's role allows pushing to the repository. */
+  readonly canPush: boolean;
+}
+
+/** One change of a proposal commit: exact new text for a created or edited file, or a deletion. */
+export type ProposalChange =
+  | { readonly operation: 'create'; readonly path: string; readonly text: string; readonly fileMode: '100644' | '100755' }
+  | { readonly operation: 'edit'; readonly path: string; readonly text: string }
+  | { readonly operation: 'delete'; readonly path: string };
+
+/** A created and verified proposal commit. */
+export interface IProposalCommit {
+  readonly commit: string;
+}
+
+/** One entry of a create-tree request. */
+interface ICreateTreeEntry {
+  readonly path: string;
+  readonly mode: string;
+  readonly type: 'blob';
+  readonly sha: string | null;
+}
+
+/** The pull request GitHub created. */
+export interface ICreatedPullRequest {
+  readonly number: number;
+  readonly htmlUrl: string;
+}
+
+/**
+ * One pull request from a branch. Only `number` is validated here; every
+ * other field is the host's value as received (the consumer validates what
+ * it relies on).
+ */
+export interface IBranchPullRequest {
+  readonly number: number;
+  readonly htmlUrl: unknown;
+  readonly body: unknown;
+  readonly authorId: unknown;
+  readonly headRef: unknown;
+  readonly headRepository: unknown;
+  readonly baseRef: unknown;
+}
+
 /**
  * The frozen client createGitHubClient returns: the publication transport
- * (getAuthenticatedUser, createReview, listReviews, listReviewComments) plus
- * fetchContext. Every method re-validates its input at runtime.
+ * (getAuthenticatedUser, createReview, listReviews, listReviewComments),
+ * fetchContext, and the companion suggestion pull request transport. Every
+ * method re-validates its input at runtime.
  */
 export interface IGitHubClient {
   readonly getAuthenticatedUser: () => Promise<IAuthenticatedUser>;
@@ -451,6 +564,28 @@ export interface IGitHubClient {
   readonly listReviews: (request: IListReviewsRequest) => Promise<IReviewPage>;
   readonly listReviewComments: (request: IListReviewCommentsRequest) => Promise<IReviewCommentPage>;
   readonly fetchContext: (request: IFetchContextRequest) => Promise<IFetchedContext>;
+  readonly readSuggestionTarget: (request: IPullRequestDestination) => Promise<ISuggestionTarget>;
+  readonly findLabel: (request: { readonly owner: string; readonly repo: string; readonly name: string }) => Promise<string | null>;
+  readonly createProposalCommit: (request: {
+    readonly owner: string;
+    readonly repo: string;
+    readonly parent: string;
+    readonly message: string;
+    readonly changes: readonly ProposalChange[];
+  }) => Promise<IProposalCommit>;
+  readonly getBranch: (request: { readonly owner: string; readonly repo: string; readonly branch: string }) => Promise<string | null>;
+  readonly createBranch: (request: { readonly owner: string; readonly repo: string; readonly branch: string; readonly commit: string }) => Promise<void>;
+  readonly createPullRequest: (request: {
+    readonly owner: string;
+    readonly repo: string;
+    readonly title: string;
+    readonly head: string;
+    readonly base: string;
+    readonly body: string;
+  }) => Promise<ICreatedPullRequest>;
+  readonly listBranchPullRequests: (request: { readonly owner: string; readonly repo: string; readonly branch: string }) => Promise<readonly IBranchPullRequest[]>;
+  readonly addLabel: (request: { readonly owner: string; readonly repo: string; readonly number: number; readonly label: string }) => Promise<void>;
+  readonly listLabels: (request: { readonly owner: string; readonly repo: string; readonly number: number }) => Promise<readonly string[]>;
 }
 
 /**
@@ -991,9 +1126,18 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
   /**
    * The page number a validated rel="next" link names after `page`, or null
    * when there is none. The link must address the same endpoint on the API
-   * origin, carry no credentials, and name exactly the following page.
+   * origin, carry no credentials, and name exactly the following page. A
+   * filtered listing's `filter` parameters must be repeated exactly, and no
+   * other parameter may appear.
    */
-  function nextPage(linkHeader: string | null, owner: string, repo: string, suffix: string, page: number): number | null {
+  function nextPage(
+    linkHeader: string | null,
+    owner: string,
+    repo: string,
+    suffix: string,
+    page: number,
+    filter: Readonly<Record<string, string>> = {},
+  ): number | null {
     const href = nextLinkHref(linkHeader);
     if (href === null) return null;
     let url;
@@ -1006,9 +1150,11 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
     const byId = new RegExp(`^/repositories/\\d+${suffix.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}$`, 'i');
     const endpointOk = url.pathname.toLowerCase() === canonical || byId.test(url.pathname);
     const params = [...url.searchParams.keys()];
+    const filterOk = Object.entries(filter).every(([key, value]) => url.searchParams.get(key) === value);
     const queryOk =
-      params.every((k) => k === 'page' || k === 'per_page') &&
+      params.every((k) => k === 'page' || k === 'per_page' || Object.hasOwn(filter, k)) &&
       new Set(params).size === params.length &&
+      filterOk &&
       (url.searchParams.get('per_page') ?? String(PER_PAGE)) === String(PER_PAGE);
     if (url.origin !== API_ORIGIN || url.username || url.password || url.hash || !endpointOk || !queryOk) {
       throw new GitHubError('unsafe-link', 'A pagination link leaves the requested endpoint; it is not followed.');
@@ -1023,18 +1169,25 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
     return page + 1;
   }
 
-  function pageUrl(owner: string, repo: string, suffix: string, page: number): string {
-    return `${API_ORIGIN}${repoPath(owner, repo)}${suffix}?per_page=${String(PER_PAGE)}&page=${String(page)}`;
+  function pageUrl(owner: string, repo: string, suffix: string, page: number, filter: Readonly<Record<string, string>> = {}): string {
+    const filtered = Object.entries(filter).map(([key, value]) => `${key}=${encodeURIComponent(value)}&`).join('');
+    return `${API_ORIGIN}${repoPath(owner, repo)}${suffix}?${filtered}per_page=${String(PER_PAGE)}&page=${String(page)}`;
   }
 
-  /** Every item of a paginated REST listing, in host order. */
-  async function listAll(owner: string, repo: string, suffix: string, what: string): Promise<unknown[]> {
+  /** Every item of a paginated REST listing, in host order; `filter` names fixed query parameters. */
+  async function listAll(
+    owner: string,
+    repo: string,
+    suffix: string,
+    what: string,
+    filter: Readonly<Record<string, string>> = {},
+  ): Promise<unknown[]> {
     const items: unknown[] = [];
     for (let page: number | null = 1; page !== null; ) {
-      const { body, link } = await restGet(pageUrl(owner, repo, suffix, page), what);
+      const { body, link } = await restGet(pageUrl(owner, repo, suffix, page, filter), what);
       if (!isList(body)) throw new GitHubError('malformed-response', `The ${what} page is not a list.`);
       items.push(...body);
-      page = nextPage(link, owner, repo, suffix, page);
+      page = nextPage(link, owner, repo, suffix, page, filter);
     }
     return items;
   }
@@ -1645,5 +1798,230 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
     return { context, readSource, fileExists };
   }
 
-  return Object.freeze({ getAuthenticatedUser, createReview, listReviews, listReviewComments, fetchContext });
+  // ---------------------------------------------------------------------------
+  // Companion suggestion pull requests (docs/companion-suggestion-pr-contract.md)
+  // ---------------------------------------------------------------------------
+
+  /** A branch name's URL path: each "/"-separated segment encoded on its own. */
+  function branchPath(branch: string): string {
+    return branch.split('/').map(encodeURIComponent).join('/');
+  }
+
+  /** The string form of a host value that must be a string, or a malformed-response error. */
+  function hostString(value: unknown, what: string): string {
+    if (typeof value !== 'string' || value === '') throw new GitHubError('malformed-response', `The ${what} is missing.`);
+    return value;
+  }
+
+  /** A full-commit host value as a string, or a malformed-response error. */
+  function hostSha(value: unknown, what: string): string {
+    if (typeof value !== 'string' || !FULL_SHA.test(value)) throw new GitHubError('malformed-response', `The ${what} is not a full object id.`);
+    return value;
+  }
+
+  /** POSTs a JSON body; a refusal answer is hostRejected only when `definitive` and its status is understood. */
+  async function restPost(url: string, body: unknown, what: string, definitive: boolean): Promise<unknown> {
+    const response = await send('POST', url, { body });
+    if (!response.ok) throw await statusError(response, what, definitive && DEFINITIVE_CREATE_REFUSALS.has(response.status));
+    return jsonBody(response, what);
+  }
+
+  async function readSuggestionTarget({
+    owner: ownerInput,
+    repo: repoInput,
+    pullNumber: pullNumberInput,
+  }: Unchecked<'owner' | 'repo' | 'pullNumber'> = {}): Promise<ISuggestionTarget> {
+    const destination = { owner: ownerInput, repo: repoInput, pullNumber: pullNumberInput };
+    requireDestination(destination);
+    const { owner, repo, pullNumber } = destination;
+    const { body: pull } = await restGet(`${API_ORIGIN}${repoPath(owner, repo)}/pulls/${String(pullNumber)}`, 'pull request');
+    const headRepo = optionalMember(pull, 'head', 'repo');
+    const headRepository = headRepo === null ? null : optionalMember(headRepo, 'full_name');
+    const { body: repository } = await restGet(`${API_ORIGIN}${repoPath(owner, repo)}`, 'repository');
+    const push = optionalMember(repository, 'permissions', 'push');
+    return {
+      headSha: hostSha(optionalMember(pull, 'head', 'sha'), 'pull request head'),
+      headRef: hostString(optionalMember(pull, 'head', 'ref'), 'pull request head branch'),
+      headRepository: headRepository === null ? null : hostString(headRepository, 'pull request head repository'),
+      baseRepository: hostString(optionalMember(pull, 'base', 'repo', 'full_name'), 'pull request base repository'),
+      defaultBranch: hostString(optionalMember(repository, 'default_branch'), 'repository default branch'),
+      canPush: push === true,
+    };
+  }
+
+  async function findLabel({ owner, repo, name }: Unchecked<'owner' | 'repo' | 'name'> = {}): Promise<string | null> {
+    requireInput(isRepoName(owner) && isRepoName(repo), 'owner and repo must be GitHub names');
+    requireInput(typeof name === 'string' && name.length > 0, 'name must be a non-empty string');
+    const response = await send('GET', `${API_ORIGIN}${repoPath(owner, repo)}/labels/${encodeURIComponent(name)}`);
+    if (response.status === 404) return null;
+    if (!response.ok) throw await statusError(response, 'label request');
+    return hostString(optionalMember(await jsonBody(response, 'label'), 'name'), 'label name');
+  }
+
+  /**
+   * One proposal commit on `parent`: a verified blob per created or edited
+   * file, one tree based on the parent's tree, and one commit with the parent
+   * as its only parent, read back before it is returned. These objects are
+   * content-addressed and invisible until a branch names them.
+   */
+  async function createProposalCommit({
+    owner,
+    repo,
+    parent,
+    message,
+    changes,
+  }: Unchecked<'owner' | 'repo' | 'parent' | 'message' | 'changes'> = {}): Promise<IProposalCommit> {
+    requireInput(isRepoName(owner) && isRepoName(repo), 'owner and repo must be GitHub names');
+    requireFullSha(parent, 'parent');
+    requireInput(typeof message === 'string' && message.length > 0, 'message must be a non-empty string');
+    requireInput(isList(changes) && changes.length > 0, 'changes must be a non-empty list');
+    const planned = changes.map((change, i) => proposalChange(change, i));
+    requireInput(new Set(planned.map((c) => c.path)).size === planned.length, 'changes must name each path once');
+    const base = repoPath(owner, repo);
+
+    const rootTree = await commitTree(owner, repo, parent);
+    const entries: ICreateTreeEntry[] = [];
+    const expected: { readonly path: string; readonly blob: string | null; readonly mode: string }[] = [];
+    for (const change of planned) {
+      const existing = await regularFileAt(owner, repo, parent, change.path);
+      if (change.operation === 'create' ? existing !== null : existing === null) {
+        throw new GitHubError('source-inconsistent', redact(`${change.path} ${change.operation === 'create' ? 'already exists' : 'does not exist'} at ${parent}.`));
+      }
+      const mode = change.operation === 'create' ? change.fileMode : String(existing?.mode);
+      if (mode !== '100644' && mode !== '100755') throw new GitHubError('not-a-file', redact(`${change.path} is not a regular file at ${parent}.`));
+      if (change.operation === 'delete') {
+        entries.push({ path: change.path, mode, type: 'blob', sha: null });
+        expected.push({ path: change.path, blob: null, mode });
+        continue;
+      }
+      const bytes = Buffer.from(change.text, 'utf8');
+      const blob = gitBlobSha(bytes);
+      const created = await restPost(`${API_ORIGIN}${base}/git/blobs`, { content: bytes.toString('base64'), encoding: 'base64' }, 'create-blob request', false);
+      if (optionalMember(created, 'sha') !== blob) throw identityError('blob', blob);
+      entries.push({ path: change.path, mode, type: 'blob', sha: blob });
+      expected.push({ path: change.path, blob, mode });
+    }
+    const tree = hostSha(optionalMember(await restPost(`${API_ORIGIN}${base}/git/trees`, { base_tree: rootTree, tree: entries }, 'create-tree request', false), 'sha'), 'created tree');
+    const commit = hostSha(
+      optionalMember(await restPost(`${API_ORIGIN}${base}/git/commits`, { message, tree, parents: [parent] }, 'create-commit request', false), 'sha'),
+      'created commit',
+    );
+
+    const { body } = await restGet(`${API_ORIGIN}${base}/git/commits/${commit}`, 'commit request');
+    const parents = optionalMember(body, 'parents');
+    const parentShas = isList(parents) ? parents.map((p) => optionalMember(p, 'sha')) : null;
+    if (optionalMember(body, 'sha') !== commit || optionalMember(body, 'tree', 'sha') !== tree || parentShas?.length !== 1 || parentShas[0] !== parent) {
+      throw new GitHubError('blob-integrity', `The created commit ${commit} does not have the proposed tree and parent.`);
+    }
+    // The verified answer is the commit's root tree: the path reads below walk it without reading the commit again.
+    void cached(commitCache, `${owner}/${repo}:commit:${commit}`, () => Promise.resolve<unknown>(tree));
+    for (const { path: filePath, blob, mode } of expected) {
+      const entry = await entryAt(owner, repo, commit, filePath);
+      const exact = blob === null ? entry === null : entry !== null && entry.sha === blob && entry.mode === mode;
+      if (!exact) throw new GitHubError('blob-integrity', redact(`The created commit ${commit} does not hold the proposed ${filePath}.`));
+    }
+    return { commit };
+  }
+
+  /** A proposal change as validated at the boundary. */
+  function proposalChange(change: unknown, i: number): ProposalChange {
+    requireInput(isPlainObject(change), `changes[${String(i)}] must be an object`);
+    const { operation, path: filePath, text, fileMode } = change;
+    requireRepositoryPath(filePath);
+    if (operation === 'delete') return { operation, path: filePath };
+    requireInput(typeof text === 'string', `changes[${String(i)}].text must be a string`);
+    if (operation === 'edit') return { operation, path: filePath, text };
+    requireInput(operation === 'create', `changes[${String(i)}].operation must be create, edit or delete`);
+    requireInput(fileMode === '100644' || fileMode === '100755', `changes[${String(i)}].fileMode must be 100644 or 100755`);
+    return { operation, path: filePath, text, fileMode };
+  }
+
+  async function getBranch({ owner, repo, branch }: Unchecked<'owner' | 'repo' | 'branch'> = {}): Promise<string | null> {
+    requireInput(isRepoName(owner) && isRepoName(repo), 'owner and repo must be GitHub names');
+    requireRepositoryPath(branch);
+    const response = await send('GET', `${API_ORIGIN}${repoPath(owner, repo)}/git/ref/heads/${branchPath(branch)}`);
+    if (response.status === 404) return null;
+    if (!response.ok) throw await statusError(response, 'branch request');
+    const body = await jsonBody(response, 'branch');
+    if (optionalMember(body, 'ref') !== `refs/heads/${branch}`) throw new GitHubError('malformed-response', 'The branch answer names another reference.');
+    return hostSha(optionalMember(body, 'object', 'sha'), 'branch commit');
+  }
+
+  async function createBranch({ owner, repo, branch, commit }: Unchecked<'owner' | 'repo' | 'branch' | 'commit'> = {}): Promise<void> {
+    requireInput(isRepoName(owner) && isRepoName(repo), 'owner and repo must be GitHub names');
+    requireRepositoryPath(branch);
+    requireFullSha(commit, 'commit');
+    await restPost(`${API_ORIGIN}${repoPath(owner, repo)}/git/refs`, { ref: `refs/heads/${branch}`, sha: commit }, 'create-branch request', true);
+  }
+
+  async function createPullRequest({
+    owner,
+    repo,
+    title,
+    head,
+    base,
+    body,
+  }: Unchecked<'owner' | 'repo' | 'title' | 'head' | 'base' | 'body'> = {}): Promise<ICreatedPullRequest> {
+    requireInput(isRepoName(owner) && isRepoName(repo), 'owner and repo must be GitHub names');
+    for (const [name, value] of Object.entries({ title, head, base, body })) {
+      requireInput(typeof value === 'string' && value.length > 0, `${name} must be a non-empty string`);
+    }
+    const created = await restPost(`${API_ORIGIN}${repoPath(owner, repo)}/pulls`, { title, head, base, body, draft: true }, 'create-pull-request request', true);
+    const number = optionalMember(created, 'number');
+    const htmlUrl = optionalMember(created, 'html_url');
+    if (!isPositiveInteger(number) || typeof htmlUrl !== 'string') {
+      throw new GitHubError('malformed-response', 'The create-pull-request answer names no pull request; the outcome is unknown.');
+    }
+    return { number, htmlUrl };
+  }
+
+  async function listBranchPullRequests({ owner, repo, branch }: Unchecked<'owner' | 'repo' | 'branch'> = {}): Promise<readonly IBranchPullRequest[]> {
+    requireInput(isRepoName(owner) && isRepoName(repo), 'owner and repo must be GitHub names');
+    requireRepositoryPath(branch);
+    const listed = await listAll(owner, repo, '/pulls', 'pull request list', { head: `${owner}:${branch}`, state: 'all' });
+    return listed.map((pr): IBranchPullRequest => {
+      const number = optionalMember(pr, 'number');
+      if (!isPositiveInteger(number)) throw new GitHubError('malformed-response', 'A listed pull request has no number.');
+      return {
+        number,
+        htmlUrl: optionalMember(pr, 'html_url'),
+        body: optionalMember(pr, 'body'),
+        authorId: optionalMember(pr, 'user', 'id'),
+        headRef: optionalMember(pr, 'head', 'ref'),
+        headRepository: optionalMember(pr, 'head', 'repo', 'full_name'),
+        baseRef: optionalMember(pr, 'base', 'ref'),
+      };
+    });
+  }
+
+  async function addLabel({ owner, repo, number, label }: Unchecked<'owner' | 'repo' | 'number' | 'label'> = {}): Promise<void> {
+    requireInput(isRepoName(owner) && isRepoName(repo), 'owner and repo must be GitHub names');
+    requireInput(isPositiveInteger(number), 'number must be a positive integer');
+    requireInput(typeof label === 'string' && label.length > 0, 'label must be a non-empty string');
+    await restPost(`${API_ORIGIN}${repoPath(owner, repo)}/issues/${String(number)}/labels`, { labels: [label] }, 'add-label request', true);
+  }
+
+  async function listLabels({ owner, repo, number }: Unchecked<'owner' | 'repo' | 'number'> = {}): Promise<readonly string[]> {
+    requireInput(isRepoName(owner) && isRepoName(repo), 'owner and repo must be GitHub names');
+    requireInput(isPositiveInteger(number), 'number must be a positive integer');
+    const listed = await listAll(owner, repo, `/issues/${String(number)}/labels`, 'label list');
+    return listed.map((label) => hostString(optionalMember(label, 'name'), 'label name'));
+  }
+
+  return Object.freeze({
+    getAuthenticatedUser,
+    createReview,
+    listReviews,
+    listReviewComments,
+    fetchContext,
+    readSuggestionTarget,
+    findLabel,
+    createProposalCommit,
+    getBranch,
+    createBranch,
+    createPullRequest,
+    listBranchPullRequests,
+    addLabel,
+    listLabels,
+  });
 }

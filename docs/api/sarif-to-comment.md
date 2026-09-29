@@ -439,6 +439,17 @@ The review on GitHub.
 </td></tr>
 <tr><td>
 
+[IPublishedSuggestion](./sarif-to-comment.ipublishedsuggestion.md)
+
+
+</td><td>
+
+A companion suggestion pull request the publication created.
+
+
+</td></tr>
+<tr><td>
+
 [IPublishSarifReviewInput](./sarif-to-comment.ipublishsarifreviewinput.md)
 
 

@@ -1,0 +1,280 @@
+{
+  "state-a": {
+    "review.json": {
+      "format": "sarif-to-comment.companion-publication-state",
+      "version": 1,
+      "publication": "cc855bf5-b55e-4080-83fa-6938594d9608",
+      "destination": {
+        "owner": "mike-north",
+        "repo": "doc-linter",
+        "pullNumber": 36
+      },
+      "reviewedCommit": "89bf101d454c10d98df84e504c05494e9627375b",
+      "inputFingerprint": "sha256:c564c901be43419263e285da7ec9af3117694b9118ac065a118255b84dd507d7",
+      "authorId": 558005,
+      "submit": false,
+      "headRef": "sarif-issue5-20260929-reviewed",
+      "label": "suggestion",
+      "suggestions": [
+        {
+          "title": "Suggestion for #36: retry-with-check (2 changes)",
+          "commitMessage": "Suggestion for #36: retry-with-check (2 changes)\n\nSuggested in a review of mike-north/doc-linter pull request 36 at commit 89bf101d454c10d98df84e504c05494e9627375b.",
+          "changes": [
+            {
+              "operation": "edit",
+              "path": "docs/experiments/sarif-issue5/client.md",
+              "text": "# Retry client (fixture)\n\nRequests are sent once, and retried once on timeout.\nTimeouts are not retried.\nThe clinet reports failures.\n"
+            },
+            {
+              "operation": "create",
+              "path": "docs/experiments/sarif-issue5/client-test.md",
+              "text": "# Retry client checks (fixture)\n\n- A timed-out request is retried once.\n",
+              "fileMode": "100644"
+            }
+          ],
+          "changeCount": 2,
+          "changeLines": "- Edited [docs/experiments/sarif-issue5/client.md line 3 at 89bf101](https://github.com/mike-north/doc-linter/blob/89bf101d454c10d98df84e504c05494e9627375b/docs/experiments/sarif-issue5/client.md#L3)\n- New file `docs/experiments/sarif-issue5/client-test.md`: 72 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644",
+          "items": "**Source:** [docs/experiments/sarif-issue5/client.md line 3 at 89bf101](https://github.com/mike-north/doc-linter/blob/89bf101d454c10d98df84e504c05494e9627375b/docs/experiments/sarif-issue5/client.md#L3)\n\n```\nRequests are sent once.\n```\n\nRetry once on timeout, and say so.\n\n<sub>— Review agent 1.0.0</sub>\n\n---\n\n**Location:** line 3 of the proposed file\n\nAdd a check for the retry.\n\n<sub>— Review agent 1.0.0</sub>",
+          "id": "5f72b5f4-8dd1-462a-948b-71b0767ecafe",
+          "branch": "sarif-to-comment/suggestions/36/5f72b5f4-8dd1-462a-948b-71b0767ecafe",
+          "body": "Suggested in a review of #36 at commit 89bf101d454c10d98df84e504c05494e9627375b.\n\nMerging this pull request into `sarif-issue5-20260929-reviewed` applies these 2 changes together:\n\n- Edited [docs/experiments/sarif-issue5/client.md line 3 at 89bf101](https://github.com/mike-north/doc-linter/blob/89bf101d454c10d98df84e504c05494e9627375b/docs/experiments/sarif-issue5/client.md#L3)\n- New file `docs/experiments/sarif-issue5/client-test.md`: 72 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644\n\n---\n\n**Source:** [docs/experiments/sarif-issue5/client.md line 3 at 89bf101](https://github.com/mike-north/doc-linter/blob/89bf101d454c10d98df84e504c05494e9627375b/docs/experiments/sarif-issue5/client.md#L3)\n\n```\nRequests are sent once.\n```\n\nRetry once on timeout, and say so.\n\n<sub>— Review agent 1.0.0</sub>\n\n---\n\n**Location:** line 3 of the proposed file\n\nAdd a check for the retry.\n\n<sub>— Review agent 1.0.0</sub>\n\n<!-- sarif-to-comment:suggestion {\"id\":\"5f72b5f4-8dd1-462a-948b-71b0767ecafe\",\"original\":{\"owner\":\"mike-north\",\"pullNumber\":36,\"repo\":\"doc-linter\"},\"publication\":\"cc855bf5-b55e-4080-83fa-6938594d9608\",\"reviewedCommit\":\"89bf101d454c10d98df84e504c05494e9627375b\",\"version\":1} -->"
+        },
+        {
+          "title": "Suggestion for #36: delete docs/experiments/sarif-issue5/obsolete.md",
+          "commitMessage": "Suggestion for #36: delete docs/experiments/sarif-issue5/obsolete.md\n\nSuggested in a review of mike-north/doc-linter pull request 36 at commit 89bf101d454c10d98df84e504c05494e9627375b.",
+          "changes": [
+            {
+              "operation": "delete",
+              "path": "docs/experiments/sarif-issue5/obsolete.md"
+            }
+          ],
+          "changeCount": 1,
+          "changeLines": "- Deleted file [docs/experiments/sarif-issue5/obsolete.md at 89bf101](https://github.com/mike-north/doc-linter/blob/89bf101d454c10d98df84e504c05494e9627375b/docs/experiments/sarif-issue5/obsolete.md): the whole file is removed",
+          "items": "This page is superseded; delete it.\n\n<sub>— Review agent 1.0.0</sub>",
+          "id": "ec69538b-1cf2-4801-b7e1-ae96d9076ff1",
+          "branch": "sarif-to-comment/suggestions/36/ec69538b-1cf2-4801-b7e1-ae96d9076ff1",
+          "body": "Suggested in a review of #36 at commit 89bf101d454c10d98df84e504c05494e9627375b.\n\nMerging this pull request into `sarif-issue5-20260929-reviewed` applies this change:\n\n- Deleted file [docs/experiments/sarif-issue5/obsolete.md at 89bf101](https://github.com/mike-north/doc-linter/blob/89bf101d454c10d98df84e504c05494e9627375b/docs/experiments/sarif-issue5/obsolete.md): the whole file is removed\n\n---\n\nThis page is superseded; delete it.\n\n<sub>— Review agent 1.0.0</sub>\n\n<!-- sarif-to-comment:suggestion {\"id\":\"ec69538b-1cf2-4801-b7e1-ae96d9076ff1\",\"original\":{\"owner\":\"mike-north\",\"pullNumber\":36,\"repo\":\"doc-linter\"},\"publication\":\"cc855bf5-b55e-4080-83fa-6938594d9608\",\"reviewedCommit\":\"89bf101d454c10d98df84e504c05494e9627375b\",\"version\":1} -->"
+        }
+      ],
+      "review": {
+        "sections": [
+          0,
+          1
+        ],
+        "comments": [
+          {
+            "path": "docs/experiments/sarif-issue5/client.md",
+            "side": "RIGHT",
+            "line": 5,
+            "body": "Typo.\n\n<sub>— Review agent 1.0.0</sub>\n\n```suggestion\nThe client reports failures.\n```"
+          }
+        ]
+      },
+      "planFingerprint": "sha256:7f0e7ae32d2205e0511d557f704cabc9277a87757a2c237901835de6fa3bb0ab"
+    },
+    "review.json.review": {
+      "format": "sarif-to-comment.publication-state",
+      "version": 1,
+      "phase": "completed",
+      "marker": "<!-- sarif-to-comment:review:b6ff5df0-2b48-43d1-a1cd-c7696e274d8c -->",
+      "destination": {
+        "owner": "mike-north",
+        "repo": "doc-linter",
+        "pullNumber": 36
+      },
+      "reviewedCommit": "89bf101d454c10d98df84e504c05494e9627375b",
+      "inputFingerprint": "sha256:c564c901be43419263e285da7ec9af3117694b9118ac065a118255b84dd507d7",
+      "authorId": 558005,
+      "request": {
+        "owner": "mike-north",
+        "repo": "doc-linter",
+        "pullNumber": 36,
+        "commitId": "89bf101d454c10d98df84e504c05494e9627375b",
+        "body": "**Suggestion pull request:** [#38](https://github.com/mike-north/doc-linter/pull/38)\n\nMerging it into `sarif-issue5-20260929-reviewed` applies these 2 changes together:\n\n- Edited [docs/experiments/sarif-issue5/client.md line 3 at 89bf101](https://github.com/mike-north/doc-linter/blob/89bf101d454c10d98df84e504c05494e9627375b/docs/experiments/sarif-issue5/client.md#L3)\n- New file `docs/experiments/sarif-issue5/client-test.md`: 72 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644\n\n**Source:** [docs/experiments/sarif-issue5/client.md line 3 at 89bf101](https://github.com/mike-north/doc-linter/blob/89bf101d454c10d98df84e504c05494e9627375b/docs/experiments/sarif-issue5/client.md#L3)\n\n```\nRequests are sent once.\n```\n\nRetry once on timeout, and say so.\n\n<sub>— Review agent 1.0.0</sub>\n\n---\n\n**Location:** line 3 of the proposed file\n\nAdd a check for the retry.\n\n<sub>— Review agent 1.0.0</sub>\n\n---\n\n**Suggestion pull request:** [#39](https://github.com/mike-north/doc-linter/pull/39)\n\nMerging it into `sarif-issue5-20260929-reviewed` applies this change:\n\n- Deleted file [docs/experiments/sarif-issue5/obsolete.md at 89bf101](https://github.com/mike-north/doc-linter/blob/89bf101d454c10d98df84e504c05494e9627375b/docs/experiments/sarif-issue5/obsolete.md): the whole file is removed\n\nThis page is superseded; delete it.\n\n<sub>— Review agent 1.0.0</sub>\n\n<!-- sarif-to-comment:review:b6ff5df0-2b48-43d1-a1cd-c7696e274d8c -->",
+        "comments": [
+          {
+            "path": "docs/experiments/sarif-issue5/client.md",
+            "side": "RIGHT",
+            "line": 5,
+            "body": "Typo.\n\n<sub>— Review agent 1.0.0</sub>\n\n```suggestion\nThe client reports failures.\n```"
+          }
+        ]
+      },
+      "requestFingerprint": "sha256:88aca29b3b99b1fbb4538b361fe4eb3fee6ce853f7b73b65c475b742ea3457e3",
+      "receipt": {
+        "reviewId": 5354085442,
+        "htmlUrl": "https://github.com/mike-north/doc-linter/pull/36#pullrequestreview-5354085442",
+        "via": "created"
+      }
+    },
+    "review.json.suggestion-1-branch": {
+      "format": "sarif-to-comment.companion-step",
+      "version": 1,
+      "publication": "cc855bf5-b55e-4080-83fa-6938594d9608",
+      "suggestion": "5f72b5f4-8dd1-462a-948b-71b0767ecafe",
+      "step": "branch",
+      "commit": "3b5e3710f9b2cf54f0c9a8c2cdcf8fcdad86b84a",
+      "phase": "completed"
+    },
+    "review.json.suggestion-1-label": {
+      "format": "sarif-to-comment.companion-step",
+      "version": 1,
+      "publication": "cc855bf5-b55e-4080-83fa-6938594d9608",
+      "suggestion": "5f72b5f4-8dd1-462a-948b-71b0767ecafe",
+      "step": "label",
+      "number": 38,
+      "phase": "completed"
+    },
+    "review.json.suggestion-1-pull": {
+      "format": "sarif-to-comment.companion-step",
+      "version": 1,
+      "publication": "cc855bf5-b55e-4080-83fa-6938594d9608",
+      "suggestion": "5f72b5f4-8dd1-462a-948b-71b0767ecafe",
+      "step": "pull",
+      "phase": "completed",
+      "receipt": {
+        "number": 38,
+        "htmlUrl": "https://github.com/mike-north/doc-linter/pull/38"
+      }
+    },
+    "review.json.suggestion-2-branch": {
+      "format": "sarif-to-comment.companion-step",
+      "version": 1,
+      "publication": "cc855bf5-b55e-4080-83fa-6938594d9608",
+      "suggestion": "ec69538b-1cf2-4801-b7e1-ae96d9076ff1",
+      "step": "branch",
+      "commit": "aaa2a0c85faf65c1636f23839dbba2233e1b391f",
+      "phase": "completed"
+    },
+    "review.json.suggestion-2-label": {
+      "format": "sarif-to-comment.companion-step",
+      "version": 1,
+      "publication": "cc855bf5-b55e-4080-83fa-6938594d9608",
+      "suggestion": "ec69538b-1cf2-4801-b7e1-ae96d9076ff1",
+      "step": "label",
+      "number": 39,
+      "phase": "completed"
+    },
+    "review.json.suggestion-2-pull": {
+      "format": "sarif-to-comment.companion-step",
+      "version": 1,
+      "publication": "cc855bf5-b55e-4080-83fa-6938594d9608",
+      "suggestion": "ec69538b-1cf2-4801-b7e1-ae96d9076ff1",
+      "step": "pull",
+      "phase": "completed",
+      "receipt": {
+        "number": 39,
+        "htmlUrl": "https://github.com/mike-north/doc-linter/pull/39"
+      }
+    }
+  },
+  "state-b": {
+    "review.json": {
+      "format": "sarif-to-comment.companion-publication-state",
+      "version": 1,
+      "publication": "9e10e5ed-90c6-46a9-acd8-bb9005c86cbc",
+      "destination": {
+        "owner": "mike-north",
+        "repo": "doc-linter",
+        "pullNumber": 37
+      },
+      "reviewedCommit": "83b57cf731f0026f993691ff11ba48b42a674753",
+      "inputFingerprint": "sha256:213be8433c6bafa457860b09e0230f62e237720e7dc3f03e1f2257ec43489382",
+      "authorId": 558005,
+      "submit": false,
+      "headRef": "sarif-issue5-20260929-recovery",
+      "label": "suggestion",
+      "suggestions": [
+        {
+          "title": "Suggestion for #37: recovery-pair (2 changes)",
+          "commitMessage": "Suggestion for #37: recovery-pair (2 changes)\n\nSuggested in a review of mike-north/doc-linter pull request 37 at commit 83b57cf731f0026f993691ff11ba48b42a674753.",
+          "changes": [
+            {
+              "operation": "create",
+              "path": "docs/experiments/sarif-issue5/recovery-a.md",
+              "text": "# Recovery A (fixture)\n",
+              "fileMode": "100644"
+            },
+            {
+              "operation": "create",
+              "path": "docs/experiments/sarif-issue5/recovery-b.md",
+              "text": "# Recovery B (fixture)\n",
+              "fileMode": "100644"
+            }
+          ],
+          "changeCount": 2,
+          "changeLines": "- New file `docs/experiments/sarif-issue5/recovery-a.md`: 23 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644\n- New file `docs/experiments/sarif-issue5/recovery-b.md`: 23 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644",
+          "items": "Add page A with page B.\n\n<sub>— Review agent 1.0.0</sub>\n\n---\n\nAdd page B with page A.\n\n<sub>— Review agent 1.0.0</sub>",
+          "id": "d692636b-46f9-4185-8e44-1b961e27bfc4",
+          "branch": "sarif-to-comment/suggestions/37/d692636b-46f9-4185-8e44-1b961e27bfc4",
+          "body": "Suggested in a review of #37 at commit 83b57cf731f0026f993691ff11ba48b42a674753.\n\nMerging this pull request into `sarif-issue5-20260929-recovery` applies these 2 changes together:\n\n- New file `docs/experiments/sarif-issue5/recovery-a.md`: 23 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644\n- New file `docs/experiments/sarif-issue5/recovery-b.md`: 23 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644\n\n---\n\nAdd page A with page B.\n\n<sub>— Review agent 1.0.0</sub>\n\n---\n\nAdd page B with page A.\n\n<sub>— Review agent 1.0.0</sub>\n\n<!-- sarif-to-comment:suggestion {\"id\":\"d692636b-46f9-4185-8e44-1b961e27bfc4\",\"original\":{\"owner\":\"mike-north\",\"pullNumber\":37,\"repo\":\"doc-linter\"},\"publication\":\"9e10e5ed-90c6-46a9-acd8-bb9005c86cbc\",\"reviewedCommit\":\"83b57cf731f0026f993691ff11ba48b42a674753\",\"version\":1} -->"
+        }
+      ],
+      "review": {
+        "sections": [
+          0
+        ],
+        "comments": []
+      },
+      "planFingerprint": "sha256:8391ca01669f895aa31459fc517301968e24734f927dac04333120e1057a7037"
+    },
+    "review.json.review": {
+      "format": "sarif-to-comment.publication-state",
+      "version": 1,
+      "phase": "completed",
+      "marker": "<!-- sarif-to-comment:review:681b52a0-0be7-48a2-b559-7620969d82b0 -->",
+      "destination": {
+        "owner": "mike-north",
+        "repo": "doc-linter",
+        "pullNumber": 37
+      },
+      "reviewedCommit": "83b57cf731f0026f993691ff11ba48b42a674753",
+      "inputFingerprint": "sha256:213be8433c6bafa457860b09e0230f62e237720e7dc3f03e1f2257ec43489382",
+      "authorId": 558005,
+      "request": {
+        "owner": "mike-north",
+        "repo": "doc-linter",
+        "pullNumber": 37,
+        "commitId": "83b57cf731f0026f993691ff11ba48b42a674753",
+        "body": "**Suggestion pull request:** [#40](https://github.com/mike-north/doc-linter/pull/40)\n\nMerging it into `sarif-issue5-20260929-recovery` applies these 2 changes together:\n\n- New file `docs/experiments/sarif-issue5/recovery-a.md`: 23 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644\n- New file `docs/experiments/sarif-issue5/recovery-b.md`: 23 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644\n\nAdd page A with page B.\n\n<sub>— Review agent 1.0.0</sub>\n\n---\n\nAdd page B with page A.\n\n<sub>— Review agent 1.0.0</sub>\n\n<!-- sarif-to-comment:review:681b52a0-0be7-48a2-b559-7620969d82b0 -->",
+        "comments": []
+      },
+      "requestFingerprint": "sha256:bb350272ddf77f0eafabc48542ecb777fcf471a206baae36795cdf25e035bc2c",
+      "receipt": {
+        "reviewId": 5354106412,
+        "htmlUrl": "https://github.com/mike-north/doc-linter/pull/37#pullrequestreview-5354106412",
+        "via": "created"
+      }
+    },
+    "review.json.suggestion-1-branch": {
+      "format": "sarif-to-comment.companion-step",
+      "version": 1,
+      "publication": "9e10e5ed-90c6-46a9-acd8-bb9005c86cbc",
+      "suggestion": "d692636b-46f9-4185-8e44-1b961e27bfc4",
+      "step": "branch",
+      "commit": "ff055e310d5ee974f6f85be4e7f8bfa658800e27",
+      "phase": "completed"
+    },
+    "review.json.suggestion-1-label": {
+      "format": "sarif-to-comment.companion-step",
+      "version": 1,
+      "publication": "9e10e5ed-90c6-46a9-acd8-bb9005c86cbc",
+      "suggestion": "d692636b-46f9-4185-8e44-1b961e27bfc4",
+      "step": "label",
+      "number": 40,
+      "phase": "completed"
+    },
+    "review.json.suggestion-1-pull": {
+      "format": "sarif-to-comment.companion-step",
+      "version": 1,
+      "publication": "9e10e5ed-90c6-46a9-acd8-bb9005c86cbc",
+      "suggestion": "d692636b-46f9-4185-8e44-1b961e27bfc4",
+      "step": "pull",
+      "phase": "completed",
+      "receipt": {
+        "number": 40,
+        "htmlUrl": "https://github.com/mike-north/doc-linter/pull/40"
+      }
+    }
+  }
+}

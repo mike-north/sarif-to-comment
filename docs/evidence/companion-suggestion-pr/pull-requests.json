@@ -1,0 +1,102 @@
+{
+  "36": {
+    "body": "Synthetic original pull request for live evidence of sarif-to-comment companion suggestion pull requests (issue 5). Targets a fixture base branch, not main. Do not merge.",
+    "headRefOid": "89bf101d454c10d98df84e504c05494e9627375b",
+    "isDraft": true,
+    "number": 36,
+    "reviews": [
+      {
+        "id": "PRR_kwDOUuyy7s8AAAABPyDcQg",
+        "author": {
+          "login": "mike-north"
+        },
+        "authorAssociation": "OWNER",
+        "body": "**Suggestion pull request:** [#38](https://github.com/mike-north/doc-linter/pull/38)\n\nMerging it into `sarif-issue5-20260929-reviewed` applies these 2 changes together:\n\n- Edited [docs/experiments/sarif-issue5/client.md line 3 at 89bf101](https://github.com/mike-north/doc-linter/blob/89bf101d454c10d98df84e504c05494e9627375b/docs/experiments/sarif-issue5/client.md#L3)\n- New file `docs/experiments/sarif-issue5/client-test.md`: 72 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644\n\n**Source:** [docs/experiments/sarif-issue5/client.md line 3 at 89bf101](https://github.com/mike-north/doc-linter/blob/89bf101d454c10d98df84e504c05494e9627375b/docs/experiments/sarif-issue5/client.md#L3)\n\n```\nRequests are sent once.\n```\n\nRetry once on timeout, and say so.\n\n<sub>— Review agent 1.0.0</sub>\n\n---\n\n**Location:** line 3 of the proposed file\n\nAdd a check for the retry.\n\n<sub>— Review agent 1.0.0</sub>\n\n---\n\n**Suggestion pull request:** [#39](https://github.com/mike-north/doc-linter/pull/39)\n\nMerging it into `sarif-issue5-20260929-reviewed` applies this change:\n\n- Deleted file [docs/experiments/sarif-issue5/obsolete.md at 89bf101](https://github.com/mike-north/doc-linter/blob/89bf101d454c10d98df84e504c05494e9627375b/docs/experiments/sarif-issue5/obsolete.md): the whole file is removed\n\nThis page is superseded; delete it.\n\n<sub>— Review agent 1.0.0</sub>\n\n<!-- sarif-to-comment:review:b6ff5df0-2b48-43d1-a1cd-c7696e274d8c -->",
+        "submittedAt": null,
+        "includesCreatedEdit": false,
+        "reactionGroups": [],
+        "state": "PENDING",
+        "commit": {
+          "oid": "89bf101d454c10d98df84e504c05494e9627375b"
+        }
+      }
+    ],
+    "state": "OPEN"
+  },
+  "37": {
+    "body": "Synthetic original pull request for live evidence of sarif-to-comment companion suggestion pull request recovery after a lost response (issue 5). Targets a fixture base branch, not main. Do not merge.",
+    "reviews": [
+      {
+        "id": "PRR_kwDOUuyy7s8AAAABPyEuLA",
+        "author": {
+          "login": "mike-north"
+        },
+        "authorAssociation": "OWNER",
+        "body": "**Suggestion pull request:** [#40](https://github.com/mike-north/doc-linter/pull/40)\n\nMerging it into `sarif-issue5-20260929-recovery` applies these 2 changes together:\n\n- New file `docs/experiments/sarif-issue5/recovery-a.md`: 23 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644\n- New file `docs/experiments/sarif-issue5/recovery-b.md`: 23 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644\n\nAdd page A with page B.\n\n<sub>— Review agent 1.0.0</sub>\n\n---\n\nAdd page B with page A.\n\n<sub>— Review agent 1.0.0</sub>\n\n<!-- sarif-to-comment:review:681b52a0-0be7-48a2-b559-7620969d82b0 -->",
+        "submittedAt": null,
+        "includesCreatedEdit": false,
+        "reactionGroups": [],
+        "state": "PENDING",
+        "commit": {
+          "oid": "83b57cf731f0026f993691ff11ba48b42a674753"
+        }
+      }
+    ]
+  },
+  "38": {
+    "baseRefName": "sarif-issue5-20260929-reviewed",
+    "files": [
+      {
+        "path": "docs/experiments/sarif-issue5/client-test.md",
+        "additions": 3,
+        "deletions": 0,
+        "changeType": "ADDED"
+      },
+      {
+        "path": "docs/experiments/sarif-issue5/client.md",
+        "additions": 1,
+        "deletions": 1,
+        "changeType": "MODIFIED"
+      }
+    ],
+    "headRefName": "sarif-to-comment/suggestions/36/5f72b5f4-8dd1-462a-948b-71b0767ecafe",
+    "headRefOid": "3b5e3710f9b2cf54f0c9a8c2cdcf8fcdad86b84a",
+    "isDraft": true,
+    "labels": [
+      {
+        "id": "LA_kwDOUuyy7s8AAAAC45HVsA",
+        "name": "suggestion",
+        "description": "Proposed changes intended for another pull request",
+        "color": "5319E7"
+      }
+    ],
+    "number": 38,
+    "state": "OPEN",
+    "title": "Suggestion for #36: retry-with-check (2 changes)"
+  },
+  "39": {
+    "baseRefName": "sarif-issue5-20260929-reviewed",
+    "files": [
+      {
+        "path": "docs/experiments/sarif-issue5/obsolete.md",
+        "additions": 0,
+        "deletions": 3,
+        "changeType": "DELETED"
+      }
+    ],
+    "headRefName": "sarif-to-comment/suggestions/36/ec69538b-1cf2-4801-b7e1-ae96d9076ff1",
+    "headRefOid": "aaa2a0c85faf65c1636f23839dbba2233e1b391f",
+    "isDraft": true,
+    "labels": [
+      {
+        "id": "LA_kwDOUuyy7s8AAAAC45HVsA",
+        "name": "suggestion",
+        "description": "Proposed changes intended for another pull request",
+        "color": "5319E7"
+      }
+    ],
+    "number": 39,
+    "state": "OPEN",
+    "title": "Suggestion for #36: delete docs/experiments/sarif-issue5/obsolete.md"
+  }
+}

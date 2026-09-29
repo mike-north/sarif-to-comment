@@ -1,0 +1,36 @@
+{
+  "outcome": {
+    "status": "uncertain",
+    "statePath": "<working-logs>/live/state-b/review.json",
+    "markdown": "## Delivery could not be confirmed\n\nNo pull request from the proposal branch `sarif-to-comment/suggestions/37/d692636b-46f9-4185-8e44-1b961e27bfc4` carries suggestion 1's marker. The suggestion pull request may not be visible yet, its creation may not have reached GitHub, or a person may have removed the marker. This state path never creates it again.\n\nAlready on GitHub for this publication:\n\n- Suggestion 1: proposal branch `sarif-to-comment/suggestions/37/d692636b-46f9-4185-8e44-1b961e27bfc4` (no pull request yet)\n\nThe publication state is preserved at `<working-logs>/live/state-b/review.json` and in the files beside it that share its name.\n\n- Retry later with the same state path: it only checks GitHub for work that may already have been sent, never sends it again, and continues with work that was never sent.\n- Do not delete those files: they are the only record of what may already exist.\n- A new state path starts a new, separate publication; use one only if you intend a separate review."
+  },
+  "requests": [
+    "GET /repos/mike-north/doc-linter/pulls/37 -> HTTP 200",
+    "GET /repos/mike-north/doc-linter/pulls/37/files?per_page=100&page=1 -> HTTP 200",
+    "GET /repos/mike-north/doc-linter/pulls/37 -> HTTP 200",
+    "GET /repos/mike-north/doc-linter/compare/0a7b03fe399255a62118311cbc3e1bd6fe64cb23...83b57cf731f0026f993691ff11ba48b42a674753 -> HTTP 200",
+    "GET /repos/mike-north/doc-linter/pulls/37 -> HTTP 200",
+    "GET /repos/mike-north/doc-linter -> HTTP 200",
+    "GET /repos/mike-north/doc-linter/git/commits/83b57cf731f0026f993691ff11ba48b42a674753 -> HTTP 200",
+    "GET /repos/mike-north/doc-linter/git/trees/b6226040babccde4f40abd9089e8145060767ea4 -> HTTP 200",
+    "GET /repos/mike-north/doc-linter/git/trees/c269f402ff5135fe76b32ea056f11bfa7ea58620 -> HTTP 200",
+    "GET /repos/mike-north/doc-linter/git/trees/bd38bd4b992cdb733eb8ea341f0b52255de2b121 -> HTTP 200",
+    "GET /repos/mike-north/doc-linter/git/trees/da19c62e0b8c4e05244863addc8449d7fa270c94 -> HTTP 200",
+    "GET /repos/mike-north/doc-linter/labels/suggestion -> HTTP 200",
+    "GET /user -> HTTP 200",
+    "POST /repos/mike-north/doc-linter/git/blobs -> HTTP 201",
+    "POST /repos/mike-north/doc-linter/git/blobs -> HTTP 201",
+    "POST /repos/mike-north/doc-linter/git/trees -> HTTP 201",
+    "POST /repos/mike-north/doc-linter/git/commits -> HTTP 201",
+    "GET /repos/mike-north/doc-linter/git/commits/ff055e310d5ee974f6f85be4e7f8bfa658800e27 -> HTTP 200",
+    "GET /repos/mike-north/doc-linter/git/trees/b40da0f3b16ea8441228e68c4ced34f62e2e857d -> HTTP 200",
+    "GET /repos/mike-north/doc-linter/git/trees/e9d035808918855f9f0c733ac73cba7019ccf3d5 -> HTTP 200",
+    "GET /repos/mike-north/doc-linter/git/trees/2443f1282ec3cfd3fd2ee775f91a886a20374f8b -> HTTP 200",
+    "GET /repos/mike-north/doc-linter/git/trees/008912874c3467112597aa62d1478d2b03ff122c -> HTTP 200",
+    "POST /repos/mike-north/doc-linter/git/refs -> HTTP 201 received by GitHub; response discarded",
+    "GET /repos/mike-north/doc-linter/git/ref/heads/sarif-to-comment/suggestions/37/d692636b-46f9-4185-8e44-1b961e27bfc4 -> HTTP 200",
+    "GET /repos/mike-north/doc-linter/git/ref/heads/sarif-to-comment/suggestions/37/d692636b-46f9-4185-8e44-1b961e27bfc4 -> HTTP 200",
+    "POST /repos/mike-north/doc-linter/pulls -> HTTP 201 received by GitHub; response discarded",
+    "GET /repos/mike-north/doc-linter/pulls?head=mike-north%3Asarif-to-comment%2Fsuggestions%2F37%2Fd692636b-46f9-4185-8e44-1b961e27bfc4&state=all&per_page=100&page=1 -> answered [] (simulated delayed visibility; not sent)"
+  ]
+}

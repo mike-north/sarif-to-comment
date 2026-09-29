@@ -1,0 +1,10 @@
+## #36
+[{"event":"pull_request","name":"Pre-1.0 version guard","state":"SUCCESS","workflow":"Version guard"},{"event":"push","name":"Pre-1.0 version guard","state":"SUCCESS","workflow":"Version guard"}]
+## #37
+[{"event":"pull_request","name":"Pre-1.0 version guard","state":"SUCCESS","workflow":"Version guard"},{"event":"push","name":"Pre-1.0 version guard","state":"SUCCESS","workflow":"Version guard"}]
+## #38
+[{"event":"pull_request","name":"Pre-1.0 version guard","state":"SUCCESS","workflow":"Version guard"},{"event":"push","name":"Pre-1.0 version guard","state":"SUCCESS","workflow":"Version guard"}]
+## #39
+[{"event":"pull_request","name":"Pre-1.0 version guard","state":"SUCCESS","workflow":"Version guard"},{"event":"push","name":"Pre-1.0 version guard","state":"SUCCESS","workflow":"Version guard"}]
+## #40
+[{"event":"pull_request","name":"Pre-1.0 version guard","state":"SUCCESS","workflow":"Version guard"},{"event":"push","name":"Pre-1.0 version guard","state":"SUCCESS","workflow":"Version guard"}]

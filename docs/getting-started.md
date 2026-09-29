@@ -67,6 +67,14 @@ Add `options: { submit: true }` (library) or `--submit` (CLI, for `publish` and 
 - Every check, approval hold and the reviewed-commit pinning apply exactly as for a draft.
 - The state file records the mode. Retry with the same state path **and** the same mode; the other mode is refused before any request.
 
+### Proposing new files and grouped changes as pull requests
+
+Add `options: { suggestionPullRequests: true }` (library) or `--suggestion-prs` (CLI, for `publish` and `validate`) to offer whole-file creations and deletions, and changes you marked with the same `properties.sarifToComment.acceptanceGroup` value, as **draft suggestion pull requests** into the pull request's head branch. The review links each one, and the outcome lists them in `suggestions`.
+
+- It is off by default: every created pull request is visible to the repository and can trigger its CI and notifications.
+- The label `suggestion` (or `suggestionLabel` / `--suggestion-label`) must already exist, your token needs *Contents: Read and write*, and the reviewed commit must be the pull request's head.
+- Keep the state file **and** the files created beside it (`<state>.suggestion-1-branch`, …, `<state>.review`); a retry uses them to continue without sending anything twice.
+
 ## Library: publish SARIF from memory
 
 Save this as `publish-review.mjs` and run it with `node publish-review.mjs`. It uses an ES module; with CommonJS, replace the `import` with `const { publishSarifReview } = require('sarif-to-comment')` and wrap the `await` in an async function. The located finding refers to line 7 of `src/calc.js`; in your own code, the locations come from your analyzer, and inline comments appear only on lines the pull request changed.

@@ -21,7 +21,10 @@
  * captureReviewInput(input, spec) -> captured fields (synchronous)
  *   Shared fields (unknown keys are refused; spec.ownKeys adds more):
  *     sarif, destination { owner, repo, pullNumber }, reviewedCommit, token,
- *     sourceRootUri?, oldSourceCommit?, options? { ignoreApprovalHold?, submit? }
+ *     sourceRootUri?, oldSourceCommit?, options? { ignoreApprovalHold?, submit?,
+ *     suggestionPullRequests?, suggestionLabel? } — suggestionLabel only with
+ *     suggestionPullRequests: true; enabled, the captured suggestionLabel is
+ *     the label (default 'suggestion'), otherwise it is undefined
  *   The SARIF, destination and options are deep JSON copies of own data
  *   properties only: caller getters never run, and cycles and non-JSON values
  *   are refused rather than dropped or coerced. Fields are checked in a fixed
@@ -31,16 +34,24 @@
  *
  * prepareForDestination(captured, client) -> Promise<ready | blocked>
  *   One fetchContext, verifyContext, then prepareReview with the context's
- *   source reader and existence check. Operational failures (GitHub,
- *   network, source reads, existence checks, a context for another pull
- *   request or commit) reject.
+ *   source reader and existence check. With suggestion pull requests
+ *   enabled (docs/companion-suggestion-pr-contract.md §2.8), the client's
+ *   readSuggestionTarget is read before preparation (its head branch is named
+ *   in the suggestion texts); a ready review that needs suggestion pull
+ *   requests is then checked against the repository — same repository,
+ *   reviewed head, head branch not the default branch, push permission, and
+ *   the label read through findLabel — all reported together as a block.
+ *   Ready carries the head branch and the label as GitHub names it.
+ *   Operational failures (GitHub, network, source reads, existence checks,
+ *   repository and label reads, a context for another pull request or
+ *   commit) reject.
  */
 
 import * as util from 'node:util';
 
-import type { IFetchContextRequest } from './github.cjs';
-import { prepareReview } from './prepare-review.cjs';
-import type { PrepareReviewOutcome } from './prepare-review.cjs';
+import type { IFetchContextRequest, IPullRequestDestination, ISuggestionTarget } from './github.cjs';
+import { blockedBy, codeSpan, prepareReview } from './prepare-review.cjs';
+import type { IBlockedOutcome, IDiagnostic, IReadyOutcome } from './prepare-review.cjs';
 import type { IJsonObject, IPlainObject, JsonValue } from './sarif-common.cjs';
 
 // ---------------------------------------------------------------------------
@@ -69,6 +80,12 @@ export interface ICapturedReview {
    * publication identity (docs/submitted-review-contract.md).
    */
   readonly submit: boolean | undefined;
+  /**
+   * The label suggestion pull requests carry when the caller enabled them
+   * (docs/companion-suggestion-pr-contract.md §2.2); undefined when they are
+   * disabled, as they are unless enabled.
+   */
+  readonly suggestionLabel: string | undefined;
 }
 
 /**
@@ -99,13 +116,34 @@ export interface IContextClient {
   readonly fetchContext: (
     request: IFetchContextRequest,
   ) => Promise<{ readonly context: unknown; readonly readSource: unknown; readonly fileExists?: unknown }>;
+  /** Read only with suggestion pull requests enabled; a client without it cannot publish them. */
+  readonly readSuggestionTarget?: ((request: IPullRequestDestination) => Promise<ISuggestionTarget>) | undefined;
+  /** Read only when a ready review needs suggestion pull requests. */
+  readonly findLabel?: ((request: { readonly owner: string; readonly repo: string; readonly name: string }) => Promise<string | null>) | undefined;
 }
+
+/**
+ * A ready preparation, and — when it needs suggestion pull requests — the
+ * head branch they target and the label as GitHub names it.
+ */
+export interface IDestinationReady extends IReadyOutcome {
+  readonly suggestionPullRequests?: { readonly headRef: string; readonly label: string };
+}
+
+/** What the preflight answers: ready (possibly with suggestion pull requests) or blocked. */
+export type DestinationOutcome = IDestinationReady | IBlockedOutcome;
 
 /** Every accepted shared top-level input field. */
 const SHARED_KEYS: readonly string[] = ['sarif', 'destination', 'reviewedCommit', 'token', 'sourceRootUri', 'oldSourceCommit', 'options'];
 
-/** Every accepted option: the approval-hold override and the explicit submitted mode. */
-const OPTION_KEYS: ReadonlySet<string> = new Set(['ignoreApprovalHold', 'submit']);
+/** Every accepted option: the approval-hold override, the explicit submitted mode, and suggestion pull requests. */
+const OPTION_KEYS: ReadonlySet<string> = new Set(['ignoreApprovalHold', 'submit', 'suggestionPullRequests', 'suggestionLabel']);
+
+/** The label suggestion pull requests carry unless the caller names another. */
+const DEFAULT_SUGGESTION_LABEL = 'suggestion';
+
+/** Characters a label name may not hold: controls and invisible formatting characters. */
+const INVISIBLE_IN_LABEL = /[\u0000-\u001F\u007F-\u009F\uFEFF\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069\u2028\u2029]/;
 
 /** A full, immutable, lowercase Git commit id. */
 const COMMIT_PATTERN = /^[0-9a-f]{40}$/;
@@ -229,6 +267,11 @@ class InputRefusals {
   }
 }
 
+/** Whether `value` can name a GitHub label exactly: 1-50 UTF-16 code units, none invisible, not whitespace-padded. */
+function isLabelName(value: unknown): value is string {
+  return typeof value === 'string' && value.length >= 1 && value.length <= 50 && !INVISIBLE_IN_LABEL.test(value) && !/^\s|\s$/.test(value);
+}
+
 function isCommit(value: unknown): value is string {
   return typeof value === 'string' && COMMIT_PATTERN.test(value);
 }
@@ -317,6 +360,7 @@ export function captureReviewInput<Own extends object>(input: unknown, spec: IRe
   const optionsValue = field('options');
   let ignoreApprovalHold: boolean | undefined;
   let submit: boolean | undefined;
+  let suggestionLabel: string | undefined;
   if (optionsValue !== undefined) {
     if (!isPlainObject(optionsValue)) throw invalid('options must be a plain object');
     const options = refusals.captureRoot(optionsValue, 'options');
@@ -329,9 +373,21 @@ export function captureReviewInput<Own extends object>(input: unknown, spec: IRe
     const submitValue = options['submit'];
     if (submitValue !== undefined && typeof submitValue !== 'boolean') throw invalid('options.submit must be a boolean');
     submit = submitValue;
+    const enabled = options['suggestionPullRequests'];
+    if (enabled !== undefined && typeof enabled !== 'boolean') throw invalid('options.suggestionPullRequests must be a boolean');
+    const label = options['suggestionLabel'];
+    if (label !== undefined && enabled !== true) {
+      throw invalid('options.suggestionLabel applies only with options.suggestionPullRequests: true');
+    }
+    if (label !== undefined && !isLabelName(label)) {
+      throw invalid('options.suggestionLabel must be 1-50 characters without control or invisible formatting characters or surrounding whitespace');
+    }
+    if (enabled === true) suggestionLabel = label ?? DEFAULT_SUGGESTION_LABEL;
   }
 
-  const shared: ICapturedReview = { sarif, destination, reviewedCommit, oldSourceCommit, token, sourceRootUri, ignoreApprovalHold, submit };
+  const shared: ICapturedReview = {
+    sarif, destination, reviewedCommit, oldSourceCommit, token, sourceRootUri, ignoreApprovalHold, submit, suggestionLabel,
+  };
   return { ...own, ...shared };
 }
 
@@ -378,10 +434,14 @@ function verifyContext(context: unknown, captured: ICapturedReview): asserts con
 /**
  * Fetches the review context once, verifies it is for exactly this pull
  * request and reviewed commit, and prepares the whole review against it.
- * Returns the preparation's `ready` or `blocked` outcome; rejects for an
- * operational failure or an unexpected preparation, never writing anything.
+ * With suggestion pull requests enabled, the pull request's branches and the
+ * repository are read first (the head branch is named in their text), and a
+ * ready review that needs any is checked against the repository
+ * (docs/companion-suggestion-pr-contract.md §2.8). Returns `ready` or
+ * `blocked`; rejects for an operational failure or an unexpected
+ * preparation, never writing anything.
  */
-export async function prepareForDestination(captured: ICapturedReview, client: IContextClient): Promise<PrepareReviewOutcome> {
+export async function prepareForDestination(captured: ICapturedReview, client: IContextClient): Promise<DestinationOutcome> {
   const contextRequest: IFetchContextRequest = {
     destination: captured.destination,
     reviewedCommit: captured.reviewedCommit,
@@ -390,12 +450,21 @@ export async function prepareForDestination(captured: ICapturedReview, client: I
   const { context, readSource, fileExists } = await client.fetchContext(contextRequest);
   verifyContext(context, captured);
 
+  let target: ISuggestionTarget | undefined;
+  if (captured.suggestionLabel !== undefined) {
+    if (client.readSuggestionTarget === undefined) throw new Error('This GitHub client cannot publish suggestion pull requests.');
+    target = await client.readSuggestionTarget(captured.destination);
+  }
+  const options = {
+    ...(captured.ignoreApprovalHold === undefined ? {} : { ignoreApprovalHold: captured.ignoreApprovalHold }),
+    ...(target === undefined ? {} : { suggestionPullRequests: { headRef: target.headRef } }),
+  };
   const prepareInput = {
     sarif: captured.sarif,
     context: captured.sourceRootUri === undefined ? context : { ...context, sourceRootUri: captured.sourceRootUri },
     readSource,
     ...(fileExists === undefined ? {} : { fileExists }),
-    ...(captured.ignoreApprovalHold === undefined ? {} : { options: { ignoreApprovalHold: captured.ignoreApprovalHold } }),
+    ...(Object.keys(options).length === 0 ? {} : { options }),
   };
   const prepared = await prepareReview(prepareInput);
   if (prepared.status === 'blocked') return prepared;
@@ -403,7 +472,53 @@ export async function prepareForDestination(captured: ICapturedReview, client: I
   if (prepared.status !== 'ready' || prepared.review.commitId !== captured.reviewedCommit) {
     throw new Error('Review preparation returned an unexpected outcome; nothing was published.');
   }
-  return prepared;
+  if (prepared.suggestions === undefined || target === undefined || captured.suggestionLabel === undefined) return prepared;
+  return checkSuggestionTarget(prepared, target, captured.suggestionLabel, captured, client);
+}
+
+/**
+ * The repository facts suggestion pull requests need, all reported together
+ * (contract §2.5, §2.7): the same repository, the reviewed head, a head
+ * branch that is not the default branch, push permission and an existing
+ * label. Ready with the head branch and the label's own name, or blocked.
+ */
+async function checkSuggestionTarget(
+  prepared: IReadyOutcome,
+  target: ISuggestionTarget,
+  label: string,
+  captured: ICapturedReview,
+  client: IContextClient,
+): Promise<DestinationOutcome> {
+  const { owner, repo } = captured.destination;
+  const repository = `${owner}/${repo}`;
+  if (client.findLabel === undefined) throw new Error('This GitHub client cannot publish suggestion pull requests.');
+  const found = await client.findLabel({ owner, repo, name: label });
+  const problems: IDiagnostic[] = [];
+  const problem = (code: string, message: string): void => {
+    problems.push({ code, message });
+  };
+  // GitHub's own name for the pull request's repository decides sameness, whatever the caller's letter case.
+  if (target.headRepository === null || target.headRepository.toLowerCase() !== target.baseRepository.toLowerCase()) {
+    problem('suggestion-pr-fork-unsupported',
+      `The pull request's head branch is in ${target.headRepository ?? 'a deleted repository'}, not ${target.baseRepository}; suggestion pull requests are supported only within one repository.`);
+  }
+  if (target.headSha !== captured.reviewedCommit) {
+    problem('suggestion-pr-historical-unsupported',
+      `The reviewed commit ${captured.reviewedCommit} is not the pull request's head ${target.headSha}; a suggestion pull request proposes changes to the reviewed head only. Review the current head, or publish without suggestion pull requests.`);
+  }
+  if (target.headRef === target.defaultBranch) {
+    problem('suggestion-pr-default-branch-unsupported',
+      `The pull request's head branch ${codeSpan(target.headRef)} is the repository's default branch; a suggestion pull request targeting it could close issues or pull requests through keywords in its feedback.`);
+  }
+  if (!target.canPush) {
+    problem('suggestion-pr-permission-missing', `The authenticated account cannot push to ${repository}, which creating proposal branches requires.`);
+  }
+  if (found === null) {
+    problem('suggestion-label-missing',
+      `The label ${codeSpan(label)} does not exist in ${repository}. Create it, or choose an existing label with suggestionLabel (--suggestion-label); labels are never created automatically.`);
+  }
+  if (problems.length > 0 || found === null) return blockedBy(problems, prepared.warnings);
+  return { ...prepared, suggestionPullRequests: { headRef: target.headRef, label: found } };
 }
 
 /** The explanation of a blocked review, shown identically by publication and assessment. */
