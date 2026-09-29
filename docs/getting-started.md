@@ -152,6 +152,34 @@ exit $status
 
 The CLI prints the same Markdown the library returns. Add `--source-root file:///…/` for absolute artifact URIs, and `--ignore-approval-hold` to publish despite an approval hold. `npx sarif-to-comment --help` lists every option and needs no token.
 
+## Check readiness without publishing
+
+`validate` (`validateSarifReview` in the library) runs every check `publish` runs against the pull request, then stops. It reads GitHub but never writes to it, and it takes no state path and writes no file. It is optional, and it grants nothing: `publish` repeats every check against the pull request as it is then.
+
+<!-- verified-example: validate -->
+```sh
+# GH_TOKEN, REVIEW_REPOSITORY, REVIEW_PULL and REVIEW_COMMIT are set as described above.
+npx --no-install sarif-to-comment validate \
+  --sarif results.sarif \
+  --repo "$REVIEW_REPOSITORY" \
+  --pull "$REVIEW_PULL" \
+  --commit "$REVIEW_COMMIT"
+status=$?
+
+case $status in
+  0) echo "Ready: publish would create the review." ;;
+  2) echo "Blocked: fix the SARIF file; the message lists every problem." ;;
+  *) echo "Not assessed (exit $status): no verdict; see the message above." ;;
+esac
+exit $status
+```
+
+| Library `status` | CLI exit | Meaning |
+| --- | --- | --- |
+| `ready` | 0 | Publication would proceed to its single create request. GitHub can still refuse the review, for example when your account already has a pending review on the pull request. |
+| `blocked` | 2 | Publication would be blocked. `problems` lists each problem with a pointer into the SARIF; the Markdown is exactly what `publish` would print. |
+| `incomplete` | 1 | The check could not be completed, for example because of a refused credential, a network failure or a failed source read. This is not a verdict. |
+
 ## Write a review yourself
 
 You don't need an analyzer. Create a SARIF document, add findings on lines or line ranges, stage the changes you are proposing with `git add`, and turn them into suggested fixes on those findings:
