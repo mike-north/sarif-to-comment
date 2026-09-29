@@ -165,6 +165,8 @@ Use an off-the-shelf JSON Schema validator for structural validation. Product po
 
 ### D16. Pending versus submitted publication is caller-configurable — settled
 
+> **Status note (reconciled September 28, 2026).** An explicitly submitted comment review has since been implemented (merged, unreleased) under the provisional [submitted-review contract](submitted-review-contract.md), which proposes the omitted-option default (draft) and the `COMMENT` event. The text below remains as historically recorded, pending owner acceptance of that contract. See [status](status.md).
+
 The caller chooses whether publication creates a pending review or submits the review immediately.
 
 **Reason:** The user explicitly chose configurability rather than prescribing one publication lifecycle for every workflow.

@@ -184,6 +184,8 @@ This is a guarantee of validation before publication writes, not a promise of at
 
 ### R13. Preserve the reviewed revision and caller-selected publication mode
 
+> **Status note (reconciled September 28, 2026).** An explicitly submitted comment review has since been implemented (merged, unreleased) under the provisional [submitted-review contract](submitted-review-contract.md), which proposes the omitted-option default (draft) and the `COMMENT` event. The text below remains as historically recorded, pending owner acceptance of that contract. See [status](status.md).
+
 Publication MUST target the explicitly reviewed source revision rather than silently substitute the newest branch head. A newer branch head alone MUST NOT imply invalid input or reset declared approval. Unsupported host placement remains subject to R7. **[D15 and source-freshness clarification; A13]**
 
 The caller MUST be able to choose pending or submitted publication. R11 and R12 apply to both. Pending mode is not a bypass for incomplete or held input. The omitted-option default and submitted review event remain open. **[D16; A17]**
