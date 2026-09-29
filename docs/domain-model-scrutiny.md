@@ -1,5 +1,7 @@
 # Domain model scrutiny
 
+> **Historical design record (reconciled September 28, 2026).** This analysis predates implementation. For current status, see [Current status and reconciliation](status.md).
+
 Candidate reasoning record · September 27, 2026 · Before milestone or implementation design
 
 ## Consumer statement and status
@@ -8,7 +10,7 @@ Candidate reasoning record · September 27, 2026 · Before milestone or implemen
 
 **Recommendation, moderate confidence:** The product can have a small conceptual surface without reducing its agreed capabilities. Keep feedback, proposed change, source association, and destination explicit. Combining, enriching, assessing, rendering, publishing, recovering, and cleaning up are behaviors over those meanings; they do not each require another user-managed entity or intermediate format.
 
-The [decision log](design-decisions.md) remains authoritative. This document challenges the model that could implement those decisions; it does not adopt public field names, packages, commands, storage, or a milestone. The [specification](specification.md) supplies requirement and acceptance IDs. The user's current [attached domain-modeling guide](</Users/mnorth/.codex/attachments/7500b802-f6bd-4fac-8250-94e5eff7332f/Pasted text.txt>) supplies the approach: ordinary-language meaning, independent variation, query catalog, and making additional representations earn their place. It matches the local guide inspected during this work. Its example domains are not imported here.
+The [decision log](design-decisions.md) remains authoritative. This document challenges the model that could implement those decisions; it does not adopt public field names, packages, commands, storage, or a milestone. The [specification](specification.md) supplies requirement and acceptance IDs. The user's attached domain-modeling guide (a local attachment, not committed) supplies the approach: ordinary-language meaning, independent variation, query catalog, and making additional representations earn their place. It matches the local guide inspected during this work. Its example domains are not imported here.
 
 The agreed default for valid feedback that cannot be placed inline is a general review comment with its exact-revision source permalink. Earlier documents may still call that default open; that wording must not reopen the accepted choice. Draft reviews are the default. Suggestion PRs are provisionally enabled by default, with explicitly low confidence pending real user experience.
 

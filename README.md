@@ -39,6 +39,8 @@ These documents are included in the package. The links open them on unpkg (for t
 
 After installation, the same files are in `node_modules/sarif-to-comment/docs/` and `node_modules/sarif-to-comment/CHANGELOG.md`.
 
+The source repository also keeps unpackaged project records. `docs/status.md` (*Current status and reconciliation*) lists what each release contains, what is merged but not yet released, which contracts await acceptance, the open work, and which older plans and specifications are historical records rather than current status.
+
 ## Installation
 
 ```sh
@@ -271,7 +273,7 @@ If that comparison can't establish the old side, you may pass `oldSourceCommit` 
 - The durability steps (write, flush, then send) are ordered for crash safety, but that has not been tested against power loss.
 - GitHub Enterprise Server and GitHub App installation tokens are not supported.
 - There is no review maintenance, re-review or synchronisation back to SARIF.
-- A finding is corrected by removing it and adding it again, not edited in place. Staged file creations and deletions can be recorded in SARIF, but can't be published yet.
+- A finding is corrected by removing it and adding it again, not edited in place.
 - npm attaches a provenance attestation only when the source repository is public at publish time. A release published while the repository is private has no provenance attestation (see [Releasing](#releasing)).
 
 ## Development

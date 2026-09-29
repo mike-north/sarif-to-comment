@@ -1,4 +1,6 @@
-# Astra goal: deliver the happy path from findings to a GitHub review
+# Second-milestone assignment: deliver the happy path from findings to a GitHub review
+
+> **Historical assignment record (reconciled September 28, 2026).** This goal was met and released as 0.2.0. Its deferred items (removal, standalone validation) have since been merged. For current status, see [Current status and reconciliation](status.md).
 
 Prepared and activated at the user's request on September 28, 2026. This is the assignment boundary for the second milestone. It supersedes the broader earlier authoring/correction/validation scope wherever they conflict.
 
@@ -37,9 +39,9 @@ Do not implement comment removal/correction, a broader proofreading loop, a stan
 
 ## Engineering ownership
 
-Astra owns planning, integration, acceptance and the completion claim. Use the existing `orchestrating-opus` skill: persistent Claude Code Opus implements cohesive assignments using native `/goal` and auto permission mode where supported. Opus owns its internal planning and tests-first repair loop. The user has explicitly authorized sending this repository's relevant material to Claude. Reuse suitable existing conversations after verifying no overlapping turn; record actual session/handle ownership and terminal evidence. An independent reviewer must scrutinize the integrated implementation.
+The engineering lead owns planning, integration, acceptance and the completion claim. Implementation is assigned as cohesive, outcome-sized tickets; implementers own their internal planning and their tests-first repair loop. The user has explicitly authorized sending this repository's relevant material to the AI coding service used for implementation. Record which implementer owns each area and the terminal evidence of each assignment. An independent reviewer must scrutinize the integrated implementation.
 
-Write behavioral tests before software changes, with meaningful failing evidence tied to intended outcomes. Use durable intent comments across abstractions. Preserve unrelated local changes, including the pre-existing `.claude/` research scaffolding. The current planning documents are intentional user-directed changes, not unexplained dirt to discard.
+Write behavioral tests before software changes, with meaningful failing evidence tied to intended outcomes. Use durable intent comments across abstractions. Preserve unrelated local changes, including pre-existing local research scaffolding. The current planning documents are intentional user-directed changes, not unexplained dirt to discard.
 
 Resolve routine engineering choices independently. Record assumptions and remaining source/representation questions; raise only consequential ambiguities that cannot be resolved from the user's goal and existing contracts. No detailed implementation plan is prescribed here.
 
@@ -47,10 +49,10 @@ Resolve routine engineering choices independently. Record assumptions and remain
 
 1. A complete authored-input flow through installed CLI and library surfaces, from initialization and line/range feedback through inspection, staged incorporation and actual GitHub draft publication. The demonstration must not hand-construct the SARIF scaffolding or bypass public interfaces.
 2. A supported upstream-SARIF flow through inspection and staged incorporation without helper initialization, plus direct ready-SARIF publication compatibility.
-3. Independent expected source locations and edited bytes. Exercise index/working-tree divergence, faithful line/range and fix association, and relevant coordinate/newline boundaries. Record what real GitHub readback/rendering/application proves separately from local fixtures and mocks. Coordinate live fixture writes and cleanup through the parent under the established authorization; never broaden to user review content.
+3. Independent expected source locations and edited bytes. Exercise index/working-tree divergence, faithful line/range and fix association, and relevant coordinate/newline boundaries. Record what real GitHub readback/rendering/application proves separately from local fixtures and mocks. Coordinate live fixture writes and cleanup through the supervising verifier under the established authorization; never broaden to user review content.
 4. Equivalent human/JSON CLI and library semantics, clean structured failures, honest artifact receipts and unchanged publication recovery behavior.
 5. Independent review findings reconciled against the integrated source; appropriate lint, types, API documentation freshness, package installation and behavioral checks pass with no unexplained omissions.
-6. Updated public declarations, generated API Extractor/API Documenter artifacts, README/getting-started examples and appropriate Changeset. Verify examples against the installed package. Preserve the existing pre-1.0 release guard and trusted-publishing pipeline. Parent retains Git delivery and npm release execution; do not invent a second release path.
+6. Updated public declarations, generated API Extractor/API Documenter artifacts, README/getting-started examples and appropriate Changeset. Verify examples against the installed package. Preserve the existing pre-1.0 release guard and trusted-publishing pipeline. The supervising verifier retains Git delivery and npm release execution; do not invent a second release path.
 7. A concise requirement-to-evidence completion audit and work record. Distinguish verified behavior, documented support limits, external blockers and future features. A green unit suite alone is not completion of the end-to-end goal.
 
 Goal preparation/activation does not itself prove implementation progress or completion. Do not claim success until the selected outcome and these evidence obligations are met.

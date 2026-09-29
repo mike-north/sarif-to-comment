@@ -1,5 +1,7 @@
 # Ready-SARIF publisher: engineering contract draft
 
+> **Historical engineering draft (reconciled September 28, 2026).** It was superseded by the released 0.1.x interface. For current status, see [Current status and reconciliation](status.md).
+
 This is a proposed bounded implementation profile for the selected milestone. It does not supersede D29 or extend publication to staged extraction, file proposals, grouped application, or review maintenance. It is not yet an implemented or released interface. The library and CLI scope is user-selected; the exact names below are engineering proposals to be finalized against tests.
 
 ## Consumer shape

@@ -1,5 +1,7 @@
 # First milestone: ready SARIF to a GitHub draft review
 
+> **Historical scope record (reconciled September 28, 2026).** The npm deferral below was later superseded: the milestone was released as 0.1.0 and 0.1.1 (see [npm release verification](npm-release-verification.md)). For current status, see [Current status and reconciliation](status.md).
+
 The user selected this milestone because existing projects need only this capability to become unblocked. Deliver the ready-SARIF publication path before staged-change enrichment or suggestion-PR support. This is the initial usable increment of the product, not a claim to implement the full specification.
 
 ## Consumer outcome

@@ -1,6 +1,6 @@
 # Native suggestion application fidelity
 
-On September 27, 2026, the parent lead tested nine manually authored native suggestions in [Experiment: verify native suggestion text fidelity](https://github.com/mike-north/doc-linter/pull/13). This establishes specific GitHub behavior. It is not an end-to-end test of the milestone implementation.
+On September 27, 2026, the supervising verifier tested nine manually authored native suggestions in [Experiment: verify native suggestion text fidelity](https://github.com/mike-north/doc-linter/pull/13). This establishes specific GitHub behavior. It is not an end-to-end test of the milestone implementation.
 
 ## Method and evidence
 

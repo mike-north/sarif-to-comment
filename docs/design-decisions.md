@@ -1,5 +1,7 @@
 # SARIF review publication: principles and decisions
 
+> **Status note (reconciled September 28, 2026).** This log remains the authoritative decision record. Its statement that no behavior has been implemented is historical. For current status, see [Current status and reconciliation](status.md).
+
 Updated: September 28, 2026.
 
 This is the working design record for the product-shaping conversation. It records decisions, their reasons, their consequences, and what remains open. It is not an implementation specification. No behavior described here has been implemented or integration-tested in this project.
@@ -162,6 +164,8 @@ Use an off-the-shelf JSON Schema validator for structural validation. Product po
 **Consequences:** A newer branch head does not alone invalidate the reviewed snapshot. Distinguish blocking misrepresentation from warnings about unused features. Exact host placement and historical-review behavior require targeted integration tests.
 
 ### D16. Pending versus submitted publication is caller-configurable — settled
+
+> **Status note (reconciled September 28, 2026).** An explicitly submitted comment review has since been implemented (merged, unreleased) under the provisional [submitted-review contract](submitted-review-contract.md), which proposes the omitted-option default (draft) and the `COMMENT` event. The text below remains as historically recorded, pending owner acceptance of that contract. See [status](status.md).
 
 The caller chooses whether publication creates a pending review or submits the review immediately.
 
@@ -349,11 +353,11 @@ Every operation needs CLI commands/subcommands and an equivalent library surface
 
 This extends D19: callers may still supply ordinary SARIF, but they can also use explicit authoring helpers with caller-provided text and locations. The tool does not invent a critique or infer a source association from arbitrary prose. Optional validation is now user-requested; it is not a mandatory extra approval gate, a publication act or a replacement for publication-time checks. D29's one-way GitHub publication boundary remains intact; local authoring/removal is not review maintenance.
 
-The user delegated naming and design discretion and expressly requested independent sub-agent scrutiny. The [milestone scope](second-milestone.md) and [interface design](second-milestone-interface-design.md) record the selected vocabulary, review feedback and remaining contracts. Detailed choices such as immutable library authoring, complete-finding removal including its attached fixes, and file-output policies are lead-selected designs under that discretion, not separately quoted user decisions.
+The user delegated naming and design discretion and expressly requested independent scrutiny. The [milestone scope](second-milestone.md) and [interface design](second-milestone-interface-design.md) record the selected vocabulary, review feedback and remaining contracts. Detailed choices such as immutable library authoring, complete-finding removal including its attached fixes, and file-output policies are lead-selected designs under that discretion, not separately quoted user decisions.
 
 ### D31. Deliver the linear happy path before correction and standalone validation — user-selected priority
 
-Later on September 28, 2026, while scoping the next Astra goal, the user explicitly deferred proofreading/correction and standalone validation in favor of “the happy path first”: establish findings, see what is present, incorporate staged changes as SARIF fixes, and publish to GitHub. Initialization, adding comments, basic read-only inspection, staged incorporation, and publication comprise the next increment. CLI/library equivalence and human-readable/JSON CLI output remain required.
+Later on September 28, 2026, while scoping the next milestone assignment, the user explicitly deferred proofreading/correction and standalone validation in favor of “the happy path first”: establish findings, see what is present, incorporate staged changes as SARIF fixes, and publish to GitHub. Initialization, adding comments, basic read-only inspection, staged incorporation, and publication comprise the next increment. CLI/library equivalence and human-readable/JSON CLI output remain required.
 
 D30 remains the broader desired workflow. Its removal/correction operations and separate validation surface are no longer requirements of this milestone. Existing publication-time validation, faithful representation and safe failure/delivery behavior are preserved. Do not interpret the deferral as permission to publish invalid, incomplete or incorrectly placed content.
 
