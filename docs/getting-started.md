@@ -11,7 +11,7 @@ Everything is sent in a single request, pinned to the commit you reviewed.
 A few rules shape everything below:
 
 - **Whole review or nothing.** The document is validated first. If any finding can't be published faithfully, nothing is published and you get an explanation (`blocked`).
-- **Draft only, one-way.** The review is created as a draft. A person submits it on GitHub. The tool never submits, edits, restores or deletes a review afterwards.
+- **Draft by default, one-way.** The review is created as a draft, and a person submits it on GitHub. The tool never submits, edits, restores or deletes a review afterwards. If you want the review visible at once, ask for it explicitly: see [Submitting the review immediately](#submitting-the-review-immediately).
 - **Never duplicated.** Each publication has a durable state file. Retrying with the same file confirms the existing review instead of creating another.
 
 There are two ways to use it: the **library**, which takes SARIF in memory, and the **CLI**, which takes SARIF files. Both run the same code and produce the same results.
@@ -58,6 +58,14 @@ The examples below read these values from the environment:
 - **Source root.** If your SARIF uses absolute `file:` URIs from the machine that ran the analysis (for example `file:///home/runner/work/widgets/widgets/src/app.js`), also pass the repository root as an absolute `file:` URI ending in `/`. That's `sourceRootUri` in the library and `--source-root` in the CLI. Repository-relative URIs need nothing extra.
 
 GitHub allows an account **one pending draft review per pull request**. If your account already has a draft there, publication is `rejected`, and the tool will never touch that draft. Submit or delete it on GitHub yourself, then publish again with a new state path.
+
+### Submitting the review immediately
+
+Add `options: { submit: true }` (library) or `--submit` (CLI, for `publish` and `validate`) to create the review already submitted, as a **comment review**. It is the same single request with GitHub's `COMMENT` event, so the review is visible on the pull request at once and its explanation starts with `## Review submitted`.
+
+- It never approves or requests changes, and nothing is inferred from finding severity.
+- Every check, approval hold and the reviewed-commit pinning apply exactly as for a draft.
+- The state file records the mode. Retry with the same state path **and** the same mode; the other mode is refused before any request.
 
 ## Library: publish SARIF from memory
 
