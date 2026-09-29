@@ -1,0 +1,21 @@
+{
+  "status": "passed",
+  "reviewId": 5347825990,
+  "pullNumber": 32,
+  "reviewedCommit": "a9f05fb5db10b470e14e94f40d6244baf24c77fc",
+  "authorId": 558005,
+  "bodyCharacters": 3317,
+  "codeBlocks": 5,
+  "checks": {
+    "pending-draft-by-this-account": "passed",
+    "reviewed-commit": "passed",
+    "body-bytes-equal-intended-request": "passed",
+    "body-equals-hand-written-oracle-plus-marker": "passed",
+    "rendered-code-blocks-hold-exact-content": "passed",
+    "html-like-content-is-escaped": "passed",
+    "deletion-permalinks-and-no-invented-links": "passed",
+    "attribution-rendered": "passed",
+    "the-edit-stays-a-native-suggestion": "passed"
+  },
+  "limits": "Readback only: draft never submitted; no file was created or deleted by applying anything."
+}

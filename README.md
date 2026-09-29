@@ -250,7 +250,7 @@ If that comparison can't establish the old side, you may pass `oldSourceCommit` 
   - branch advance;
   - read-only recovery after a discarded create response and after a process kill.
 
-  These bounded fixture runs do not establish every host failure mode or suggestion shape. Native application of one-line-to-three, two-lines-to-one and middle-line deletion suggestions was verified by exact resulting file bytes and Git blob identities. Inline-only and CRLF-source review bodies also read back exactly. The evidence is recorded in the source repository (`docs/milestone-e2e-evidence.md` and `docs/suggestion-application-e2e.md`).
+  These bounded fixture runs do not establish every host failure mode or suggestion shape. Native application of one-line-to-three, two-lines-to-one and middle-line deletion suggestions was verified by exact resulting file bytes and Git blob identities. Inline-only and CRLF-source review bodies also read back exactly. A review proposing new files (including an empty file, an executable, CRLF and byte-order-mark content and adversarial fences and HTML) and deletions (including a binary file and one over the source size limit) read back byte for byte, with every proposed file's content in its own rendered code block. The evidence is recorded in the source repository (`docs/milestone-e2e-evidence.md`, `docs/suggestion-application-e2e.md` and `docs/file-operation-publication-e2e-evidence.md`).
 - Only `https://api.github.com` is supported.
 - The hidden marker only identifies a review; it is not a secret. A human edit to an unconfirmed draft leaves delivery `uncertain` rather than being "fixed".
 - The durability steps (write, flush, then send) are ordered for crash safety, but that has not been tested against power loss.

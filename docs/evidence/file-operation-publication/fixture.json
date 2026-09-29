@@ -1,0 +1,72 @@
+{
+  "repository": "mike-north/doc-linter",
+  "pullNumber": 32,
+  "draftPullRequest": true,
+  "baseBranch": "sarif-issue4-20260928-base",
+  "headBranch": "sarif-issue4-20260928-reviewed",
+  "baseCommit": "430677396cbd0bdb9023a62ff96ecb66ae7de5d7",
+  "reviewedCommit": "a9f05fb5db10b470e14e94f40d6244baf24c77fc",
+  "defaultBranchUntouched": "0a7b03fe399255a62118311cbc3e1bd6fe64cb23",
+  "reviewedFiles": [
+    "100644 blob e0b5392ea5dee9d0bc84e1fdcf2a0b1d84b9f795 1128899\tfile-ops-fixture/huge.csv",
+    "100644 blob c814901611d776c01f7d8702e386120352cfb5b5      16\tfile-ops-fixture/logo.png",
+    "100644 blob 6d5be93e5d8579d713ccf98a0dfbc45d9ee4966e      20\tfile-ops-fixture/notes.md",
+    "100644 blob 06fcdd77c9348567c50638b30d406500f521c304      23\tfile-ops-fixture/obsolete.txt"
+  ],
+  "stagedChanges": [
+    {
+      "path": "file-ops-fixture/bom-crlf.txt",
+      "status": "A",
+      "oldMode": "000000",
+      "newMode": "100644"
+    },
+    {
+      "path": "file-ops-fixture/docs/guide.md",
+      "status": "A",
+      "oldMode": "000000",
+      "newMode": "100644"
+    },
+    {
+      "path": "file-ops-fixture/empty.txt",
+      "status": "A",
+      "oldMode": "000000",
+      "newMode": "100644"
+    },
+    {
+      "path": "file-ops-fixture/huge.csv",
+      "status": "D",
+      "oldMode": "100644",
+      "newMode": "000000"
+    },
+    {
+      "path": "file-ops-fixture/logo.png",
+      "status": "D",
+      "oldMode": "100644",
+      "newMode": "000000"
+    },
+    {
+      "path": "file-ops-fixture/notes.md",
+      "status": "M",
+      "oldMode": "100644",
+      "newMode": "100644"
+    },
+    {
+      "path": "file-ops-fixture/obsolete.txt",
+      "status": "D",
+      "oldMode": "100644",
+      "newMode": "000000"
+    },
+    {
+      "path": "file-ops-fixture/tool.sh",
+      "status": "A",
+      "oldMode": "000000",
+      "newMode": "100755"
+    },
+    {
+      "path": "file-ops-fixture/unicode.md",
+      "status": "A",
+      "oldMode": "000000",
+      "newMode": "100644"
+    }
+  ]
+}

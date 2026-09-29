@@ -1,0 +1,72 @@
+{
+  "reviewedCommit": "a9f05fb5db10b470e14e94f40d6244baf24c77fc",
+  "changes": [
+    {
+      "path": "file-ops-fixture/bom-crlf.txt",
+      "operation": "create",
+      "associated": [],
+      "explainedBy": "neutral"
+    },
+    {
+      "path": "file-ops-fixture/docs/guide.md",
+      "operation": "create",
+      "associated": [
+        "/runs/0/results/0"
+      ],
+      "explainedBy": "finding"
+    },
+    {
+      "path": "file-ops-fixture/empty.txt",
+      "operation": "create",
+      "associated": [],
+      "explainedBy": "neutral"
+    },
+    {
+      "path": "file-ops-fixture/huge.csv",
+      "operation": "delete",
+      "associated": [],
+      "explainedBy": "neutral"
+    },
+    {
+      "path": "file-ops-fixture/logo.png",
+      "operation": "delete",
+      "associated": [],
+      "explainedBy": "neutral"
+    },
+    {
+      "path": "file-ops-fixture/notes.md",
+      "operation": "edit",
+      "replacements": [
+        {
+          "startLine": 4,
+          "endLine": 4,
+          "associated": [],
+          "explainedBy": "neutral"
+        }
+      ]
+    },
+    {
+      "path": "file-ops-fixture/obsolete.txt",
+      "operation": "delete",
+      "associated": [
+        "/runs/0/results/1"
+      ],
+      "explainedBy": "finding"
+    },
+    {
+      "path": "file-ops-fixture/tool.sh",
+      "operation": "create",
+      "associated": [],
+      "explainedBy": "neutral"
+    },
+    {
+      "path": "file-ops-fixture/unicode.md",
+      "operation": "create",
+      "associated": [],
+      "explainedBy": "neutral"
+    }
+  ],
+  "boundRuns": [],
+  "addedRun": 1,
+  "warnings": []
+}

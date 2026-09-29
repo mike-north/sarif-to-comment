@@ -1,0 +1,9 @@
+[
+  {
+    "id": 4129734261,
+    "path": "file-ops-fixture/notes.md",
+    "commit_id": "a9f05fb5db10b470e14e94f40d6244baf24c77fc",
+    "original_commit_id": "a9f05fb5db10b470e14e94f40d6244baf24c77fc",
+    "body": "Staged change to lines 4–4 of \\`file-ops-fixture/notes.md\\`. No supplied finding was associated with this change.\n\n<sub>— sarif-to-comment 0.2.1 · rule `staged-change`</sub>\n\n```suggestion\ngamma\n```"
+  }
+]

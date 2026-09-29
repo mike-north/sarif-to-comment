@@ -1,0 +1,360 @@
+{
+  "$schema": "https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Live acceptance reviewer"
+        }
+      },
+      "columnKind": "utf16CodeUnits",
+      "versionControlProvenance": [
+        {
+          "repositoryUri": "https://github.com/mike-north/doc-linter",
+          "revisionId": "a9f05fb5db10b470e14e94f40d6244baf24c77fc"
+        }
+      ],
+      "results": [
+        {
+          "message": {
+            "text": "Add this guide for the new option."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file-ops-fixture/docs/guide.md"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "properties": {
+            "sarifToComment": {
+              "proposedFileChanges": [
+                {
+                  "operation": "create",
+                  "artifactIndex": 0,
+                  "fileMode": "100644"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "message": {
+            "text": "This file is obsolete; remove it."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file-ops-fixture/obsolete.txt"
+                },
+                "region": {
+                  "startLine": 2
+                }
+              }
+            }
+          ],
+          "properties": {
+            "sarifToComment": {
+              "proposedFileChanges": [
+                {
+                  "operation": "delete",
+                  "artifactIndex": 1
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "artifacts": [
+        {
+          "location": {
+            "uri": "file-ops-fixture/docs/guide.md"
+          },
+          "contents": {
+            "text": "# Guide\n\nThree: ```js\n```\n````\n``````````\n~~~\n</details>\n<script>alert(1)</script>\n<!-- unterminated\n{{ template }} and {0}\n@octocat #1 [x](javascript:alert(1))\n**not bold** <img src=x onerror=alert(1)>\n```suggestion\n"
+          },
+          "encoding": "utf-8"
+        },
+        {
+          "location": {
+            "uri": "file-ops-fixture/obsolete.txt"
+          }
+        }
+      ]
+    },
+    {
+      "tool": {
+        "driver": {
+          "name": "sarif-to-comment",
+          "version": "0.2.1",
+          "rules": [
+            {
+              "id": "staged-change"
+            }
+          ]
+        }
+      },
+      "columnKind": "utf16CodeUnits",
+      "versionControlProvenance": [
+        {
+          "repositoryUri": "https://github.com/mike-north/doc-linter",
+          "revisionId": "a9f05fb5db10b470e14e94f40d6244baf24c77fc"
+        }
+      ],
+      "results": [
+        {
+          "ruleId": "staged-change",
+          "message": {
+            "text": "Staged creation of `file-ops-fixture/bom-crlf.txt`. No supplied finding was associated with this change."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file-ops-fixture/bom-crlf.txt"
+                }
+              }
+            }
+          ],
+          "properties": {
+            "sarifToComment": {
+              "proposedFileChanges": [
+                {
+                  "operation": "create",
+                  "artifactIndex": 0,
+                  "fileMode": "100644"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "ruleId": "staged-change",
+          "message": {
+            "text": "Staged creation of `file-ops-fixture/empty.txt`. No supplied finding was associated with this change."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file-ops-fixture/empty.txt"
+                }
+              }
+            }
+          ],
+          "properties": {
+            "sarifToComment": {
+              "proposedFileChanges": [
+                {
+                  "operation": "create",
+                  "artifactIndex": 1,
+                  "fileMode": "100644"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "ruleId": "staged-change",
+          "message": {
+            "text": "Staged deletion of `file-ops-fixture/huge.csv`. No supplied finding was associated with this change."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file-ops-fixture/huge.csv"
+                }
+              }
+            }
+          ],
+          "properties": {
+            "sarifToComment": {
+              "proposedFileChanges": [
+                {
+                  "operation": "delete",
+                  "artifactIndex": 2
+                }
+              ]
+            }
+          }
+        },
+        {
+          "ruleId": "staged-change",
+          "message": {
+            "text": "Staged deletion of `file-ops-fixture/logo.png`. No supplied finding was associated with this change."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file-ops-fixture/logo.png"
+                }
+              }
+            }
+          ],
+          "properties": {
+            "sarifToComment": {
+              "proposedFileChanges": [
+                {
+                  "operation": "delete",
+                  "artifactIndex": 3
+                }
+              ]
+            }
+          }
+        },
+        {
+          "ruleId": "staged-change",
+          "message": {
+            "text": "Staged change to lines 4–4 of `file-ops-fixture/notes.md`. No supplied finding was associated with this change."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file-ops-fixture/notes.md"
+                },
+                "region": {
+                  "startLine": 4,
+                  "endLine": 4
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "file-ops-fixture/notes.md"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 4,
+                        "startColumn": 1,
+                        "endLine": 4,
+                        "endColumn": 6
+                      },
+                      "insertedContent": {
+                        "text": "gamma\n"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "ruleId": "staged-change",
+          "message": {
+            "text": "Staged creation of `file-ops-fixture/tool.sh`. No supplied finding was associated with this change."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file-ops-fixture/tool.sh"
+                }
+              }
+            }
+          ],
+          "properties": {
+            "sarifToComment": {
+              "proposedFileChanges": [
+                {
+                  "operation": "create",
+                  "artifactIndex": 4,
+                  "fileMode": "100755"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "ruleId": "staged-change",
+          "message": {
+            "text": "Staged creation of `file-ops-fixture/unicode.md`. No supplied finding was associated with this change."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file-ops-fixture/unicode.md"
+                }
+              }
+            }
+          ],
+          "properties": {
+            "sarifToComment": {
+              "proposedFileChanges": [
+                {
+                  "operation": "create",
+                  "artifactIndex": 5,
+                  "fileMode": "100644"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "artifacts": [
+        {
+          "location": {
+            "uri": "file-ops-fixture/bom-crlf.txt"
+          },
+          "contents": {
+            "text": "﻿one\r\ntwo"
+          },
+          "encoding": "utf-8"
+        },
+        {
+          "location": {
+            "uri": "file-ops-fixture/empty.txt"
+          },
+          "contents": {
+            "text": ""
+          },
+          "encoding": "utf-8"
+        },
+        {
+          "location": {
+            "uri": "file-ops-fixture/huge.csv"
+          }
+        },
+        {
+          "location": {
+            "uri": "file-ops-fixture/logo.png"
+          }
+        },
+        {
+          "location": {
+            "uri": "file-ops-fixture/tool.sh"
+          },
+          "contents": {
+            "text": "#!/bin/sh\necho hi\n"
+          },
+          "encoding": "utf-8"
+        },
+        {
+          "location": {
+            "uri": "file-ops-fixture/unicode.md"
+          },
+          "contents": {
+            "text": "héllo 🎉\n\tindented  \n"
+          },
+          "encoding": "utf-8"
+        }
+      ]
+    }
+  ]
+}
