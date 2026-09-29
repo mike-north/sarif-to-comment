@@ -33,7 +33,7 @@ This is a responsibility boundary, not a requirement for separate npm packages o
 
 ## Deferred
 
-- Comment removal and correction by removal/recreation.
+- Comment removal and correction by removal/recreation. (Delivered after this milestone under [the finding removal contract](finding-removal-contract.md).)
 - A broader proofreading/correction loop.
 - A standalone `validate` command and library readiness-assessment function.
 - Suggestion PRs and review maintenance.
