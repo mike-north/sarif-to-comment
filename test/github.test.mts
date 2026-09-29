@@ -1765,8 +1765,10 @@ describe('GitHubError and client object runtime shape', () => {
 
   test('a GitHubError with a status and cause carries them, in 0.2.0 key order', () => {
     const cause = new Error('socket hang up');
-    // @ts-expect-error -- 'create-refused' is not a GitHubErrorCode; kept as authored, since this test asserts only status, hostRejected, cause and key order, which the constructor sets independently of the code
-    const err = new GitHubError('create-refused', 'Unprocessable Entity', { status: 422, hostRejected: true, cause });
+    // The code and status the client raises when the host refuses the create-review POST; the cause is
+    // added here (the client itself attaches none) to pin the standard Error cause shape.
+    const err = new GitHubError('http-status', 'Unprocessable Entity', { status: 422, hostRejected: true, cause });
+    assert.equal(err.code, 'http-status');
     assert.equal(err.status, 422);
     assert.equal(err.hostRejected, true);
     assert.equal(err.cause, cause);
