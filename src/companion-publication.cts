@@ -69,6 +69,7 @@ import type { IPreparedCompanion, IPreparedSuggestions, ISuggestionContext, Prep
 import { renderReviewBody, renderSuggestionPullBody } from './prepare-review.cjs';
 import {
   PublicationStateError,
+  boundedRejectionMessage,
   claimNewFile,
   fingerprintOf,
   isHostRejection,
@@ -613,8 +614,7 @@ class Publication {
 
   /** A record of the host's refusal, and the outcome that stops the publication. */
   rejected(index: number, record: StepRecord, err: { readonly status: number; readonly message?: unknown }, what: string): Settled<never> {
-    // eslint-disable-next-line @typescript-eslint/no-base-to-string -- the host's refusal message is untrusted text of any type; String() is the deliberate, total coercion before bounding it
-    const message = String(err.message ?? '').slice(0, MAX_REJECTION_MESSAGE);
+    const message = boundedRejectionMessage(err);
     this.settle(index, { ...record, phase: 'rejected', rejection: { status: err.status, message } });
     return { done: false, outcome: this.rejectedOutcome(record.step, index, err.status, message, what, 'response') };
   }

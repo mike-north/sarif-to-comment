@@ -1373,6 +1373,16 @@ function isHostRejection(err: unknown): err is IHostRejection {
 }
 
 /**
+ * The persisted text of a host refusal: its message, coerced to a string and
+ * cut to MAX_REJECTION_MESSAGE characters. Transport errors may carry request
+ * details, so nothing else of the error is ever kept.
+ */
+function boundedRejectionMessage(err: { readonly message?: unknown }): string {
+  // eslint-disable-next-line @typescript-eslint/no-base-to-string -- the host's refusal message is untrusted text of any type; String() is the deliberate, total coercion before bounding it (an Error's message is already a string)
+  return String(err.message ?? '').slice(0, MAX_REJECTION_MESSAGE);
+}
+
+/**
  * Records a definitive host refusal of the single create. Only the status and
  * a bounded message are kept: transport errors may carry request details that
  * must never reach state. If the terminal record cannot be saved, the sending
@@ -1384,8 +1394,7 @@ function settleRejection(
   record: ISendingRecord,
   err: IHostRejection,
 ): IRejectedOutcome {
-  // eslint-disable-next-line @typescript-eslint/no-base-to-string -- the host's refusal message is untrusted text of any type; String() is the deliberate, total coercion before bounding it (an Error's message is already a string)
-  const message = String(err.message ?? '').slice(0, MAX_REJECTION_MESSAGE);
+  const message = boundedRejectionMessage(err);
   const rejected: IRejectedRecord = { ...record, phase: 'rejected', rejection: { status: err.status, message } };
   let rejectionPersisted = true;
   try {
@@ -1616,6 +1625,7 @@ export { publishPreparedReview, recoverPublication, PublicationStateError };
 // keeps its plan and step records with the same durability, identity and
 // refusal rules; not part of the package's public API.
 export {
+  boundedRejectionMessage,
   claimNewFile,
   fingerprintOf,
   isHostRejection,
