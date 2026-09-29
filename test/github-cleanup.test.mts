@@ -285,17 +285,17 @@ const timeline = (nodes: readonly unknown[], hasNextPage: boolean, endCursor: st
   json({ data: { repository: { pullRequest: { timelineItems: { pageInfo: { hasNextPage, endCursor }, nodes } } } } });
 
 describe('listCrossReferencingPullRequests', () => {
-  test('pages through CROSS_REFERENCED_EVENT timeline items and answers each pull request source', async () => {
+  test('pages through CROSS_REFERENCED_EVENT timeline items and answers each pull request source of this repository', async () => {
     const script = new Script().on(
       'POST',
       GRAPHQL,
       timeline([source(40), { source: { __typename: 'Issue', number: 12 } }, {}], true, 'Y3Vyc29yOjE='),
-      timeline([source(41, { state: 'MERGED', repository: { nameWithOwner: 'someone/fork' }, body: null }), source(42, { state: 'CLOSED' })], false, 'Y3Vyc29yOjI='),
+      timeline([source(41, { state: 'MERGED', repository: { nameWithOwner: 'Octo/Widgets' }, body: null }), source(42, { state: 'CLOSED' }), source(7, { repository: { nameWithOwner: 'someone/fork' } })], false, 'Y3Vyc29yOjI='),
     );
     const found = await script.client().listCrossReferencingPullRequests({ owner: 'octo', repo: 'widgets', pullNumber: 37 });
     assert.deepEqual(found, [
       { number: 40, htmlUrl: 'https://github.com/octo/widgets/pull/40', repository: 'octo/widgets', state: 'open', body: 'Suggested in a review of #37 (40).', labels: ['suggestion'] },
-      { number: 41, htmlUrl: 'https://github.com/octo/widgets/pull/41', repository: 'someone/fork', state: 'merged', body: '', labels: ['suggestion'] },
+      { number: 41, htmlUrl: 'https://github.com/octo/widgets/pull/41', repository: 'Octo/Widgets', state: 'merged', body: '', labels: ['suggestion'] },
       { number: 42, htmlUrl: 'https://github.com/octo/widgets/pull/42', repository: 'octo/widgets', state: 'closed', body: 'Suggested in a review of #37 (42).', labels: ['suggestion'] },
     ]);
     assert.equal(script.sent.length, 2);
@@ -320,6 +320,21 @@ describe('listCrossReferencingPullRequests', () => {
     assert.ok(found);
     assert.equal(found.labels.length, 101);
     assert.equal(found.labels.at(-1), 'suggestion');
+  });
+
+  test('regression: a source in another repository is left out before its labels are read, however many or malformed they are', async () => {
+    // A private foreign repository answers its REST label listing with 403,
+    // and its label connection may be null; neither may stop discovery of
+    // this repository's sources (unscripted requests fail the test).
+    const many = Array.from({ length: 100 }, (_, i) => ({ name: `label-${String(i)}` }));
+    const script = new Script().on('POST', GRAPHQL, timeline([
+      source(45, { repository: { nameWithOwner: 'someone/private' }, labels: { pageInfo: { hasNextPage: true }, nodes: many } }),
+      source(46, { repository: { nameWithOwner: 'someone/private' }, labels: null }),
+      source(40),
+    ], false, null));
+    const found = await script.client().listCrossReferencingPullRequests({ owner: 'octo', repo: 'widgets', pullNumber: 37 });
+    assert.deepEqual(found.map((f) => f.number), [40]);
+    assert.deepEqual(script.sent.map((s) => s.method), ['POST'], 'no label listing in the foreign repository');
   });
 
   test('GraphQL errors, a missing connection and a repeated cursor are refused', async () => {

@@ -585,6 +585,20 @@ describe('targeted discovery from one original (§2.4, D21)', () => {
     assert.equal(world.host.log().filter((r) => r.path.endsWith('/issues')).length, 0, 'the labeled listing is not used');
   });
 
+  test('regression: a foreign pull request with more than 100 labels in an inaccessible repository does not stop targeted discovery', async () => {
+    const labels = Array.from({ length: 101 }, (_, i) => `label-${String(i)}`);
+    const world = makeWorld([
+      original(37, 'closed'),
+      suggestion(40, 37),
+      { ...suggestion(45, 37), repository: 'someone/private', labels, body: `See octo/widgets#37.\n\n${markerLine(45, 37)}` },
+    ]);
+    const outcome = await cleanup(world, { originalPullNumber: 37 });
+    assert.equal(outcome['status'], 'complete');
+    assert.deepEqual(results(outcome), [[40, 37, 'closed']]);
+    assert.equal(world.host.log().some((r) => r.path.startsWith('/repos/someone/')), false, 'nothing is read in the foreign repository');
+    assert.deepEqual(writes(world), closes(40));
+  });
+
   test('a suggestion found through backlinks without the label is reported unlabeled and never closed', async () => {
     const world = makeWorld([original(37, 'merged'), suggestion(40, 37, { labels: [] }), suggestion(41, 37)]);
     const outcome = await cleanup(world, { originalPullNumber: 37 });
