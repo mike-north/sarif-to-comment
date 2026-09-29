@@ -138,6 +138,8 @@ type Problem = { message: string; pointer?: string; path?: string }; // message 
 
 **`ref`** is the JSON Pointer `/runs/i/results/j`. It is bound to this document and is not a persistent identifier; removal selectors are deferred.
 
+> **Superseded:** removal selectors were later defined by [the finding removal contract](finding-removal-contract.md) §2. Inspection now gives each finding a `selector` bound to the document as inspected; `ref` keeps the meaning above.
+
 **No source access.** Line validity is checked later, by extraction (§4) and by publication.
 
 **CLI:**
@@ -170,6 +172,7 @@ interface SarifInspection {
     otherContent: Record<string, unknown> }>;          // full additional evidence, not counts standing in for omitted content
   findings: Array<{
     ref: string; runIndex: number; resultIndex: number;
+    selector: string;                                   // added later: see finding-removal-contract.md §2
     ruleId?: string; level?: string; kind?: string; baselineState?: string; approval?: string;
     message: { text?: string; markdown?: string; id?: string; resolved: boolean };  // full text, never shortened
     locations: LocationView[];                          // every location, in order; [] = general finding
