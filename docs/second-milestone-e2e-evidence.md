@@ -1,6 +1,6 @@
 # Second milestone: installed and live end-to-end evidence
 
-On September 28, 2026 the parent packed the reviewed source as `sarif-to-comment-0.2.0.tgz` and installed it into a clean consumer. It then drove the workflow through the installed package's public library functions and its executable, against real GitHub on two owned synthetic pull requests in the private repository `mike-north/doc-linter`. Five draft reviews were created by the product. Two were submitted and their suggestions applied with GitHub's native Commit suggestion, and the resulting file bytes were read back from immutable Git blobs.
+On September 28, 2026 the supervising verifier packed the reviewed source as `sarif-to-comment-0.2.0.tgz` and installed it into a clean consumer. It then drove the workflow through the installed package's public library functions and its executable, against real GitHub on two owned synthetic pull requests in the private repository `mike-north/doc-linter`. Five draft reviews were created by the product. Two were submitted and their suggestions applied with GitHub's native Commit suggestion, and the resulting file bytes were read back from immutable Git blobs.
 
 The product purpose and requirements are in [the milestone goal](second-milestone-goal.md). This report records observations. Their status against each requirement is in [the acceptance audit](second-milestone-release-audit.md).
 
@@ -13,7 +13,7 @@ The product purpose and requirements are in [the milestone goal](second-mileston
   - [version-preparation.json](evidence/second-milestone/version-preparation.json)
   - [independent review 02](evidence/second-milestone/independent-review-02.md) and [independent review 03](evidence/second-milestone/independent-review-03.md)
   - four screenshots
-- **Raw working records:** the unedited GitHub responses and product output are under `logs/opus/m2/` (`parent-live-final/`, `parent-insertion-final/`, `parent-local-final/`, `parent-installed-final.json`). That area is local and git-ignored.
+- **Raw working records:** the unedited GitHub responses and product output are under `<working-logs>/m2/` (`parent-live-final/`, `parent-insertion-final/`, `parent-local-final/`, `parent-installed-final.json`). That area is local and git-ignored.
 
 **What the consolidation drops.** It omits user-profile blobs, credentials, process environments and absolute temporary paths. The product's own messages name the local state file by absolute path; the consolidation replaces that path with `<state file>`.
 
@@ -21,7 +21,7 @@ The product purpose and requirements are in [the milestone goal](second-mileston
 
 | Item | Value |
 |---|---|
-| Reviewed source manifest | `reviewed-source.sha256`, 325 entries, file SHA-256 `823bef633b25c49908aebb6b774aba6462bef9759a2131e0c41dc7223dfc60d7` |
+| Reviewed source manifest | `reviewed-source.sha256`, 325 entries, file SHA-256 `823bef633b25c49908aebb6b774aba6462bef9759a2131e0c41dc7223dfc60d7`. The hashes identify files at commit `da3c138`, apart from the three versioning files below. Several listed documents were edited later: `README.md`, `docs/getting-started.md`, `docs/second-milestone.md`, `docs/second-milestone-contract-proposal.md`, `docs/second-milestone-goal.md` and generated `docs/api/` pages. Verify with `git show da3c138:<path> \| shasum -a 256`. |
 | Post-versioning differences from the manifest | Only `package.json` (0.1.1 → 0.2.0), `CHANGELOG.md` and the consumed `.changeset/authoring-inspection-staged-changes.md`. `version-preparation.json` records that code, types, API and lockfile are unchanged. A re-check of the manifest against the working tree on September 28 found exactly these three differing entries. |
 | Packed artifact | `sarif-to-comment-0.2.0.tgz`, SHA-256 `13b75f537f36453968b7720e09d6210571aca500116b5bb77bce7e11e994c1f1`. The installed `src/` hashes equal the reviewed source hashes (`acceptance-evidence.json`, `installedPackage`). |
 | Registry | **Released and verified.** These live runs used the locally packed artifact; all 246 published files match it exactly. See [release verification](second-milestone-release-verification.md). |
@@ -67,7 +67,7 @@ Links between local acceptance and the live runs:
 
 Each publication created one pending review through the installed product. The durable state recorded `phase: "completed"` with `via: "created"`.
 
-An independent read-only verifier (`logs/opus/m2/live-readback.cjs`, which shares no code with `src/`) then asserted the following against GitHub:
+An independent read-only verifier (`<working-logs>/m2/live-readback.cjs`, which shares no code with `src/`) then asserted the following against GitHub:
 - the review is `PENDING`, by the authenticated account (id 558005), at H;
 - its body equals the product's saved request body and carries the state marker;
 - exactly one review on the pull request carries that marker, and exactly one pending review belongs to the account;
@@ -87,7 +87,7 @@ The insertion suggestions used the renderings `inserted before third entry` / `r
 
 **Retry with the same state path.** Re-running authored-library returned `published` with the same review id, 5341773653: "was already published; its completion is recorded at `<state file>`. Nothing was sent." Only one review with that marker exists.
 
-**Deleted drafts.** The parent deleted drafts 5341773653, 5341790476 and 5341805378 after their readback, and saved each before-delete and delete response. Each deletion is also confirmed by absence: the next PR 19 review listing held only the next review (5341790476, then 5341805378, then 5341813827).
+**Deleted drafts.** The supervising verifier deleted drafts 5341773653, 5341790476 and 5341805378 after their readback, and saved each before-delete and delete response. Each deletion is also confirmed by absence: the next PR 19 review listing held only the next review (5341790476, then 5341805378, then 5341813827).
 
 **Retained reviews.** Reviews 5341813827 (PR 19, submitted `2026-09-28T16:44:28Z`) and 5341820039 (PR 20, submitted `2026-09-28T16:44:34Z`) are retained as `COMMENTED`. Submission was required for GitHub's Apply action.
 

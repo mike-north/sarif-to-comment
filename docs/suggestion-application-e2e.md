@@ -1,6 +1,6 @@
 # Live evidence: exact review-body readback and native suggestion application fixture
 
-On September 27, 2026 the real public product was run against GitHub. It used the actual CLI and the in-memory library, the real adapter, and global `fetch`. The runs close the independent reviewer's remaining live-evidence gaps (E1 in `logs/opus/assembled-review-04-result.md`), including subsequent native browser application and exact-byte verification by the parent.
+On September 27, 2026 the real public product was run against GitHub. It used the actual CLI and the in-memory library, the real adapter, and global `fetch`. The runs close the independent reviewer's remaining live-evidence gaps (E1 in `<working-logs>/assembled-review-04-result.md`), including subsequent native browser application and exact-byte verification by the supervising verifier.
 
 Expectations were written by hand before any run (`docs/evidence/suggestion-application/expected.json`, `expected-after-apply/`, `expected-blobs.txt`). Readback came from an independent reader that shares no code with `src/`. Raw, credential-free evidence is in `docs/evidence/suggestion-application/raw/`; a scan of all 128 evidence files found no credential.
 
@@ -39,14 +39,14 @@ Each suggestion targets a separate file, so the order of application does not ma
 
 The exact expected bytes are in `docs/evidence/suggestion-application/expected-after-apply/`. After clicking GitHub's native Apply (individually or as a batch), compare `git rev-parse <new head>:apply-fixture/<file>` with the expected blob ids above.
 
-The parent clicked GitHub's native **Apply suggestion → Commit changes** for each of the three comments in signed-in Chrome. GitHub reported each application successful. The resulting head is `ee7d1ea18c3e99cbd399194eecdb9c908c190e94`; the three commits are `8310df8eadbc58d88abc7a3de9a57504d3803f45`, `6185e7d97392039f2f92883b510d5b1265939b97` and `ee7d1ea18c3e99cbd399194eecdb9c908c190e94`.
+The supervising verifier clicked GitHub's native **Apply suggestion → Commit changes** for each of the three comments in signed-in Chrome. GitHub reported each application successful. The resulting head is `ee7d1ea18c3e99cbd399194eecdb9c908c190e94`; the three commits are `8310df8eadbc58d88abc7a3de9a57504d3803f45`, `6185e7d97392039f2f92883b510d5b1265939b97` and `ee7d1ea18c3e99cbd399194eecdb9c908c190e94`.
 
 Independent REST reads pinned to that final immutable commit were decoded and compared byte for byte against the pre-authored expected files. All three matched. Independently calculated Git blob hashes also matched both GitHub's blob identifiers and the pre-authored expectations. Evidence: [applied-files.json](evidence/suggestion-application/applied-files.json), [browser screenshot](evidence/suggestion-application/applied-browser.png). No expected replacement text was committed through Git or an API; GitHub's suggestion application produced the tested files.
 
 ## Cleanup performed
 
-**PR #14:** the parent had visually verified draft review 5333352940 in signed-in Chrome. Before deletion, a fresh readback passed every check (`raw/pr14-verify-05-before-cleanup.txt`). It was then deleted after checking author 558005, state PENDING and its single marker `<!-- sarif-to-comment:review:d0dad03f-6464-4421-9216-9d303034be75 -->` (`raw/pr14-delete-cli-final.json`). PR #14 was closed unmerged with no reviews.
+**PR #14:** the supervising verifier had visually verified draft review 5333352940 in signed-in Chrome. Before deletion, a fresh readback passed every check (`raw/pr14-verify-05-before-cleanup.txt`). It was then deleted after checking author 558005, state PENDING and its single marker `<!-- sarif-to-comment:review:d0dad03f-6464-4421-9216-9d303034be75 -->` (`raw/pr14-delete-cli-final.json`). PR #14 was closed unmerged with no reviews.
 
 **PR #16 CRLF-general draft:** draft 5333374050 was deleted after the same checks, to free the author's single pending-review slot (`raw/pr16-delete-crlf.json`).
 
-No other review or draft was touched. `main` remains `0a7b03fe399255a62118311cbc3e1bd6fe64cb23`. Fixture branches are retained. After all three exact-byte checks passed, the parent verified the fixture branch identities and final head, closed PR #16 unmerged, and retained its submitted review as evidence. See [cleanup.json](evidence/suggestion-application/cleanup.json). No pending experiment draft remains.
+No other review or draft was touched. `main` remains `0a7b03fe399255a62118311cbc3e1bd6fe64cb23`. Fixture branches are retained. After all three exact-byte checks passed, the supervising verifier verified the fixture branch identities and final head, closed PR #16 unmerged, and retained its submitted review as evidence. See [cleanup.json](evidence/suggestion-application/cleanup.json). No pending experiment draft remains.

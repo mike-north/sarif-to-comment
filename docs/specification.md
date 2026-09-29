@@ -1,5 +1,7 @@
 # SARIF generation, combination, and review publication
 
+> **Historical status (reconciled September 28, 2026).** This specification was written before any implementation. Its requirements still govern the broader product, but its status statements (such as "No product implementation exists") are historical. The product has since shipped through 0.2.1, and the §11 open contracts O1–O11 are mapped to shipped evidence, issues, decisions or non-goals in [the reconciliation](status.md#reconciliation-of-the-first-specifications-open-contracts-o1o11). The latest release evidence is [TypeScript migration release verification](typescript-migration-release-verification.md).
+
 First behavioral specification · September 27, 2026 · Draft for review
 
 ## 1. Purpose and authority
@@ -181,6 +183,8 @@ The publisher MUST NOT select a ready subset by omitting held or invalid items. 
 This is a guarantee of validation before publication writes, not a promise of atomic network effects. A host failure after the first write can leave uncertain or partial remote state. Recovery requirements apply; the tool cannot declare success merely because local validation succeeded. **[D12, D14; A18]**
 
 ### R13. Preserve the reviewed revision and caller-selected publication mode
+
+> **Status note (reconciled September 28, 2026).** An explicitly submitted comment review has since been implemented (merged, unreleased) under the provisional [submitted-review contract](submitted-review-contract.md), which proposes the omitted-option default (draft) and the `COMMENT` event. The text below remains as historically recorded, pending owner acceptance of that contract. See [status](status.md).
 
 Publication MUST target the explicitly reviewed source revision rather than silently substitute the newest branch head. A newer branch head alone MUST NOT imply invalid input or reset declared approval. Unsupported host placement remains subject to R7. **[D15 and source-freshness clarification; A13]**
 

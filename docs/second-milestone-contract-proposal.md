@@ -1,6 +1,8 @@
 # Second milestone: accepted engineering contract
 
-Accepted by Astra after parent review on September 28, 2026. This defines the selected five-operation increment. Implementation algorithms remain the authors' responsibility. No second-milestone implementation or passing tests are claimed by this document. The historical filename retains the design proposal's provenance.
+> **Status note (reconciled September 28, 2026).** This contract was implemented and released in 0.2.0. Its "no implementation claimed" statement is historical. For current status, see [Current status and reconciliation](status.md).
+
+Accepted by the engineering lead after review by the supervising verifier on September 28, 2026. This defines the selected five-operation increment. Implementation algorithms remain the authors' responsibility. No second-milestone implementation or passing tests are claimed by this document. The historical filename retains the design proposal's provenance.
 
 **Governing documents:** [goal](second-milestone-goal.md), [scope](second-milestone.md), [interface design](second-milestone-interface-design.md), [lead's contract notes](second-milestone-contract-notes.md), [decisions](design-decisions.md) (D1–D10, D19–D20, D23, D31–D32), and the [specification](specification.md) (R1–R9, O2–O3).
 
@@ -91,7 +93,7 @@ The document it returns is exactly:
 - With no caller-supplied tool, the default name/version identify this package, reading its version at runtime. With a caller-supplied name, only a supplied version is written; do not attribute this package's version to another author.
 - `columnKind` is fixed so that later column-bearing edits are unambiguous. **[E]**
 
-Guidance to callers: pass a `tool.name` that identifies the actual author, such as "Claude review agent". The default attributes the feedback to this tool (D5).
+Guidance to callers: pass a `tool.name` that identifies the actual author, such as "Security review agent". The default attributes the feedback to this tool (D5).
 
 **CLI:**
 
@@ -540,7 +542,7 @@ Each test asserts independently authored bytes and coordinates, never output der
     - exit codes follow §5;
     - no secret appears in any stream.
 11. **Compatibility.** The legacy flag-only publish tests pass unmodified. `publish --format human` matches the legacy output.
-12. **End-to-end (local, then live via parent).** The W1 flow through the installed package and library; upstream SARIF (W7) through inspect and extract; direct publish. Live evidence is recorded separately from local tests.
+12. **End-to-end (local, then live via the supervising verifier).** The W1 flow through the installed package and library; upstream SARIF (W7) through inspect and extract; direct publish. Live evidence is recorded separately from local tests.
 
 ## 9. What is new versus inherited
 
@@ -562,7 +564,7 @@ Every new rule is testable per §8.
 
 ## 10. Resolved representation choice: unexplained changes
 
-**Q1, resolved by the parent under delegated engineering discretion: adopt A without an additional user gate.** What happens to a staged change that no supplied finding explains?** The settled constraints forbid dropping it and forbid inventing reasoning (notes, "Neutral descriptions"). Three options:
+**Q1, resolved under delegated engineering discretion: adopt A without an additional user gate.** What happens to a staged change that no supplied finding explains?** The settled constraints forbid dropping it and forbid inventing reasoning (notes, "Neutral descriptions"). Three options:
 
 | Option | Behavior | Consequence |
 |---|---|---|
@@ -587,11 +589,11 @@ No other product decision was found to be irreducible. The binding, coordinate, 
    - command dispatch, format and envelope, file handling (atomic edit, D10 archive), legacy compatibility;
    - declarations, generated API docs, README and getting-started examples, and the Changeset; tests 3, 9–11.
    - Integrates the shared entry files.
-4. **Publisher:** unchanged. Any integration need is raised to Astra with a regression test first.
-5. **Independent reviewer** on the integrated source, plus live evidence (test 12) through the parent.
+4. **Publisher:** unchanged. Any integration need is raised to the engineering lead with a regression test first.
+5. **Independent reviewer** on the integrated source, plus live evidence (test 12) through the supervising verifier.
 
 Owners 1 and 2 can proceed in parallel once §3 is accepted, since they share only the helper module's signatures. Owner 3 can build dispatch and D10 against stubs.
 
 ## 12. Reconciliation before implementation
 
-Astra and the parent reviewed the proposal against the existing implementation and selected scope. This accepted revision corrects legacy JSON opt-in, destination-free inspection, complete inspection evidence, binding of file operations without provenance loss, truthful neutral text, conservative insertion association, valid EOF/newline coordinates, intent-to-add snapshot requirements, and bounded concurrent-file guarantees. These are observable contract corrections; implementation algorithms remain delegated. The original no-code design ticket completed before implementation assignments.
+The engineering lead and the supervising verifier reviewed the proposal against the existing implementation and selected scope. This accepted revision corrects legacy JSON opt-in, destination-free inspection, complete inspection evidence, binding of file operations without provenance loss, truthful neutral text, conservative insertion association, valid EOF/newline coordinates, intent-to-add snapshot requirements, and bounded concurrent-file guarantees. These are observable contract corrections; implementation algorithms remain delegated. The original no-code design ticket completed before implementation assignments.

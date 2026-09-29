@@ -1,5 +1,7 @@
 # Second milestone: the happy path from authored findings to a GitHub review
 
+> **Historical scope record (reconciled September 28, 2026).** Statements that implementation has not begun are historical. This milestone was released as 0.2.0; see [release verification](second-milestone-release-verification.md). Several deferred items have since been merged. For current status, see [Current status and reconciliation](status.md).
+
 Current scope · September 28, 2026. The user's latest instruction is **“the happy path first.”** This narrows the earlier broader authoring/proofreading proposal. No second-milestone implementation or completed tests are claimed.
 
 ## Consumer outcome

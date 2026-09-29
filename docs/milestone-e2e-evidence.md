@@ -2,7 +2,7 @@
 
 On September 27, 2026 the implemented public library (`src/index.cjs`) and the actual CLI (`bin/sarif-to-comment.cjs`) were run against real GitHub. They used the real adapter (`src/github.cjs`) and global `fetch`, with no fake transport and no test seams. The target was an isolated synthetic fixture in the private repository `mike-north/doc-linter`.
 
-Expectations were written by hand before any product run, and results were checked by a reader that shares no code with `src/`. The earlier manual probes ([placement](placement-host-probe.md), [native suggestion fidelity](native-suggestion-fidelity-experiment.md)) remain supporting host facts only. Selected sanitized evidence is retained in [docs/evidence/milestone-e2e](evidence/milestone-e2e/README.md); full raw evidence remains in `logs/opus/e2e/`. None of the original evidence contains the credential: a final scan of all 79 files there, plus this report, found none.
+Expectations were written by hand before any product run, and results were checked by a reader that shares no code with `src/`. The earlier manual probes ([placement](placement-host-probe.md), [native suggestion fidelity](native-suggestion-fidelity-experiment.md)) remain supporting host facts only. Selected sanitized evidence is retained in [docs/evidence/milestone-e2e](evidence/milestone-e2e/README.md); full raw evidence remains in `<working-logs>/e2e/`. None of the original evidence contains the credential: a final scan of all 79 files there, plus this report, found none.
 
 ## Fixture
 
@@ -18,7 +18,7 @@ Expectations were written by hand before any product run, and results were check
 
 **Fixture files:** `sarif-e2e-fixture/alpha.txt`, `gamma.js`, `notes.md`. `alpha.txt` has two hunks: two inserted lines, one deleted line, and a changed last line, so head context is shifted by +1. `gamma.js` gains an added function. `notes.md` gains an added non-ASCII line.
 
-**Inputs:** the SARIF is `logs/opus/e2e/fixture.sarif.json`. It has 2 runs and 10 results; the second run carries `versionControlProvenance` for revision B. The expectations are in `logs/opus/e2e/expected.json`. `verify.cjs` reads each expected literal text back from Git with `git show`, independently of the product, and every one matched.
+**Inputs:** the SARIF is `<working-logs>/e2e/fixture.sarif.json`. It has 2 runs and 10 results; the second run carries `versionControlProvenance` for revision B. The expectations are in `<working-logs>/e2e/expected.json`. `verify.cjs` reads each expected literal text back from Git with `git show`, independently of the product, and every one matched.
 
 **Expected placement:**
 
@@ -48,7 +48,7 @@ Each row below was checked against the real host through independent readback (`
 
 The publications were library reviews 5333318805, 5333330277, 5333334104 and 5333351652, and CLI reviews 5333342940 and 5333352940.
 
-**2. One pending create.** Each publication made exactly one `POST …/pulls/{n}/reviews`, with the body and all 8 comments and no `event`. The final request is `logs/opus/e2e/create-request-cli-final.json`. The library and CLI requests are identical apart from the per-publication marker.
+**2. One pending create.** Each publication made exactly one `POST …/pulls/{n}/reviews`, with the body and all 8 comments and no `event`. The final request is `<working-logs>/e2e/create-request-cli-final.json`. The library and CLI requests are identical apart from the per-publication marker.
 
 **3. Explicit, verified old-side provenance.** With `oldSourceCommit` set, no compare request was made. The base blob of `alpha.txt` at B was fetched through commit → trees → blob. It was accepted only after the pull request's patch, reverse-applied to the head blob, reproduced it. No request ever read the advanced base tip B2.
 
@@ -69,7 +69,7 @@ A new publication pinned to H (so historical), made without `oldSourceCommit`, b
 
 **8. One pending review per author.** A new publication while our draft was still pending returned `rejected` with GitHub's 422 ("User can only have one pending review per pull request"). It was sent once and never retried, and the Markdown tells the user to resolve the existing draft themselves.
 
-**9. Invalid-anchor control.** Through the real adapter, one create was sent with a valid first comment and a final comment on line 999. It returned 422 "Line could not be resolved", with `hostRejected: true`. Readback then showed zero reviews. The only artifact is the record `logs/opus/e2e/control-invalid-anchor.json`.
+**9. Invalid-anchor control.** Through the real adapter, one create was sent with a valid first comment and a final comment on line 999. It returned 422 "Line could not be resolved", with `hostRejected: true`. Readback then showed zero reviews. The only artifact is the record `<working-logs>/e2e/control-invalid-anchor.json`.
 
 Host facts observed during these runs:
 - Pending REST review comments return `line`, `side` and `original_line` as `null`, with diff positions only.
@@ -83,15 +83,15 @@ Host facts observed during these runs:
 - state PENDING;
 - commit `c96e4c386527de44b29b507907e2c97d2351d45e`;
 - marker `<!-- sarif-to-comment:review:d0dad03f-6464-4421-9216-9d303034be75 -->`;
-- state file `logs/opus/e2e/state/pr14-cli-final.json` (completed, `via: created`).
+- state file `<working-logs>/e2e/state/pr14-cli-final.json` (completed, `via: created`).
 
-It was published by the CLI and passed every check (`pr14-verify-04-cli-final.txt`). It was not submitted or applied. After the parent verified its rendering, it was deleted under exact author/state/marker checks and PR #14 was closed unmerged; see the supplemental application report.
+It was published by the CLI and passed every check (`pr14-verify-04-cli-final.txt`). It was not submitted or applied. After the supervising verifier verified its rendering, it was deleted under exact author/state/marker checks and PR #14 was closed unmerged; see the supplemental application report.
 
 **All other drafts were cleaned up.** Every other draft was deleted only after its author, PENDING state and single marker were checked. The deletion records are in `pr15-delete-*.json` and `pr14-delete-*.json`. The fixture branches are retained.
 
 ## Not yet demonstrated
 
-- Browser rendering was subsequently verified by the parent against the final draft, including both general entries, the exact source link, all eight source associations and both native suggestion previews; see the retained evidence README.
+- Browser rendering was subsequently verified by the supervising verifier against the final draft, including both general entries, the exact source link, all eight source associations and both native suggestion previews; see the retained evidence README.
 - Native application was subsequently verified on a separate product-generated fixture, covering 1→3, 2→1 and middle-line deletion with exact final bytes; see [the application report](suggestion-application-e2e.md).
 - A `base.sha` that differs from the merge base. GitHub did not move it here, so that case rests on the adapter's unit tests.
 - Transport or 5xx uncertainty on the real host. The lost response and the process kill were simulated at the client after a genuine host answer.
@@ -101,7 +101,7 @@ It was published by the CLI and passed every check (`pr14-verify-04-cli-final.tx
 
 The hashes were recorded immediately before and after the final library and CLI runs (`code-hashes-before-final.txt`, `code-hashes-after-final.txt`), and the two files are identical.
 
-Another worker changed `src/prepare-review.cjs` at 19:23:09, which was after the earlier scenario runs. Those runs' create requests are byte-identical, apart from the marker, to the final run's.
+Another implementer changed `src/prepare-review.cjs` at 19:23:09, which was after the earlier scenario runs. Those runs' create requests are byte-identical, apart from the marker, to the final run's.
 
 | File | SHA-256 |
 |---|---|
@@ -114,6 +114,6 @@ Another worker changed `src/prepare-review.cjs` at 19:23:09, which was after the
 | `bin/sarif-to-comment.cjs` | `f437934733841b1ae6a28d385d810cca45ca1a194b5035c8202e544cd7245f27` |
 | `package.json` | `cce72ebe9a9fc9587808e7d6df4eebf607ccb1104198eb4e3103f0fd637e210e` |
 
-Local validation at that snapshot: `node --test test/*.test.cjs` passed 1278 of 1278, and `eslint .` was clean (`logs/opus/e2e/local-suite.txt`, `local-lint.txt`). No product code was changed for this demonstration.
+Local validation at that snapshot: `node --test test/*.test.cjs` passed 1278 of 1278, and `eslint .` was clean (`<working-logs>/e2e/local-suite.txt`, `local-lint.txt`). No product code was changed for this demonstration.
 
 **Operational note:** an invalid `GITHUB_TOKEN` in this environment overrides the valid keyring login for `gh`. Every command therefore ran with `GITHUB_TOKEN` unset and received `GH_TOKEN` from the keyring. No credential was changed.
