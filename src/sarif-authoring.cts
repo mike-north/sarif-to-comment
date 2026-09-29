@@ -2,19 +2,28 @@
  * Optional, freestanding SARIF authoring (private internal module).
  *
  * Lets a caller with no upstream SARIF producer create an ordinary SARIF
- * 2.1.0 document and append feedback on repository lines or line ranges
- * (D31, D32). Contract: docs/second-milestone-contract-proposal.md §3.1-§3.2.
+ * 2.1.0 document, append feedback on repository lines or line ranges, and
+ * correct it by removing a finding selected through inspection (D30-D32).
+ * Contracts: docs/second-milestone-contract-proposal.md §3.1-§3.2 and
+ * docs/finding-removal-contract.md.
  *
  * Invariants:
  * - Ordinary SARIF in and out. There is no builder, session, marker,
  *   authoring history or private format. Any schema-valid SARIF, authored or
  *   upstream, can be extended, and authored documents need nothing from this
  *   module downstream.
- * - Inputs are never mutated. addSarifComment captures the caller's document
- *   (no getters, no cycles, no non-JSON values) and returns a fresh document
- *   that shares no objects with it. Every existing run, finding, attribution
- *   and metadata value is kept exactly; the only change is the appended
- *   result, plus an appended run when one is requested.
+ * - Inputs are never mutated. addSarifComment and removeSarifComment capture
+ *   the caller's document (no getters, no cycles, no non-JSON values) and
+ *   return a fresh document that shares no objects with it. Every other run,
+ *   finding, attribution and metadata value is kept exactly; the only change
+ *   is the appended result (plus an appended run when one is requested) or
+ *   the one removed result.
+ * - Removal is selected, never guessed. A selector from inspection names a
+ *   finding in the document exactly as inspected; any later change makes it
+ *   stale, and a stale selector removes nothing. The whole result goes, with
+ *   the fixes and file proposals it carries, and nothing else: fixes are
+ *   never relocated, and identical fixes elsewhere, run artifacts and
+ *   properties stay.
  * - No invented content. Only what the caller supplied is written: message,
  *   location, rule and level. The attributed tool is the caller's or, by
  *   default, this package at its runtime version.
@@ -27,11 +36,12 @@
  */
 
 
+import { documentDigest, parseFindingSelector } from './finding-selectors.cjs';
 import {
   COMMIT_PATTERN, OWNER_PATTERN, REPO_PATTERN, captureJson, validateSarif, isPlainObject,
   isNormalizedRepositoryPath, encodeRepositoryPath, packageVersion,
 } from './sarif-common.cjs';
-import type { IInvalidSarifOutcome, ISarifLog, ISarifSourceBinding } from './public-types.cjs';
+import type { IInvalidSarifOutcome, IProblem, ISarifLog, ISarifSourceBinding } from './public-types.cjs';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -163,11 +173,71 @@ export interface IAddedSarifCommentOutcome {
  */
 export type AddSarifCommentOutcome = IAddedSarifCommentOutcome | IInvalidSarifOutcome;
 
+/**
+ * The finding {@link removeSarifComment} removed.
+ *
+ * @public
+ */
+export interface IRemovedFinding {
+  /** JSON Pointer the finding had in the input, such as `/runs/0/results/3`. */
+  readonly ref: string;
+  /** Index of its run. */
+  readonly runIndex: number;
+  /** Index it had in that run; findings after it have moved up by one. */
+  readonly resultIndex: number;
+  /** The run's tool name. */
+  readonly tool: string;
+  /** How many fixes were removed with it. */
+  readonly fixes: number;
+  /** How many proposed whole-file operations were removed with it. */
+  readonly fileProposals: number;
+}
+
+/**
+ * The finding and its attached fixes were removed from a new copy of the
+ * document.
+ *
+ * @public
+ */
+export interface IRemovedSarifCommentOutcome {
+  /** Discriminant: the finding was removed. */
+  readonly status: 'removed';
+  /** The new document. Your input is unchanged; use this value from now on. */
+  readonly sarif: ISarifLog;
+  /** What was removed. */
+  readonly finding: IRemovedFinding;
+}
+
+/**
+ * The selector does not select a finding in this document as it is now,
+ * usually because the document changed after it was inspected. Nothing was
+ * removed.
+ *
+ * @public
+ */
+export interface IStaleSarifSelectorOutcome {
+  /** Discriminant: the selector was refused. */
+  readonly status: 'stale';
+  /** The selector, as given. */
+  readonly selector: string;
+  /** Why, with the position the selector names as its pointer. */
+  readonly problems: readonly IProblem[];
+  /** The same explanation as Markdown. */
+  readonly markdown: string;
+}
+
+/**
+ * Every outcome of {@link removeSarifComment}, discriminated by `status`.
+ *
+ * @public
+ */
+export type RemoveSarifCommentOutcome = IRemovedSarifCommentOutcome | IStaleSarifSelectorOutcome | IInvalidSarifOutcome;
+
 // ---------------------------------------------------------------------------
 // Internal types
 
 /** The public operation a misuse message names. */
-type Operation = 'createSarifDocument' | 'addSarifComment';
+type Operation = 'createSarifDocument' | 'addSarifComment' | 'removeSarifComment';
 
 /** A run's tool driver as this module writes it: the version only when one is known. */
 interface IAuthoredDriver {
@@ -525,4 +595,129 @@ function addSarifCommentWithUntypedInput(sarif: unknown, comment: unknown): AddS
   };
 }
 
-export { addSarifCommentWithUntypedInput };
+/**
+ * Removes one finding, with the fixes attached to it, from a copy of a SARIF
+ * document.
+ *
+ * @remarks
+ * Take the selector from {@link inspectSarif}: each finding's `selector`. It
+ * belongs to the document exactly as inspected, so after any change, such as
+ * a previous removal, inspect again. A selector that no longer fits is
+ * refused as `stale` rather than removing whichever finding is now in its
+ * place, which also keeps identical findings apart.
+ *
+ * The whole finding is removed, including its fixes and proposed file
+ * operations. Everything else is kept: other findings and their fixes (even
+ * identical ones), runs, artifacts and properties. Works on SARIF from any
+ * producer; the input is copied and never changed.
+ *
+ * To correct a finding, remove it and add the replacement with
+ * {@link addSarifComment}. Removal only edits this document; it never changes
+ * a published review, and it does not re-derive fixes: run
+ * {@link addStagedChangesToSarif} again on the corrected document.
+ *
+ * @param sarif - A SARIF log as a parsed JSON object.
+ * @param selector - The finding's `selector` from {@link inspectSarif}.
+ * @returns `removed` with the new document, `stale` if the selector does not
+ * fit the document as it is now, or `invalid` if the input is not schema-valid
+ * SARIF.
+ * @throws `TypeError` for a selector that is not of the form inspection gives
+ * (a bare `ref` included), or non-JSON input.
+ *
+ * @example
+ * ```ts
+ * import { inspectSarif, removeSarifComment } from 'sarif-to-comment';
+ *
+ * const inspected = inspectSarif(sarif);
+ * if (inspected.status === 'inspected') {
+ *   const removed = removeSarifComment(sarif, inspected.view.findings[0].selector);
+ *   if (removed.status === 'removed') sarif = removed.sarif;
+ * }
+ * ```
+ *
+ * @public
+ */
+export function removeSarifComment(sarif: object, selector: string): RemoveSarifCommentOutcome {
+  return removeSarifCommentWithUntypedInput(sarif, selector);
+}
+
+/** A `stale` outcome for `selector`, pointing at the position it names. */
+function staleSelector(selector: string, ref: string, message: string): IStaleSarifSelectorOutcome {
+  return { status: 'stale', selector, problems: [{ message, pointer: ref }], markdown: `**Cannot remove the finding:** ${message}` };
+}
+
+/** How many entries a property of a removed result holds, when it is an array. */
+function entriesOf(value: unknown): number {
+  return Array.isArray(value) ? value.length : 0;
+}
+
+/** How many proposed whole-file operations a result carries in its owned extension (D23). */
+function fileProposalsOf(result: object): number {
+  if (!isPlainObject(result)) return 0;
+  const { properties } = result;
+  if (!isPlainObject(properties)) return 0;
+  const owned = properties['sarifToComment'];
+  return isPlainObject(owned) ? entriesOf(owned['proposedFileChanges']) : 0;
+}
+
+/**
+ * Removes the selected finding from a copy of `sarif` (docs/finding-removal-contract.md §3).
+ *
+ * Order: capture, check the selector's form (TypeError), validate the
+ * schema (`invalid`), compare the document digest and locate the position
+ * (`stale`), then remove. The digest is taken before anything changes, over
+ * the same captured value inspection digests, so a document that is
+ * unchanged since inspection always matches.
+ *
+ * Both arguments are validated at run time, since JavaScript callers can pass
+ * anything; the CLI calls this directly with parsed file content.
+ *
+ * @returns `{ status: 'removed', sarif, finding }`, `{ status: 'stale', selector, problems, markdown }`
+ *   or `{ status: 'invalid', problems, markdown }`
+ * @throws TypeError on caller misuse
+ */
+function removeSarifCommentWithUntypedInput(sarif: unknown, selector: unknown): RemoveSarifCommentOutcome {
+  const operation = 'removeSarifComment';
+  const input: unknown = sarif;
+  if (input === null || typeof input !== 'object' || Array.isArray(input)) {
+    throw misuse(operation, 'sarif must be a parsed SARIF object, not serialized text');
+  }
+  const json = captureJson(input, 'sarif');
+  const captured: unknown = json;
+  const parsed = parseFindingSelector(selector);
+  if (parsed === null || typeof selector !== 'string') {
+    throw misuse(operation, 'selector must be a finding selector such as "/runs/0/results/1@0123456789abcdef", '
+      + 'copied from a finding\'s `selector` in inspectSarif (or `sarif-to-comment inspect`); a position alone does not select a finding');
+  }
+  const invalid = validateSarif(captured);
+  if (invalid) return invalid;
+  if (!isValidatedLog(captured)) throw new Error('Internal error: a schema-valid SARIF log has no runs array.');
+
+  const { ref, runIndex, resultIndex } = parsed;
+  if (documentDigest(json) !== parsed.digest) {
+    return staleSelector(selector, ref, `The document has changed since the selector \`${selector}\` was taken from inspecting it, `
+      + 'so it may no longer name the same finding. Nothing was removed. Inspect the document again and use its current selector.');
+  }
+  const run = captured.runs[runIndex];
+  const results = run?.results;
+  const result = results?.[resultIndex];
+  if (run === undefined || results === undefined || result === undefined) {
+    return staleSelector(selector, ref, `This document has no finding at \`${ref}\`, so the selector \`${selector}\` did not come from `
+      + 'inspecting it. Nothing was removed. Inspect the document again and use a selector it shows.');
+  }
+  results.splice(resultIndex, 1);
+  return {
+    status: 'removed',
+    sarif: captured,
+    finding: {
+      ref,
+      runIndex,
+      resultIndex,
+      tool: run.tool.driver.name,
+      fixes: isPlainObject(result) ? entriesOf(result['fixes']) : 0,
+      fileProposals: fileProposalsOf(result),
+    },
+  };
+}
+
+export { addSarifCommentWithUntypedInput, removeSarifCommentWithUntypedInput };

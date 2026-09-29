@@ -27,6 +27,7 @@ import { describe, test } from 'node:test';
 
 import library from '../dist/index.cjs';
 import { addSarifComment, createSarifDocument, removeSarifComment } from '../dist/sarif-authoring.cjs';
+import type { AddSarifCommentOutcome, IAddedSarifCommentOutcome } from '../dist/sarif-authoring.cjs';
 import type { IRemovedSarifCommentOutcome, IStaleSarifSelectorOutcome, RemoveSarifCommentOutcome } from '../dist/sarif-authoring.cjs';
 import { inspectSarif } from '../dist/sarif-inspection.cjs';
 import type { ISarifInspection } from '../dist/sarif-inspection.cjs';
@@ -91,6 +92,12 @@ function selectorAt(sarif: object, ref: string): string {
   const finding = viewOf(sarif).findings.find((f) => f.ref === ref);
   if (!finding) throw new AssertionError({ message: `inspection has no finding ${ref}` });
   return finding.selector;
+}
+
+/** The outcome of a comment that must have been added. */
+function added(outcome: AddSarifCommentOutcome): IAddedSarifCommentOutcome {
+  if (outcome.status !== 'added') throw new AssertionError({ message: `comment refused: ${outcome.markdown}` });
+  return outcome;
 }
 
 /** The outcome of a removal that must have succeeded. */
@@ -239,8 +246,8 @@ describe('inspection gives every finding a selector bound to the inspected docum
     const sarif = loadUpstream();
     const plain = selectorsOf(sarif);
     const outcome = inspectSarif(sarif, { previewLines: 1, previewChars: 3, sourceRootUri: 'file:///work/app/' });
-    assert.equal(outcome.status, 'inspected');
-    if (outcome.status === 'inspected') assert.deepStrictEqual(outcome.view.findings.map((f) => f.selector), plain);
+    if (outcome.status !== 'inspected') throw new AssertionError({ message: `SARIF refused: ${outcome.markdown}` });
+    assert.deepStrictEqual(outcome.view.findings.map((f) => f.selector), plain);
   });
 });
 
@@ -335,13 +342,9 @@ describe('stale or foreign selectors are refused and delete nothing (acceptance 
 
   test('a comment added after inspection makes earlier selectors stale', () => {
     const sarif = createSarifDocument({ tool: { name: 'Review agent' } });
-    const one = addSarifComment(sarif, { file: 'src/parse.js', line: 2, message: EMPTY_INPUT });
-    assert.equal(one.status, 'added');
-    if (one.status !== 'added') return;
+    const one = added(addSarifComment(sarif, { file: 'src/parse.js', line: 2, message: EMPTY_INPUT }));
     const selector = selectorAt(one.sarif, '/runs/0/results/0');
-    const two = addSarifComment(one.sarif, { file: 'src/parse.js', line: 5, message: 'Another.' });
-    assert.equal(two.status, 'added');
-    if (two.status !== 'added') return;
+    const two = added(addSarifComment(one.sarif, { file: 'src/parse.js', line: 5, message: 'Another.' }));
     stale(removeSarifComment(two.sarif, selector));
   });
 
@@ -369,8 +372,10 @@ describe('stale or foreign selectors are refused and delete nothing (acceptance 
     const outcome = stale(removeSarifComment(once, selector));
     assert.deepStrictEqual(Object.keys(outcome), ['status', 'selector', 'problems', 'markdown']);
     assert.equal(outcome.problems.length, 1);
-    assert.equal(outcome.problems[0]?.pointer, '/runs/0/results/1');
-    assert.match(outcome.problems[0]?.message ?? '', /inspect/i);
+    const [problem] = outcome.problems;
+    if (!problem) throw new AssertionError({ message: 'the refusal has no problem' });
+    assert.equal(problem.pointer, '/runs/0/results/1');
+    assert.match(problem.message, /inspect/i);
     assert.match(outcome.markdown, /inspect/i);
   });
 });
@@ -403,11 +408,9 @@ describe('malformed input', () => {
 
   test('schema-invalid SARIF is the invalid outcome', () => {
     const outcome = removeSarifComment({ version: '2.1.0', runs: [{ results: [] }] }, `/runs/0/results/0@${digest}`);
-    assert.equal(outcome.status, 'invalid');
-    if (outcome.status === 'invalid') {
-      assert.ok(outcome.problems.length > 0);
-      assert.deepStrictEqual(Object.keys(outcome), ['status', 'problems', 'markdown']);
-    }
+    if (outcome.status !== 'invalid') throw new AssertionError({ message: `expected invalid, got ${outcome.status}` });
+    assert.ok(outcome.problems.length > 0);
+    assert.deepStrictEqual(Object.keys(outcome), ['status', 'problems', 'markdown']);
   });
 });
 
@@ -415,15 +418,12 @@ describe('correction: remove the mistaken finding, then add its replacement (acc
   test('the corrected document has the replacement and every other finding unchanged', () => {
     let sarif = createSarifDocument({ tool: { name: 'Review agent' } });
     for (const [line, message] of [[3, 'Handle the empty input case on the wrong line.'], [5, 'Combine these entries.']] as const) {
-      const added = addSarifComment(sarif, { file: 'src/parse.js', line, message });
-      if (added.status !== 'added') throw new AssertionError({ message: added.markdown });
-      sarif = added.sarif;
+      sarif = added(addSarifComment(sarif, { file: 'src/parse.js', line, message })).sarif;
     }
     const keep = dig(sarif, 'runs', 0, 'results', 1);
     const out = removed(removeSarifComment(sarif, selectorAt(sarif, '/runs/0/results/0')));
     sarif = out.sarif;
-    const corrected = addSarifComment(sarif, { file: 'src/parse.js', line: 2, message: EMPTY_INPUT });
-    if (corrected.status !== 'added') throw new AssertionError({ message: corrected.markdown });
+    const corrected = added(addSarifComment(sarif, { file: 'src/parse.js', line: 2, message: EMPTY_INPUT }));
     assert.equal(corrected.finding.ref, '/runs/0/results/1');
     assert.deepStrictEqual(dig(corrected.sarif, 'runs', 0, 'results'), [keep, emptyInputFinding()]);
     const view = viewOf(corrected.sarif);

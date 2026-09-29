@@ -8,9 +8,9 @@ Author, inspect and extend SARIF 2.1.0, and publish it as one GitHub draft pull 
 
 ## Remarks
 
-Five operations work on ordinary in-memory SARIF values:
+Six operations work on ordinary in-memory SARIF values:
 
-- [createSarifDocument()](./sarif-to-comment.createsarifdocument.md) and [addSarifComment()](./sarif-to-comment.addsarifcomment.md) optionally author  SARIF for your own findings, on lines or line ranges.
+- [createSarifDocument()](./sarif-to-comment.createsarifdocument.md) and [addSarifComment()](./sarif-to-comment.addsarifcomment.md) optionally author  SARIF for your own findings, on lines or line ranges, and  [removeSarifComment()](./sarif-to-comment.removesarifcomment.md) removes a finding selected through inspection,  so a finding can be corrected by removing it and adding it again.
 
 - [inspectSarif()](./sarif-to-comment.inspectsarif.md) shows every finding, location and fix in any SARIF.
 
@@ -20,7 +20,7 @@ Five operations work on ordinary in-memory SARIF values:
 
 Authoring is optional: SARIF from any producer can be inspected, extended and published directly, and no operation depends on how a document was made. There is no builder, session or private format; each operation that changes a document returns a new one and leaves its input untouched.
 
-The `sarif-to-comment` command-line interface provides the same operations for files (`init`<!-- -->, `add-comment`<!-- -->, `inspect`<!-- -->, `add-staged-changes`<!-- -->,`publish`<!-- -->). These declarations describe the package's CommonJS runtime entry; they are generated from its TypeScript implementation, checked by API Extractor and compiled against CommonJS and ES module consumers by the package tests.
+The `sarif-to-comment` command-line interface provides the same operations for files (`init`<!-- -->, `add-comment`<!-- -->, `remove-comment`<!-- -->, `inspect`<!-- -->,`add-staged-changes`<!-- -->, `publish`<!-- -->). These declarations describe the package's CommonJS runtime entry; they are generated from its TypeScript implementation, checked by API Extractor and compiled against CommonJS and ES module consumers by the package tests.
 
 ## Functions
 
@@ -87,6 +87,17 @@ Shows every finding, location and fix in a SARIF document, from any producer, wi
 </td><td>
 
 Publishes a ready SARIF document as one GitHub draft review — or explains why it is blocked, uncertain or refused.
+
+
+</td></tr>
+<tr><td>
+
+[removeSarifComment(sarif, selector)](./sarif-to-comment.removesarifcomment.md)
+
+
+</td><td>
+
+Removes one finding, with the fixes attached to it, from a copy of a SARIF document.
 
 
 </td></tr>
@@ -437,6 +448,28 @@ GitHub definitively refused the create-review request (for example because the a
 </td></tr>
 <tr><td>
 
+[IRemovedFinding](./sarif-to-comment.iremovedfinding.md)
+
+
+</td><td>
+
+The finding [removeSarifComment()](./sarif-to-comment.removesarifcomment.md) removed.
+
+
+</td></tr>
+<tr><td>
+
+[IRemovedSarifCommentOutcome](./sarif-to-comment.iremovedsarifcommentoutcome.md)
+
+
+</td><td>
+
+The finding and its attached fixes were removed from a new copy of the document.
+
+
+</td></tr>
+<tr><td>
+
 [ISarifComment](./sarif-to-comment.isarifcomment.md)
 
 
@@ -525,6 +558,17 @@ One staged edit region and the findings that carry it.
 </td></tr>
 <tr><td>
 
+[IStaleSarifSelectorOutcome](./sarif-to-comment.istalesarifselectoroutcome.md)
+
+
+</td><td>
+
+The selector does not select a finding in this document as it is now, usually because the document changed after it was inspected. Nothing was removed.
+
+
+</td></tr>
+<tr><td>
+
 [IUncertainOutcome](./sarif-to-comment.iuncertainoutcome.md)
 
 
@@ -590,6 +634,17 @@ Every outcome of [inspectSarif()](./sarif-to-comment.inspectsarif.md)<!-- -->, d
 </td><td>
 
 Every outcome of [publishSarifReview()](./sarif-to-comment.publishsarifreview.md)<!-- -->, discriminated by `status`<!-- -->.
+
+
+</td></tr>
+<tr><td>
+
+[RemoveSarifCommentOutcome](./sarif-to-comment.removesarifcommentoutcome.md)
+
+
+</td><td>
+
+Every outcome of [removeSarifComment()](./sarif-to-comment.removesarifcomment.md)<!-- -->, discriminated by `status`<!-- -->.
 
 
 </td></tr>

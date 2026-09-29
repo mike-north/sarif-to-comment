@@ -30,12 +30,16 @@
  *   Provenance is reported as declared facts; with no destination
  *   repository, inspection never judges a source foreign. The input SARIF is
  *   captured and never changed.
+ * - Selectable. Every finding carries a selector bound to the document as
+ *   inspected (finding-selectors.cts), which removal requires, so a finding
+ *   is never removed from a document that changed after it was inspected.
  * - Shared interpretation. Paths, rules and messages are read with the same
  *   rules the publisher uses (`sarif-common.cjs`). What cannot be resolved
  *   stays in the view (`path: null`, `resolved: false`) with a warning.
  */
 
 
+import { documentDigest, findingSelector } from './finding-selectors.cjs';
 import {
   captureJson, validateSarif, isPlainObject, parseBaseUri, resolveArtifactPath, resolveRule, resolveMessage,
 } from './sarif-common.cjs';
@@ -247,6 +251,12 @@ export interface IInspectionMessage {
 export interface IInspectionFinding {
   /** JSON Pointer to the result, such as `/runs/0/results/3`. */
   readonly ref: string;
+  /**
+   * Selects this finding for {@link removeSarifComment}. It is bound to the
+   * document exactly as inspected: after any change to the document, inspect
+   * again for current selectors. Treat it as opaque.
+   */
+  readonly selector: string;
   /** Index of its run. */
   readonly runIndex: number;
   /** Index of the result in its run. */
@@ -927,7 +937,9 @@ function defaultLevel(rule: ISarifReportingDescriptor | undefined): string | und
   return typeof level === 'string' ? level : undefined;
 }
 
-function findingView(result: IResultInput, run: IRunInput, runIndex: number, resultIndex: number, state: IInspectionState): IInspectionFinding {
+function findingView(
+  result: IResultInput, run: IRunInput, runIndex: number, resultIndex: number, digest: string, state: IInspectionState,
+): IInspectionFinding {
   const ref = `/runs/${String(runIndex)}/results/${String(resultIndex)}`;
   const reference = resolveRule(result, run);
   if (reference.error) warn(state, ref, `The rule reference could not be resolved (${reference.error[0]}): ${reference.error[1]}`);
@@ -942,6 +954,7 @@ function findingView(result: IResultInput, run: IRunInput, runIndex: number, res
   const approval = approvalOf(result.properties);
   return {
     ref,
+    selector: findingSelector(ref, digest),
     runIndex,
     resultIndex,
     ...(ruleId !== undefined ? { ruleId } : {}),
@@ -1062,17 +1075,19 @@ function inspectSarifWithUntypedInput(sarif: unknown, options?: IInspectSarifOpt
   if (input === null || typeof input !== 'object' || Array.isArray(input)) {
     throw misuse('sarif must be a parsed SARIF object, not serialized text');
   }
-  const captured: unknown = captureJson(input, 'sarif');
+  const json = captureJson(input, 'sarif');
+  const captured: unknown = json;
   const limits = checkOptions(options);
   const invalid = validateSarif(captured);
   if (invalid) return invalid;
   if (!isInspectableLog(captured)) throw new Error('Internal error: a schema-valid SARIF log has no runs array.');
 
+  const digest = documentDigest(json);
   const state = newState(limits);
   const runs = captured.runs.map((run, i) => runView(run, i));
   const findings: IInspectionFinding[] = [];
   captured.runs.forEach((run, runIndex) => {
-    (run.results || []).forEach((result, resultIndex) => findings.push(findingView(result, run, runIndex, resultIndex, state)));
+    (run.results || []).forEach((result, resultIndex) => findings.push(findingView(result, run, runIndex, resultIndex, digest, state)));
   });
   const count = (key: 'fixes' | 'fileProposals'): number => findings.reduce((n, f) => n + f[key].length, 0);
   const log = logView(captured);
@@ -1279,7 +1294,7 @@ function findingLines(finding: IInspectionFinding, view: ISarifInspection): stri
     const value = finding[key];
     if (value !== undefined) facts.push(`${key}: ${value}`);
   }
-  const lines = ['', `Finding ${finding.ref} — ${facts.join(' · ')}`];
+  const lines = ['', `Finding ${finding.ref} — ${facts.join(' · ')}`, `Selector: ${finding.selector}`];
   lines.push(...messageLines(finding.message, 'Message', ''));
   lines.push(finding.locations.length === 0 ? 'Location: general' : 'Locations:');
   for (const location of finding.locations) lines.push(...locationLines(location, '  '));

@@ -131,6 +131,7 @@ export interface IInspectionFinding {
     readonly resultIndex: number;
     readonly ruleId?: string | undefined;
     readonly runIndex: number;
+    readonly selector: string;
 }
 
 // @public
@@ -287,6 +288,23 @@ export interface IRejectedOutcome {
 }
 
 // @public
+export interface IRemovedFinding {
+    readonly fileProposals: number;
+    readonly fixes: number;
+    readonly ref: string;
+    readonly resultIndex: number;
+    readonly runIndex: number;
+    readonly tool: string;
+}
+
+// @public
+export interface IRemovedSarifCommentOutcome {
+    readonly finding: IRemovedFinding;
+    readonly sarif: ISarifLog;
+    readonly status: 'removed';
+}
+
+// @public
 export interface ISarifComment {
     readonly endLine?: number | undefined;
     readonly file: string;
@@ -366,6 +384,14 @@ export interface IStagedReplacementReceipt {
 }
 
 // @public
+export interface IStaleSarifSelectorOutcome {
+    readonly markdown: string;
+    readonly problems: readonly IProblem[];
+    readonly selector: string;
+    readonly status: 'stale';
+}
+
+// @public
 export interface IUncertainOutcome {
     readonly markdown: string;
     readonly statePath: string;
@@ -377,5 +403,11 @@ export function publishSarifReview(input: IPublishSarifReviewInput): Promise<Pub
 
 // @public
 export type PublishSarifReviewOutcome = IPublishedOutcome | IBlockedOutcome | IUncertainOutcome | IRejectedOutcome;
+
+// @public
+export function removeSarifComment(sarif: object, selector: string): RemoveSarifCommentOutcome;
+
+// @public
+export type RemoveSarifCommentOutcome = IRemovedSarifCommentOutcome | IStaleSarifSelectorOutcome | IInvalidSarifOutcome;
 
 ```
