@@ -33,7 +33,7 @@ A verifier that uses only `gh api` reads and the oracle, never the package's cod
 | The stored body equals the intended request body byte for byte, including the CRLF inside the proposal | passed |
 | The body is the hand-written oracle followed only by the hidden marker, which occurs once | passed |
 | `body_html` has exactly five code blocks, each holding the exact proposed content: the page, the deleted file's quoted line, the CRLF file, the script and the multibyte file | passed |
-| HTML-like content is escaped: no `<script>`, `onerror`, `javascript:` link or `<details>` element in the rendered HTML | passed |
+| HTML-like content is escaped: the rendered HTML has no script element, no `onerror` attribute, no `javascript:` link and no `<details>` element; the content appears only as escaped text | passed |
 | The deletions link `blob/<reviewed commit>/…` (and `#L2` for the quoted line), no link exists to any created path, and `@octocat` in the content is not linked | passed |
 | Attribution: two authored items and six neutral `sarif-to-comment 0.2.1 · rule staged-change` items | passed |
 | The edit stays one inline native suggestion | passed |
