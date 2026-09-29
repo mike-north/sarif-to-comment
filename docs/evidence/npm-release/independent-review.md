@@ -1,10 +1,10 @@
 # Independent review: trusted npm release and API documentation (turn 05)
 
-Read-only review against `logs/opus/trusted-publish-review-brief.md` and `logs/opus/release-acceptance.md`. Probes ran only in scratch directories under `/tmp`. I made no product edits, no Git changes, and no publish or other external write. My only network use was a read-only `npm view` of the public registry.
+Read-only review against `<working-logs>/trusted-publish-review-brief.md` and `<working-logs>/release-acceptance.md`. Probes ran only in scratch directories under `/tmp`. I made no product edits, no Git changes, and no publish or other external write. My only network use was a read-only `npm view` of the public registry.
 
 ## Snapshot coverage
 
-- `shasum -a 256 -c logs/opus/trusted-publish-review-manifest.txt`: every one of the 62 entries is OK.
+- `shasum -a 256 -c <working-logs>/trusted-publish-review-manifest.txt`: every one of the 62 entries is OK.
 - `git diff --quiet HEAD -- src bin vendor` passes. The runtime is byte-identical to commit `dfaebb0`, so there is no product runtime change to justify.
 - `git status --porcelain` was the same before and after every probe.
 

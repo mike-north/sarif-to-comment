@@ -1,6 +1,6 @@
 No confirmed code defect still blocks the first milestone. All four earlier findings reproduce as fixed. What remains before release is live-GitHub evidence, not code.
 
-**Reviewed snapshot.** Every entry in `logs/opus/assembled-review-hashes-02.txt` matches:
+**Reviewed snapshot.** Every entry in `<working-logs>/assembled-review-hashes-02.txt` matches:
 
 | File | SHA-256 |
 |---|---|

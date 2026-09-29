@@ -1,10 +1,10 @@
 # Second-milestone independent review 02: reconciliation of the final fixed snapshot
 
-This review is read-only. It examines the snapshot at `logs/opus/m2/review-snapshot-02` (Git baseline `bedc5b8`, package `0.1.1`, with the minor Changeset present), against its manifest `logs/opus/m2/review-snapshot-02.sha256`.
+This review is read-only. It examines the snapshot at `<working-logs>/m2/review-snapshot-02` (Git baseline `bedc5b8`, package `0.1.1`, with the minor Changeset present), against its manifest `<working-logs>/m2/review-snapshot-02.sha256`.
 - **Manifest file SHA-256:** `18e459187b193da1f1cb56c2c6d26f4636ed3ff6d61ec2ab102e793b111774f1`.
 - **Manifest size:** 325 entries, including 225 generated `docs/api` pages.
 
-It is compared with review 01 (`logs/opus/m2/review-01-report.md`, snapshot 01). Probes and outputs are in `logs/opus/m2/review-02-probes/`. Mutations ran only in the throwaway copy `/tmp/m2-review-02-mut`. I made no product, test, snapshot or Git change and no external write, and I ran no parent fixture or remote action. This covers exactly the snapshot below and nothing changed after it.
+It is compared with review 01 (`<working-logs>/m2/review-01-report.md`, snapshot 01). Probes and outputs are in `<working-logs>/m2/review-02-probes/`. Mutations ran only in the throwaway copy `/tmp/m2-review-02-mut`. I made no product, test, snapshot or Git change and no external write, and I ran no parent fixture or remote action. This covers exactly the snapshot below and nothing changed after it.
 
 ## Conclusion
 

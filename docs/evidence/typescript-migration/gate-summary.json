@@ -17,7 +17,7 @@
         "committed API artifact freshness",
         "pnpm run check"
       ],
-      "rawLog": "logs/opus/typescript/evidence/final-bound/02-node24.log",
+      "rawLog": "<working-logs>/typescript/evidence/final-bound/02-node24.log",
       "rawLogSha256": "b4afde3bfd861e0ede57990a0b3123289eb41be441c35af0db9f14c32e42b1f1"
     },
     {
@@ -34,7 +34,7 @@
         "committed API artifact freshness",
         "pnpm run check"
       ],
-      "rawLog": "logs/opus/typescript/evidence/final-bound/02-node22.log",
+      "rawLog": "<working-logs>/typescript/evidence/final-bound/02-node22.log",
       "rawLogSha256": "49d150dd324d007e4d552a261b463f87e11f72a6459e411249572f85dfd03918"
     }
   ],
