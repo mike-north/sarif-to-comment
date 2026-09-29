@@ -123,5 +123,26 @@ Discriminant: The publication is complete.
 
 
 </td></tr>
+<tr><td>
+
+[suggestions?](./sarif-to-comment.ipublishedoutcome.suggestions.md)
+
+
+</td><td>
+
+`readonly`
+
+
+</td><td>
+
+readonly [IPublishedSuggestion](./sarif-to-comment.ipublishedsuggestion.md)<!-- -->\[\]
+
+
+</td><td>
+
+_(Optional)_ The suggestion pull requests created with the review, in the order the review presents them. Present only when there are any.
+
+
+</td></tr>
 </tbody></table>
 

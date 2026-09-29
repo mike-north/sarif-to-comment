@@ -33,15 +33,20 @@
  *                             // cannot establish it; still verified file by
  *                             // file against the pull request's patches
  *   options?: { ignoreApprovalHold?: boolean,  // bypasses only an approval hold
- *               submit?: boolean }             // true: create the review
+ *               submit?: boolean,              // true: create the review
  *                                              // submitted, event COMMENT;
  *                                              // part of the publication
  *                                              // identity (never inferred)
+ *               suggestionPullRequests?: boolean,  // companion suggestion
+ *               suggestionLabel?: string }     // pull requests
+ *                                              // (docs/companion-suggestion-pr-contract.md)
  *
  * Outcome — the consumer contract is `status` plus human-readable `markdown`
  * (and the listed identifiers). Internal reason codes, evidence and diagnostics
  * are deliberately not part of it (D13).
- *   { status: 'published', review: { id, url }, statePath, markdown }
+ *   { status: 'published', review: { id, url }, suggestions?, statePath, markdown }
+ *       // suggestions: [{ number, url, branch }], only when suggestion pull
+ *       // requests were created
  *   { status: 'blocked', markdown }        // nothing was written anywhere
  *   { status: 'uncertain', statePath, markdown }
  *       // delivery could not be confirmed; markdown names the preserved
@@ -68,25 +73,34 @@
  *      Excludes the token, statePath, destination and reviewedCommit (the
  *      latter two are checked separately by publication state) and the
  *      approval-hold override (it authorizes, but does not change, content).
- *   3. recoverPublication with only that identity — before any branch or
- *      source work. A completed receipt or a known refusal returns without
- *      network; an existing sending intent is investigated with its saved
- *      request and is never re-prepared or re-sent.
+ *      With suggestion pull requests enabled, the document also holds
+ *      suggestionPullRequests: { label }; disabled, it is exactly as above.
+ *   3. When the state path holds a companion publication plan
+ *      (src/companion-publication.cts), continue it: identity checks, then
+ *      only the steps it still lacks. Otherwise recoverPublication with only
+ *      that identity — before any branch or source work. A completed receipt
+ *      or a known refusal returns without network; an existing sending
+ *      intent is investigated with its saved request and is never
+ *      re-prepared or re-sent.
  *   4. Only when no state exists: fetch the review context, verify it is for
  *      exactly this pull request and reviewed commit, prepare the whole
- *      review, and return `blocked` (no remote write, no state file) or call
- *      publishPreparedReview exactly once.
+ *      review, and return `blocked` (no remote write, no state file), call
+ *      publishPreparedReview exactly once, or — when the review needs
+ *      suggestion pull requests — start the companion publication.
  *
  * internals (private seam, not caller API):
  *   createGitHubClient({ token, fetch }) -> client with the publication
  *     transport methods and fetchContext({ destination, reviewedCommit,
- *     oldSourceCommit? }) -> { context, readSource, fileExists }. Defaults to
- *     src/github.cts.
+ *     oldSourceCommit? }) -> { context, readSource, fileExists }, and — for
+ *     suggestion pull requests — the companion transport of src/github.cts.
+ *     Defaults to src/github.cts.
  */
 
 import * as crypto from 'node:crypto';
 import * as path from 'node:path';
 
+import { continueCompanionPublication, hasCompanionPlan, startCompanionPublication } from './companion-publication.cjs';
+import type { CompanionOutcome, ICompanionTransport, IEstablished } from './companion-publication.cjs';
 import { createGitHubClient as defaultCreateGitHubClient } from './github.cjs';
 import type { ICreateGitHubClientOptions } from './github.cjs';
 import type { IReadyOutcome } from './prepare-review.cjs';
@@ -146,6 +160,23 @@ export interface IPublishSarifReviewOptions {
    * always retried with the mode it started with.
    */
   readonly submit?: boolean | undefined;
+  /**
+   * Allow companion suggestion pull requests: whole-file creations and
+   * deletions, and explicitly grouped changes
+   * (`properties.sarifToComment.acceptanceGroup`), are proposed as draft pull
+   * requests into the pull request's head branch, which the review links.
+   * Omitted or `false`: disabled; creations and deletions are shown in the
+   * review body and a grouped document is refused, naming this option. Small
+   * edits stay native suggestions either way. The setting and the label are
+   * part of the publication identity.
+   */
+  readonly suggestionPullRequests?: boolean | undefined;
+  /**
+   * The existing label every suggestion pull request carries (default
+   * `suggestion`). Allowed only with `suggestionPullRequests: true`. It is
+   * never created: a missing label blocks the review.
+   */
+  readonly suggestionLabel?: string | undefined;
 }
 
 /**
@@ -211,6 +242,20 @@ export interface IPublishedReview {
 }
 
 /**
+ * A companion suggestion pull request the publication created.
+ *
+ * @public
+ */
+export interface IPublishedSuggestion {
+  /** The pull request's number. */
+  readonly number: number;
+  /** Web URL of the pull request. */
+  readonly url: string;
+  /** Its proposal branch, which targets the reviewed pull request's head branch. */
+  readonly branch: string;
+}
+
+/**
  * The publication is complete: the review (a draft, or a submitted comment
  * review when `options.submit` was set) was created and confirmed now,
  * confirmed after an earlier uncertain attempt, or recorded as complete in
@@ -228,6 +273,11 @@ export interface IPublishedOutcome {
   readonly status: 'published';
   /** The review as it was when the publication completed. */
   readonly review: IPublishedReview;
+  /**
+   * The suggestion pull requests created with the review, in the order the
+   * review presents them. Present only when there are any.
+   */
+  readonly suggestions?: readonly IPublishedSuggestion[];
   /** The state file recording this publication. */
   readonly statePath: string;
   /** Human-readable explanation, including the review link. */
@@ -374,7 +424,12 @@ function jsonMember(object: IJsonObject, key: string): JsonValue {
   return object[key] ?? null;
 }
 
-/** Fingerprint of everything that determines the prepared content (see module doc). */
+/**
+ * Fingerprint of everything that determines the prepared content (see module
+ * doc). Enabled suggestion pull requests and their label change what is
+ * published, so they are part of it; disabled, the identity document is
+ * exactly what it always was.
+ */
 function inputFingerprintOf(captured: ICapturedInput): string {
   const identity: IJsonObject = {
     format: INPUT_FORMAT,
@@ -382,6 +437,7 @@ function inputFingerprintOf(captured: ICapturedInput): string {
     sarif: captured.sarif,
     sourceRootUri: captured.sourceRootUri ?? null,
     oldSourceCommit: captured.oldSourceCommit ?? null,
+    ...(captured.suggestionLabel === undefined ? {} : { suggestionPullRequests: { label: captured.suggestionLabel } }),
   };
   return `sha256:${crypto.createHash('sha256').update(canonicalJson(identity), 'utf8').digest('hex')}`;
 }
@@ -416,7 +472,10 @@ const MODE_WORDING: Readonly<Record<'draft' | 'submitted', IModeWording>> = {
   },
 };
 
-function publishedMarkdown(result: PublishedResult, captured: ICapturedInput, prepared: IReadyOutcome | undefined): string {
+/** What the published explanation needs from a verified delivery. */
+type DeliveredReview = Pick<PublishedResult, 'via' | 'receiptPersisted'> & { readonly review: { readonly id: number; readonly htmlUrl: string } };
+
+function publishedMarkdown(result: DeliveredReview, captured: ICapturedInput, prepared: IReadyOutcome | undefined): string {
   const link = `[review ${String(result.review.id)}](${result.review.htmlUrl})`;
   const where = `${destinationLabel(captured)} at commit ${code(captured.reviewedCommit)}`;
   // A record is only ever continued in the mode it was started with, so the
@@ -497,6 +556,99 @@ function present(result: PublicationResult, captured: ICapturedInput, prepared?:
 }
 
 // ---------------------------------------------------------------------------
+// Companion suggestion pull requests (docs/companion-suggestion-pr-contract.md)
+// ---------------------------------------------------------------------------
+
+/** The client methods a companion publication calls, beyond the review context. */
+const COMPANION_METHODS: readonly string[] = [
+  'getAuthenticatedUser', 'createReview', 'listReviews', 'listReviewComments', 'createProposalCommit', 'getBranch',
+  'createBranch', 'createPullRequest', 'listBranchPullRequests', 'addLabel', 'listLabels',
+];
+
+/**
+ * Whether a client provides every companion method. Only their presence can
+ * be checked; each answer is validated where it is used.
+ */
+function isCompanionTransport(client: object): client is ICompanionTransport {
+  return COMPANION_METHODS.every((method) => typeof Reflect.get(client, method) === 'function');
+}
+
+function companionTransport(client: object): ICompanionTransport {
+  if (!isCompanionTransport(client)) throw new Error('This GitHub client cannot publish suggestion pull requests.');
+  return client;
+}
+
+/** What is already on GitHub when a companion publication stops, as Markdown lines. */
+function establishedMarkdown(established: readonly IEstablished[]): string[] {
+  const lines = established.flatMap((e) => {
+    if (e.pull !== null) return [`- Suggestion ${String(e.suggestion)}: [pull request #${String(e.pull.number)}](${e.pull.htmlUrl}) from ${code(e.branch ?? '')}`];
+    if (e.branch !== null) return [`- Suggestion ${String(e.suggestion)}: proposal branch ${code(e.branch)} (no pull request yet)`];
+    return [];
+  });
+  return lines.length === 0 ? [] : ['Already on GitHub for this publication:', '', ...lines, ''];
+}
+
+function presentCompanion(outcome: CompanionOutcome, captured: ICapturedInput, prepared?: IReadyOutcome): PublishSarifReviewOutcome {
+  const { statePath } = captured;
+  switch (outcome.status) {
+    case 'published': {
+      const suggestions = outcome.suggestions.map((s) => ({ number: s.number, url: s.htmlUrl, branch: s.branch }));
+      const listed = suggestions.map((s) => `- [#${String(s.number)}](${s.url}) from ${code(s.branch)}`);
+      const markdown = [
+        publishedMarkdown(outcome, captured, prepared),
+        '',
+        `Suggestion pull requests (drafts into ${code(outcome.headRef)}, labeled ${code(outcome.label)}):`,
+        '',
+        ...listed,
+      ].join('\n');
+      return { status: 'published', review: { id: outcome.review.id, url: outcome.review.htmlUrl }, suggestions, statePath, markdown };
+    }
+    case 'uncertain':
+      return {
+        status: 'uncertain',
+        statePath,
+        markdown: [
+          '## Delivery could not be confirmed',
+          '',
+          outcome.detail,
+          '',
+          ...establishedMarkdown(outcome.established),
+          `The publication state is preserved at ${code(statePath)} and in the files beside it that share its name.`,
+          '',
+          '- Retry later with the same state path: it only checks GitHub for work that may already have been sent, never sends it again, and continues with work that was never sent.',
+          '- Do not delete those files: they are the only record of what may already exist.',
+          '- A new state path starts a new, separate publication; use one only if you intend a separate review.',
+        ].join('\n'),
+      };
+    case 'rejected': {
+      const review = outcome.step === 'review';
+      return {
+        status: 'rejected',
+        statePath,
+        markdown: [
+          review ? '## GitHub refused the review' : '## GitHub refused a suggestion pull request step',
+          '',
+          outcome.detail,
+          '',
+          review
+            ? `The request is never resent. The refusal is tied to the state path ${code(statePath)}.`
+            : `It is never resent, and the review was not published: it would link a suggestion that does not exist. The refusal is tied to the state path ${code(statePath)}.`,
+          '',
+          ...establishedMarkdown(outcome.established),
+          'After resolving the cause, publish again with a new state path. Anything already created is left as it is.',
+        ].join('\n'),
+      };
+    }
+    default: {
+      // Unreachable for the typed companion core; kept as the durable
+      // refusal to present a status this module does not know.
+      const unexpected: { readonly status: unknown } = outcome;
+      throw new Error(`Unexpected publication status ${templateText(unexpected.status)}.`);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
 
@@ -511,11 +663,28 @@ async function run(captured: ICapturedInput, createGitHubClient: CreatePublishin
     submit: captured.submit === true,
   };
 
+  // A companion plan is continued before anything else: its own identity
+  // checks, then only the steps it still lacks.
+  if (hasCompanionPlan(captured.statePath)) {
+    return presentCompanion(await continueCompanionPublication({ ...identity, transport: companionTransport(client) }), captured);
+  }
   const existing = await recoverPublication(identity);
   if (existing.status !== 'missing') return present(existing, captured);
 
   const prepared = await prepareForDestination(captured, client);
   if (prepared.status === 'blocked') return { status: 'blocked', markdown: blockedReviewMarkdown(prepared) };
+
+  if (prepared.suggestions !== undefined && prepared.suggestionPullRequests !== undefined) {
+    const outcome = await startCompanionPublication({
+      ...identity,
+      transport: companionTransport(client),
+      suggestions: prepared.suggestions,
+      comments: prepared.review.comments,
+      headRef: prepared.suggestionPullRequests.headRef,
+      label: prepared.suggestionPullRequests.label,
+    });
+    return presentCompanion(outcome, captured, prepared);
+  }
 
   const result = await publishPreparedReview({
     ...identity,

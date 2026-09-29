@@ -27,6 +27,11 @@
  *   an unknown field), captured and validated identically; a TypeError
  *   rejects before any request.
  *
+ * With suggestion pull requests enabled (docs/companion-suggestion-pr-contract.md
+ * §2.8), the preflight's repository and label reads apply unchanged, and a
+ * ready assessment says how many draft suggestion pull requests publication
+ * would create, into which branch and with which label.
+ *
  * Outcome (status plus Markdown is the contract; internal codes are not, D13):
  *   { status: 'ready', markdown }
  *   { status: 'blocked', problems: [{ message, pointer? }], markdown }
@@ -49,7 +54,7 @@
 
 import { createGitHubClient as defaultCreateGitHubClient } from './github.cjs';
 import type { ICreateGitHubClientOptions } from './github.cjs';
-import type { IDiagnostic, IReadyOutcome } from './prepare-review.cjs';
+import type { IDiagnostic } from './prepare-review.cjs';
 import { authenticatedUserId, validatePreparedReview } from './publication.cjs';
 import type { IPublishSarifReviewOptions, IPullRequestDestination } from './publish-sarif-review.cjs';
 import type { IProblem } from './public-types.cjs';
@@ -63,7 +68,7 @@ import {
   redact,
   withoutCredential,
 } from './review-preflight.cjs';
-import type { ICapturedReview, IContextClient, IReviewInputSpec } from './review-preflight.cjs';
+import type { ICapturedReview, IContextClient, IDestinationReady, IReviewInputSpec } from './review-preflight.cjs';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -189,15 +194,22 @@ function code(text: string): string {
   return `\`${text.replace(/`/g, "'")}\``;
 }
 
-function readyMarkdown(prepared: IReadyOutcome, captured: ICapturedReview): string {
+function readyMarkdown(prepared: IDestinationReady, captured: ICapturedReview): string {
   // The mode changes no check (docs/submitted-review-contract.md §2.6); a
   // submitted assessment only says what publication would create.
   const as = captured.submit === true ? ' as a submitted comment review' : '';
+  const count = prepared.suggestions?.companions.length ?? 0;
+  const target = prepared.suggestionPullRequests;
+  const suggestions = count === 0 || target === undefined ? [] : [
+    `Publication would also create ${String(count)} draft suggestion pull request${count === 1 ? '' : 's'} into ${code(target.headRef)}, labeled ${code(target.label)}.`,
+    '',
+  ];
   return [
     '## Ready to publish',
     '',
     `The complete document can be published faithfully to ${destinationLabel(captured)} at commit ${code(captured.reviewedCommit)}${as}.`,
     '',
+    ...suggestions,
     prepared.markdown.trim(),
     '',
     NOTHING_WRITTEN,
@@ -278,6 +290,19 @@ class OperationalFailures {
           throw this.record(err);
         }
       },
+      ...(client.readSuggestionTarget === undefined ? {} : { readSuggestionTarget: this.observeCall(client.readSuggestionTarget) }),
+      ...(client.findLabel === undefined ? {} : { findLabel: this.observeCall(client.findLabel) }),
+    };
+  }
+
+  /** A client read with its failures recorded as operational. */
+  private observeCall<A, R>(call: (argument: A) => Promise<R>): (argument: A) => Promise<R> {
+    return async (argument) => {
+      try {
+        return await call(argument);
+      } catch (err) {
+        throw this.record(err);
+      }
     };
   }
 
@@ -304,7 +329,7 @@ class OperationalFailures {
 
 async function assess(captured: ICapturedReview, createGitHubClient: (options: ICreateGitHubClientOptions) => IAssessingClient): Promise<ValidateSarifReviewOutcome> {
   const operational = new OperationalFailures();
-  let ready: IReadyOutcome;
+  let ready: IDestinationReady;
   try {
     const client = operational.observe(createGitHubClient({ token: captured.token, fetch: globalThis.fetch }));
     const prepared = await prepareForDestination(captured, client);

@@ -261,11 +261,19 @@ export interface IPublishedOutcome {
     readonly review: IPublishedReview;
     readonly statePath: string;
     readonly status: 'published';
+    readonly suggestions?: readonly IPublishedSuggestion[];
 }
 
 // @public
 export interface IPublishedReview {
     readonly id: number;
+    readonly url: string;
+}
+
+// @public
+export interface IPublishedSuggestion {
+    readonly branch: string;
+    readonly number: number;
     readonly url: string;
 }
 
@@ -285,6 +293,8 @@ export interface IPublishSarifReviewInput {
 export interface IPublishSarifReviewOptions {
     readonly ignoreApprovalHold?: boolean | undefined;
     readonly submit?: boolean | undefined;
+    readonly suggestionLabel?: string | undefined;
+    readonly suggestionPullRequests?: boolean | undefined;
 }
 
 // @public

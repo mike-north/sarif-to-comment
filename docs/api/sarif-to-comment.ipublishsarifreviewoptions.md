@@ -77,5 +77,47 @@ _(Optional)_ Create the review already submitted, as a comment review (GitHub's`
 
 
 </td></tr>
+<tr><td>
+
+[suggestionLabel?](./sarif-to-comment.ipublishsarifreviewoptions.suggestionlabel.md)
+
+
+</td><td>
+
+`readonly`
+
+
+</td><td>
+
+string \| undefined
+
+
+</td><td>
+
+_(Optional)_ The existing label every suggestion pull request carries (default`suggestion`<!-- -->). Allowed only with `suggestionPullRequests: true`<!-- -->. It is never created: a missing label blocks the review.
+
+
+</td></tr>
+<tr><td>
+
+[suggestionPullRequests?](./sarif-to-comment.ipublishsarifreviewoptions.suggestionpullrequests.md)
+
+
+</td><td>
+
+`readonly`
+
+
+</td><td>
+
+boolean \| undefined
+
+
+</td><td>
+
+_(Optional)_ Allow companion suggestion pull requests: whole-file creations and deletions, and explicitly grouped changes (`properties.sarifToComment.acceptanceGroup`<!-- -->), are proposed as draft pull requests into the pull request's head branch, which the review links. Omitted or `false`<!-- -->: disabled; creations and deletions are shown in the review body and a grouped document is refused, naming this option. Small edits stay native suggestions either way. The setting and the label are part of the publication identity.
+
+
+</td></tr>
 </tbody></table>
 

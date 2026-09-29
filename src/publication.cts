@@ -1044,6 +1044,56 @@ function claimIntent(fs: IPublicationFs, statePath: string, record: ISendingReco
 }
 
 /**
+ * Exclusively creates `filePath` holding `text`, with the discipline of
+ * claimIntent: a flushed owner-only sibling, hard-linked into place, then the
+ * directory flushed. Returns false when the file already existed. Used for
+ * the companion publication's plan and step records
+ * (src/companion-publication.cts). `what` names the record in errors.
+ */
+function claimNewFile(fs: IPublicationFs, filePath: string, text: string, what: string): boolean {
+  let tmp: string;
+  try {
+    tmp = writeFlushedSibling(fs, filePath, text);
+  } catch (err) {
+    throw new PublicationStateError('state-io', `Cannot write ${what} beside ${filePath}.`, { cause: err });
+  }
+  try {
+    fs.linkSync(tmp, filePath);
+  } catch (err) {
+    removeQuietly(fs, tmp);
+    if (thrownCode(err) === 'EEXIST') return false;
+    throw new PublicationStateError('state-io', `Cannot publish ${what} at ${filePath}.`, { cause: err });
+  }
+  removeQuietly(fs, tmp);
+  try {
+    flushDirectory(fs, path.dirname(filePath));
+  } catch (err) {
+    throw new PublicationStateError('state-io', `${what} at ${filePath} could not be made durable; nothing was sent for it.`, { cause: err });
+  }
+  return true;
+}
+
+/**
+ * Atomically and durably replaces `filePath` with `text` (flushed sibling,
+ * rename, directory flush), as replaceRecord does; a failure leaves the
+ * previous file intact and is a state-io PublicationStateError.
+ */
+function replaceFileDurably(fs: IPublicationFs, filePath: string, text: string, what: string): void {
+  try {
+    const tmp = writeFlushedSibling(fs, filePath, text);
+    try {
+      fs.renameSync(tmp, filePath);
+    } catch (err) {
+      removeQuietly(fs, tmp);
+      throw err;
+    }
+    flushDirectory(fs, path.dirname(filePath));
+  } catch (err) {
+    throw new PublicationStateError('state-io', `Cannot record ${what} at ${filePath}.`, { cause: err });
+  }
+}
+
+/**
  * Atomically and durably replaces the record with a terminal form (completed
  * receipt or persisted rejection): flushed sibling, rename, directory flush.
  * A failure leaves the previous record intact.
@@ -1562,6 +1612,22 @@ async function recoverPublication(
 }
 
 export { publishPreparedReview, recoverPublication, PublicationStateError };
+// Shared with the companion publication (src/companion-publication.cts), which
+// keeps its plan and step records with the same durability, identity and
+// refusal rules; not part of the package's public API.
+export {
+  claimNewFile,
+  fingerprintOf,
+  isHostRejection,
+  isRefusalStatus,
+  mismatch,
+  modeMismatch,
+  replaceFileDurably,
+  thrownMessage,
+  MAX_REJECTION_MESSAGE,
+  STATE_FORMAT,
+};
+export type { IPublicationFs, IPublicationInternals, PublicationMode };
 // The pre-send checks that readiness assessment runs unchanged
 // (src/validate-sarif-review.cts); not part of the package's public API.
 export { authenticatedUserId, validatePreparedReview };

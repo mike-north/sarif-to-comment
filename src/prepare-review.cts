@@ -46,6 +46,10 @@
  *                    // operational and propagates unchanged.
  *   options?: {
  *     ignoreApprovalHold?: boolean,   // bypasses only an approval hold
+ *     suggestionPullRequests?: { headRef },  // enabled: whole-file proposals
+ *                                     // and explicit groups become
+ *                                     // suggestion pull requests into the
+ *                                     // named head branch
  *     maxComments?: number,           // default 100 inline comments
  *     maxCommentBodyChars?: number,   // default 60000 UTF-16 units per comment
  *                                     // body and for the review body
@@ -67,7 +71,12 @@
  *       Comment: { path, side, line, startSide?, startLine?, body }
  *       (the preparedReview shape accepted by publication)
  *     evidence: Evidence[],   // one per SARIF result, in SARIF order
- *     warnings: Diagnostic[], markdown: string }
+ *     warnings: Diagnostic[], markdown: string,
+ *     suggestions?: { companions, sections } }  // only when suggestion pull
+ *       // requests are needed: each companion's exact changes, title, commit
+ *       // message and rendered parts, and the body's sections (text, or a
+ *       // companion index rendered once its number is known); review.body
+ *       // is then the body at its largest possible size, for the limits
  *   { status: 'blocked', diagnostics: Diagnostic[], warnings: Diagnostic[], markdown: string }
  *
  *   Diagnostic: { code, pointer?, message }  pointer is a JSON Pointer into the
@@ -81,6 +90,7 @@
  *     attribution: { tool, version?, component?: { name, version? }, ruleId? },
  *     fileOperation?: { operation, path, fileMode?, byteLength?,
  *       proposedLines? } (a general result's whole-file proposal),
+ *     suggestionPullRequest? (the suggestion carrying a general result's change),
  *     taxa? (retained, not rendered),
  *     approval: 'none'|'declared-ready'|'hold-overridden',
  *     uninterpretedProperties? }
@@ -158,6 +168,19 @@
  *   carrying the same proposal share one body section; conflicting
  *   proposals, and fixes on a proposed path, block. `edit` operations are
  *   unsupported: edits are SARIF fixes.
+ * - Suggestion pull requests (docs/companion-suggestion-pr-contract.md): a
+ *   result's owned `acceptanceGroup` joins it to an explicit group of
+ *   changes (each member one fix or one whole-file proposal; at least two
+ *   distinct changes; nothing inferred). A group member's fix is an exact
+ *   edit of the reviewed file, committed rather than rendered, so it needs
+ *   no native-suggestion eligibility. Without the setting every group
+ *   blocks, naming it. With it, each group and each distinct standalone
+ *   whole-file proposal becomes one suggestion pull request whose body
+ *   section links it; native suggestions are unchanged. Every unit must be
+ *   acceptable on its own: overlapping edits across units, and any change to
+ *   a path another unit creates or deletes, block. At most 10 suggestion
+ *   pull requests, each body within the comment limit, each created file
+ *   within 1,000,000 bytes.
  *
  * Rendering:
  *   item      = message [ "\n\n**Fix:** " fix description ] "\n\n<sub>— " attribution "</sub>"
@@ -182,10 +205,11 @@ import * as crypto from 'node:crypto';
 import type { SchemaObject, ValidateFunction } from 'ajv';
 import type AjvDraft04Module = require('ajv-draft-04');
 import type AjvFormatsModule = require('ajv-formats');
-import type { IReviewContext } from './github.cjs';
+import type { IReviewContext, ProposalChange } from './github.cjs';
 import { classifyPlacement } from './placement.cjs';
 import type { IPlacementSourceRange, PlacementAnchorSide } from './placement.cjs';
 import { applyReplacement as productionApplyReplacement } from './replacements.cjs';
+import { formatSuggestionMarker } from './suggestion-marker.cjs';
 import type { ColumnKind, IReplacementRegion, IReplacementRequest, ReplacementDiagnostic, ReplacementOutcome } from './replacements.cjs';
 import type {
   ArtifactPathErrorCode,
@@ -410,12 +434,22 @@ type SnapshotReader = (commit: string, path: string) => unknown;
  */
 type ExistenceCheck = (commit: string, path: string) => unknown;
 
+/**
+ * Suggestion pull requests are enabled (docs/companion-suggestion-pr-contract.md):
+ * `headRef` is the pull request's head branch they would target, which their
+ * rendered text names.
+ */
+interface ISuggestionPullRequestsOption {
+  readonly headRef: string;
+}
+
 /** Caller options; every limit defaults to PRODUCT_LIMITS. */
 interface IPrepareReviewOptions {
   readonly ignoreApprovalHold?: boolean | undefined;
   readonly maxComments?: number | undefined;
   readonly maxCommentBodyChars?: number | undefined;
   readonly maxPayloadBytes?: number | undefined;
+  readonly suggestionPullRequests?: ISuggestionPullRequestsOption | undefined;
 }
 
 /** The caller input once validateCallerInput accepted it (see the module documentation). */
@@ -453,6 +487,7 @@ interface IEffectiveOptions {
   readonly maxCommentBodyChars: number | undefined;
   readonly maxPayloadBytes: number | undefined;
   readonly ignoreApprovalHold: boolean | undefined;
+  readonly suggestionPullRequests?: ISuggestionPullRequestsOption | undefined;
 }
 
 /**
@@ -590,6 +625,23 @@ interface IPreparedItem {
   readonly suggestion: IPreparedSuggestion | null;
   readonly fileOperation: PreparedFileOperation | null;
   readonly proposedLines: IProposedLines | null;
+  /** The caller's acceptance group, when the result declares one. */
+  readonly group: string | undefined;
+  /** A group member's fix: an exact edit committed in a suggestion pull request, never a native suggestion. */
+  readonly edit: IPreparedEdit | null;
+}
+
+/** A group member's fix: one exact replacement of the reviewed file (the replacement module's edit). */
+interface IPreparedEdit {
+  readonly path: string;
+  readonly startLine: number;
+  readonly endLine: number;
+  readonly replacementText: string;
+  /** The complete reviewed file the replacement applies to. */
+  readonly sourceText: string;
+  /** The replaced lines at the reviewed commit. */
+  readonly source: IPlacementSourceRange;
+  readonly description: string | undefined;
 }
 
 /** Fields every evidence record carries; optional ones are omitted when absent. */
@@ -644,18 +696,56 @@ interface IGeneralEvidence extends IEvidenceRecord {
   readonly bodySectionIndex: number;
   readonly source?: EvidenceSource;
   readonly fileOperation?: IFileOperationEvidence;
+  /** The index of the suggestion pull request that carries this result's change. */
+  readonly suggestionPullRequest?: number;
 }
 
 /** One evidence record per SARIF result, in SARIF order. */
 export type Evidence = ISuggestionEvidence | IInlineEvidence | IGeneralEvidence;
 
+/**
+ * One suggestion pull request as preparation settles it: its exact changes
+ * and every text except what only its creation can supply (its number, and
+ * its structured marker's identifiers).
+ */
+export interface IPreparedCompanion {
+  readonly title: string;
+  readonly commitMessage: string;
+  /** One change per path, in the order paths first appear. */
+  readonly changes: readonly ProposalChange[];
+  /** How many distinct changes the list shows (edits of one file are listed separately). */
+  readonly changeCount: number;
+  /** The rendered change list ("- …" lines). */
+  readonly changeLines: string;
+  /** The rendered findings carrying these changes. */
+  readonly items: string;
+}
+
+/** The suggestion pull requests a ready review needs, and where each appears in its body. */
+export interface IPreparedSuggestions {
+  readonly companions: readonly IPreparedCompanion[];
+  /**
+   * The review body's sections in order: literal text, or the index of the
+   * companion whose section is rendered once its pull request exists.
+   */
+  readonly sections: readonly (string | number)[];
+}
+
 /** A complete review, ready for publication. */
 export interface IReadyOutcome {
   readonly status: 'ready';
+  /**
+   * The review. When `suggestions` is present, `review.body` is only the
+   * body at its largest possible size (each suggestion link with the largest
+   * pull request number), which the limits were checked against; the body
+   * sent is rendered from `suggestions.sections` once the numbers are known.
+   */
   readonly review: IPreparedReview;
   readonly evidence: readonly Evidence[];
   readonly warnings: readonly IDiagnostic[];
   readonly markdown: string;
+  /** Present exactly when the review needs suggestion pull requests. */
+  readonly suggestions?: IPreparedSuggestions;
 }
 
 /** The whole review is blocked; nothing may be published. */
@@ -701,6 +791,7 @@ type ProposedOperationEntry = Readonly<Record<string, unknown>> & { readonly ope
 interface IOwnedProperties {
   approval: DeclaredApproval | undefined;
   proposedFileChanges: readonly ProposedOperationEntry[] | undefined;
+  acceptanceGroup: string | undefined;
 }
 
 /** A result's whole-file proposal, with where its finding points. */
@@ -722,6 +813,44 @@ interface IRenderedProposal {
 type BodySection =
   | { readonly kind: 'item'; readonly item: IPreparedItem }
   | { readonly kind: 'operation'; readonly operation: PreparedFileOperation; readonly items: IPreparedItem[] };
+
+/** A body section when suggestion pull requests are in play: a single finding, or a suggestion pull request's section. */
+type UnitSection = { readonly kind: 'item'; readonly item: IPreparedItem } | { readonly kind: 'suggestion'; readonly unit: number };
+
+/** A change a suggestion pull request (or a native suggestion) proposes, as conflicts are judged. */
+type UnitChange =
+  | { readonly kind: 'operation'; readonly operation: PreparedFileOperation }
+  | { readonly kind: 'edit'; readonly edit: IPreparedEdit };
+
+/** Who proposes a change: a suggestion pull request by index, or a native suggestion. */
+type ChangeOwner = number | 'native';
+
+/** One suggestion pull request while the review is assembled. */
+interface ISuggestionUnit {
+  readonly group: string | undefined;
+  readonly sectionIndex: number;
+  readonly items: IPreparedItem[];
+  /** Distinct changes in order of first appearance, by identity. */
+  readonly changes: Map<string, UnitChange>;
+}
+
+/** What a suggestion pull request's texts name besides its own changes and findings. */
+export interface ISuggestionContext {
+  readonly owner: string;
+  readonly repo: string;
+  readonly pullNumber: number;
+  readonly reviewedCommit: string;
+  /** The original pull request's head branch, which the suggestion targets. */
+  readonly headRef: string;
+}
+
+/** What the unit-based assembly produces; `suggestions` is null when the review is blocked. */
+interface IUnitAssembly {
+  readonly review: IPreparedReview;
+  readonly evidence: Evidence[];
+  readonly sectionCount: number;
+  readonly suggestions: IPreparedSuggestions | null;
+}
 
 /** Source text read at a location's resolved repository path and revision. */
 interface ILocatedSource {
@@ -787,7 +916,22 @@ const OWNED_NAMESPACE = 'sarifToComment';
 
 /** Owned keys meaningful on a run and on a result. */
 const OWNED_RUN_KEYS: ReadonlySet<string> = new Set(['approval']);
-const OWNED_RESULT_KEYS: ReadonlySet<string> = new Set(['approval', 'proposedFileChanges']);
+const OWNED_RESULT_KEYS: ReadonlySet<string> = new Set(['approval', 'proposedFileChanges', 'acceptanceGroup']);
+
+/** Suggestion pull requests one review may create (docs/companion-suggestion-pr-contract.md §2.8). */
+const MAX_SUGGESTION_PULL_REQUESTS = 10;
+
+/** Bytes one created or edited file in a suggestion pull request may hold: the source-read limit. */
+const MAX_SUGGESTION_FILE_BYTES = 1_000_000;
+
+/** The largest pull request number GitHub issues (a 32-bit signed integer): sizing uses its length. */
+const LARGEST_PULL_NUMBER = 2_147_483_647;
+
+/** A v4 UUID's shape, used only to size a suggestion marker before its identifiers exist. */
+const SIZING_UUID = '00000000-0000-4000-8000-000000000000';
+
+/** Title length GitHub accepts for a pull request. */
+const MAX_TITLE = 256;
 
 /** Declared approval states; anything else in the owned namespace is invalid. */
 const APPROVAL_HOLD = 'awaiting-approval';
@@ -958,6 +1102,26 @@ async function prepareReview(input: unknown, internals: IPrepareReviewInternals 
   }
   if (report.errors.length > 0) return blocked(report);
 
+  // Units (suggestion pull requests) are needed only for explicit groups, or
+  // for whole-file proposals when suggestion pull requests are enabled; every
+  // other review is assembled exactly as it always was.
+  const enabled = options.suggestionPullRequests;
+  const needsUnits = items.some((item) => item.group !== undefined) || (enabled !== undefined && items.some((item) => item.fileOperation !== null));
+  if (needsUnits) {
+    const units = assembleWithSuggestions(items, state);
+    if (report.errors.length > 0 || units.suggestions === null) return blocked(report);
+    enforceLimits(units.review, [], state);
+    if (report.errors.length > 0) return blocked(report);
+    return {
+      status: 'ready',
+      review: units.review,
+      evidence: units.evidence,
+      warnings: report.warnings,
+      markdown: readyMarkdown(units.review, units.sectionCount, report),
+      suggestions: units.suggestions,
+    };
+  }
+
   const assembled = assemble(items, state);
   if (report.errors.length > 0) return blocked(report);
   enforceLimits(assembled.review, assembled.proposals, state);
@@ -1011,6 +1175,10 @@ function validateCallerInput(input: unknown): asserts input is IPrepareReviewInp
     }
     const hold = options['ignoreApprovalHold'];
     if (hold !== undefined && typeof hold !== 'boolean') fail('`options.ignoreApprovalHold` must be a boolean.');
+    const suggestions = options['suggestionPullRequests'];
+    if (suggestions !== undefined && !(isPlainObject(suggestions) && typeof suggestions['headRef'] === 'string' && suggestions['headRef'] !== '')) {
+      fail('`options.suggestionPullRequests` must be { headRef } naming the pull request\'s head branch.');
+    }
   }
 }
 
@@ -1080,6 +1248,18 @@ function diagnostic(code: string, pointer: string | undefined, message: string):
 
 function blocked(report: Report): IBlockedOutcome {
   return { status: 'blocked', diagnostics: report.errors, warnings: report.warnings, markdown: blockedMarkdown(report) };
+}
+
+/**
+ * A whole-review block for problems found outside the SARIF (the repository
+ * facts suggestion pull requests need), rendered exactly as preparation's own
+ * blocks, keeping a ready preparation's warnings.
+ */
+function blockedBy(diagnostics: readonly IDiagnostic[], warnings: readonly IDiagnostic[]): IBlockedOutcome {
+  const report = new Report();
+  for (const d of diagnostics) report.error(d.code, d.pointer, d.message);
+  for (const w of warnings) report.warn(w.code, w.pointer, w.message);
+  return blocked(report);
 }
 
 function diagnosticLine(d: IDiagnostic): string {
@@ -1234,7 +1414,7 @@ function parseOwned(
   allowedKeys: ReadonlySet<string>,
   state: IPreparationState,
 ): IOwnedProperties {
-  const outcome: IOwnedProperties = { approval: undefined, proposedFileChanges: undefined };
+  const outcome: IOwnedProperties = { approval: undefined, proposedFileChanges: undefined, acceptanceGroup: undefined };
   if (!properties || properties[OWNED_NAMESPACE] === undefined) return outcome;
   const owned = properties[OWNED_NAMESPACE];
   if (!isPlainObject(owned)) {
@@ -1271,7 +1451,26 @@ function parseOwned(
       outcome.proposedFileChanges = operations;
     }
   }
+  const group = owned['acceptanceGroup'];
+  if (group !== undefined && allowedKeys.has('acceptanceGroup')) {
+    if (typeof group === 'string' && isAcceptanceGroupName(group)) {
+      outcome.acceptanceGroup = group;
+    } else {
+      state.report.error('acceptance-group-invalid', pointer,
+        `properties.${OWNED_NAMESPACE}.acceptanceGroup must be 1-100 characters without control or invisible formatting characters or surrounding whitespace.`);
+    }
+  }
   return outcome;
+}
+
+/**
+ * Whether a caller's acceptance group identifier can be shown exactly in a
+ * pull request title: 1-100 UTF-16 code units, none invisible or a control,
+ * no surrounding whitespace, and valid Unicode.
+ */
+function isAcceptanceGroupName(group: string): boolean {
+  return group.length >= 1 && group.length <= 100 && !INVISIBLE_IN_PATH.test(group)
+    && !LONE_SURROGATE.test(group) && !/^\s|\s$/.test(group);
 }
 
 /** Whether a proposedFileChanges entry is an object naming its operation. */
@@ -1336,9 +1535,11 @@ async function prepareResult(
 
   let placement: PreparedPlacement | null = null;
   let suggestion: IPreparedSuggestion | null = null;
+  let edit: IPreparedEdit | null = null;
   let fileOperation: IFileOperationPlacement | null = null;
   const fixes = Array.isArray(result.fixes) && result.fixes.length > 0 ? result.fixes : null;
   const operations = owned.proposedFileChanges || [];
+  const group = owned.acceptanceGroup;
   if (operations.length > 0) {
     // A whole-file proposal decides how its finding's location is read: a
     // created file's lines are in the proposed content, never the reviewed
@@ -1347,12 +1548,16 @@ async function prepareResult(
     placement = fileOperation ? fileOperation.placement : null;
   } else {
     if (locations.length === 1 && onlyLocation !== undefined) placement = await placeLocation(onlyLocation, pointer, runInfo, state);
-    if (fixes) suggestion = await prepareFix(fixes, pointer, runInfo, state);
+    // A group member's fix is committed in the group's suggestion pull
+    // request, so it needs an exact edit, not native-suggestion eligibility.
+    if (fixes && group !== undefined) edit = await prepareGroupEdit(fixes, pointer, runInfo, state);
+    else if (fixes) suggestion = await prepareFix(fixes, pointer, runInfo, state);
   }
   // D3/D4: a result's explanation travels with its fix only when the result's
   // own source lies within the fix's replacement lines; it is never moved to
   // the fix location, and the replacement is never enlarged to reach it.
-  if (suggestion && placement && !sourceWithin(placement.source, suggestion)) {
+  const replaced = suggestion || edit;
+  if (replaced && placement && !sourceWithin(placement.source, replaced)) {
     report.error('fix-association-unsupported', pointer,
       'The result\'s location is not within its fix\'s replacement lines; presenting them together would move the feedback. '
       + 'Keep the correct result location and separate the feedback from this unsupported fix association.');
@@ -1370,7 +1575,7 @@ async function prepareResult(
     message: message.markdown,
     locationMessage,
     classification,
-    fixDescription: suggestion ? suggestion.description : undefined,
+    fixDescription: suggestion ? suggestion.description : edit ? edit.description : undefined,
     attribution,
     approval,
     uninterpretedProperties: Object.keys(uninterpreted).length > 0 ? uninterpreted : undefined,
@@ -1379,6 +1584,8 @@ async function prepareResult(
     suggestion,
     fileOperation: fileOperation ? fileOperation.operation : null,
     proposedLines: fileOperation ? fileOperation.proposedLines : null,
+    group,
+    edit,
   };
 }
 
@@ -1398,8 +1605,8 @@ function classifyResult(result: ISarifResultView, rule: ISarifRule | undefined):
   return Object.keys(classification).length > 0 ? classification : undefined;
 }
 
-/** Whether a located source range lies within a suggestion's replacement lines of the same file and revision. */
-function sourceWithin(source: EvidenceSource, suggestion: IPreparedSuggestion): boolean {
+/** Whether a located source range lies within a replacement's lines of the same file and revision. */
+function sourceWithin(source: EvidenceSource, suggestion: Pick<IPreparedSuggestion, 'path' | 'startLine' | 'endLine' | 'source'>): boolean {
   return source.path === suggestion.path && source.commit === suggestion.source.commit
     && source.startLine !== undefined && source.startLine >= suggestion.startLine && source.endLine <= suggestion.endLine;
 }
@@ -2033,17 +2240,26 @@ function describedBytesProblem(artifact: ISarifArtifactView, bytes: Buffer): str
 // ---------------------------------------------------------------------------
 // Fixes
 
+/** The exact replacement a single supported SARIF fix makes to the reviewed file. */
+interface IAppliedFix {
+  readonly source: ILocatedSource;
+  readonly edit: Extract<ReplacementOutcome, { readonly kind: 'replacement' }>;
+  readonly description: string | undefined;
+}
+
 /**
- * Prepares a result's single native suggestion. Returns
- * { path, startLine, endLine, originalText, replacementText, source, description }
- * or null after recording errors.
+ * Reads a result's single fix and applies its one replacement to the
+ * reviewed file exactly. `native` adds the native-suggestion requirement that
+ * the reviewed commit is the diff head, checked in the order it always was.
+ * Returns the applied fix, or null after recording errors.
  */
-async function prepareFix(
+async function applyResultFix(
   fixes: readonly ISarifFix[],
   pointer: string,
   runInfo: IRunInfo,
   state: IPreparationState,
-): Promise<IPreparedSuggestion | null> {
+  native: boolean,
+): Promise<IAppliedFix | null> {
   const { report, context } = state;
   const fail = (code: string, message: string): null => {
     report.error(code, pointer, message);
@@ -2070,7 +2286,7 @@ async function prepareFix(
     return fail('suggestion-source-not-reviewed',
       `The fix edits ${runInfo.sourceCommit}, not the reviewed commit; its applicability there is unverified.`);
   }
-  if (context.reviewedCommit !== context.diff.headCommit) {
+  if (native && context.reviewedCommit !== context.diff.headCommit) {
     return fail('suggestion-historical-unsupported',
       'The reviewed commit is not the pull request head, so a native suggestion could not be applied to the reviewed text.');
   }
@@ -2092,6 +2308,28 @@ async function prepareFix(
   if (edit.kind !== 'replacement') {
     return fail(`replacement-${edit.kind}`, `The replacement cannot be applied (${edit.reason}): ${edit.message}`);
   }
+  return { source, edit, description };
+}
+
+/**
+ * Prepares a result's single native suggestion. Returns
+ * { path, startLine, endLine, originalText, replacementText, source, description }
+ * or null after recording errors.
+ */
+async function prepareFix(
+  fixes: readonly ISarifFix[],
+  pointer: string,
+  runInfo: IRunInfo,
+  state: IPreparationState,
+): Promise<IPreparedSuggestion | null> {
+  const { report, context } = state;
+  const fail = (code: string, message: string): null => {
+    report.error(code, pointer, message);
+    return null;
+  };
+  const applied = await applyResultFix(fixes, pointer, runInfo, state, true);
+  if (!applied) return null;
+  const { source, edit, description } = applied;
   const { startLine, endLine, originalText, replacementText } = edit;
   const payload = suggestionPayload(source.text, startLine, endLine, replacementText, edit.editedText);
   if (payload.error) return fail(payload.error[0], payload.error[1]);
@@ -2106,6 +2344,41 @@ async function prepareFix(
   }
   return {
     path: source.path, startLine, endLine, originalText, replacementText, payload: payload.text, source: placed.source, description,
+  };
+}
+
+/**
+ * Prepares an acceptance-group member's fix: the same single exact
+ * replacement, committed in the group's suggestion pull request rather than
+ * rendered, so neither native-suggestion fidelity nor inline placement
+ * applies. Returns the edit, or null after recording errors.
+ */
+async function prepareGroupEdit(
+  fixes: readonly ISarifFix[],
+  pointer: string,
+  runInfo: IRunInfo,
+  state: IPreparationState,
+): Promise<IPreparedEdit | null> {
+  const applied = await applyResultFix(fixes, pointer, runInfo, state, false);
+  if (!applied) return null;
+  const { source, edit, description } = applied;
+  const placed = classifyPlacement({
+    source: { commit: source.commit, path: source.path, text: source.text },
+    range: { startLine: edit.startLine, endLine: edit.endLine },
+    diff: state.context.diff,
+  });
+  if (placed.kind === 'rejected') {
+    state.report.error('diff-context-inconsistent', pointer, `${placed.reason}: ${placed.message}`);
+    return null;
+  }
+  return {
+    path: source.path,
+    startLine: edit.startLine,
+    endLine: edit.endLine,
+    replacementText: edit.replacementText,
+    sourceText: source.text,
+    source: placed.source,
+    description,
   };
 }
 
@@ -2308,6 +2581,340 @@ function assemble(
   };
 }
 
+// ---------------------------------------------------------------------------
+// Assembly with suggestion pull requests (docs/companion-suggestion-pr-contract.md)
+
+/** The identity of a change: equal changes are shared, as equal suggestions and proposals are (R8). */
+function changeKey(change: UnitChange): string {
+  return change.kind === 'operation'
+    ? proposalKey(change.operation)
+    : JSON.stringify(['edit', change.edit.path, change.edit.startLine, change.edit.endLine, change.edit.replacementText]);
+}
+
+/** The path a change touches. */
+function changePath(change: UnitChange): string {
+  return change.kind === 'operation' ? change.operation.path : change.edit.path;
+}
+
+/** The change a result carries as a unit member, if any. */
+function unitChangeOf(item: IPreparedItem): UnitChange | null {
+  if (item.fileOperation) return { kind: 'operation', operation: item.fileOperation };
+  if (item.edit) return { kind: 'edit', edit: item.edit };
+  return null;
+}
+
+/** The key of the unit a result belongs to: its group, or its standalone whole-file proposal. */
+function unitKeyOf(item: IPreparedItem, change: UnitChange): string {
+  return item.group !== undefined ? `group:${item.group}` : `operation:${changeKey(change)}`;
+}
+
+/**
+ * Tracks which unit proposes what, so that every unit stays acceptable on
+ * its own: a path created or deleted by one unit is changed by no other,
+ * and no two units change the same lines.
+ */
+class ChangeRegistry {
+  private readonly operations = new Map<string, { readonly owner: ChangeOwner; readonly key: string }>();
+  private readonly edits = new Map<string, { readonly owner: ChangeOwner; readonly key: string; readonly startLine: number; readonly endLine: number }[]>();
+
+  constructor(private readonly report: Report) {}
+
+  /**
+   * Admits `change` for `owner`: 'shared' when the same unit already has
+   * the equal change, 'new' after registering it, or false after recording
+   * the conflict.
+   */
+  admit(change: UnitChange, owner: ChangeOwner, pointer: string): 'new' | 'shared' | false {
+    const key = changeKey(change);
+    const filePath = changePath(change);
+    const operation = this.operations.get(filePath);
+    const pathEdits = this.edits.get(filePath) ?? [];
+    if (change.kind === 'operation') {
+      if (operation !== undefined && operation.owner === owner && operation.key === key) return 'shared';
+      if (operation !== undefined || pathEdits.length > 0) {
+        const sameUnit = (operation === undefined || operation.owner === owner) && pathEdits.every((e) => e.owner === owner);
+        this.report.error('file-operation-conflict', pointer, sameUnit
+          ? `${filePath} already has a different proposed change in this review; one of them must be chosen before publication.`
+          : `${filePath} already has a proposed change in another part of this review; one of them must be chosen before publication.`);
+        return false;
+      }
+      this.operations.set(filePath, { owner, key });
+      return 'new';
+    }
+    const { startLine, endLine } = change.edit;
+    if (operation !== undefined) {
+      this.report.error('file-operation-conflict', pointer, `The fix edits ${filePath}, which this review proposes to create or delete; the proposals conflict.`);
+      return false;
+    }
+    if (pathEdits.some((e) => e.owner === owner && e.key === key)) return 'shared';
+    if (pathEdits.some((e) => e.startLine <= endLine && startLine <= e.endLine)) {
+      this.report.error('overlapping-replacements', pointer,
+        `The replacement of ${filePath} lines ${String(startLine)}-${String(endLine)} overlaps a different replacement.`);
+      return false;
+    }
+    this.edits.set(filePath, [...pathEdits, { owner, key, startLine, endLine }]);
+    return 'new';
+  }
+}
+
+/**
+ * Builds a review whose explicit groups, and (when suggestion pull requests
+ * are enabled) whose whole-file proposals, travel as suggestion pull
+ * requests. Every presentation unit — an inline comment, a native
+ * suggestion, a suggestion pull request — must be acceptable on its own;
+ * within one unit, equal changes are shared and conflicting ones block.
+ * Without the setting, every group is refused, naming the setting; nothing
+ * is split. Each suggestion pull request's section takes the position of the
+ * first finding carrying one of its changes.
+ */
+function assembleWithSuggestions(items: readonly IPreparedItem[], state: IPreparationState): IUnitAssembly {
+  const { context, report, options } = state;
+  const enabled = options.suggestionPullRequests;
+  const registry = new ChangeRegistry(report);
+  const commentItems: ICommentEntry[] = [];
+  const sections: UnitSection[] = [];
+  const evidence: Evidence[] = [];
+  const units: ISuggestionUnit[] = [];
+  const unitByKey = new Map<string, number>();
+  const suggestionComments = new Map<string, number>();
+  /** Every distinct change each group's members declared, including refused ones, by group. */
+  const declared = new Map<string, Set<string>>();
+  /** Each group's first member, in SARIF order. */
+  const firstMember = new Map<string, string>();
+
+  for (const item of items) {
+    if (item.group === undefined || firstMember.has(item.group)) continue;
+    firstMember.set(item.group, item.pointer);
+    declared.set(item.group, new Set());
+    if (enabled === undefined) {
+      report.error('acceptance-group-requires-suggestion-prs', item.pointer,
+        `Acceptance group ${JSON.stringify(item.group)} must be accepted as one unit, which needs a suggestion pull request. `
+        + 'Enable suggestion pull requests (options.suggestionPullRequests or --suggestion-prs); a group is never split into separate suggestions or published in part.');
+    }
+  }
+
+  for (const item of items) {
+    const record: IEvidenceRecord = {
+      pointer: item.pointer,
+      attribution: item.attribution,
+      approval: item.approval,
+      ...(item.uninterpretedProperties ? { uninterpretedProperties: item.uninterpretedProperties } : {}),
+      ...(item.taxa ? { taxa: item.taxa } : {}),
+      ...(item.classification ? { classification: item.classification } : {}),
+      ...(item.locationMessage !== undefined ? { locationMessage: item.locationMessage } : {}),
+    };
+    const change = unitChangeOf(item);
+    if (item.group !== undefined && change === null) {
+      report.error('acceptance-group-member-without-change', item.pointer,
+        `The finding is in acceptance group ${JSON.stringify(item.group)} but proposes no change; a group joins changes. `
+        + 'Remove the finding from the group, or give it its change.');
+    } else if (change !== null && (item.group !== undefined || item.fileOperation)) {
+      if (item.group !== undefined) declared.get(item.group)?.add(changeKey(change));
+      const key = unitKeyOf(item, change);
+      const admitted = registry.admit(change, unitByKey.get(key) ?? units.length, item.pointer);
+      if (admitted === false) continue;
+      let index = unitByKey.get(key);
+      if (index === undefined) {
+        index = units.length;
+        unitByKey.set(key, index);
+        units.push({ group: item.group, sectionIndex: sections.length, items: [], changes: new Map() });
+        sections.push({ kind: 'suggestion', unit: index });
+      }
+      const unit = itemAt(units, index);
+      if (admitted === 'new') unit.changes.set(changeKey(change), change);
+      if (enabled !== undefined && change.kind === 'operation' && change.operation.operation === 'create') {
+        const bytes = Buffer.byteLength(change.operation.text, 'utf8');
+        if (bytes > MAX_SUGGESTION_FILE_BYTES) {
+          report.error('suggestion-file-too-large', item.pointer,
+            `${change.operation.path}: the proposed file is ${String(bytes)} bytes; a suggestion pull request carries at most ${String(MAX_SUGGESTION_FILE_BYTES)} bytes per file.`);
+        }
+      }
+      unit.items.push(item);
+      evidence.push({ ...record, treatment: 'general', bodySectionIndex: unit.sectionIndex,
+        ...(item.placement ? { source: item.placement.source } : {}),
+        ...(item.fileOperation ? { fileOperation: fileOperationEvidence(item.fileOperation, item.proposedLines) } : {}),
+        suggestionPullRequest: index });
+    } else if (item.suggestion) {
+      const s = item.suggestion;
+      const key = JSON.stringify([s.path, s.startLine, s.endLine, s.replacementText]);
+      let index = suggestionComments.get(key);
+      if (index === undefined) {
+        const native: UnitChange = {
+          kind: 'edit',
+          edit: { path: s.path, startLine: s.startLine, endLine: s.endLine, replacementText: s.replacementText, sourceText: '', source: s.source, description: s.description },
+        };
+        if (registry.admit(native, 'native', item.pointer) === false) continue;
+        index = commentItems.length;
+        suggestionComments.set(key, index);
+        commentItems.push({
+          coordinates: inlineCoordinates(s.path, { side: 'RIGHT', line: s.endLine, startLine: s.startLine === s.endLine ? undefined : s.startLine }),
+          items: [],
+          suggestion: s,
+        });
+      }
+      itemAt(commentItems, index).items.push(item);
+      evidence.push({ ...record, treatment: 'suggestion', commentIndex: index,
+        ...(item.placement ? { source: item.placement.source } : {}),
+        fixSource: s.source,
+        replacement: { startLine: s.startLine, endLine: s.endLine, originalText: s.originalText, replacementText: s.replacementText },
+        suggestionPayload: s.payload });
+    } else if (item.placement && item.placement.treatment === 'inline') {
+      const index = commentItems.length;
+      commentItems.push({ coordinates: inlineCoordinates(item.placement.source.path, item.placement.anchor), items: [item] });
+      evidence.push({ ...record, treatment: 'inline', commentIndex: index, source: item.placement.source, anchor: item.placement.anchor });
+    } else {
+      evidence.push({ ...record, treatment: 'general', bodySectionIndex: sections.length,
+        ...(item.placement ? { source: item.placement.source } : {}) });
+      sections.push({ kind: 'item', item });
+    }
+  }
+
+  for (const [group, changes] of declared) {
+    if (changes.size < 2) {
+      report.error('acceptance-group-single-change', firstMember.get(group),
+        `Acceptance group ${JSON.stringify(group)} holds only one distinct change; a group needs at least two changes to accept together. `
+        + 'Remove the group, and the change is published on its own.');
+    }
+  }
+  if (enabled !== undefined && units.length > MAX_SUGGESTION_PULL_REQUESTS) {
+    report.error('too-many-suggestion-prs', undefined,
+      `The review needs ${String(units.length)} suggestion pull requests; the limit is ${String(MAX_SUGGESTION_PULL_REQUESTS)}. Nothing is split or dropped.`);
+  }
+
+  const comments: PreparedComment[] = commentItems.map((entry) => {
+    const body = entry.items.map(renderItem).join(SEPARATOR);
+    return { ...entry.coordinates, body: entry.suggestion ? `${body}\n\n\`\`\`suggestion\n${entry.suggestion.payload}\`\`\`` : body };
+  });
+  const blockedAssembly: IUnitAssembly = {
+    review: { commitId: context.reviewedCommit, body: '', comments },
+    evidence,
+    sectionCount: sections.length,
+    suggestions: null,
+  };
+  if (enabled === undefined || report.errors.length > 0) return blockedAssembly;
+
+  const target: ISuggestionContext = {
+    owner: context.owner, repo: context.repo, pullNumber: context.pullNumber, reviewedCommit: context.reviewedCommit, headRef: enabled.headRef,
+  };
+  const companions = units.map((unit) => prepareCompanion(unit, target, context));
+  const sizingMarker = formatSuggestionMarker({ ...target, id: SIZING_UUID, publication: SIZING_UUID });
+  const { maxCommentBodyChars } = options;
+  for (const [i, companion] of companions.entries()) {
+    const size = renderSuggestionPullBody(companion, sizingMarker, target).length;
+    const unit = itemAt(units, i);
+    if (maxCommentBodyChars !== undefined && size > maxCommentBodyChars) {
+      const subject = unit.group !== undefined ? `acceptance group ${JSON.stringify(unit.group)}` : `the proposed change to ${itemAt(companion.changes, 0).path}`;
+      report.error('suggestion-body-too-large', unit.items[0]?.pointer,
+        `The suggestion pull request for ${subject} would have a ${String(size)}-character body; the limit is ${String(maxCommentBodyChars)}. Nothing is truncated or split.`);
+    }
+  }
+  if (report.errors.length > 0) return blockedAssembly;
+  const parts = sections.map((section): string | number => (section.kind === 'item' ? renderSection(section.item, context) : section.unit));
+  const suggestions: IPreparedSuggestions = { companions, sections: parts };
+  return {
+    review: { commitId: context.reviewedCommit, body: renderReviewBody(suggestions, companions.map(() => LARGEST_PULL_NUMBER), target), comments },
+    evidence,
+    sectionCount: sections.length,
+    suggestions,
+  };
+}
+
+/** A unit's companion: its exact commit changes, title, commit message and rendered parts. */
+function prepareCompanion(unit: ISuggestionUnit, target: ISuggestionContext, context: IPreparationContext): IPreparedCompanion {
+  const changes = [...unit.changes.values()];
+  const byPath = new Map<string, UnitChange[]>();
+  for (const change of changes) byPath.set(changePath(change), [...(byPath.get(changePath(change)) ?? []), change]);
+  const commitChanges = [...byPath].map(([filePath, onPath]): ProposalChange => {
+    const first = itemAt(onPath, 0);
+    if (first.kind === 'operation') {
+      const operation = first.operation;
+      return operation.operation === 'create'
+        ? { operation: 'create', path: filePath, text: operation.text, fileMode: operation.fileMode }
+        : { operation: 'delete', path: filePath };
+    }
+    const fileEdits = onPath.flatMap((c) => (c.kind === 'edit' ? [c.edit] : []));
+    return { operation: 'edit', path: filePath, text: combineEdits(first.edit.sourceText, fileEdits) };
+  });
+  const count = changes.length;
+  const pull = `#${String(target.pullNumber)}`;
+  const only = commitChanges.length === 1 ? itemAt(commitChanges, 0) : undefined;
+  const summary = unit.group !== undefined ? `${unit.group} (${String(count)} changes)`
+    : only === undefined ? `${String(count)} changes` : `${only.operation} ${only.path}`;
+  const full = `Suggestion for ${pull}: ${summary}`;
+  const title = full.length <= MAX_TITLE ? full : `Suggestion for ${pull}: ${String(count)} change${count === 1 ? '' : 's'}`;
+  return {
+    title,
+    commitMessage: `${title}\n\nSuggested in a review of ${target.owner}/${target.repo} pull request ${String(target.pullNumber)} at commit ${target.reviewedCommit}.`,
+    changes: commitChanges,
+    changeCount: count,
+    changeLines: changes.map((change) => changeLine(change, context)).join('\n'),
+    items: unit.items.map((item) => renderSuggestionItem(item, context)).join(SEPARATOR),
+  };
+}
+
+/**
+ * The reviewed file with non-overlapping whole-line replacements applied:
+ * each replaces exactly its lines, in any order of the list (applied from
+ * the last line up, so earlier line numbers stay valid).
+ */
+function combineEdits(sourceText: string, fileEdits: readonly IPreparedEdit[]): string {
+  const lines: string[] = sourceText.match(/[^\n]*\n|[^\n]+$/g) || [];
+  for (const edit of [...fileEdits].sort((a, b) => b.startLine - a.startLine)) {
+    lines.splice(edit.startLine - 1, edit.endLine - edit.startLine + 1, edit.replacementText);
+  }
+  return lines.join('');
+}
+
+/** One line of a suggestion's change list (contract §2.11). */
+function changeLine(change: UnitChange, context: IPreparationContext): string {
+  if (change.kind === 'edit') {
+    const { edit } = change;
+    const lines = edit.startLine === edit.endLine ? `line ${String(edit.startLine)}` : `lines ${String(edit.startLine)}-${String(edit.endLine)}`;
+    return `- Edited [${escapePlainInline(edit.path)} ${lines} at ${edit.source.commit.slice(0, 7)}](${permalink(context, edit.source)})`;
+  }
+  const { operation } = change;
+  if (operation.operation === 'create') return `- New file ${codeSpan(operation.path)}: ${fileFacts(operation.text, operation.fileMode)}`;
+  const source: IWholeFileSource = { commit: operation.commit, path: operation.path };
+  return `- Deleted file [${escapePlainInline(operation.path)} at ${operation.commit.slice(0, 7)}](${permalink(context, source)}): the whole file is removed`;
+}
+
+/** A finding in a suggestion's section: its lines of a proposed file, or its quoted reviewed source. */
+function renderSuggestionItem(item: IPreparedItem, context: IPreparationContext): string {
+  const lines = item.proposedLines;
+  if (!lines) return renderSection(item, context);
+  const named = lines.startLine === lines.endLine ? `line ${String(lines.startLine)}` : `lines ${String(lines.startLine)}-${String(lines.endLine)}`;
+  return `**Location:** ${named} of the proposed file\n\n${renderItem(item)}`;
+}
+
+/** "Merging … into HEAD applies this change:" or "… these N changes together:". */
+function mergeSentence(companion: IPreparedCompanion, subject: string, headRef: string): string {
+  const what = companion.changeCount === 1 ? 'this change' : `these ${String(companion.changeCount)} changes together`;
+  return `Merging ${subject} into ${codeSpan(headRef)} applies ${what}:`;
+}
+
+/** A suggestion pull request's section of the review body, once its number is known. */
+function renderSuggestionSection(companion: IPreparedCompanion, number: number, target: ISuggestionContext): string {
+  const link = `https://${GITHUB_HOST}/${encodeLinkSegment(target.owner)}/${encodeLinkSegment(target.repo)}/pull/${String(number)}`;
+  return `**Suggestion pull request:** [#${String(number)}](${link})\n\n${mergeSentence(companion, 'it', target.headRef)}`
+    + `\n\n${companion.changeLines}\n\n${companion.items}`;
+}
+
+/**
+ * The review body: its sections in order, each suggestion's section rendered
+ * with its pull request number (`numbers[i]` for companion i).
+ */
+function renderReviewBody(suggestions: IPreparedSuggestions, numbers: readonly number[], target: ISuggestionContext): string {
+  return suggestions.sections
+    .map((part) => (typeof part === 'string' ? part : renderSuggestionSection(itemAt(suggestions.companions, part), itemAt(numbers, part), target)))
+    .join(SEPARATOR);
+}
+
+/** A suggestion pull request's body, ending with its structured marker line. */
+function renderSuggestionPullBody(companion: IPreparedCompanion, marker: string, target: ISuggestionContext): string {
+  return `Suggested in a review of #${String(target.pullNumber)} at commit ${target.reviewedCommit}.`
+    + `\n\n${mergeSentence(companion, 'this pull request', target.headRef)}\n\n${companion.changeLines}${SEPARATOR}${companion.items}\n\n${marker}`;
+}
+
 /** The identity of a proposal: equal proposals share one section (R8). */
 function proposalKey(operation: PreparedFileOperation): string {
   return JSON.stringify(operation.operation === 'create'
@@ -2425,6 +3032,26 @@ function renderProposalSection(operation: PreparedFileOperation, items: readonly
       + `The whole file is removed; this is not a proposal to empty it.\n\n${items.map((item) => renderSection(item, context)).join(SEPARATOR)}`;
   }
   const { text, fileMode } = operation;
+  const hasBom = text.startsWith(BOM);
+  const body = hasBom ? text.slice(BOM.length) : text;
+  const finalTerminator = body.endsWith('\r\n') ? '\r\n' : body.endsWith('\n') ? '\n' : '';
+  const displayed = body.slice(0, body.length - finalTerminator.length);
+  const fence = '`'.repeat(Math.max(3, longestRun(displayed, '`') + 1));
+  const block = body === '' ? '' : `\n\n${fence}\n${displayed}\n${fence}`;
+  const rendered = items.map((item) => {
+    const lines = item.proposedLines;
+    if (!lines) return renderItem(item);
+    const named = lines.startLine === lines.endLine ? `line ${String(lines.startLine)}` : `lines ${String(lines.startLine)}-${String(lines.endLine)}`;
+    return `**Location:** ${named} of the proposed file\n\n${renderItem(item)}`;
+  });
+  return `**Proposed new file:** ${codeSpan(operation.path)}\n\n**File details:** ${fileFacts(text, fileMode)}${block}\n\n${rendered.join(SEPARATOR)}`;
+}
+
+/**
+ * The details of a proposed new file that, with its displayed content,
+ * determine its exact bytes (docs/file-operation-publication-contract.md §2).
+ */
+function fileFacts(text: string, fileMode: ProposedFileMode): string {
   const bytes = Buffer.byteLength(text, 'utf8');
   const hasBom = text.startsWith(BOM);
   const body = hasBom ? text.slice(BOM.length) : text;
@@ -2443,16 +3070,7 @@ function renderProposalSection(operation: PreparedFileOperation, items: readonly
     }
   }
   facts.push(fileMode === '100755' ? 'mode 100755 (executable)' : 'mode 100644');
-  const displayed = body.slice(0, body.length - finalTerminator.length);
-  const fence = '`'.repeat(Math.max(3, longestRun(displayed, '`') + 1));
-  const block = body === '' ? '' : `\n\n${fence}\n${displayed}\n${fence}`;
-  const rendered = items.map((item) => {
-    const lines = item.proposedLines;
-    if (!lines) return renderItem(item);
-    const named = lines.startLine === lines.endLine ? `line ${String(lines.startLine)}` : `lines ${String(lines.startLine)}-${String(lines.endLine)}`;
-    return `**Location:** ${named} of the proposed file\n\n${renderItem(item)}`;
-  });
-  return `**Proposed new file:** ${codeSpan(operation.path)}\n\n**File details:** ${facts.join(' · ')}${block}\n\n${rendered.join(SEPARATOR)}`;
+  return facts.join(' · ');
 }
 
 /**
@@ -2729,4 +3347,4 @@ function groupOf(match: RegExpExecArray, index: number): string {
   return group;
 }
 
-export { prepareReview, PRODUCT_LIMITS };
+export { blockedBy, codeSpan, prepareReview, PRODUCT_LIMITS, renderReviewBody, renderSuggestionPullBody };

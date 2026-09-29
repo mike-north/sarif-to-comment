@@ -48,6 +48,7 @@ export type {
   IPublishSarifReviewOptions,
   IPublishSarifReviewInput,
   IPublishedReview,
+  IPublishedSuggestion,
   IPublishedOutcome,
   IBlockedOutcome,
   IUncertainOutcome,

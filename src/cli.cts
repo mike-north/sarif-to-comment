@@ -15,7 +15,9 @@
  *   add-staged-changes  add staged Git changes to a copy addStagedChangesToSarif
  *   validate            readiness, without publishing    validateSarifReview
  *   publish             create the GitHub review         publishSarifReview
- *                       (a draft; --submit: submitted)
+ *                       (a draft; --submit: submitted;
+ *                       --suggestion-prs: with companion
+ *                       suggestion pull requests)
  * A first argument beginning with "-" (or no argument) is the original
  * flag-only publisher, which keeps its exact behavior, output, credentials and
  * exit statuses. Anything else is a usage error.
@@ -115,6 +117,12 @@ const REVIEW_POLICY_OPTIONS = md`  --source-root ABSOLUTE_FILE_URI
                                  comment review, instead of a draft. Never
                                  approves or requests changes. Retry a
                                  publication with the mode it started with.
+  --suggestion-prs               Propose whole-file creations and deletions,
+                                 and grouped changes (acceptanceGroup), as draft
+                                 suggestion pull requests into the pull
+                                 request's head branch, linked from the review.
+  --suggestion-label NAME        Existing label for suggestion pull requests
+                                 (default: suggestion). Needs --suggestion-prs.
 `;
 
 const PUBLISH_OPTIONS = md`  --sarif FILE                   SARIF 2.1.0 JSON file to publish.
@@ -151,6 +159,7 @@ Usage:
   sarif-to-comment --sarif FILE --repo OWNER/REPO --pull N --commit FULLSHA
                    --state ABSOLUTE_FILE [--source-root ABSOLUTE_FILE_URI]
                    [--old-source-commit FULLSHA] [--ignore-approval-hold] [--submit]
+                   [--suggestion-prs [--suggestion-label NAME]]
   sarif-to-comment [COMMAND] --help
 
 Commands:
@@ -318,7 +327,8 @@ represented faithfully (nothing written); 1 usage error or operational failure.
 Usage:
   sarif-to-comment validate --sarif FILE --repo OWNER/REPO --pull N --commit FULLSHA
                             [--source-root ABSOLUTE_FILE_URI] [--old-source-commit FULLSHA]
-                            [--ignore-approval-hold] [--submit] [--format human|json]
+                            [--ignore-approval-hold] [--submit]
+                            [--suggestion-prs [--suggestion-label NAME]] [--format human|json]
 
 Runs every check publish runs, reading the pull request and its source from
 GitHub, and stops before publishing: nothing is written to GitHub and no file
@@ -343,7 +353,8 @@ Usage:
   sarif-to-comment publish --sarif FILE --repo OWNER/REPO --pull N --commit FULLSHA
                            --state ABSOLUTE_FILE [--source-root ABSOLUTE_FILE_URI]
                            [--old-source-commit FULLSHA] [--ignore-approval-hold]
-                           [--submit] [--format human|json]
+                           [--submit] [--suggestion-prs [--suggestion-label NAME]]
+                           [--format human|json]
 
 The same operation as the original form without a command.
 
@@ -1145,8 +1156,8 @@ async function addStagedChanges(argv: readonly string[], { cwd }: IHandlerContex
 
 /** The review options publish and validate share: everything but --state. */
 const REVIEW_SPEC = {
-  values: ['--sarif', '--repo', '--pull', '--commit', '--source-root', '--old-source-commit'],
-  booleans: ['--ignore-approval-hold', '--submit'],
+  values: ['--sarif', '--repo', '--pull', '--commit', '--source-root', '--old-source-commit', '--suggestion-label'],
+  booleans: ['--ignore-approval-hold', '--submit', '--suggestion-prs'],
   required: ['--sarif', '--repo', '--pull', '--commit'],
 } as const satisfies IOptionSpec;
 
@@ -1162,7 +1173,12 @@ interface IReviewRequestInput {
   readonly reviewedCommit: string;
   readonly oldSourceCommit?: string;
   readonly sourceRootUri?: string;
-  readonly options?: { readonly ignoreApprovalHold?: true; readonly submit?: true };
+  readonly options?: {
+    readonly ignoreApprovalHold?: true;
+    readonly submit?: true;
+    readonly suggestionPullRequests?: true;
+    readonly suggestionLabel?: string;
+  };
 }
 
 /** A review command's SARIF file and library input fields. */
@@ -1185,9 +1201,13 @@ function reviewRequestInput({ values, flags }: IParsedOptions): IReviewRequestIn
   const reviewedCommit = commitValue(requiredValue(values, '--commit'), '--commit');
   const oldSourceCommit = commitFlag(values, '--old-source-commit');
   const sourceRootUri = sourceRootFlag(values);
+  const label = values.get('--suggestion-label');
+  if (label !== undefined && !flags.has('--suggestion-prs')) throw new UsageError('--suggestion-label requires --suggestion-prs');
   const options = {
     ...(flags.has('--ignore-approval-hold') ? { ignoreApprovalHold: true as const } : {}),
     ...(flags.has('--submit') ? { submit: true as const } : {}),
+    ...(flags.has('--suggestion-prs') ? { suggestionPullRequests: true as const } : {}),
+    ...(label === undefined ? {} : { suggestionLabel: label }),
   };
   return {
     destination,
@@ -1283,6 +1303,9 @@ async function publish(argv: readonly string[], { env }: IHandlerContext, intern
     command: 'publish',
     status: outcome.status,
     ...('review' in outcome ? { review: { id: outcome.review.id, url: outcome.review.url } } : {}),
+    ...(outcome.status === 'published' && outcome.suggestions !== undefined
+      ? { suggestions: outcome.suggestions.map((s) => ({ number: s.number, url: s.url, branch: s.branch })) }
+      : {}),
     ...('statePath' in outcome && outcome.statePath ? { statePath: outcome.statePath } : {}),
     message: outcome.markdown,
   };
