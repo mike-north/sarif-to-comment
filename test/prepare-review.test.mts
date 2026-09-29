@@ -38,7 +38,7 @@ import { spawnSync } from 'node:child_process';
 import { prepareReview, PRODUCT_LIMITS } from '../dist/prepare-review.cjs';
 import type { Evidence, IBlockedOutcome, IDiagnostic, IReadyOutcome, PrepareReviewOutcome } from '../dist/prepare-review.cjs';
 import { applyReplacement } from '../dist/replacements.cjs';
-import type { IReplacementRequest } from '../dist/replacements.cjs';
+import type { IReplacementRequest, ReplacementOutcome } from '../dist/replacements.cjs';
 import {
   asArray,
   asRecord,
@@ -218,7 +218,7 @@ function replacementBoundary() {
     if (editedTextLines !== undefined) response['editedText'] = editedTextLines.join('');
     return { id: entry.id, request, response };
   });
-  const applyReplacement = (request: IReplacementRequest): unknown => {
+  const applyReplacement = (request: IReplacementRequest): ReplacementOutcome => {
     calls.push(request);
     const normalized: Record<string, unknown> = { ...request };
     if (normalized['columnKind'] === undefined) delete normalized['columnKind'];
@@ -231,6 +231,7 @@ function replacementBoundary() {
       }
     });
     if (!match) throw new assert.AssertionError({ message: `unexpected replacement request ${JSON.stringify(request)}` });
+    // @ts-expect-error -- the authored responses are partial outcomes carrying only the fields preparation reads (replacements.json); this return is the one intentionally incomplete part of the boundary, so the prepareReview call that receives it stays fully type-checked
     return structuredClone(match.response);
   };
   return { applyReplacement, calls };
@@ -248,7 +249,6 @@ async function prepare(sarif: unknown, {
   const input: Record<string, unknown> = { sarif, context, readSource: reader.readSource };
   if (options !== undefined) input['options'] = options;
   const internals = realReplacement ? undefined : { applyReplacement: replacements.applyReplacement };
-  // @ts-expect-error -- the authored boundary answers with partial outcomes: only the fields preparation reads (replacements.json)
   const outcome = await prepareReview(input, internals);
   return { outcome, reader, replacements };
 }
