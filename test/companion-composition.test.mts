@@ -675,6 +675,47 @@ describe('group rules (§2.3–§2.4), identical in validate and publish', () =>
     ]);
   });
 
+  test('regression: a group member carrying alternative fixes is refused, never unioned into the group', async () => {
+    const alternatives = {
+      text: 'Two ways to retry.',
+      group: 'g',
+      location: at('src/client.ts', 2),
+    };
+    const sarif = document([
+      { ...result(alternatives), fixes: [lineFix('src/client.ts', 2, RETRY), lineFix('src/client.ts', 2, '  const response = await retry(request, id);')] },
+      result({ text: 'Page.', group: 'g', operation: createOp(0) }),
+    ], [created('docs/a.md', PAGE_A)]);
+    await assertBlockedEverywhere(makeWorld(), sarif, [
+      '- `fix-alternatives-unsupported` at `/runs/0/results/0`: Several alternative fixes were proposed; none is chosen silently.',
+    ]);
+  });
+
+  test('regression: a suggestion pull request body over 60,000 characters blocks the review; nothing is truncated', async () => {
+    const message = 'x'.repeat(60_000);
+    const sarif = document([result({ text: message, operation: createOp(0) })], [created('docs/guide.md', GUIDE)]);
+    // The body §2.11 defines, with a marker of the same length (its ids are v4 UUIDs, 36 characters each).
+    const uuid = '00000000-0000-4000-8000-000000000000';
+    const body = [
+      `Suggested in a review of #7 at commit ${HEAD}.`,
+      '',
+      'Merging this pull request into `feature/retry` applies this change:',
+      '',
+      '- New file `docs/guide.md`: 25 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644',
+      '',
+      '---',
+      '',
+      message,
+      '',
+      attribution,
+      '',
+      markerFor(uuid, uuid),
+    ].join('\n');
+    assert.ok(body.length > 60_000);
+    await assertBlockedEverywhere(makeWorld(), sarif, [
+      `- \`suggestion-body-too-large\` at \`/runs/0/results/0\`: The suggestion pull request for the proposed change to docs/guide.md would have a ${String(body.length)}-character body; the limit is 60000. Nothing is truncated or split.`,
+    ]);
+  });
+
   test('more than ten suggestion pull requests', async () => {
     const pages = Array.from({ length: 11 }, (_, i) => created(`docs/p${String(i)}.md`, `# ${String(i)}\n`));
     const sarif = document(pages.map((_, i) => result({ text: `Page ${String(i)}.`, operation: createOp(i) })), pages);
