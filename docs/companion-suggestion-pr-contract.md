@@ -1,6 +1,6 @@
 # Companion suggestion pull requests: contract
 
-Proposal awaiting owner acceptance · September 29, 2026. Publication of whole-file operations and explicitly grouped edits as companion suggestion pull requests is implemented under the conservative options below. Every decision in [Decisions awaiting acceptance](#decisions-awaiting-acceptance) is provisional until the owner accepts or replaces it. Where this proposal departs from a recorded default (§2.1), the departure is stated with its reasons.
+Proposal awaiting owner acceptance · September 29, 2026. Publication of whole-file operations and explicitly grouped edits as companion suggestion pull requests is implemented under the conservative options below. The default-off setting (§2.1) is the owner's decision of September 29, 2026 ([issue #5](https://github.com/mike-north/sarif-to-comment/issues/5), recorded in D22 and R16). Every other decision in [Decisions awaiting acceptance](#4-decisions-awaiting-acceptance) is provisional until the owner accepts or replaces it.
 
 **Sources.** [Issue #5](https://github.com/mike-north/sarif-to-comment/issues/5); [specification](specification.md) R16 and open contract O11, with R1, R3, R8, R10, R12, R13 and R14; [decisions](design-decisions.md) D7, D12, D14, D21–D29; the [file-operation publication contract](file-operation-publication-contract.md), which remains the form used when suggestion pull requests are not enabled; the [grouped-suggestion](grouped-suggestion-experiment.md), [lifecycle](companion-pr-lifecycle-experiment.md) and [recovery](publication-recovery-experiment.md) experiments; [status](status.md). Cleanup of suggestion pull requests after their original pull request ends is [issue #6](https://github.com/mike-north/sarif-to-comment/issues/6) and is not implemented here; §8 states what it can rely on.
 
@@ -22,9 +22,9 @@ Proposal awaiting owner acceptance · September 29, 2026. Publication of whole-f
 
 ### 2.1 The setting, and why it is off by default
 
-**Adopted: suggestion pull requests are disabled unless the caller enables them** (`options.suggestionPullRequests: true`, CLI `--suggestion-prs`).
+**Owner decision (September 29, 2026): suggestion pull requests are explicit opt-in and disabled unless the caller enables them** (`options.suggestionPullRequests: true`, CLI `--suggestion-prs`). The owner recorded it on [issue #5](https://github.com/mike-north/sarif-to-comment/issues/5); [D22](design-decisions.md#d22-gate-suggestion-prs-with-one-caller-setting--settled-direction) and [R16](specification.md#r16-select-publication-forms-using-the-suggestion-pr-setting) now state it. The evaluation below is the evidence it rests on.
 
-[D22](design-decisions.md#d22-gate-suggestion-prs-with-one-caller-setting--settled-direction) records "enabled when omitted" as a *low-conviction* default, to be validated against "PR clutter and repository automation triggered by PR creation". Issue #5 asks for that evaluation. It found the costs of an enabled default concrete and the benefit small:
+D22 earlier recorded "enabled when omitted" as a *low-conviction* default, to be validated against "PR clutter and repository automation triggered by PR creation". Issue #5 asks for that evaluation. It found the costs of an enabled default concrete and the benefit small:
 
 | Consideration | Enabled by default | Disabled by default (adopted) |
 | --- | --- | --- |
@@ -34,7 +34,7 @@ Proposal awaiting owner acceptance · September 29, 2026. Publication of whole-f
 | Failure surface | New failure modes for everyone: missing push permission, a missing label, fork pull requests, a moved head. Each would block reviews that publish today. | Those checks apply only when requested. |
 | What is lost | Grouped edits and pull-request-based file operations work without a flag. | Grouped edits need one explicit setting; without it they are refused with the setting named (never split). Creations and deletions still publish, in the review body. |
 
-The asymmetry decides it: an enabled default imposes surprise costs on every repository to save one flag for the callers who want the feature, and turning it off after the fact does not remove pull requests already created. The explicit disable choice D22 requires remains available (`suggestionPullRequests: false` behaves exactly like omission). If the owner re-adopts D22's default, only the omitted-option value changes; nothing else in this contract depends on it.
+The asymmetry decides it: an enabled default imposes surprise costs on every repository to save one flag for the callers who want the feature, and turning it off after the fact does not remove pull requests already created. The explicit disable choice D22 requires remains available (`suggestionPullRequests: false` behaves exactly like omission). Nothing else in this contract depends on the omitted-option value.
 
 ### 2.2 Options
 
@@ -220,7 +220,7 @@ Disabled: blocked, `acceptance-group-requires-suggestion-prs` at `/runs/0/result
 
 ## 4. Decisions awaiting acceptance
 
-1. **Off by default** (§2.1), departing from D22's low-conviction "enabled when omitted". Alternative: D22's default, which changes existing callers' behavior and requirements on upgrade.
+1. **Off by default, explicit opt-in** (§2.1). *Decided by the owner on September 29, 2026 ([issue #5](https://github.com/mike-north/sarif-to-comment/issues/5)); no longer awaiting acceptance.* The earlier provisional D22 default ("enabled when omitted") is superseded. Items 2–12 below remain awaiting owner acceptance.
 2. **Option names** `suggestionPullRequests` / `suggestionLabel` and `--suggestion-prs` / `--suggestion-label` (§2.2). Alternatives: a single `suggestionPullRequests: { label }` object (less uniform with the boolean options), or `companion…` names (the specification's term is "suggestion PR").
 3. **Group representation** `properties.sarifToComment.acceptanceGroup` (§2.3), with members holding one change each, at least two distinct changes, and no feedback-only members. Alternatives: a multi-file SARIF fix (a fix structure left to #9), or a run-level group table (indirection without benefit).
 4. **Same repository, head-branch target, reviewed-commit parent, refusal of historical reviews, forks and default-branch heads** (§2.5). Alternatives: basing on the current head (would propose against unreviewed code) or accepting any ancestor (needs a comparison read and still proposes a stale diff).
