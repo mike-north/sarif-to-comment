@@ -2,7 +2,7 @@
 
 > **Historical analysis (reconciled September 28, 2026).** These notes were superseded by the [accepted engineering contract](second-milestone-contract-proposal.md) and the 0.2.0 release. For current status, see [Current status and reconciliation](status.md).
 
-September 28, 2026. This is Astra's local contract analysis while the authorized Opus launch awaits approval reconsideration. It distinguishes settled constraints from proposed engineering defaults. It is not an adopted implementation contract and does not claim software progress. The [goal](second-milestone-goal.md), current scope and interface design govern; the forthcoming complete contract must settle argument/result types before dependent implementation.
+September 28, 2026. This is the engineering lead's contract analysis, written while implementation was waiting to start. It distinguishes settled constraints from proposed engineering defaults. It is not an adopted implementation contract and does not claim software progress. The [goal](second-milestone-goal.md), current scope and interface design govern; the forthcoming complete contract must settle argument/result types before dependent implementation.
 
 ## Settled constraints and scope interpretations
 
@@ -11,8 +11,8 @@ September 28, 2026. This is Astra's local contract analysis while the authorized
 3. Source coordinates are one-based inclusive lines/ranges at an explicit source snapshot. Extraction uses the intended index, never unstaged content. An independently applied supported edit set must reproduce the staged bytes (R2).
 4. Feedback and edits are separate facts. A replacement must not expand to absorb nearby feedback. Several explanations inside one replacement may accompany one rendered suggestion with their individual origins (D4/D5). No explanation may be invented from staged code.
 5. A proposed creation is not an edit to a fictitious empty reviewed file, and deletion is not emptying. D23 selects result-level operation properties referencing standard artifacts. Feedback about a new file is verified against the proposed content; deletion feedback refers to the existing source (D6/D20).
-6. Current publisher guarantees and its bounded operation profile remain intact. The parent interprets this selected increment as allowing faithful extracted file proposals that the publisher still explicitly blocks. The live happy path uses supported existing-file fixes. This does not classify file additions/deletions as invalid or remove them from the broader product.
-7. The parent confirmed strict extraction is sufficient under the latest happy-path-first priority. Best-effort repair workflows are deferred; actionable failure evidence and applicable D10 artifact preservation are not.
+6. Current publisher guarantees and its bounded operation profile remain intact. The selected increment was interpreted as allowing faithful extracted file proposals that the publisher still explicitly blocks. The live happy path uses supported existing-file fixes. This does not classify file additions/deletions as invalid or remove them from the broader product.
+7. Strict extraction was confirmed as sufficient under the latest happy-path-first priority. Best-effort repair workflows are deferred; actionable failure evidence and applicable D10 artifact preservation are not.
 8. Inspection is not publication readiness. It must retain full explanations, every source association and every included fix, even when the publisher cannot accept them. Only fix previews can shorten, and omission must be explicit without mutating the SARIF.
 9. Existing flag-only publication remains compatible. Every handled JSON-mode outcome is one JSON document on stdout, with meaningful exit status. Removal/correction selectors, standalone validation and suggestion PRs are not prerequisites.
 
@@ -70,10 +70,10 @@ After the complete shared contracts are agreed:
 - Staged incorporation: explicit repository/index snapshot, source verification, exact proposed edits and faithful merge with supplied feedback. Own its Git fixtures and independent apply oracle.
 - Public surface and artifacts: CLI dispatch/file handling/human-JSON presentation, package exports, declarations, generated API docs, installed examples and Changeset. One owner integrates shared entry files.
 - Existing publication: preserve its contract and sources unless a necessary integration change is identified and regression-tested; no new operation rendering in this increment.
-- Independent reviewer: separate conversation, final integrated source identity, meaningful tests and installed-user paths. Parent owns live fixture writes and release delivery.
+- Independent reviewer: separate from the authors, reviewing the final integrated source identity, meaningful tests and installed-user paths. The supervising verifier owns live fixture writes and release delivery.
 
-These are responsibility boundaries, not prescribed algorithms or a requirement for additional packages. Opus should own implementation decomposition within the agreed contracts.
+These are responsibility boundaries, not prescribed algorithms or a requirement for additional packages. Implementers own the decomposition within the agreed contracts.
 
 ## Next design deliverable
 
-The contract-design ticket must choose complete argument/result shapes, CLI flags and structured outcomes; resolve the engineering details above; and attach testable examples. Astra will reconcile it with these constraints before dependent implementation. No software implementation has started while Claude authorization remains unresolved.
+The contract-design ticket must choose complete argument/result shapes, CLI flags and structured outcomes; resolve the engineering details above; and attach testable examples. The lead reconciles it with these constraints before dependent implementation. No software implementation had started when these notes were written.

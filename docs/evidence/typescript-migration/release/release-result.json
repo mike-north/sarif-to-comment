@@ -56,8 +56,8 @@
     }
   },
   "runnerAndOracleHashes": {
-    "logs/opus/m2/installed-typescript-acceptance.cjs": "8518c2e25d83c4248ce5d750f150cefdc2fdffa8ce213045646f501754dabb23",
-    "logs/opus/m2/installed-insertion-acceptance.cjs": "1b59c357b628416eb690c76f996ce96d5ae85c3f4fb693dffebe534792e37703",
+    "<working-logs>/m2/installed-typescript-acceptance.cjs": "8518c2e25d83c4248ce5d750f150cefdc2fdffa8ce213045646f501754dabb23",
+    "<working-logs>/m2/installed-insertion-acceptance.cjs": "1b59c357b628416eb690c76f996ce96d5ae85c3f4fb693dffebe534792e37703",
     "docs/evidence/second-milestone/source-oracle.json": "8a51cec87afc8e60f3c5139273e74503a4ead44794c2de6fd8099cd1565cefcd",
     "docs/evidence/second-milestone/insertion-source-oracle.json": "ae50e0264dbb8f0b229edf575b56903475cdbae9f8777f5863e418c678562f70"
   },

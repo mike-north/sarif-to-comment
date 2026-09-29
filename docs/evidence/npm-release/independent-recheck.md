@@ -1,10 +1,10 @@
 # Independent re-review: V1–V3 repairs (turn 06)
 
-Read-only review against `logs/opus/trusted-publish-review-05-result.md` and `logs/opus/release-acceptance.md`. Probes ran only in scratch directories under `/tmp`. I made no product edits, no Git changes, no external writes and no publish, and I did not wait on the author's mutation run.
+Read-only review against `<working-logs>/trusted-publish-review-05-result.md` and `<working-logs>/release-acceptance.md`. Probes ran only in scratch directories under `/tmp`. I made no product edits, no Git changes, no external writes and no publish, and I did not wait on the author's mutation run.
 
 ## Coverage
 
-- `shasum -a 256 -c logs/opus/trusted-publish-review-06-manifest.txt`: all 49 entries are OK.
+- `shasum -a 256 -c <working-logs>/trusted-publish-review-06-manifest.txt`: all 49 entries are OK.
 - Files changed since turn 05, with their manifest hashes:
 
   | File | SHA-256 |

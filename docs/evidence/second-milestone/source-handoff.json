@@ -15,11 +15,11 @@
     "failed": 0,
     "skipped": 0,
     "apiPages": 225,
-    "rawLog": "logs/opus/m2/final-lead-check-02.txt",
+    "rawLog": "<working-logs>/m2/final-lead-check-02.txt",
     "rawLogSha256": "0ca265830215946cdcc00492760eedd19f891df2e873a5ce61d5779fd4bdd8ce"
   },
   "independentReview": {
-    "conversation": "dac76d06-ff9e-486f-a27d-d5f6256ca3b9",
+    "reviewer": "independent reviewer, separate from the authors",
     "review02ExitCode": 0,
     "review03ExitCode": 0,
     "verdict": "No material defect within reviewed scope",

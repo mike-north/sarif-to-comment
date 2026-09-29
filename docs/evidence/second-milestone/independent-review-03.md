@@ -1,9 +1,9 @@
 # Second-milestone review 03: final delta, snapshot 02 → 03
 
-This is a read-only, bounded delta review of `logs/opus/m2/review-snapshot-03`.
-- **Manifest:** `logs/opus/m2/review-snapshot-03.sha256`, file SHA-256 `823bef633b25c49908aebb6b774aba6462bef9759a2131e0c41dc7223dfc60d7`, 325 entries.
+This is a read-only, bounded delta review of `<working-logs>/m2/review-snapshot-03`.
+- **Manifest:** `<working-logs>/m2/review-snapshot-03.sha256`, file SHA-256 `823bef633b25c49908aebb6b774aba6462bef9759a2131e0c41dc7223dfc60d7`, 325 entries.
 - **Integrity:** `shasum -c` reported every entry OK, before and after. The snapshot's `git status --porcelain` was unchanged.
-- **Probe:** `logs/opus/m2/review-03-probes/ast-compare.cjs`, with output in `ast-compare.out`.
+- **Probe:** `<working-logs>/m2/review-03-probes/ast-compare.cjs`, with output in `ast-compare.out`.
 
 I made no edits, commits or remote actions, and did not repeat the broad review.
 
@@ -42,7 +42,7 @@ I made no edits, commits or remote actions, and did not repeat the broad review.
 **New regression: meaningful.**
 - It sets a schema-valid matching `runGuid` on both the run and the inline external properties.
 - It asserts the `runGuid` is retained verbatim, that the message avoids the overclaim and says "does not merge", and that the human rendering contains the GUID.
-- `logs/opus/m2/inspection-run-guid-red.txt` shows it failing against the old message. `node --test test/sarif-inspection.test.cjs` in the snapshot gives 59 tests, 59 passing, 0 failing.
+- `<working-logs>/m2/inspection-run-guid-red.txt` shows it failing against the old message. `node --test test/sarif-inspection.test.cjs` in the snapshot gives 59 tests, 59 passing, 0 failing.
 
 **README and guide clarification: accurate.** "Staged edits to UTF-8 text files become fixes", and publication blocks empty or BOM-only reviewed files for inline suggestions. That matches review 02's observation: extraction is faithful, and the unchanged publisher refuses with a precise diagnostic.
 - **Nonactionable wording nuance:** "no source line" is slightly loose for a BOM-only file. The publisher treats the BOM as line 1 and refuses with `suggestion-final-newline-unverified`. The stated outcome, blocked, is correct.

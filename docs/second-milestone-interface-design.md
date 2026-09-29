@@ -2,7 +2,7 @@
 
 > **Historical design record (reconciled September 28, 2026).** Names selected here shipped in 0.2.0. The removal and validation designs marked deferred have since been merged under provisional contracts. For current status, see [Current status and reconciliation](status.md).
 
-Design proposal · September 28, 2026. The user delegated command and function naming and requested independent sub-agent scrutiny. This document designs the vocabulary and visible operation boundaries for [the second milestone](second-milestone.md); it is not an implemented API or a complete extraction specification.
+Design proposal · September 28, 2026. The user delegated command and function naming and requested independent scrutiny. This document designs the vocabulary and visible operation boundaries for [the second milestone](second-milestone.md); it is not an implemented API or a complete extraction specification.
 
 ## Current delivery boundary — happy path first
 
@@ -31,7 +31,7 @@ The existing supported-profile limitations remain explicit; accepting upstream i
 
 ## Selected vocabulary
 
-These names are lead-selected design decisions under the user's delegation, scrutinized by an independent sub-agent. They are not available in version 0.1.1 except for the existing library publisher and flag-only publication CLI.
+These names are lead-selected design decisions under the user's delegation, scrutinized by an independent reviewer. They are not available in version 0.1.1 except for the existing library publisher and flag-only publication CLI.
 
 | Intent | CLI command | Library function | Visible effect |
 | --- | --- | --- | --- |
@@ -107,7 +107,7 @@ D4 permits several independent findings to contribute to one rendered suggestion
 
 ## Review record
 
-Independent reviewer: `/root/authoring_api_review`, explicitly requested by the user; read-only inspection of the scope, existing contracts and public interfaces.
+Independent reviewer, explicitly requested by the user: read-only inspection of the scope, existing contracts and public interfaces.
 
 Accepted findings: use `init --output`; keep authoring functions ordinary-value operations and illustrate returned-document assignment; distinguish local `--worktree` from remote `--repo`; use `line`/`endLine` on both authoring surfaces; preserve the existing flag-only publisher as an exact compatibility form; avoid an extra `sarif` namespace or mandatory builder.
 

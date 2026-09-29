@@ -1,12 +1,12 @@
 INDEPENDENT VALIDATION — strict-TypeScript migration of sarif-to-comment
 =========================================================================
-Validated revision: f2aa51b (branch typescript-migration-validation, worktree logs/opus/typescript/wt/validation).
+Validated revision: f2aa51b (branch typescript-migration-validation, worktree <working-logs>/typescript/wt/validation).
 Later docs/changeset commits on the integration branch (e.g. 7c9c8af, 6d868ab, 02df2c8, see docs.txt from another agent) were NOT validated here.
 Tools: Node 24.14.0 (npm 11.18.0, pnpm 11.12.0) default; Node 22.18.0 (npm 10.9.3) and 22.23.3 (npm 10.9.9) from wt/spike/.nodes.
-Scratch copies and harness scripts (not evidence, not product): logs/opus/typescript/valtmp/ (gitignored via logs/):
+Scratch copies and harness scripts (not evidence, not product): <working-logs>/typescript/valtmp/ (gitignored via logs/):
   mutate.cjs, run-mutants.sh, run-matrix.sh, probe.mjs, normalize.cjs, run-diff.sh, inventory.cjs, oracle-shim/*.cjs
-Nothing was committed, pushed or published. The main checkout, other worktrees, .claude/, logs/opus/m2/** and
-logs/opus/typescript/baseline-package.json were only read or executed (m2 runner sha256 unchanged: 4-m2-acceptance/runner-hashes-before.txt).
+Nothing was committed, pushed or published. The main checkout, other worktrees, unrelated local scaffolding, <working-logs>/m2/** and
+<working-logs>/typescript/baseline-package.json were only read or executed (m2 runner sha256 unchanged: 4-m2-acceptance/runner-hashes-before.txt).
 
 RESULT SUMMARY
   Behavioral defects found: NONE.   Mutant survivors: NONE (7/7 killed by both suites, each by a behavioral test).
@@ -103,7 +103,7 @@ Results (bash valtmp/run-diff.sh; 4-differential/):
   'module.exports' namespace key (present on 24 only, for both packages), as the plan §0.6 records.
   Interop (both): CJS keys [createSarifDocument, addSarifComment, inspectSarif, addStagedChangesToSarif, publishSarifReview],
   all functions, no __esModule, default import === require(), named imports identical.
-Parent acceptance runners (logs/opus/m2, run unmodified; they locate the package via the consumer dir argument):
+Parent acceptance runners (<working-logs>/m2, run unmodified; they locate the package via the consumer dir argument):
   installed-typescript-acceptance.cjs <newConsumer> <out>: PASSED on Node 24.14.0 and 22.18.0; all 6 output files
     byte-identical to the parent's 0.2.0 run in evidence/parent-baseline-acceptance (4-m2-acceptance/output-comparison.txt).
   installed-insertion-acceptance.cjs <snapshot> <out> local (snapshot 4-m2-acceptance/insertion-snapshot-new.json naming the
@@ -132,7 +132,7 @@ Common files with changed content (5-changed-file-diffs.txt):
   README.md — development/build instructions and .cjs->.mts tool paths; Node 22.18.0 floor for development/publishing.
   docs/api/sarif-to-comment.md — overview sentence now says declarations are generated from the TypeScript implementation.
   docs/api/ iinspectionrun(.source,.tool), isarifinspection(.log,.summary) — layout only: tsc prints four inline object
-    literal types multi-line / with trailing `;` (plan checkpoint Wave 3: "api-report/docs drift = layout only").
+    literal types multi-line / with trailing `;` (plan checkpoint for the third conversion batch: "api-report/docs drift = layout only").
 All other 222 common files byte-identical (incl. vendor/, CHANGELOG.md, docs/getting-started.md, remaining docs/api/).
 `node scripts/release-guard.mts verify-pack evidence/final/5-pack.json` -> "Verified sarif-to-comment-0.2.0.tgz: 247 files,
   all inside the distribution boundary." exit 0 (5-verify-pack.txt).

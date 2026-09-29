@@ -12,10 +12,10 @@
 
 **New finding (low, test-coverage) — test/publication-state.types.mts:57 and :66.** The `@ts-expect-error` negative assertions accept *any* error, so a regression to `readonly receipt?: IReceipt; readonly rejection?: IRejection;` on `ICoercedPhaseRecord` passes the type check unchanged (verified: 0 errors) even though it would falsely type a coerced `['completed']` record's `receipt: 42` as `IReceipt | undefined`, letting `record.receipt?.reviewId` compile. Minimal fix: add a positive assertion that the coerced record's fields stay `unknown`, e.g. `type Coerced = Extract<ParsedStateRecord, { phase: readonly unknown[] }>; true satisfies (unknown extends Coerced['receipt'] ? true : false);` (and the same for `rejection`), or switch the exclusion probes to `record.receipt?.reviewId` so the expected error is TS18046 (unknown) rather than "possibly undefined".
 
-**Out of scope note.** Uncommitted `.gitignore` hunk (`.claude/*.local.*`) sits in the worktree; unrelated to the repair.
+**Out of scope note.** An uncommitted local `.gitignore` hunk sits in the worktree; unrelated to the repair.
 
 ### Critical Files for Implementation
-- /Users/mnorth/Development/sarif-to-comment/logs/opus/typescript/wt/integration/src/publication.cts
-- /Users/mnorth/Development/sarif-to-comment/logs/opus/typescript/wt/integration/test/publication-state.types.mts
-- /Users/mnorth/Development/sarif-to-comment/logs/opus/typescript/wt/integration/test/publication.test.mts
-- /Users/mnorth/Development/sarif-to-comment/logs/opus/typescript/wt/integration/scripts/check-types.mts
+- `src/publication.cts`
+- `test/publication-state.types.mts`
+- `test/publication.test.mts`
+- <working-logs>/typescript/wt/integration/scripts/check-types.mts
