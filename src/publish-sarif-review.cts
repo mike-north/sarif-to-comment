@@ -1,6 +1,8 @@
 /**
- * publishSarifReview: publishes a ready SARIF document as one GitHub draft
- * review (the fifth public operation; the package entry re-exports it).
+ * publishSarifReview: publishes a ready SARIF document as one GitHub review —
+ * a draft by default, or, on explicit request, a submitted comment review
+ * (docs/submitted-review-contract.md) — (the fifth public operation; the
+ * package entry re-exports it).
  *
  * Publication composes private cores: the GitHub client (src/github.cts),
  * the review preflight shared with readiness assessment
@@ -30,7 +32,11 @@
  *                             // old side, used only when GitHub's own compare
  *                             // cannot establish it; still verified file by
  *                             // file against the pull request's patches
- *   options?: { ignoreApprovalHold?: boolean }  // bypasses only an approval hold
+ *   options?: { ignoreApprovalHold?: boolean,  // bypasses only an approval hold
+ *               submit?: boolean }             // true: create the review
+ *                                              // submitted, event COMMENT;
+ *                                              // part of the publication
+ *                                              // identity (never inferred)
  *
  * Outcome — the consumer contract is `status` plus human-readable `markdown`
  * (and the listed identifiers). Internal reason codes, evidence and diagnostics
@@ -119,8 +125,8 @@ export interface IPullRequestDestination {
 }
 
 /**
- * Options that change how a ready document is judged. Unknown options are
- * refused.
+ * Options that change how a document is judged or published. Unknown options
+ * are refused.
  *
  * @public
  */
@@ -131,6 +137,15 @@ export interface IPublishSarifReviewOptions {
    * the hold, never validation, and is not part of the publication identity.
    */
   readonly ignoreApprovalHold?: boolean | undefined;
+  /**
+   * Create the review already submitted, as a comment review (GitHub's
+   * `COMMENT` event), instead of leaving a draft. Omitted or `false` leaves a
+   * draft. It never approves or requests changes, and nothing is inferred
+   * from finding severity. Every readiness check and approval hold applies
+   * unchanged. The mode is part of the publication identity: a state path is
+   * always retried with the mode it started with.
+   */
+  readonly submit?: boolean | undefined;
 }
 
 /**
@@ -162,7 +177,7 @@ export interface IPublishSarifReviewInput {
   readonly statePath: string;
   /**
    * GitHub personal access token (or user token) used to read the pull
-   * request and create the draft review. GitHub App installation tokens,
+   * request and create the review. GitHub App installation tokens,
    * including the automatic Actions `GITHUB_TOKEN`, are not supported. Never
    * persisted, fingerprinted, rendered or included in a rejection.
    */
@@ -184,7 +199,7 @@ export interface IPublishSarifReviewInput {
 }
 
 /**
- * The draft review on GitHub.
+ * The review on GitHub.
  *
  * @public
  */
@@ -196,9 +211,10 @@ export interface IPublishedReview {
 }
 
 /**
- * The publication is complete: the draft review was created and confirmed
- * now, confirmed after an earlier uncertain attempt, or recorded as complete
- * in the state file by an earlier call.
+ * The publication is complete: the review (a draft, or a submitted comment
+ * review when `options.submit` was set) was created and confirmed now,
+ * confirmed after an earlier uncertain attempt, or recorded as complete in
+ * the state file by an earlier call.
  *
  * @remarks
  * A completed record is returned without contacting GitHub. Publication is
@@ -378,16 +394,41 @@ function code(text: string): string {
   return `\`${text.replace(/`/g, "'")}\``;
 }
 
+/** How the published explanation names each publication mode (contract §2.7). */
+interface IModeWording {
+  readonly heading: string;
+  /** The review's description in the recovered and receipt sentences. */
+  readonly noun: string;
+  /** The sentence for a review created now. */
+  readonly created: (link: string, where: string) => string;
+}
+
+const MODE_WORDING: Readonly<Record<'draft' | 'submitted', IModeWording>> = {
+  draft: {
+    heading: '## Draft review published',
+    noun: 'draft',
+    created: (link, where) => `Created the draft ${link} on ${where}. It stays a draft until someone submits it on GitHub.`,
+  },
+  submitted: {
+    heading: '## Review submitted',
+    noun: 'submitted comment',
+    created: (link, where) => `Created and submitted the comment ${link} on ${where}. It is visible on the pull request now.`,
+  },
+};
+
 function publishedMarkdown(result: PublishedResult, captured: ICapturedInput, prepared: IReadyOutcome | undefined): string {
   const link = `[review ${String(result.review.id)}](${result.review.htmlUrl})`;
   const where = `${destinationLabel(captured)} at commit ${code(captured.reviewedCommit)}`;
-  const lines = ['## Draft review published', ''];
+  // A record is only ever continued in the mode it was started with, so the
+  // requested mode is the mode of the review being reported.
+  const wording = MODE_WORDING[captured.submit === true ? 'submitted' : 'draft'];
+  const lines = [wording.heading, ''];
   if (result.via === 'receipt') {
-    lines.push(`The draft ${link} on ${where} was already published; its completion is recorded at ${code(captured.statePath)}. Nothing was sent.`);
+    lines.push(`The ${wording.noun} ${link} on ${where} was already published; its completion is recorded at ${code(captured.statePath)}. Nothing was sent.`);
   } else if (result.via === 'recovered') {
-    lines.push(`The draft ${link} on ${where} was confirmed on GitHub for this publication; nothing was resent.`);
+    lines.push(`The ${wording.noun} ${link} on ${where} was confirmed on GitHub for this publication; nothing was resent.`);
   } else {
-    lines.push(`Created the draft ${link} on ${where}. It stays a draft until someone submits it on GitHub.`);
+    lines.push(wording.created(link, where));
   }
   if (!result.receiptPersisted) {
     lines.push(
@@ -467,6 +508,7 @@ async function run(captured: ICapturedInput, createGitHubClient: CreatePublishin
     inputFingerprint: inputFingerprintOf(captured),
     statePath: captured.statePath,
     transport: client,
+    submit: captured.submit === true,
   };
 
   const existing = await recoverPublication(identity);
@@ -483,14 +525,15 @@ async function run(captured: ICapturedInput, createGitHubClient: CreatePublishin
 }
 
 /**
- * Publishes a ready SARIF document as one GitHub draft review — or explains
- * why it is blocked, uncertain or refused.
+ * Publishes a ready SARIF document as one GitHub review — a draft unless
+ * `options.submit` asks for a submitted comment review — or explains why it
+ * is blocked, uncertain or refused.
  *
  * @remarks
  * The whole document is validated before anything is written: if any finding
  * cannot be published faithfully, nothing is published. Publication is
- * one-way and draft-only: the tool never submits, updates, restores or
- * deletes a review. Retrying with the same `statePath` never creates a second
+ * one-way: the tool never submits an existing draft, and never updates,
+ * restores or deletes a review. Retrying with the same `statePath` never creates a second
  * review; an existing record is honoured before any GitHub request for the
  * pull request's source.
  *

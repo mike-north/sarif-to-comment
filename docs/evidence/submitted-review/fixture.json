@@ -1,0 +1,24 @@
+{
+  "repository": "mike-north/doc-linter (owned private sandbox)",
+  "base": {
+    "branch": "sarif-issue7-20260928-base",
+    "commit": "0a7b03fe399255a62118311cbc3e1bd6fe64cb23"
+  },
+  "reviewedCommit": "05f323760807c1c30aa7e9efa280d12b8717d7f3",
+  "pullRequests": {
+    "33": {
+      "head": "sarif-issue7-20260928-draft",
+      "purpose": "default publication (draft), then a submitted create beside that pending draft"
+    },
+    "34": {
+      "head": "sarif-issue7-20260928-submitted",
+      "purpose": "explicit submitted publication, retries, mode mismatch and a discarded create response"
+    }
+  },
+  "change": "adds docs/sarif-issue7-fixture.md (7 lines)",
+  "findings": [
+    "line 4: typo, with a staged fix (native suggestion)",
+    "lines 6-7: multi-line comment"
+  ],
+  "package": "built from this branch, packed with npm pack and installed into a clean consumer (tarball sha256 4e4aac6c06a555c2093a3e05db3c94ffddbfc2747b065b3e27c84008e26ce9af)"
+}

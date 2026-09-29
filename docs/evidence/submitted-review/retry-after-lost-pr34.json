@@ -1,0 +1,10 @@
+{
+  "command": "publish",
+  "status": "published",
+  "review": {
+    "id": 5348460479,
+    "url": "https://github.com/mike-north/doc-linter/pull/34#pullrequestreview-5348460479"
+  },
+  "statePath": "<state-dir>/pr34-lost.json",
+  "message": "## Review submitted\n\nThe submitted comment [review 5348460479](https://github.com/mike-north/doc-linter/pull/34#pullrequestreview-5348460479) on mike-north/doc-linter#34 at commit `05f323760807c1c30aa7e9efa280d12b8717d7f3` was already published; its completion is recorded at `<state-dir>/pr34-lost.json`. Nothing was sent."
+}

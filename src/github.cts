@@ -10,7 +10,8 @@
  *     src/prepare-review.cts (fetchContext, and the readSource it returns).
  *
  * It never decides placement, rendering, or delivery; it never retries a
- * write, never submits, edits or deletes a review, and never invents
+ * write, never submits an existing review, edits or deletes a review, and
+ * never invents
  * coordinates or source text. Anything it cannot establish exactly is an
  * error, not an approximation.
  *
@@ -69,12 +70,14 @@
  * Publication transport (see test/fixtures/publication/fake-github.mts)
  *
  *   getAuthenticatedUser() -> { id, login }          GET /user
- *   createReview({ owner, repo, pullNumber, commitId, body, comments })
+ *   createReview({ owner, repo, pullNumber, commitId, body, event?, comments })
  *       -> { id, htmlUrl }
  *     Exactly one POST /repos/{o}/{r}/pulls/{n}/reviews with JSON
  *     { commit_id, body, comments: [{ path, body, line, side,
- *       start_line?, start_side? }] } and no `event` (a pending draft). Bodies
- *     are sent byte-for-byte. Never retried.
+ *       start_line?, start_side? }] }. Without `event` the review is a pending
+ *     draft and no `event` is sent; `event` may only be 'COMMENT', which is
+ *     sent after `body` and creates the review already submitted as a comment
+ *     review (never a verdict). Bodies are sent byte-for-byte. Never retried.
  *   listReviews({ owner, repo, pullNumber, cursor })
  *       -> { reviews: [{ id, htmlUrl, authorId, authorLogin, commitId, state,
  *            body }], nextCursor }
@@ -305,10 +308,14 @@ export interface IReviewCommentDraft {
   readonly body: string;
 }
 
-/** A create-review request: exactly these keys, nothing else. */
+/**
+ * A create-review request: exactly these keys, nothing else. `event` is
+ * present only to submit the new review as a comment review.
+ */
 export interface ICreateReviewRequest extends IPullRequestDestination {
   readonly commitId: string;
   readonly body: string;
+  readonly event?: 'COMMENT';
   readonly comments: readonly IReviewCommentDraft[];
 }
 
@@ -464,10 +471,11 @@ type RequestHeaders = {
   'Content-Type'?: string;
 };
 
-/** The create-review POST body. */
+/** The create-review POST body; `event` only for a submitted comment review. */
 interface ICreateReviewPayload {
   readonly commit_id: string;
   readonly body: string;
+  readonly event?: 'COMMENT';
   readonly comments: readonly ICreateReviewCommentPayload[];
 }
 
@@ -588,6 +596,7 @@ const SIDES: ReadonlySet<unknown> = new Set<ReviewSide>(['LEFT', 'RIGHT']);
 
 /** Keys a create request and its comments may carry; anything else is refused. */
 const CREATE_KEYS: readonly string[] = ['body', 'comments', 'commitId', 'owner', 'pullNumber', 'repo'];
+const SUBMITTED_CREATE_KEYS: readonly string[] = [...CREATE_KEYS, 'event'].sort();
 const COMMENT_KEYS: ReadonlySet<string> = new Set(['path', 'side', 'line', 'startSide', 'startLine', 'body']);
 
 /** Unified hunk header; omitted counts mean 1. */
@@ -1045,10 +1054,14 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
   function createPayload(request: unknown): ICreateReviewPayload {
     requireInput(isPlainObject(request), 'the create request must be an object');
     const keys = Object.keys(request).sort();
+    const submitted = Object.hasOwn(request, 'event');
+    const expectedKeys = submitted ? SUBMITTED_CREATE_KEYS : CREATE_KEYS;
     requireInput(
-      keys.length === CREATE_KEYS.length && keys.every((k, i) => k === CREATE_KEYS[i]),
-      `the create request must have exactly ${CREATE_KEYS.join(', ')}`,
+      keys.length === expectedKeys.length && keys.every((k, i) => k === expectedKeys[i]),
+      `the create request must have exactly ${CREATE_KEYS.join(', ')} and optionally event`,
     );
+    const event = request['event'];
+    requireInput(!submitted || event === 'COMMENT', "event must be 'COMMENT' when present; a review verdict is never sent");
     requireDestination(request);
     requireFullSha(request['commitId'], 'commitId');
     requireInput(typeof request['body'] === 'string', 'body must be a string');
@@ -1071,7 +1084,10 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
       }
       return payload;
     });
-    return { commit_id: request['commitId'], body: request['body'], comments };
+    // The draft payload keeps exactly the key set and order it always had.
+    return event === 'COMMENT'
+      ? { commit_id: request['commitId'], body: request['body'], event, comments }
+      : { commit_id: request['commitId'], body: request['body'], comments };
   }
 
   // The declared request type is the consumer's contract; createPayload checks

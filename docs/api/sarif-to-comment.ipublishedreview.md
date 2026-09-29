@@ -4,7 +4,7 @@
 
 ## IPublishedReview interface
 
-The draft review on GitHub.
+The review on GitHub.
 
 **Signature:**
 

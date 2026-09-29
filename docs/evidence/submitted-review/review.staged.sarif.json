@@ -1,0 +1,81 @@
+{
+  "$schema": "https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Review agent"
+        }
+      },
+      "columnKind": "utf16CodeUnits",
+      "results": [
+        {
+          "message": {
+            "text": "Typo: 'teh' should be 'the'."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "docs/sarif-issue7-fixture.md"
+                },
+                "region": {
+                  "startLine": 4
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "docs/sarif-issue7-fixture.md"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 4,
+                        "startColumn": 1,
+                        "endLine": 5,
+                        "endColumn": 1
+                      },
+                      "insertedContent": {
+                        "text": "It has a sentence with a typo: the result.\n"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "message": {
+            "text": "These two lines are placeholders; say what the pair demonstrates."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "docs/sarif-issue7-fixture.md"
+                },
+                "region": {
+                  "startLine": 6,
+                  "endLine": 7
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "versionControlProvenance": [
+        {
+          "repositoryUri": "https://github.com/mike-north/doc-linter",
+          "revisionId": "05f323760807c1c30aa7e9efa280d12b8717d7f3"
+        }
+      ]
+    }
+  ]
+}

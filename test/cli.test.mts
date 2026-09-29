@@ -65,6 +65,7 @@ const FLAGS = [
   '--source-root',
   '--old-source-commit',
   '--ignore-approval-hold',
+  '--submit',
 ];
 
 /**
@@ -264,6 +265,8 @@ describe('usage errors are exact, actionable and make no remote call', () => {
     ['valued boolean flag', (w) => [...standardArgs(w), '--ignore-approval-hold=yes'], '--ignore-approval-hold'],
     ['abbreviated old-source commit', (w) => [...standardArgs(w), '--old-source-commit', BASE.slice(0, 7)], '--old-source-commit'],
     ['duplicate boolean flag', (w) => [...standardArgs(w), '--ignore-approval-hold', '--ignore-approval-hold'], '--ignore-approval-hold'],
+    ['valued --submit', (w) => [...standardArgs(w), '--submit=true'], '--submit'],
+    ['duplicate --submit', (w) => [...standardArgs(w), '--submit', '--submit'], '--submit'],
     ['unknown flag alone', () => ['--bogus'], '--bogus'],
   ];
 

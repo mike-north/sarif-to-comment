@@ -4,7 +4,7 @@
 
 ## IPublishedOutcome interface
 
-The publication is complete: the draft review was created and confirmed now, confirmed after an earlier uncertain attempt, or recorded as complete in the state file by an earlier call.
+The publication is complete: the review (a draft, or a submitted comment review when `options.submit` was set) was created and confirmed now, confirmed after an earlier uncertain attempt, or recorded as complete in the state file by an earlier call.
 
 **Signature:**
 

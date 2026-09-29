@@ -4,7 +4,7 @@
 
 ## validateSarifReview() function
 
-Checks whether a complete SARIF document can be published faithfully as one draft review of a pull request, without publishing anything.
+Checks whether a complete SARIF document can be published faithfully as one review of a pull request (a draft, or a submitted comment review with`options.submit`<!-- -->), without publishing anything.
 
 **Signature:**
 

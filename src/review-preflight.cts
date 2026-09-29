@@ -21,7 +21,7 @@
  * captureReviewInput(input, spec) -> captured fields (synchronous)
  *   Shared fields (unknown keys are refused; spec.ownKeys adds more):
  *     sarif, destination { owner, repo, pullNumber }, reviewedCommit, token,
- *     sourceRootUri?, oldSourceCommit?, options? { ignoreApprovalHold? }
+ *     sourceRootUri?, oldSourceCommit?, options? { ignoreApprovalHold?, submit? }
  *   The SARIF, destination and options are deep JSON copies of own data
  *   properties only: caller getters never run, and cycles and non-JSON values
  *   are refused rather than dropped or coerced. Fields are checked in a fixed
@@ -63,6 +63,12 @@ export interface ICapturedReview {
   readonly token: string;
   readonly sourceRootUri: string | undefined;
   readonly ignoreApprovalHold: boolean | undefined;
+  /**
+   * Whether the review is to be created already submitted as a comment
+   * review. It changes no readiness rule; publication binds it into the
+   * publication identity (docs/submitted-review-contract.md).
+   */
+  readonly submit: boolean | undefined;
 }
 
 /**
@@ -98,8 +104,8 @@ export interface IContextClient {
 /** Every accepted shared top-level input field. */
 const SHARED_KEYS: readonly string[] = ['sarif', 'destination', 'reviewedCommit', 'token', 'sourceRootUri', 'oldSourceCommit', 'options'];
 
-/** Every accepted option. Only the approval-hold override exists. */
-const OPTION_KEYS: ReadonlySet<string> = new Set(['ignoreApprovalHold']);
+/** Every accepted option: the approval-hold override and the explicit submitted mode. */
+const OPTION_KEYS: ReadonlySet<string> = new Set(['ignoreApprovalHold', 'submit']);
 
 /** A full, immutable, lowercase Git commit id. */
 const COMMIT_PATTERN = /^[0-9a-f]{40}$/;
@@ -310,6 +316,7 @@ export function captureReviewInput<Own extends object>(input: unknown, spec: IRe
 
   const optionsValue = field('options');
   let ignoreApprovalHold: boolean | undefined;
+  let submit: boolean | undefined;
   if (optionsValue !== undefined) {
     if (!isPlainObject(optionsValue)) throw invalid('options must be a plain object');
     const options = refusals.captureRoot(optionsValue, 'options');
@@ -319,9 +326,12 @@ export function captureReviewInput<Own extends object>(input: unknown, spec: IRe
       throw invalid('options.ignoreApprovalHold must be a boolean');
     }
     ignoreApprovalHold = ignoreHold;
+    const submitValue = options['submit'];
+    if (submitValue !== undefined && typeof submitValue !== 'boolean') throw invalid('options.submit must be a boolean');
+    submit = submitValue;
   }
 
-  const shared: ICapturedReview = { sarif, destination, reviewedCommit, oldSourceCommit, token, sourceRootUri, ignoreApprovalHold };
+  const shared: ICapturedReview = { sarif, destination, reviewedCommit, oldSourceCommit, token, sourceRootUri, ignoreApprovalHold, submit };
   return { ...own, ...shared };
 }
 

@@ -1078,10 +1078,21 @@ describe('createReview', () => {
     assert.equal(host.requests.length, 1);
   });
 
-  test('a request carrying a submission event or unknown comment fields is refused before sending', async () => {
+  test('a submitted request sends the same POST plus event COMMENT, once (docs/submitted-review-contract.md §2.3)', async () => {
+    const host = new FakeHost().on('POST', url, () => jsonResponse(200, { ...response, state: 'COMMENTED' }));
+    assert.deepEqual(await client(host).createReview({ ...structuredClone(request), event: 'COMMENT' }), expected);
+    assert.equal(host.requests.length, 1);
+    const sent = asRecord(requestJson(at(host.requests, 0, 'requests')), 'the create-review request body');
+    assert.deepEqual(sent, { ...expectedPostBody, event: 'COMMENT' });
+    assertHttpDiscipline(host);
+  });
+
+  test('a request carrying any event but COMMENT, or unknown comment fields, is refused before sending', async () => {
     const host = new FakeHost();
-    // @ts-expect-error -- deliberately invalid: proves runtime refusal of a submission event on a create-review request
-    await assert.rejects(client(host).createReview({ ...structuredClone(request), event: 'COMMENT' }), TypeError);
+    for (const event of ['APPROVE', 'REQUEST_CHANGES', 'PENDING', 'comment', '', null, undefined]) {
+      // @ts-expect-error -- deliberately invalid: proves runtime refusal of a verdict or malformed event on a create-review request
+      await assert.rejects(client(host).createReview({ ...structuredClone(request), event }), TypeError, `event ${String(event)}`);
+    }
     const withPosition = structuredClone(request);
     // @ts-expect-error -- deliberately invalid: proves runtime refusal of an unknown comment field (position)
     at(withPosition.comments, 0, 'comments').position = 5;

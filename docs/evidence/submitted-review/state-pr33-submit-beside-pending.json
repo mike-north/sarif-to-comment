@@ -1,0 +1,43 @@
+{
+  "format": "sarif-to-comment.publication-state",
+  "version": 1,
+  "phase": "rejected",
+  "marker": "<!-- sarif-to-comment:review:96b9c787-34ed-4195-9f90-90f12e122858 -->",
+  "destination": {
+    "owner": "mike-north",
+    "repo": "doc-linter",
+    "pullNumber": 33
+  },
+  "reviewedCommit": "05f323760807c1c30aa7e9efa280d12b8717d7f3",
+  "inputFingerprint": "sha256:fa7dccc851ac68dc82cdbc9efa8d5036b2252812e1c983cf035851d091abaa0e",
+  "authorId": 558005,
+  "request": {
+    "owner": "mike-north",
+    "repo": "doc-linter",
+    "pullNumber": 33,
+    "commitId": "05f323760807c1c30aa7e9efa280d12b8717d7f3",
+    "body": "\n\n<!-- sarif-to-comment:review:96b9c787-34ed-4195-9f90-90f12e122858 -->",
+    "comments": [
+      {
+        "path": "docs/sarif-issue7-fixture.md",
+        "side": "RIGHT",
+        "line": 4,
+        "body": "Typo: 'teh' should be 'the'.\n\n<sub>— Review agent</sub>\n\n```suggestion\nIt has a sentence with a typo: the result.\n```"
+      },
+      {
+        "path": "docs/sarif-issue7-fixture.md",
+        "side": "RIGHT",
+        "line": 7,
+        "startSide": "RIGHT",
+        "startLine": 6,
+        "body": "These two lines are placeholders; say what the pair demonstrates.\n\n<sub>— Review agent</sub>"
+      }
+    ],
+    "event": "COMMENT"
+  },
+  "requestFingerprint": "sha256:9bdec9800f1792e53b3aacff9ae6f3116513405c03de0ca1bd5836cc855d9e82",
+  "rejection": {
+    "status": 422,
+    "message": "GitHub answered the create-review request with HTTP 422: Unprocessable Entity; User can only have one pending review per pull request"
+  }
+}

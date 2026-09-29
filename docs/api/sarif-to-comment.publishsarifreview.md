@@ -4,7 +4,7 @@
 
 ## publishSarifReview() function
 
-Publishes a ready SARIF document as one GitHub draft review — or explains why it is blocked, uncertain or refused.
+Publishes a ready SARIF document as one GitHub review — a draft unless`options.submit` asks for a submitted comment review — or explains why it is blocked, uncertain or refused.
 
 **Signature:**
 
@@ -60,7 +60,7 @@ The outcome. `status` plus `markdown` is the stable contract; internal diagnosti
 
 ## Remarks
 
-The whole document is validated before anything is written: if any finding cannot be published faithfully, nothing is published. Publication is one-way and draft-only: the tool never submits, updates, restores or deletes a review. Retrying with the same `statePath` never creates a second review; an existing record is honoured before any GitHub request for the pull request's source.
+The whole document is validated before anything is written: if any finding cannot be published faithfully, nothing is published. Publication is one-way: the tool never submits an existing draft, and never updates, restores or deletes a review. Retrying with the same `statePath` never creates a second review; an existing record is honoured before any GitHub request for the pull request's source.
 
 ## Example
 

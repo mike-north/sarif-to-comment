@@ -284,6 +284,7 @@ export interface IPublishSarifReviewInput {
 // @public
 export interface IPublishSarifReviewOptions {
     readonly ignoreApprovalHold?: boolean | undefined;
+    readonly submit?: boolean | undefined;
 }
 
 // @public

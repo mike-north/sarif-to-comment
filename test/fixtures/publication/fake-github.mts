@@ -36,8 +36,9 @@
  *   createReview({ owner, repo, pullNumber, commitId, body, comments })
  *       -> Promise<{ id, htmlUrl }>
  *     `comments` items: { path, side, line, startSide?, startLine?, body };
- *     start fields are omitted for single-line comments. No `event` key:
- *     omitting it leaves the review as a draft (pending).
+ *     start fields are omitted for single-line comments. No `event` key
+ *     leaves the review as a draft (PENDING); `event: 'COMMENT'` stores it
+ *     already submitted (COMMENTED), as GitHub does.
  *   listReviews({ owner, repo, pullNumber, cursor })
  *       -> Promise<{ reviews: ReviewSummary[], nextCursor: string | null }>
  *     ReviewSummary: { id, htmlUrl, authorId, authorLogin, commitId, state, body }.
@@ -137,8 +138,9 @@ export interface IFakeRemoteConfig {
  *   singlePendingPerAuthor: GitHub allows an author only one pending review
  *     per pull request; a second create is refused with HTTP 422 and nothing
  *     is stored (observed live: docs/native-suggestion-fidelity-experiment.md,
- *     docs/evidence/native-fidelity-probe/pending-second-response.json). On by
- *     default. seedReview bypasses it: seeds that give one author several
+ *     docs/evidence/native-fidelity-probe/pending-second-response.json). The
+ *     refusal is modelled for a submitted create too
+ *     (docs/submitted-review-contract.md §2.6). On by default. seedReview bypasses it: seeds that give one author several
  *     pending reviews model states the host itself cannot produce and are
  *     adversarial/corruption fixtures only.
  *   visibilityDelay: number of *later* review enumerations (listReviews with
@@ -247,7 +249,7 @@ export interface IFakeDestination {
   readonly pullNumber: number;
 }
 
-/** createReview's request. `event` must be absent (a draft); a present one is observed, not refused. */
+/** createReview's request. `event` is absent (a draft) or 'COMMENT' (submitted); any value is observed, not refused. */
 export interface IFakeCreateReviewRequest extends IFakeDestination {
   readonly commitId: string;
   readonly body: string;
@@ -620,7 +622,7 @@ export class FakeGitHubRemote {
             comments: request.comments
               .map((c, i) => ({ ...c, body: text(c.body), ...(alter.has(i) ? { line: c.line + 1 } : {}) }))
               .filter((_, i) => !drop.has(i)),
-            state: request.event ? 'SUBMITTED' : 'PENDING',
+            state: request.event === 'COMMENT' ? 'COMMENTED' : request.event === undefined ? 'PENDING' : 'SUBMITTED',
             visibilityDelay: config.visibilityDelay,
           });
         };
@@ -628,7 +630,7 @@ export class FakeGitHubRemote {
         const hasPending = destinationReviews(request).some(
           (r) => r.authorId === user.id && r.state === 'PENDING',
         );
-        if (config.singlePendingPerAuthor && persists.includes(config.create) && !request.event && hasPending) {
+        if (config.singlePendingPerAuthor && persists.includes(config.create) && hasPending) {
           push('createReview:rejected');
           throw new HostRejectedError(422, 'Unprocessable Entity: User can only have one pending review per pull request');
         }

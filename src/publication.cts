@@ -1,10 +1,12 @@
 /**
  * Durable initial publication of one prepared review (private internal module).
  *
- * Scope (D14, D26, D29, R14): take a wholly validated, trusted prepared
- * contribution and create exactly one GitHub draft review from it — body plus
- * every inline comment in a single create-review request against an explicit
- * reviewed commit, with no submission event. SARIF/schema/source validation,
+ * Scope (D14, D16, D26, D29, R14): take a wholly validated, trusted prepared
+ * contribution and create exactly one GitHub review from it — body plus every
+ * inline comment in a single create-review request against an explicit
+ * reviewed commit. The review is a draft (no submission event) unless the
+ * caller explicitly asked for it to be submitted, in which case the same
+ * request carries `event: 'COMMENT'` (docs/submitted-review-contract.md). SARIF/schema/source validation,
  * placement and rendering belong to the separate core that calls this module;
  * nothing here re-validates source, repairs, reassembles, submits, restores, or
  * maintains a review. Publication is one-way: once a completed receipt exists
@@ -12,7 +14,8 @@
  *
  * Delivery identity. Each caller-chosen `statePath` is one logical
  * publication, identified by destination + reviewed commit + the caller's
- * `inputFingerprint` (identity of the original SARIF artifact and options).
+ * `inputFingerprint` (identity of the original SARIF artifact and options) +
+ * the publication mode (draft or submitted), which the saved request records.
  * Before any remote write the coordinator publishes a complete intent record
  * at `statePath` — already declaring that sending may have begun, and holding
  * the complete intended request with its marker — by writing and flushing a
@@ -47,7 +50,9 @@
  * carrying the exact marker, authored by the same numeric user id, against the
  * reviewed commit, whose body equals the saved body exactly and whose comments
  * equal the saved comments as a multiset (all review and comment pages read,
- * with bounded, cycle-checked pagination). Anything else is an explicit
+ * with bounded, cycle-checked pagination). A submitted publication's review
+ * must also be COMMENTED; a draft's state is not compared, so a draft a
+ * person has since submitted still confirms its initial delivery. Anything else is an explicit
  * uncertain outcome; nothing is repaired or retried.
  *
  * ---------------------------------------------------------------------------
@@ -60,6 +65,8 @@
  *   inputFingerprint: string  // 'sha256:<64 hex>' identity of the original
  *                             // SARIF artifact plus options, from the caller
  *   statePath:        string  // absolute, caller-chosen durable state file
+ *   submit?:          boolean // true: create the review already submitted
+ *                             // (event COMMENT); absent or false: a draft
  *   transport:        see test/fixtures/publication/fake-github.mts for the
  *                     private contract (getAuthenticatedUser -> {id, login?},
  *                     createReview, listReviews, listReviewComments; host
@@ -80,7 +87,8 @@
  * The create request is exactly:
  *   { owner, repo, pullNumber, commitId: reviewedCommit,
  *     body: preparedReview.body + '\n\n' + marker, comments }
- * with no `event` key (draft). marker is
+ * with no `event` key for a draft, and with `event: 'COMMENT'` added for a
+ * submitted publication. marker is
  *   `<!-- sarif-to-comment:review:<uuid v4> -->`
  * generated once per statePath and never regenerated. It is hidden in normal
  * rendering and is not a secret.
@@ -116,8 +124,9 @@
  *                                               partial, inconsistent, or not a
  *                                               known form
  *   PublicationStateError code 'state-mismatch' existing record is for another
- *                                               destination, commit, original
- *                                               input or author id
+ *                                               destination, commit, publication
+ *                                               mode, original input or author
+ *                                               id
  *   PublicationStateError code 'state-io'       local I/O failed before sending
  *   Transport errors from read-only context (getAuthenticatedUser) propagate
  *   unchanged.
@@ -128,6 +137,9 @@
  *     reviewedCommit, inputFingerprint, authorId, request, requestFingerprint,
  *     receipt?: { reviewId, htmlUrl, via: 'created'|'recovered' },
  *     rejection?: { status, message } }
+ *   `request` has an `event` key exactly for a submitted publication, and its
+ *   only value is 'COMMENT'; a request without it is a draft's, so every
+ *   record written before submitted publication existed reads as a draft.
  *   `receipt` is present exactly when phase is 'completed'; `rejection` exactly
  *   when phase is 'rejected' (status: integer 400-499 except 408; message: at
  *   most 1000 characters). The version stays 1 while the format is unreleased;
@@ -185,8 +197,11 @@ interface IPreparedReview {
   readonly comments: readonly ReviewRequestComment[];
 }
 
-/** The single create-review request; it never carries an `event` (draft). */
-interface ICreateReviewRequest {
+/** The only submission event this module sends: a comment review, never a verdict. */
+type SubmitEvent = 'COMMENT';
+
+/** The single create-review request of a draft: no `event` key. */
+interface IDraftReviewRequest {
   readonly owner: string;
   readonly repo: string;
   readonly pullNumber: number;
@@ -194,6 +209,17 @@ interface ICreateReviewRequest {
   readonly body: string;
   readonly comments: readonly ReviewRequestComment[];
 }
+
+/** The single create-review request of a submitted publication. */
+interface ISubmittedReviewRequest extends IDraftReviewRequest {
+  readonly event: SubmitEvent;
+}
+
+/** The single create-review request; `event` is present exactly when submitting. */
+type ICreateReviewRequest = IDraftReviewRequest | ISubmittedReviewRequest;
+
+/** How the review is published: left as a draft, or submitted as a comment review. */
+type PublicationMode = 'draft' | 'submitted';
 
 /** Query for one page of the pull request's reviews; `cursor: null` starts. */
 interface IReviewListQuery {
@@ -229,6 +255,7 @@ interface IPublicationIdentity {
   readonly inputFingerprint: string;
   readonly statePath: string;
   readonly transport: IPublicationTransport;
+  readonly submit?: boolean | undefined;
 }
 
 /**
@@ -368,6 +395,7 @@ interface IHostReviewSummary {
   readonly htmlUrl?: unknown;
   readonly authorId?: unknown;
   readonly commitId?: unknown;
+  readonly state?: unknown;
 }
 
 /** Why delivery could not be verified (see the module comment). */
@@ -470,8 +498,17 @@ const SIDES: ReadonlySet<unknown> = new Set(['LEFT', 'RIGHT']);
 /** Every field an inline comment may carry; anything else is refused, never sent. */
 const COMMENT_KEYS: ReadonlySet<string> = new Set(['path', 'side', 'line', 'startSide', 'startLine', 'body']);
 
-/** Exact field set of the saved create-review request (sorted for comparison). */
+/** Exact field set of a draft's saved create-review request (sorted for comparison). */
 const REQUEST_KEYS: readonly string[] = ['body', 'comments', 'commitId', 'owner', 'pullNumber', 'repo'];
+
+/** Exact field set of a submitted publication's saved request: the draft's plus `event`. */
+const SUBMITTED_REQUEST_KEYS: readonly string[] = [...REQUEST_KEYS, 'event'].sort();
+
+/** The submission event of a submitted publication (docs/submitted-review-contract.md §2.1). */
+const SUBMIT_EVENT: SubmitEvent = 'COMMENT';
+
+/** The host state of a review created with SUBMIT_EVENT. */
+const SUBMITTED_STATE = 'COMMENTED';
 
 /** Upper bound on the persisted host refusal message; longer text is truncated. */
 const MAX_REJECTION_MESSAGE = 1000;
@@ -659,6 +696,18 @@ function validateIdentity(input: unknown): asserts input is IPublicationIdentity
       ),
     'transport must provide getAuthenticatedUser, createReview, listReviews and listReviewComments',
   );
+  const submit = input['submit'];
+  requireInput(submit === undefined || typeof submit === 'boolean', 'submit must be a boolean when present');
+}
+
+/** The mode a validated identity asks for: submitted only when `submit` is exactly true. */
+function requestedMode(identity: IPublicationIdentity): PublicationMode {
+  return identity.submit === true ? 'submitted' : 'draft';
+}
+
+/** The mode a saved request records: submitted exactly when it carries an event. */
+function recordedMode(request: ICreateReviewRequest): PublicationMode {
+  return 'event' in request ? 'submitted' : 'draft';
 }
 
 /**
@@ -727,14 +776,19 @@ function copyComment(comment: ReviewRequestComment): ReviewRequestComment {
   return { path: comment.path, side: comment.side, line: comment.line, body: comment.body };
 }
 
-/** The single create-review request for a prepared review under `marker`. */
+/**
+ * The single create-review request for a prepared review under `marker`: a
+ * draft's has no `event` key at all (byte for byte what drafts always sent),
+ * a submitted publication's adds `event: 'COMMENT'`.
+ */
 function buildRequest(
   destination: IPublicationDestination,
   reviewedCommit: string,
   preparedReview: IPreparedReview,
   marker: string,
+  mode: PublicationMode,
 ): ICreateReviewRequest {
-  return {
+  const draft: IDraftReviewRequest = {
     owner: destination.owner,
     repo: destination.repo,
     pullNumber: destination.pullNumber,
@@ -742,6 +796,7 @@ function buildRequest(
     body: `${preparedReview.body}\n\n${marker}`,
     comments: preparedReview.comments.map(copyComment),
   };
+  return mode === 'submitted' ? { ...draft, event: SUBMIT_EVENT } : draft;
 }
 
 // ---------------------------------------------------------------------------
@@ -806,7 +861,13 @@ function recordProblem(record: unknown): string | null {
   if (!isPositiveInteger(record['authorId'])) return 'malformed authorId';
 
   const request = record['request'];
-  if (!isPlainObject(request) || !hasExactKeys(request, REQUEST_KEYS)) return 'malformed saved request';
+  if (!isPlainObject(request)) return 'malformed saved request';
+  if (Object.hasOwn(request, 'event')) {
+    if (!hasExactKeys(request, SUBMITTED_REQUEST_KEYS)) return 'malformed saved request';
+    if (request['event'] !== SUBMIT_EVENT) return 'saved request event is not COMMENT';
+  } else if (!hasExactKeys(request, REQUEST_KEYS)) {
+    return 'malformed saved request';
+  }
   if (
     request['owner'] !== destination['owner'] ||
     request['repo'] !== destination['repo'] ||
@@ -1130,6 +1191,14 @@ async function investigate(transport: IPublicationTransport, record: IStateRecor
       candidates: [reviewRef(candidate)],
     };
   }
+  if (recordedMode(record.request) === 'submitted' && candidate.state !== SUBMITTED_STATE) {
+    return {
+      complete: false,
+      reason: 'candidate-mismatch',
+      detail: `The review carrying this marker is not a submitted comment review (its state is ${String(candidate.state)}). It is neither submitted nor repaired; inspect it on the host.`,
+      candidates: [reviewRef(candidate)],
+    };
+  }
   if (candidate.body !== record.request.body) {
     return differs(candidate, 'body');
   }
@@ -1364,7 +1433,18 @@ function mismatch(statePath: string, what: string): PublicationStateError {
   );
 }
 
-/** Throws state-mismatch unless the record belongs to this destination, commit and original input. */
+/**
+ * Refusal to continue a publication in the other mode. A publication's mode is
+ * fixed when its intent is claimed; neither direction is ever converted.
+ */
+function modeMismatch(statePath: string, recorded: PublicationMode, requested: PublicationMode): PublicationStateError {
+  return new PublicationStateError(
+    'state-mismatch',
+    `Publication state at ${statePath} records a ${recorded} review, but a ${requested} review was requested. A publication's mode is fixed when it starts: retry with the mode it started with, or use a new state path for a separate review.`,
+  );
+}
+
+/** Throws state-mismatch unless the record belongs to this destination, commit, mode and original input. */
 function assertSameIdentity(record: IStateRecordBase, input: IPublicationIdentity): void {
   const d = input.destination;
   if (
@@ -1375,6 +1455,9 @@ function assertSameIdentity(record: IStateRecordBase, input: IPublicationIdentit
     throw mismatch(input.statePath, 'destination');
   }
   if (record.reviewedCommit !== input.reviewedCommit) throw mismatch(input.statePath, 'reviewed commit');
+  const recorded = recordedMode(record.request);
+  const requested = requestedMode(input);
+  if (recorded !== requested) throw modeMismatch(input.statePath, recorded, requested);
   if (record.inputFingerprint !== input.inputFingerprint) throw mismatch(input.statePath, 'original input');
 }
 
@@ -1421,7 +1504,7 @@ async function publishPreparedReview(
 
   const authorId = await authenticatedUserId(transport);
   const marker = newMarker();
-  const request = buildRequest(input.destination, input.reviewedCommit, input['preparedReview'], marker);
+  const request = buildRequest(input.destination, input.reviewedCommit, input['preparedReview'], marker, requestedMode(input));
   const record: ISendingRecord = {
     format: STATE_FORMAT,
     version: STATE_VERSION,

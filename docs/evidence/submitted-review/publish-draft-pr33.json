@@ -1,0 +1,10 @@
+{
+  "command": "publish",
+  "status": "published",
+  "review": {
+    "id": 5348454897,
+    "url": "https://github.com/mike-north/doc-linter/pull/33#pullrequestreview-5348454897"
+  },
+  "statePath": "<state-dir>/pr33-draft.json",
+  "message": "## Draft review published\n\nCreated the draft [review 5348454897](https://github.com/mike-north/doc-linter/pull/33#pullrequestreview-5348454897) on mike-north/doc-linter#33 at commit `05f323760807c1c30aa7e9efa280d12b8717d7f3`. It stays a draft until someone submits it on GitHub."
+}

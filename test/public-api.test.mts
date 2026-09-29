@@ -440,6 +440,14 @@ describe('input is validated and captured before any remote read', () => {
     'non-boolean override': (i) => (i.options = { ignoreApprovalHold: 'yes' }),
     // @ts-expect-error -- deliberately invalid: proves runtime validation of array options
     'array options': (i) => (i.options = []),
+    // @ts-expect-error -- deliberately invalid: proves runtime validation of a non-boolean submit option
+    'non-boolean submit': (i) => (i.options = { submit: 'yes' }),
+    // @ts-expect-error -- deliberately invalid: proves runtime validation of a verdict passed as the submit option
+    'verdict as submit': (i) => (i.options = { submit: 'APPROVE' }),
+    // @ts-expect-error -- deliberately invalid: proves runtime validation of a null submit option
+    'null submit': (i) => (i.options = { submit: null }),
+    // @ts-expect-error -- deliberately invalid: proves there is no event option (the event is never caller-chosen beyond submit)
+    'event option': (i) => (i.options = { submit: true, event: 'APPROVE' }),
     // @ts-expect-error -- deliberately invalid: proves runtime validation of an unknown top-level field
     'unknown top-level field': (i) => (i.reviewCommit = HEAD),
   };
@@ -831,5 +839,177 @@ describe('existing state is honoured before any branch or source preparation', (
     assert.match(outcome.markdown, /submit or delete/i);
     assert.deepEqual(world.remote.review(human.id), human);
     assert.deepEqual(world.remote.writeCalls().map((c) => c.method), ['createReview'], 'only the refused create');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Immediately submitted publication (docs/submitted-review-contract.md)
+// ---------------------------------------------------------------------------
+
+/** `input` publishing an immediately submitted review. */
+function submitted(input: TestInput): TestInput {
+  return { ...input, options: { ...input.options, submit: true } };
+}
+
+/** The Markdown link GitHub's review URL is shown with (contract §2.7). */
+function reviewLink(outcome: Extract<PublishSarifReviewOutcome, { status: 'published' }>): string {
+  return `[review ${String(outcome.review.id)}](${outcome.review.url})`;
+}
+
+const WHERE = `${DESTINATION.owner}/${DESTINATION.repo}#${String(DESTINATION.pullNumber)} at commit \`${HEAD}\``;
+
+describe('submitted publication: explicit mode selection (contract §2.1–§2.3, §2.7)', () => {
+  test('options.submit publishes the same prepared review as one COMMENT create pinned to the reviewed commit', async () => {
+    const world = makeWorld();
+    const outcome = await run(world, submitted(baseInput(world)));
+    assertPublicShape(outcome, 'published');
+    const creates = calls(world, 'createReview');
+    assert.equal(creates.length, 1);
+    const args = at(creates, 0).args;
+    assert.equal(args['event'], 'COMMENT');
+    const request = sentRequest(world);
+    const prepared = await preparedDirectly(READY);
+    assert.equal(prepared.status, 'ready');
+    assert.equal(request.commitId, HEAD);
+    assert.equal(request.body.replace(MARKER, ''), prepared.review.body);
+    assert.deepEqual(request.comments, prepared.review.comments);
+    assert.deepEqual(Object.keys(args).sort(), ['body', 'comments', 'commitId', 'event', 'owner', 'pullNumber', 'repo']);
+
+    const stored = at(world.remote.reviews(), 0);
+    assert.equal(stored.state, 'COMMENTED');
+    assert.deepEqual(outcome.review, { id: stored.id, url: stored.htmlUrl });
+    assert.equal(
+      outcome.markdown,
+      `## Review submitted\n\nCreated and submitted the comment ${reviewLink(outcome)} on ${WHERE}. It is visible on the pull request now.`,
+    );
+    assertTokenAbsent(world, outcome);
+  });
+
+  for (const [label, options] of [
+    ['omitted options', undefined],
+    ['submit: false', { submit: false }],
+  ] as const) {
+    test(`draft stays the default (${label}): no event, a pending review and the draft explanation`, async () => {
+      const world = makeWorld();
+      const input = baseInput(world);
+      if (options !== undefined) input.options = options;
+      const outcome = await run(world, input);
+      assertPublicShape(outcome, 'published');
+      assert.equal(Object.hasOwn(at(calls(world, 'createReview'), 0).args, 'event'), false);
+      assert.equal(at(world.remote.reviews(), 0).state, 'PENDING');
+      assert.equal(
+        outcome.markdown,
+        `## Draft review published\n\nCreated the draft ${reviewLink(outcome)} on ${WHERE}. It stays a draft until someone submits it on GitHub.`,
+      );
+    });
+  }
+
+  test('the mode is not part of the input fingerprint (it is bound through the saved request)', async () => {
+    const draft = makeWorld();
+    await run(draft);
+    const sub = makeWorld();
+    await run(sub, submitted(baseInput(sub)));
+    assert.equal(readState(sub).inputFingerprint, readState(draft).inputFingerprint);
+  });
+});
+
+describe('submitted publication: readiness and targeting apply unchanged (contract §1)', () => {
+  test('a historical reviewed commit stays the review commit when submitting', async () => {
+    const world = makeWorld();
+    setAdapterConfig(world.remote.dir, { context: 'historical' });
+    const outcome = await run(world, submitted(baseInput(world)));
+    assertPublicShape(outcome, 'published');
+    const request = sentRequest(world);
+    assert.equal(request.commitId, HEAD, 'the submitted review must stay pinned to the reviewed commit');
+    assert.equal(request.comments.length, 0);
+    assert.ok(request.body.includes(`/blob/${HEAD}/src/app.js`));
+    assert.equal(at(world.remote.reviews(), 0).state, 'COMMENTED');
+  });
+
+  test('invalid SARIF is blocked when submitting: no remote write and no state', async () => {
+    const world = makeWorld();
+    const outcome = await run(world, submitted(baseInput(world, { sarif: structuredClone(INVALID) })));
+    assertPublicShape(outcome, 'blocked');
+    const prepared = await preparedDirectly(INVALID);
+    assert.ok(outcome.markdown.includes(prepared.markdown));
+    assertNoRemoteWrites(world);
+    assertStateDirEmpty(world);
+  });
+
+  test('an approval hold blocks a submitted publication; the explicit override submits it', async () => {
+    const held = makeWorld();
+    const blocked = await run(held, submitted(baseInput(held, { sarif: structuredClone(HELD) })));
+    assertPublicShape(blocked, 'blocked');
+    assertNoRemoteWrites(held);
+    assertStateDirEmpty(held);
+
+    const overridden = makeWorld();
+    const outcome = await run(
+      overridden,
+      baseInput(overridden, { sarif: structuredClone(HELD), options: { ignoreApprovalHold: true, submit: true } }),
+    );
+    assertPublicShape(outcome, 'published');
+    assert.equal(at(calls(overridden, 'createReview'), 0).args['event'], 'COMMENT');
+    const prepared = await preparedDirectly(HELD, { ignoreApprovalHold: true });
+    assert.deepEqual(sentRequest(overridden).comments, readyReviewOf(prepared)?.comments);
+  });
+});
+
+describe('submitted publication: durable identity and retries (contract §2.4, §2.5)', () => {
+  test('a lost response is confirmed by readback and never resent; later calls answer from the receipt', async () => {
+    const world = makeWorld({ create: 'lose-response' });
+    const outcome = await run(world, submitted(baseInput(world)));
+    assertPublicShape(outcome, 'published');
+    assert.equal(
+      outcome.markdown,
+      `## Review submitted\n\nThe submitted comment ${reviewLink(outcome)} on ${WHERE} was confirmed on GitHub for this publication; nothing was resent.`,
+    );
+    setAdapterConfig(world.remote.dir, { network: 'down', context: 'throw' });
+    const again = await run(world, submitted(baseInput(world)));
+    assertPublicShape(again, 'published');
+    assert.equal(
+      again.markdown,
+      `## Review submitted\n\nThe submitted comment ${reviewLink(again)} on ${WHERE} was already published; its completion is recorded at \`${world.statePath}\`. Nothing was sent.`,
+    );
+    assert.equal(calls(world, 'createReview').length, 1);
+    assert.equal(world.remote.reviews().length, 1);
+  });
+
+  for (const [first, second] of [
+    ['draft', 'submitted'],
+    ['submitted', 'draft'],
+  ] as const) {
+    test(`a ${first} state path reused for a ${second} publication is refused before any context fetch or send`, async () => {
+      const world = makeWorld();
+      const firstInput = baseInput(world);
+      assertPublicShape(await run(world, first === 'submitted' ? submitted(firstInput) : firstInput), 'published');
+      const secondInput = baseInput(world);
+      await assert.rejects(run(world, second === 'submitted' ? submitted(secondInput) : secondInput), (err) => {
+        assert.ok(err instanceof Error);
+        assert.match(err.message, new RegExp(`records a ${first} review, but a ${second} review was requested`));
+        assert.equal(inspectDeep(err).includes(TOKEN), false);
+        return true;
+      });
+      assert.equal(calls(world, 'adapter:fetchContext').length, 1, 'only the first publication fetched context');
+      assert.equal(calls(world, 'createReview').length, 1);
+    });
+  }
+
+  test("an existing draft by the same account refuses the submitted create too; the refusal says so", async () => {
+    const world = makeWorld();
+    const human = world.remote.seedReview({
+      ...DESTINATION,
+      authorId: DEFAULT_USER.id,
+      authorLogin: DEFAULT_USER.login,
+      commitId: HEAD,
+      body: 'My unfinished notes.',
+      comments: [],
+    });
+    const outcome = await run(world, submitted(baseInput(world)));
+    assertPublicShape(outcome, 'rejected');
+    assertRejectedGuidance(outcome, world.statePath);
+    assert.match(outcome.markdown, /one pending review per pull request/);
+    assert.match(outcome.markdown, /submit or delete/i);
+    assert.deepEqual(world.remote.review(human.id), human);
   });
 });

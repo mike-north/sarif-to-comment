@@ -1,0 +1,117 @@
+[
+  {
+    "check": "pr33-draft: record is completed, receipt names one review on PR #33",
+    "result": "passed"
+  },
+  {
+    "check": "pr33-draft: saved request event is absent",
+    "result": "passed"
+  },
+  {
+    "check": "pr33-draft: GitHub state is PENDING",
+    "result": "passed",
+    "detail": "PENDING"
+  },
+  {
+    "check": "pr33-draft: body equals the saved request body byte for byte",
+    "result": "passed"
+  },
+  {
+    "check": "pr33-draft: body ends with the record marker, which occurs once",
+    "result": "passed"
+  },
+  {
+    "check": "pr33-draft: author is the publishing account",
+    "result": "passed"
+  },
+  {
+    "check": "pr33-draft: pinned to the reviewed commit",
+    "result": "passed"
+  },
+  {
+    "check": "pr34-submit: record is completed, receipt names one review on PR #34",
+    "result": "passed"
+  },
+  {
+    "check": "pr34-submit: saved request event is COMMENT",
+    "result": "passed"
+  },
+  {
+    "check": "pr34-submit: GitHub state is COMMENTED",
+    "result": "passed",
+    "detail": "COMMENTED"
+  },
+  {
+    "check": "pr34-submit: body equals the saved request body byte for byte",
+    "result": "passed"
+  },
+  {
+    "check": "pr34-submit: body ends with the record marker, which occurs once",
+    "result": "passed"
+  },
+  {
+    "check": "pr34-submit: author is the publishing account",
+    "result": "passed"
+  },
+  {
+    "check": "pr34-submit: pinned to the reviewed commit",
+    "result": "passed"
+  },
+  {
+    "check": "pr34-submit: saved request holds 2 inline comments (lines 4 and 6-7)",
+    "result": "passed"
+  },
+  {
+    "check": "pr34-lost: record is completed, receipt names one review on PR #34",
+    "result": "passed"
+  },
+  {
+    "check": "pr34-lost: saved request event is COMMENT",
+    "result": "passed"
+  },
+  {
+    "check": "pr34-lost: GitHub state is COMMENTED",
+    "result": "passed",
+    "detail": "COMMENTED"
+  },
+  {
+    "check": "pr34-lost: body equals the saved request body byte for byte",
+    "result": "passed"
+  },
+  {
+    "check": "pr34-lost: body ends with the record marker, which occurs once",
+    "result": "passed"
+  },
+  {
+    "check": "pr34-lost: author is the publishing account",
+    "result": "passed"
+  },
+  {
+    "check": "pr34-lost: pinned to the reviewed commit",
+    "result": "passed"
+  },
+  {
+    "check": "pr34-lost: saved request holds 2 inline comments (lines 4 and 6-7)",
+    "result": "passed"
+  },
+  {
+    "check": "PR #34 holds exactly two reviews (normal + lost-response publication); no duplicate after retries",
+    "result": "passed"
+  },
+  {
+    "check": "PR #34 lists exactly four inline comments, two per submitted review, on lines 4 and 7",
+    "result": "passed"
+  },
+  {
+    "check": "PR #33 holds exactly one review: the refused submitted create added nothing",
+    "result": "passed"
+  },
+  {
+    "check": "refused submitted create beside a pending draft is recorded as rejected 422 with the event in its saved request",
+    "result": "passed"
+  },
+  {
+    "check": "lost-response run sent exactly one create request and recovered by marker",
+    "result": "passed"
+  }
+]

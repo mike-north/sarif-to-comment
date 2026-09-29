@@ -14,7 +14,8 @@
  *   inspect             read-only view of a SARIF file   inspectSarif
  *   add-staged-changes  add staged Git changes to a copy addStagedChangesToSarif
  *   validate            readiness, without publishing    validateSarifReview
- *   publish             create the GitHub draft review   publishSarifReview
+ *   publish             create the GitHub review         publishSarifReview
+ *                       (a draft; --submit: submitted)
  * A first argument beginning with "-" (or no argument) is the original
  * flag-only publisher, which keeps its exact behavior, output, credentials and
  * exit statuses. Anything else is a usage error.
@@ -110,6 +111,10 @@ const REVIEW_POLICY_OPTIONS = md`  --source-root ABSOLUTE_FILE_URI
                                  it; verified against the pull request's patches.
   --ignore-approval-hold         Publish despite an approval hold (bypasses only
                                  the hold, never validation).
+  --submit                       Create the review already submitted, as a
+                                 comment review, instead of a draft. Never
+                                 approves or requests changes. Retry a
+                                 publication with the mode it started with.
 `;
 
 const PUBLISH_OPTIONS = md`  --sarif FILE                   SARIF 2.1.0 JSON file to publish.
@@ -145,7 +150,7 @@ Usage:
   sarif-to-comment publish --sarif FILE --repo OWNER/REPO --pull N --commit FULLSHA --state ABSOLUTE_FILE [options]
   sarif-to-comment --sarif FILE --repo OWNER/REPO --pull N --commit FULLSHA
                    --state ABSOLUTE_FILE [--source-root ABSOLUTE_FILE_URI]
-                   [--old-source-commit FULLSHA] [--ignore-approval-hold]
+                   [--old-source-commit FULLSHA] [--ignore-approval-hold] [--submit]
   sarif-to-comment [COMMAND] --help
 
 Commands:
@@ -155,7 +160,8 @@ Commands:
   inspect              Show the findings, locations and fixes in a SARIF file.
   add-staged-changes   Add proposed changes from the Git index to a SARIF document.
   validate             Check, without publishing, that a SARIF file can be published.
-  publish              Publish a SARIF file as one GitHub draft pull request review.
+  publish              Publish a SARIF file as one GitHub pull request review (a draft
+                       unless --submit).
 Every command reads and writes ordinary SARIF files; SARIF from any producer
 can be inspected, extended and published without init.
 
@@ -307,12 +313,12 @@ written. While it runs, the command owns OUT through a marker file
 Exit status: 0 written; 2 invalid SARIF or a staged change that cannot be
 represented faithfully (nothing written); 1 usage error or operational failure.
 `,
-  validate: md`sarif-to-comment validate — check that a SARIF file can be published as one GitHub draft review
+  validate: md`sarif-to-comment validate — check that a SARIF file can be published as one GitHub review
 
 Usage:
   sarif-to-comment validate --sarif FILE --repo OWNER/REPO --pull N --commit FULLSHA
                             [--source-root ABSOLUTE_FILE_URI] [--old-source-commit FULLSHA]
-                            [--ignore-approval-hold] [--format human|json]
+                            [--ignore-approval-hold] [--submit] [--format human|json]
 
 Runs every check publish runs, reading the pull request and its source from
 GitHub, and stops before publishing: nothing is written to GitHub and no file
@@ -331,13 +337,13 @@ Exit status:
      the network or a source read failed), or a usage error, unreadable SARIF
      file or operational failure
 `,
-  publish: md`sarif-to-comment publish — publish a SARIF file as one GitHub draft review
+  publish: md`sarif-to-comment publish — publish a SARIF file as one GitHub review (a draft unless --submit)
 
 Usage:
   sarif-to-comment publish --sarif FILE --repo OWNER/REPO --pull N --commit FULLSHA
                            --state ABSOLUTE_FILE [--source-root ABSOLUTE_FILE_URI]
                            [--old-source-commit FULLSHA] [--ignore-approval-hold]
-                           [--format human|json]
+                           [--submit] [--format human|json]
 
 The same operation as the original form without a command.
 
@@ -1140,7 +1146,7 @@ async function addStagedChanges(argv: readonly string[], { cwd }: IHandlerContex
 /** The review options publish and validate share: everything but --state. */
 const REVIEW_SPEC = {
   values: ['--sarif', '--repo', '--pull', '--commit', '--source-root', '--old-source-commit'],
-  booleans: ['--ignore-approval-hold'],
+  booleans: ['--ignore-approval-hold', '--submit'],
   required: ['--sarif', '--repo', '--pull', '--commit'],
 } as const satisfies IOptionSpec;
 
@@ -1156,7 +1162,7 @@ interface IReviewRequestInput {
   readonly reviewedCommit: string;
   readonly oldSourceCommit?: string;
   readonly sourceRootUri?: string;
-  readonly options?: { readonly ignoreApprovalHold: true };
+  readonly options?: { readonly ignoreApprovalHold?: true; readonly submit?: true };
 }
 
 /** A review command's SARIF file and library input fields. */
@@ -1179,12 +1185,16 @@ function reviewRequestInput({ values, flags }: IParsedOptions): IReviewRequestIn
   const reviewedCommit = commitValue(requiredValue(values, '--commit'), '--commit');
   const oldSourceCommit = commitFlag(values, '--old-source-commit');
   const sourceRootUri = sourceRootFlag(values);
+  const options = {
+    ...(flags.has('--ignore-approval-hold') ? { ignoreApprovalHold: true as const } : {}),
+    ...(flags.has('--submit') ? { submit: true as const } : {}),
+  };
   return {
     destination,
     reviewedCommit,
     ...(oldSourceCommit === undefined ? {} : { oldSourceCommit }),
     ...(sourceRootUri === undefined ? {} : { sourceRootUri }),
-    ...(flags.has('--ignore-approval-hold') ? { options: { ignoreApprovalHold: true as const } } : {}),
+    ...(Object.keys(options).length === 0 ? {} : { options }),
   };
 }
 

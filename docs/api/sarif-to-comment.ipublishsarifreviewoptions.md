@@ -4,7 +4,7 @@
 
 ## IPublishSarifReviewOptions interface
 
-Options that change how a ready document is judged. Unknown options are refused.
+Options that change how a document is judged or published. Unknown options are refused.
 
 **Signature:**
 
@@ -53,6 +53,27 @@ boolean \| undefined
 </td><td>
 
 _(Optional)_ Publish despite an approval hold declared in the SARIF (`properties.sarifToComment.approval: "awaiting-approval"`<!-- -->). Bypasses only the hold, never validation, and is not part of the publication identity.
+
+
+</td></tr>
+<tr><td>
+
+[submit?](./sarif-to-comment.ipublishsarifreviewoptions.submit.md)
+
+
+</td><td>
+
+`readonly`
+
+
+</td><td>
+
+boolean \| undefined
+
+
+</td><td>
+
+_(Optional)_ Create the review already submitted, as a comment review (GitHub's`COMMENT` event), instead of leaving a draft. Omitted or `false` leaves a draft. It never approves or requests changes, and nothing is inferred from finding severity. Every readiness check and approval hold applies unchanged. The mode is part of the publication identity: a state path is always retried with the mode it started with.
 
 
 </td></tr>

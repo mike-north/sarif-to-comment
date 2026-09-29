@@ -583,3 +583,69 @@ describe('no approval stamp: publication checks everything again', () => {
     assertNothingWritten(world);
   });
 });
+
+describe('submitted mode: the same checks, reported for that mode (docs/submitted-review-contract.md §2.6)', () => {
+  /** The assessment input for a document with `submit` added to its options. */
+  function submittedInput(c: IDocumentCase): Record<string, unknown> {
+    return { ...assessmentInput(c.sarif), options: { ...c.options, submit: true } };
+  }
+
+  for (const c of DOCUMENT_CASES) {
+    test(`${c.name}: submitted assessment says ${c.expected}, and a submitted publication agrees`, async () => {
+      const assessed = makeWorld();
+      const outcome = await validate(assessed, submittedInput(c));
+      assert.equal(outcome.status, c.expected, outcome.markdown);
+      assert.equal(outcome.status, (await validate(makeWorld(), assessmentInput(c.sarif, c.options))).status, 'the mode changes no verdict');
+      assertNothingWritten(assessed);
+
+      const published = makeWorld();
+      const input: IPublishSarifReviewInput = {
+        sarif: structuredClone(c.sarif),
+        destination: { ...DESTINATION },
+        reviewedCommit: HEAD,
+        statePath: published.statePath,
+        token: TOKEN,
+        options: { ...c.options, submit: true },
+      };
+      const publication = await library.publishSarifReview(
+        input,
+        // @ts-expect-error -- the private internals seam is deliberately absent from the public declaration; this suite injects the fake client through the seam the public entry honours at runtime
+        { createGitHubClient: published.createGitHubClient },
+      );
+      if (c.expected === 'ready') {
+        assert.equal(publication.status, 'published', publication.markdown);
+        assert.deepEqual(published.remote.reviews().map((r) => r.state), ['COMMENTED']);
+      } else {
+        assert.equal(publication.status, 'blocked', publication.markdown);
+        assert.equal(outcome.markdown, publication.markdown, 'the blocked explanation is the publisher’s own');
+        assert.deepEqual(published.remote.writeCalls(), []);
+      }
+    });
+  }
+
+  test('a ready submitted assessment says a submitted comment review would be created; the draft wording is unchanged', async () => {
+    const submitted = await validate(makeWorld(), { ...assessmentInput(READY), options: { submit: true } });
+    assertShape(submitted, 'ready');
+    const where = `${DESTINATION.owner}/${DESTINATION.repo}#${String(DESTINATION.pullNumber)} at commit \`${HEAD}\``;
+    assert.ok(
+      submitted.markdown.includes(`The complete document can be published faithfully to ${where} as a submitted comment review.`),
+      submitted.markdown,
+    );
+    const draft = await validate(makeWorld(), assessmentInput(READY));
+    assert.ok(draft.markdown.includes(`The complete document can be published faithfully to ${where}.`), draft.markdown);
+    assert.equal(draft.markdown.includes('submitted comment review'), false);
+    const explicitDraft = await validate(makeWorld(), { ...assessmentInput(READY), options: { submit: false } });
+    assert.equal(explicitDraft.markdown, draft.markdown);
+  });
+
+  test('a non-boolean submit option is refused with a TypeError and no client', async () => {
+    const world = makeWorld();
+    await assert.rejects(validate(world, { ...assessmentInput(READY), options: { submit: 'COMMENT' } }), (err) => {
+      assert.ok(err instanceof TypeError);
+      assert.match(err.message, /^Invalid validateSarifReview input: options\.submit must be a boolean/);
+      return true;
+    });
+    assert.deepEqual(world.remote.calls('adapter:create'), []);
+    assertNothingWritten(world);
+  });
+});

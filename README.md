@@ -1,6 +1,6 @@
 # sarif-to-comment
 
-Write, inspect and publish [SARIF 2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/sarif-v2.1.0-errata01-os-complete.html) findings as **one GitHub draft pull request review**:
+Write, inspect and publish [SARIF 2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/sarif-v2.1.0-errata01-os-complete.html) findings as **one GitHub draft pull request review** (or, when you explicitly ask, one immediately submitted comment review):
 
 - general feedback in the review body;
 - findings on changed lines as inline comments;
@@ -20,7 +20,7 @@ Every step reads and writes ordinary SARIF and is optional. SARIF from an analyz
 The scope is deliberately narrow:
 
 - **One-way.** SARIF goes to GitHub once. The tool never updates, reconciles, submits, restores or deletes a review afterwards. Supplying a new SARIF document (with a new state path) creates a separate review.
-- **Drafts only.** The review is created pending. A person submits it on GitHub.
+- **Drafts by default.** The review is created pending, and a person submits it on GitHub. Only an explicit `options.submit` (`--submit`) creates it already submitted, as a comment review; see [Draft or submitted review](#draft-or-submitted-review).
 - **Whole review or nothing.** If any finding can't be published faithfully, nothing is published, and the tool explains why.
 - **Never duplicated.** A durable state file makes retries confirm the existing review instead of creating another.
 
@@ -70,6 +70,7 @@ const outcome = await publishSarifReview({
   // sourceRootUri: 'file:///home/ci/work/widgets/', // optional: repo root in the producer's file system
   // oldSourceCommit: '<full SHA>',                  // optional: see "Old-side source"
   // options: { ignoreApprovalHold: true },          // optional: see "Approval hold"
+  // options: { submit: true },                      // optional: see "Draft or submitted review"
 });
 
 console.log(outcome.markdown); // always a human-readable explanation
@@ -103,7 +104,7 @@ GH_TOKEN=... npx sarif-to-comment \
   --state /var/lib/my-linter/reviews/acme-widgets-42-run-1817.json
 ```
 
-- **Optional flags:** `--source-root FILE_URI`, `--old-source-commit FULLSHA`, `--ignore-approval-hold` and `--format human|json`. Run `sarif-to-comment --help` for details; it needs no token and makes no request.
+- **Optional flags:** `--source-root FILE_URI`, `--old-source-commit FULLSHA`, `--ignore-approval-hold`, `--submit` and `--format human|json`. Run `sarif-to-comment --help` for details; it needs no token and makes no request.
 - **Checking first:** `sarif-to-comment validate` takes the same flags without `--state` and runs the same checks without publishing; see [Checking readiness without publishing](#checking-readiness-without-publishing).
 - **Command form:** `sarif-to-comment publish` followed by the same flags does exactly the same thing. With `--format json` either form prints one JSON document (`status`, `review`, `statePath` and the Markdown `message`), with the same exit status.
 - **Same core as the library:** the CLI reads the file, calls the same `publishSarifReview`, and prints the same Markdown to stdout.
@@ -164,7 +165,7 @@ See the [getting-started guide](https://unpkg.com/sarif-to-comment/docs/getting-
 
 - **Read-only.** It reads the pull request, its source and the authenticated user from GitHub. It never writes to GitHub, takes no state path, and writes no file.
 - **Not an approval.** A `ready` result carries nothing that `publish` accepts. `publish` repeats every check against the pull request as it is then, so a branch that moved in between is caught by `publish` itself. GitHub can also still refuse the review, for example when your account already has a pending review on the pull request, which only `publish` discovers.
-- **Input.** The same as `publishSarifReview` without `statePath`, which is refused. The CLI takes the `publish` flags without `--state`.
+- **Input.** The same as `publishSarifReview` without `statePath`, which is refused. The CLI takes the `publish` flags without `--state`. With `options.submit` (`--submit`) the checks are identical, and a ready result says a submitted comment review would be created.
 
 | Library `status` | CLI exit | Meaning |
 | --- | --- | --- |
@@ -195,13 +196,27 @@ This review credential is unrelated to how the package itself is published. npm 
 - Concurrent runs on the same state path are safe: exactly one sends and the others only check.
 - **The state path is bound to its input.**
   - Reusing it with different SARIF, a different pull request or commit, or a different source root or old-side candidate is refused.
+  - Reusing it in the other mode (draft or submitted) is refused before any request: retry with the mode it started with.
   - An unresolved publication also checks the authenticated account.
   - Completed and rejected records return without authentication or network calls; the API still requires a token-shaped input.
 - The state file is created with owner-only permissions. It requires a local file system that supports hard links.
 
+## Draft or submitted review
+
+By default the review is a **draft** (pending): only your account sees it until a person submits it on GitHub. Nothing changes when you omit the option; the request and the state file are exactly what earlier versions write.
+
+`options.submit: true` (`--submit`) creates the review **already submitted, as a comment review**. It is the same single create request, with GitHub's `COMMENT` event added, so it is visible on the pull request at once.
+
+- The tool never approves or requests changes, and never infers either from a finding's severity. `COMMENT` is the only event it sends.
+- Every check applies unchanged: the whole-review validation, approval holds, and the reviewed commit the review is pinned to.
+- It is an initial-publication choice. The tool never submits an existing draft, including one it created earlier.
+- The mode is part of the publication's identity. The state file records it; a retry with the same state path must use the same mode, and the other mode is refused before any request. State files written by earlier versions are drafts.
+- Retries work the same way: a lost response is confirmed by finding the submitted review by its hidden marker, and it is never sent twice. A submitted publication is confirmed only when GitHub reports that review as submitted (`COMMENTED`).
+- The published explanation starts with `## Review submitted` instead of `## Draft review published`. Outcomes and exit statuses are unchanged.
+
 ## One pending review per account
 
-GitHub lets an account hold only **one pending (draft) review per pull request**, and refuses a second one with HTTP 422. If your account already has a draft on the pull request — made by a person or by an earlier run — publication is `rejected`. The tool never submits, edits or deletes an existing draft to make room. A person has to submit or delete it on GitHub, and then you publish again with a new state path.
+GitHub lets an account hold only **one pending (draft) review per pull request**, and refuses a second one with HTTP 422. It refuses a submitted review (`--submit`) the same way while your draft is pending. If your account already has a draft on the pull request — made by a person or by an earlier run — publication is `rejected`. The tool never submits, edits or deletes an existing draft to make room. A person has to submit or delete it on GitHub, and then you publish again with a new state path.
 
 A refused request is recorded in the state file. Later runs with that path report the refusal without contacting GitHub, and never resend it.
 
@@ -230,7 +245,7 @@ A refused request is recorded in the state file. Later runs with that path repor
 
 A run or result may declare `properties.sarifToComment.approval: "awaiting-approval"`. Publication then stops with `blocked`.
 
-`options.ignoreApprovalHold` (`--ignore-approval-hold`) overrides **only** that hold, never any other check. The override is not part of the publication's identity, so a retry doesn't need to repeat it.
+`options.ignoreApprovalHold` (`--ignore-approval-hold`) overrides **only** that hold, never any other check. The override is not part of the publication's identity, so a retry doesn't need to repeat it. (`options.submit` is different: it is part of the identity and must be repeated.)
 
 ### Reviewed commit and historical reviews
 
@@ -250,7 +265,7 @@ If that comparison can't establish the old side, you may pass `oldSourceCommit` 
   - branch advance;
   - read-only recovery after a discarded create response and after a process kill.
 
-  These bounded fixture runs do not establish every host failure mode or suggestion shape. Native application of one-line-to-three, two-lines-to-one and middle-line deletion suggestions was verified by exact resulting file bytes and Git blob identities. Inline-only and CRLF-source review bodies also read back exactly. A review proposing new files (including an empty file, an executable, CRLF and byte-order-mark content and adversarial fences and HTML) and deletions (including a binary file and one over the source size limit) read back byte for byte, with every proposed file's content in its own rendered code block. The evidence is recorded in the source repository (`docs/milestone-e2e-evidence.md`, `docs/suggestion-application-e2e.md` and `docs/file-operation-publication-e2e-evidence.md`).
+  These bounded fixture runs do not establish every host failure mode or suggestion shape. Native application of one-line-to-three, two-lines-to-one and middle-line deletion suggestions was verified by exact resulting file bytes and Git blob identities. Inline-only and CRLF-source review bodies also read back exactly. A review proposing new files (including an empty file, an executable, CRLF and byte-order-mark content and adversarial fences and HTML) and deletions (including a binary file and one over the source size limit) read back byte for byte, with every proposed file's content in its own rendered code block. A submitted comment review read back as `COMMENTED` with its exact body, commit and inline comments, including after a discarded create response, without duplicates. The evidence is recorded in the source repository (`docs/milestone-e2e-evidence.md`, `docs/suggestion-application-e2e.md`, `docs/file-operation-publication-e2e-evidence.md` and `docs/submitted-review-e2e-evidence.md`).
 - Only `https://api.github.com` is supported.
 - The hidden marker only identifies a review; it is not a secret. A human edit to an unconfirmed draft leaves delivery `uncertain` rather than being "fixed".
 - The durability steps (write, flush, then send) are ordered for crash safety, but that has not been tested against power loss.

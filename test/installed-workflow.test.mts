@@ -121,13 +121,22 @@ const createPosts = (host: FakeHttpGitHub): number => host.log().filter((r) => r
 function assertOracleReview(
   host: FakeHttpGitHub,
   w: IWorkflowWorld,
-  { messages = [FINDING_A.message, FINDING_B.message] }: { messages?: readonly [string, string] } = {},
+  {
+    messages = [FINDING_A.message, FINDING_B.message],
+    submitted = false,
+  }: { messages?: readonly [string, string]; submitted?: boolean } = {},
 ): void {
   const reviews = host.reviews();
   assert.equal(reviews.length, 1, 'exactly one review');
   const stored = present(reviews[0], 'the review');
-  assert.equal(stored.state, 'PENDING', 'a draft');
-  assert.equal(Object.hasOwn(stored.request, 'event'), false, 'never submitted');
+  if (submitted) {
+    // docs/submitted-review-contract.md §2.1, §2.3: the one create carries event COMMENT.
+    assert.equal(stored.state, 'COMMENTED', 'a submitted comment review');
+    assert.equal(stored.request.event, 'COMMENT');
+  } else {
+    assert.equal(stored.state, 'PENDING', 'a draft');
+    assert.equal(Object.hasOwn(stored.request, 'event'), false, 'never submitted');
+  }
   assert.equal(stored.request.commit_id, w.head);
   const comments = [...stored.request.comments].sort((x, y) => x.line - y.line);
   assert.equal(comments.length, 2, JSON.stringify(stored.request.comments, null, 2));
@@ -639,5 +648,69 @@ describe('the installed package runs the complete workflow', () => {
     assert.equal(published.status, 0, published.stdout + published.stderr);
     assert.equal(createPosts(w.host), 1);
     assertOracleReview(w.host, w);
+  });
+
+  test('submitted comment review: the installed CLI (--submit) and library (options.submit) create it once, bound to its state', { skip, timeout: 300_000 }, () => {
+    const { consumer, bin } = installIntoConsumer();
+    const cliWorld = world('installed-submitted-cli');
+    const ready = path.join(cliWorld.root, 'ready.sarif');
+    fs.writeFileSync(ready, JSON.stringify(readyUpstreamSarif()));
+    const destination = ['--repo', cliWorld.repoFlag, '--pull', cliWorld.pull, '--commit', cliWorld.head];
+    const statePath = path.join(cliWorld.root, 'state.json');
+    const cli = (args: readonly string[]): SpawnSyncReturns<string> => {
+      const result = spawnSync(bin, args, { cwd: consumer, env: cliWorld.env, encoding: 'utf8', timeout: 120_000 });
+      for (const text of [result.stdout, result.stderr]) assert.ok(!text.includes(TOKEN), 'the token never appears');
+      return result;
+    };
+
+    const assessed = cli(['validate', '--sarif', ready, ...destination, '--submit']);
+    assert.equal(assessed.status, 0, assessed.stdout + assessed.stderr);
+    assert.match(assessed.stdout, / as a submitted comment review\./);
+    assert.deepEqual(cliWorld.host.reviews(), []);
+
+    const published = cli(['publish', '--sarif', ready, ...destination, '--state', statePath, '--submit']);
+    assert.equal(published.status, 0, published.stdout + published.stderr);
+    assert.match(published.stdout, /^## Review submitted\n/);
+    assertOracleReview(cliWorld.host, cliWorld, { submitted: true });
+
+    const retried = cli(['publish', '--sarif', ready, ...destination, '--state', statePath, '--submit', '--format', 'json']);
+    assert.equal(retried.status, 0, retried.stdout + retried.stderr);
+    const mismatched = cli(['publish', '--sarif', ready, ...destination, '--state', statePath]);
+    assert.equal(mismatched.status, 1, mismatched.stdout + mismatched.stderr);
+    assert.match(mismatched.stderr, /records a submitted review, but a draft review was requested/);
+    assert.equal(createPosts(cliWorld.host), 1, 'retries never create again');
+
+    const libWorld = world('installed-submitted-library');
+    const js = String.raw;
+    const script = js`
+      import { publishSarifReview } from 'sarif-to-comment';
+      import { readFileSync } from 'node:fs';
+      const [owner, repo] = process.env.REVIEW_REPOSITORY.split('/');
+      const outcome = await publishSarifReview({
+        sarif: JSON.parse(readFileSync(process.env.REVIEW_SARIF, 'utf8')),
+        destination: { owner, repo, pullNumber: Number(process.env.REVIEW_PULL) },
+        reviewedCommit: process.env.REVIEW_COMMIT,
+        statePath: process.env.REVIEW_STATE,
+        token: process.env.GH_TOKEN,
+        options: { submit: true },
+      });
+      process.stdout.write(JSON.stringify(outcome));
+    `;
+    const file = path.join(consumer, 'publish-submitted.mjs');
+    fs.writeFileSync(file, script);
+    const env = {
+      ...libWorld.env,
+      REVIEW_REPOSITORY: libWorld.repoFlag,
+      REVIEW_COMMIT: libWorld.head,
+      REVIEW_PULL: libWorld.pull,
+      REVIEW_SARIF: ready,
+      REVIEW_STATE: path.join(libWorld.root, 'state.json'),
+    };
+    const library = spawnSync(process.execPath, [file], { cwd: consumer, env, encoding: 'utf8', timeout: 120_000 });
+    assert.equal(library.status, 0, library.stdout + library.stderr);
+    const outcome = expectType(parseJson(library.stdout), isOutcome, 'the library publication');
+    assert.equal(outcome.status, 'published', outcome.markdown);
+    assert.match(outcome.markdown ?? '', /^## Review submitted\n/);
+    assertOracleReview(libWorld.host, libWorld, { submitted: true });
   });
 });

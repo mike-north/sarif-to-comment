@@ -4,7 +4,7 @@
 
 ## IPublishSarifReviewInput.token property
 
-GitHub personal access token (or user token) used to read the pull request and create the draft review. GitHub App installation tokens, including the automatic Actions `GITHUB_TOKEN`<!-- -->, are not supported. Never persisted, fingerprinted, rendered or included in a rejection.
+GitHub personal access token (or user token) used to read the pull request and create the review. GitHub App installation tokens, including the automatic Actions `GITHUB_TOKEN`<!-- -->, are not supported. Never persisted, fingerprinted, rendered or included in a rejection.
 
 **Signature:**
 

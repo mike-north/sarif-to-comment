@@ -1,0 +1,6 @@
+{
+  "command": "publish",
+  "status": "rejected",
+  "statePath": "<state-dir>/pr33-submit-beside-pending.json",
+  "message": "## GitHub refused the review\n\nGitHub refused the create-review request (HTTP 422): GitHub answered the create-review request with HTTP 422: Unprocessable Entity; User can only have one pending review per pull request It is never resent; this state path now records the refusal. Resolve the cause, then publish under a new state path.\n\nThe request is never resent. The refusal is tied to the state path `<state-dir>/pr33-submit-beside-pending.json`.\n\nThis account already has a pending draft review on this pull request, and GitHub allows only one. This tool never submits, edits or deletes it: submit or delete that draft on GitHub yourself.\n\nAfter resolving the cause, publish again with a new state path."
+}

@@ -1,0 +1,43 @@
+{
+  "format": "sarif-to-comment.publication-state",
+  "version": 1,
+  "phase": "completed",
+  "marker": "<!-- sarif-to-comment:review:ad34e215-f0a6-45e5-806e-9d64b8fdb979 -->",
+  "destination": {
+    "owner": "mike-north",
+    "repo": "doc-linter",
+    "pullNumber": 33
+  },
+  "reviewedCommit": "05f323760807c1c30aa7e9efa280d12b8717d7f3",
+  "inputFingerprint": "sha256:fa7dccc851ac68dc82cdbc9efa8d5036b2252812e1c983cf035851d091abaa0e",
+  "authorId": 558005,
+  "request": {
+    "owner": "mike-north",
+    "repo": "doc-linter",
+    "pullNumber": 33,
+    "commitId": "05f323760807c1c30aa7e9efa280d12b8717d7f3",
+    "body": "\n\n<!-- sarif-to-comment:review:ad34e215-f0a6-45e5-806e-9d64b8fdb979 -->",
+    "comments": [
+      {
+        "path": "docs/sarif-issue7-fixture.md",
+        "side": "RIGHT",
+        "line": 4,
+        "body": "Typo: 'teh' should be 'the'.\n\n<sub>— Review agent</sub>\n\n```suggestion\nIt has a sentence with a typo: the result.\n```"
+      },
+      {
+        "path": "docs/sarif-issue7-fixture.md",
+        "side": "RIGHT",
+        "line": 7,
+        "startSide": "RIGHT",
+        "startLine": 6,
+        "body": "These two lines are placeholders; say what the pair demonstrates.\n\n<sub>— Review agent</sub>"
+      }
+    ]
+  },
+  "requestFingerprint": "sha256:4356c6475aa84e9acbd02bba09422eeef88021973709ee127238a20093081da2",
+  "receipt": {
+    "reviewId": 5348454897,
+    "htmlUrl": "https://github.com/mike-north/doc-linter/pull/33#pullrequestreview-5348454897",
+    "via": "created"
+  }
+}

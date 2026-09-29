@@ -57,6 +57,7 @@ import type {
   ISeedReview,
 } from './fixtures/publication/fake-github.mts';
 import {
+  asRecord,
   asString,
   expectType,
   isArrayOf,
@@ -225,6 +226,7 @@ interface IPublishInput {
   preparedReview: FixtureInput['preparedReview'];
   statePath: string;
   transport: IFakeTransport;
+  submit?: unknown;
 }
 
 interface IInputOptions {
@@ -232,10 +234,12 @@ interface IInputOptions {
   readonly user?: IFakeUser;
   readonly events?: RecordedEvent[];
   readonly mutate?: (input: FixtureInput) => unknown;
+  /** Publication mode; omitted means the field is absent (draft). */
+  readonly submit?: unknown;
 }
 
 /** Publication input for `world`; `mutate` edits a deep copy of the fixture input. */
-function makeInput(world: IWorld, { statePath = world.statePath, user, events, mutate }: IInputOptions = {}): IPublishInput {
+function makeInput(world: IWorld, { statePath = world.statePath, user, events, mutate, ...rest }: IInputOptions = {}): IPublishInput {
   const base = structuredClone(FIXTURE.input);
   if (mutate) mutate(base);
   return {
@@ -245,6 +249,7 @@ function makeInput(world: IWorld, { statePath = world.statePath, user, events, m
     preparedReview: base.preparedReview,
     statePath,
     transport: world.remote.transport({ user, events }),
+    ...(Object.hasOwn(rest, 'submit') ? { submit: rest.submit } : {}),
   };
 }
 
@@ -2127,6 +2132,278 @@ describe('restart and concurrency use on-disk state and fresh processes', () => 
 // unless it mentions the token, so the error's own properties are observable.
 // These pin facts no type declaration expresses (own keys, cause handling).
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Immediately submitted publication (docs/submitted-review-contract.md)
+// ---------------------------------------------------------------------------
+
+/** The hand-authored submitted request (contract §2.3): the draft request plus `event: 'COMMENT'`. */
+function expectedSubmittedRequest(marker: string) {
+  return { ...expectedRequest(marker), event: 'COMMENT' };
+}
+
+/** A complete, consistent submitted sending intent built only from the contract (§2.4). */
+function handBuiltSubmittedIntent(marker = '<!-- sarif-to-comment:review:5d2c8b1a-7e6f-4a3b-9c8d-0e1f2a3b4c5d -->') {
+  const request = expectedSubmittedRequest(marker);
+  return { ...handBuiltIntent(marker), request, requestFingerprint: fingerprintOf(request) };
+}
+
+/** Asserts a local mode-mismatch refusal naming the recorded and the requested mode (contract §2.4). */
+async function assertModeMismatch(promise: Promise<unknown>, recorded: 'draft' | 'submitted', requested: 'draft' | 'submitted'): Promise<void> {
+  await assert.rejects(promise, (err) => {
+    assert.ok(err instanceof PublicationStateError, `expected a PublicationStateError, got ${String(err)}`);
+    assert.equal(err.code, 'state-mismatch');
+    assert.match(err.message, new RegExp(`records a ${recorded} review, but a ${requested} review was requested`));
+    assert.match(err.message, /use a new state path for a separate review/);
+    return true;
+  });
+}
+
+describe('submitted publication: one COMMENT create request (contract §2.1, §2.3)', () => {
+  test('submit: true sends exactly the draft request plus event COMMENT, once, and nothing else', async () => {
+    const world = makeWorld();
+    const result = await publish(world, { submit: true });
+
+    assertExactlyOneCreateAttempt(world.remote);
+    assertNoWriteOtherThanCreate(world.remote);
+    const create = itemAt(world.remote.calls('createReview'), 0, 'the create-review call');
+    const marker = extractMarker(asString(create.args['body'], 'the create-review body'));
+    assert.deepEqual(create.args, expectedSubmittedRequest(marker));
+    assert.equal(create.args['commitId'], '3f9c2a7b1e4d5c6f708192a3b4c5d6e7f8091a2b', 'pinned to the reviewed commit');
+
+    const stored = itemAt(world.remote.reviews(), 0, 'the stored review');
+    assert.equal(stored.state, 'COMMENTED');
+    assert.deepEqual(result, {
+      status: 'published',
+      via: 'created',
+      review: { id: stored.id, htmlUrl: stored.htmlUrl },
+      marker,
+      statePath: world.statePath,
+      receiptPersisted: true,
+    });
+  });
+
+  test('the saved request records event COMMENT and its fingerprint covers it; the rest of the record is unchanged', async () => {
+    const world = makeWorld();
+    const result = published(await publish(world, { submit: true }));
+    const record = readRecord(world.statePath);
+    assert.deepEqual(Object.keys(record).sort(), [
+      'authorId',
+      'destination',
+      'format',
+      'inputFingerprint',
+      'marker',
+      'phase',
+      'receipt',
+      'request',
+      'requestFingerprint',
+      'reviewedCommit',
+      'version',
+    ]);
+    assert.equal(record.version, 1);
+    assert.equal(record.phase, 'completed');
+    assert.equal(record.inputFingerprint, FIXTURE.input.inputFingerprint, 'the mode is not part of the input fingerprint');
+    assert.deepEqual(record.request, expectedSubmittedRequest(result.marker));
+    assert.equal(record.requestFingerprint, fingerprintOf(expectedSubmittedRequest(result.marker)));
+    assert.notEqual(record.requestFingerprint, fingerprintOf(expectedRequest(result.marker)));
+  });
+
+  for (const [label, options] of [
+    ['omitted', {}],
+    ['submit: false', { submit: false }],
+  ] as const) {
+    test(`default unchanged (${label}): the request and the saved request carry no event key`, async () => {
+      const world = makeWorld();
+      const result = published(await publish(world, options));
+      const create = itemAt(world.remote.calls('createReview'), 0, 'the create-review call');
+      assert.equal(Object.hasOwn(create.args, 'event'), false);
+      assert.deepEqual(create.args, expectedRequest(result.marker));
+      const record = readRecord(world.statePath);
+      assert.deepEqual(record.request, expectedRequest(result.marker));
+      assert.equal(Object.hasOwn(asRecord(record.request, 'the saved request'), 'event'), false);
+      assert.equal(itemAt(world.remote.reviews(), 0, 'the stored review').state, 'PENDING');
+    });
+  }
+
+  test('submit must be a boolean: anything else is refused before any transport call or state write', async () => {
+    const world = makeWorld();
+    for (const submit of ['yes', 1, null, 'COMMENT', {}]) {
+      await assert.rejects(publishPreparedReview(makeInput(world, { submit })), TypeError);
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the rest-sibling binding only drops preparedReview from the copy
+      const { preparedReview: _p, ...recovery } = makeInput(world, { submit });
+      await assert.rejects(recoverPublication(recovery), TypeError);
+    }
+    assert.deepEqual(world.remote.calls(), []);
+    assert.deepEqual(fs.readdirSync(world.stateDir), []);
+  });
+});
+
+describe('submitted publication: lost responses are rediscovered, never resent (contract §2.5)', () => {
+  test('lost response: the COMMENTED review is found by its marker and recorded as recovered', async () => {
+    const world = makeWorld({ create: 'lose-response' });
+    const result = published(await publish(world, { submit: true }));
+    assertExactlyOneCreateAttempt(world.remote);
+    assertNoWriteOtherThanCreate(world.remote);
+    const stored = itemAt(world.remote.reviews(), 0, 'the stored review');
+    assert.equal(stored.state, 'COMMENTED');
+    assert.equal(result.via, 'recovered');
+    assert.deepEqual(result.review, { id: stored.id, htmlUrl: stored.htmlUrl });
+    assert.deepEqual(readRecord(world.statePath).receipt, { reviewId: stored.id, htmlUrl: stored.htmlUrl, via: 'recovered' });
+  });
+
+  test('delayed visibility: retries (publish and recover) only investigate, then complete; one create in total', async () => {
+    const world = makeWorld({ create: 'lose-response', visibilityDelay: 2 });
+    const first = await publish(world, { submit: true });
+    assert.equal(first.status, 'uncertain');
+    const second = await recover(world, { submit: true });
+    assert.equal(second.status, 'uncertain');
+    const third = published(await publish(world, { submit: true }));
+    assert.equal(third.via, 'recovered');
+    assertExactlyOneCreateAttempt(world.remote);
+    assert.equal(world.remote.reviews().length, 1);
+    assert.equal(readRecord(world.statePath).phase, 'completed');
+    const before = world.remote.calls().length;
+    assert.equal(published(await publish(world, { submit: true })).via, 'receipt');
+    assert.equal(world.remote.calls().length, before, 'a completed receipt needs no transport call');
+  });
+
+  test('a marker candidate that is still PENDING is not a submitted delivery: uncertain, nothing repaired', async () => {
+    const world = makeWorld();
+    const intent = handBuiltSubmittedIntent();
+    fs.writeFileSync(world.statePath, JSON.stringify(intent), { mode: 0o600 });
+    world.remote.seedReview({
+      ...FIXTURE.input.destination,
+      authorId: DEFAULT_USER.id,
+      authorLogin: DEFAULT_USER.login,
+      commitId: EXPECTED.commitId,
+      body: intent.request.body,
+      comments: EXPECTED.comments,
+      state: 'PENDING',
+    });
+    const result = await recover(world, { submit: true });
+    assert.equal(result.status, 'uncertain');
+    assert.equal(result.reason, 'candidate-mismatch');
+    assertNoCreateAttempt(world.remote);
+    assertNoWriteOtherThanCreate(world.remote);
+    assert.equal(readRecord(world.statePath).phase, 'sending');
+  });
+
+  test('control: the same candidate COMMENTED completes the submitted intent', async () => {
+    const world = makeWorld();
+    const intent = handBuiltSubmittedIntent();
+    fs.writeFileSync(world.statePath, JSON.stringify(intent), { mode: 0o600 });
+    world.remote.seedReview({
+      ...FIXTURE.input.destination,
+      authorId: DEFAULT_USER.id,
+      authorLogin: DEFAULT_USER.login,
+      commitId: EXPECTED.commitId,
+      body: intent.request.body,
+      comments: EXPECTED.comments,
+      state: 'COMMENTED',
+    });
+    const result = published(await recover(world, { submit: true }));
+    assert.equal(result.via, 'recovered');
+    assertNoCreateAttempt(world.remote);
+  });
+});
+
+describe('submitted publication: the mode is bound to the state path (contract §2.4)', () => {
+  test('a completed draft state path retried as submitted is refused before any transport call', async () => {
+    const world = makeWorld();
+    published(await publish(world));
+    const before = world.remote.calls().length;
+    await assertModeMismatch(publish(world, { submit: true }), 'draft', 'submitted');
+    await assertModeMismatch(recover(world, { submit: true }), 'draft', 'submitted');
+    assert.equal(world.remote.calls().length, before);
+    assert.equal(readRecord(world.statePath).phase, 'completed');
+  });
+
+  test('a completed submitted state path retried as a draft (omitted or false) is refused before any transport call', async () => {
+    const world = makeWorld();
+    published(await publish(world, { submit: true }));
+    const before = world.remote.calls().length;
+    await assertModeMismatch(publish(world), 'submitted', 'draft');
+    await assertModeMismatch(publish(world, { submit: false }), 'submitted', 'draft');
+    await assertModeMismatch(recover(world), 'submitted', 'draft');
+    assert.equal(world.remote.calls().length, before);
+  });
+
+  test('an unresolved submitted intent retried as a draft is refused and never investigated or resent', async () => {
+    const world = makeWorld({ create: 'lose-response', visibilityDelay: 5 });
+    assert.equal((await publish(world, { submit: true })).status, 'uncertain');
+    const before = world.remote.calls().length;
+    await assertModeMismatch(publish(world), 'submitted', 'draft');
+    assert.equal(world.remote.calls().length, before);
+    assertExactlyOneCreateAttempt(world.remote);
+    assert.equal(readRecord(world.statePath).phase, 'sending');
+  });
+
+  test('a rejected draft state path retried as submitted is refused, not reported as the old refusal', async () => {
+    const world = makeWorld({ create: 'reject' });
+    assert.equal((await publish(world)).status, 'rejected');
+    await assertModeMismatch(publish(world, { submit: true }), 'draft', 'submitted');
+    assertExactlyOneCreateAttempt(world.remote);
+  });
+
+  test('a 0.2.x state file (no event in its saved request) reads as a draft record', async () => {
+    const world = makeWorld();
+    fs.writeFileSync(world.statePath, JSON.stringify(handBuiltIntent()), { mode: 0o600 });
+    await assertModeMismatch(recover(world, { submit: true }), 'draft', 'submitted');
+    assert.deepEqual(world.remote.calls(), []);
+    const asDraft = await recover(world);
+    assert.equal(asDraft.status, 'uncertain', 'control: the same file is investigated as a draft');
+    assertNoCreateAttempt(world.remote);
+  });
+
+  test('control: a hand-built submitted intent is accepted and investigated as submitted', async () => {
+    const world = makeWorld();
+    fs.writeFileSync(world.statePath, JSON.stringify(handBuiltSubmittedIntent()), { mode: 0o600 });
+    const result = await recover(world, { submit: true });
+    assert.equal(result.status, 'uncertain');
+    assert.equal(result.reason, 'not-found');
+    assertNoCreateAttempt(world.remote);
+  });
+
+  for (const event of ['APPROVE', 'REQUEST_CHANGES', 'comment', '', null, true]) {
+    test(`a saved request with event ${JSON.stringify(event)} is corrupt state, never sent or investigated`, async () => {
+      const world = makeWorld();
+      const record = rehashed(handBuiltSubmittedIntent(), (request) => {
+        Reflect.set(request, 'event', event);
+      });
+      fs.writeFileSync(world.statePath, JSON.stringify(record), { mode: 0o600 });
+      for (const submit of [true, false]) {
+        await assert.rejects(recover(world, { submit }), (err) => {
+          assert.ok(err instanceof PublicationStateError);
+          assert.equal(err.code, 'state-corrupt');
+          return true;
+        });
+      }
+      assert.deepEqual(world.remote.calls(), []);
+    });
+  }
+});
+
+describe('submitted publication: the host refusal of a create beside a pending draft (contract §2.6)', () => {
+  test("a pre-existing draft of the same account: the submitted create is refused, remembered, and the draft untouched", async () => {
+    const world = makeWorld();
+    const human = world.remote.seedReview({
+      ...FIXTURE.input.destination,
+      authorId: DEFAULT_USER.id,
+      authorLogin: DEFAULT_USER.login,
+      commitId: EXPECTED.commitId,
+      body: 'My own notes, not finished yet.',
+    });
+    const result = await publish(world, { submit: true });
+    assert.equal(result.status, 'rejected');
+    assert.equal(result.httpStatus, 422);
+    const again = await publish(world, { submit: true });
+    assert.equal(again.status, 'rejected');
+    assert.equal(again.via, 'record');
+    assertExactlyOneCreateAttempt(world.remote);
+    assertNoWriteOtherThanCreate(world.remote);
+    assert.deepEqual(world.remote.review(human.id), human);
+  });
+});
 
 describe('PublicationStateError runtime shape', () => {
   test('carries name and code as its only own enumerable keys; cause only when given', () => {
