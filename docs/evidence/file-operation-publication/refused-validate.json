@@ -1,0 +1,15 @@
+{
+  "input": "the published SARIF with the guide content replaced by \"bare\\rreturn\\n\"",
+  "exitStatus": 2,
+  "output": {
+    "command": "validate",
+    "status": "blocked",
+    "problems": [
+      {
+        "message": "file-ops-fixture/docs/guide.md: line 1 contains a carriage return that does not end a CRLF line, so the review could not show the proposed file exactly.",
+        "pointer": "/runs/0/results/0"
+      }
+    ],
+    "message": "## Review blocked\n\nNothing was published and no publication state was written.\n\n**Review blocked:** 1 problem must be resolved before publication; nothing was published.\n\n- `file-operation-content-unrepresentable` at `/runs/0/results/0`: file-ops-fixture/docs/guide.md: line 1 contains a carriage return that does not end a CRLF line, so the review could not show the proposed file exactly."
+  }
+}

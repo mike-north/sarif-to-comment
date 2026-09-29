@@ -1,0 +1,18 @@
+{
+  "surface": "installed package: library authoring, extraction and publication; installed CLI validate",
+  "tarballSha256": "da503db16de3ffc01736671e972a62ba31a5f949a28445249a910781dca577e1",
+  "fileProposalsInspected": 8,
+  "validate": {
+    "command": "validate",
+    "status": "ready",
+    "message": "## Ready to publish\n\nThe complete document can be published faithfully to mike-north/doc-linter#32 at commit `a9f05fb5db10b470e14e94f40d6244baf24c77fc`.\n\n**Review prepared:** 1 inline comment(s) and 8 general section(s) for commit `a9f05fb5db10b470e14e94f40d6244baf24c77fc`.\n\nNothing was published and no publication state was written.\n\nThis is not an approval: publication repeats every check against the pull request as it is then. GitHub can still refuse the review, for example when this account already has a pending review on the pull request."
+  },
+  "outcome": {
+    "status": "published",
+    "review": {
+      "id": 5347825990,
+      "url": "https://github.com/mike-north/doc-linter/pull/32#pullrequestreview-5347825990"
+    },
+    "statePath": "<state file>"
+  }
+}

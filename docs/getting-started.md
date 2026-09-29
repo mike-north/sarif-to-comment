@@ -332,7 +332,7 @@ npx --no-install sarif-to-comment publish --sarif results.staged.sarif \
 
 A finding that already has its own fix is never changed. If your staged change is identical to that fix, it counts as already present. If your staged change differs from it on the same lines, `add-staged-changes` fails rather than choose between them.
 
-**Current limits.** Staged edits to UTF-8 text files become fixes. Publication still checks native-suggestion compatibility: empty reviewed files, or files containing only a byte-order mark, have no source line for an inline suggestion and are blocked. Staged file creations and deletions are recorded as proposed file operations that `inspect` shows, but `publish` doesn't support them yet and blocks the review. Mode changes, symbolic links, submodules, binary files, conflicts and intent-to-add entries can't be represented; `add-staged-changes` fails, names the path and explains what to do.
+**Current limits.** Staged edits to UTF-8 text files become fixes. Publication still checks native-suggestion compatibility: empty reviewed files, or files containing only a byte-order mark, have no source line for an inline suggestion and are blocked. Staged file creations and deletions are recorded as proposed file operations that `inspect` shows. `publish` presents each one in the review body: a new file in full, with its size, line endings and mode stated, and a deletion as a link to the file at the reviewed commit. Content that a code block can't show exactly, such as control characters or mixed line endings, blocks the review instead. Mode changes, symbolic links, submodules, binary files, conflicts and intent-to-add entries can't be represented; `add-staged-changes` fails, names the path and explains what to do.
 
 ## Outcomes
 

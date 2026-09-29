@@ -262,7 +262,11 @@ class OperationalFailures {
         } catch (err) {
           throw this.record(err);
         }
-        return { context: fetched.context, readSource: this.observeReader(fetched.readSource) };
+        return {
+          context: fetched.context,
+          readSource: this.observeReader(fetched.readSource),
+          ...(fetched.fileExists === undefined ? {} : { fileExists: this.observeReader(fetched.fileExists) }),
+        };
       },
       getAuthenticatedUser: async () => {
         try {
@@ -275,16 +279,16 @@ class OperationalFailures {
   }
 
   /**
-   * The source reader with its failures recorded. A reader that is not a
-   * function is passed on unchanged, for preparation to refuse as the
-   * contract violation it is.
+   * A snapshot reader (the source reader or the existence check) with its
+   * failures recorded. A reader that is not a function is passed on
+   * unchanged, for preparation to refuse as the contract violation it is.
    */
   private observeReader(readSource: unknown): unknown {
     if (typeof readSource !== 'function') return readSource;
     return async (...args: readonly unknown[]): Promise<unknown> => {
       try {
-        const text: unknown = await Reflect.apply(readSource, undefined, args);
-        return text;
+        const answer: unknown = await Reflect.apply(readSource, undefined, args);
+        return answer;
       } catch (err) {
         throw this.record(err);
       }

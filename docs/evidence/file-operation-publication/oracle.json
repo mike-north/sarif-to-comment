@@ -1,0 +1,30 @@
+{
+  "description": "Hand-written expectations for the live whole-file proposal fixture. The body excludes the trailing hidden marker.",
+  "repository": "mike-north/doc-linter",
+  "pullNumber": 32,
+  "baseCommit": "430677396cbd0bdb9023a62ff96ecb66ae7de5d7",
+  "reviewedCommit": "a9f05fb5db10b470e14e94f40d6244baf24c77fc",
+  "expectedBody": "**Proposed new file:** `file-ops-fixture/docs/guide.md`\n\n**File details:** 217 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644\n\n```````````\n# Guide\n\nThree: ```js\n```\n````\n``````````\n~~~\n</details>\n<script>alert(1)</script>\n<!-- unterminated\n{{ template }} and {0}\n@octocat #1 [x](javascript:alert(1))\n**not bold** <img src=x onerror=alert(1)>\n```suggestion\n```````````\n\n**Location:** line 1 of the proposed file\n\nAdd this guide for the new option.\n\n<sub>— Live acceptance reviewer</sub>\n\n---\n\n**Proposed file deletion:** [file-ops-fixture/obsolete.txt at a9f05fb](https://github.com/mike-north/doc-linter/blob/a9f05fb5db10b470e14e94f40d6244baf24c77fc/file-ops-fixture/obsolete.txt)\n\nThe whole file is removed; this is not a proposal to empty it.\n\n**Source:** [file-ops-fixture/obsolete.txt line 2 at a9f05fb](https://github.com/mike-north/doc-linter/blob/a9f05fb5db10b470e14e94f40d6244baf24c77fc/file-ops-fixture/obsolete.txt#L2)\n\n```\nsecond line\n```\n\nThis file is obsolete; remove it.\n\n<sub>— Live acceptance reviewer</sub>\n\n---\n\n**Proposed new file:** `file-ops-fixture/bom-crlf.txt`\n\n**File details:** 11 bytes of UTF-8 text · begins with a byte-order mark · CRLF line endings · no newline at end of file · mode 100644\n\n```\none\r\ntwo\n```\n\nStaged creation of \\`file-ops-fixture/bom-crlf.txt\\`. No supplied finding was associated with this change.\n\n<sub>— sarif-to-comment 0.2.1 · rule `staged-change`</sub>\n\n---\n\n**Proposed new file:** `file-ops-fixture/empty.txt`\n\n**File details:** empty file (0 bytes) · mode 100644\n\nStaged creation of \\`file-ops-fixture/empty.txt\\`. No supplied finding was associated with this change.\n\n<sub>— sarif-to-comment 0.2.1 · rule `staged-change`</sub>\n\n---\n\n**Proposed file deletion:** [file-ops-fixture/huge.csv at a9f05fb](https://github.com/mike-north/doc-linter/blob/a9f05fb5db10b470e14e94f40d6244baf24c77fc/file-ops-fixture/huge.csv)\n\nThe whole file is removed; this is not a proposal to empty it.\n\nStaged deletion of \\`file-ops-fixture/huge.csv\\`. No supplied finding was associated with this change.\n\n<sub>— sarif-to-comment 0.2.1 · rule `staged-change`</sub>\n\n---\n\n**Proposed file deletion:** [file-ops-fixture/logo.png at a9f05fb](https://github.com/mike-north/doc-linter/blob/a9f05fb5db10b470e14e94f40d6244baf24c77fc/file-ops-fixture/logo.png)\n\nThe whole file is removed; this is not a proposal to empty it.\n\nStaged deletion of \\`file-ops-fixture/logo.png\\`. No supplied finding was associated with this change.\n\n<sub>— sarif-to-comment 0.2.1 · rule `staged-change`</sub>\n\n---\n\n**Proposed new file:** `file-ops-fixture/tool.sh`\n\n**File details:** 18 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100755 (executable)\n\n```\n#!/bin/sh\necho hi\n```\n\nStaged creation of \\`file-ops-fixture/tool.sh\\`. No supplied finding was associated with this change.\n\n<sub>— sarif-to-comment 0.2.1 · rule `staged-change`</sub>\n\n---\n\n**Proposed new file:** `file-ops-fixture/unicode.md`\n\n**File details:** 24 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644\n\n```\nhéllo 🎉\n\tindented  \n```\n\nStaged creation of \\`file-ops-fixture/unicode.md\\`. No supplied finding was associated with this change.\n\n<sub>— sarif-to-comment 0.2.1 · rule `staged-change`</sub>",
+  "expectedCodeBlocks": [
+    "# Guide\n\nThree: ```js\n```\n````\n``````````\n~~~\n</details>\n<script>alert(1)</script>\n<!-- unterminated\n{{ template }} and {0}\n@octocat #1 [x](javascript:alert(1))\n**not bold** <img src=x onerror=alert(1)>\n```suggestion",
+    "second line",
+    "one\r\ntwo",
+    "#!/bin/sh\necho hi",
+    "héllo 🎉\n\tindented  "
+  ],
+  "forbiddenLinks": [
+    "/blob/a9f05fb5db10b470e14e94f40d6244baf24c77fc/file-ops-fixture/docs/guide.md",
+    "/blob/a9f05fb5db10b470e14e94f40d6244baf24c77fc/file-ops-fixture/bom-crlf.txt",
+    "/blob/a9f05fb5db10b470e14e94f40d6244baf24c77fc/file-ops-fixture/empty.txt",
+    "/blob/a9f05fb5db10b470e14e94f40d6244baf24c77fc/file-ops-fixture/tool.sh",
+    "/blob/a9f05fb5db10b470e14e94f40d6244baf24c77fc/file-ops-fixture/unicode.md"
+  ],
+  "expectedComments": [
+    {
+      "path": "file-ops-fixture/notes.md",
+      "line": 4,
+      "side": "RIGHT",
+      "suggestion": "gamma\n"
+    }
+  ]
+}

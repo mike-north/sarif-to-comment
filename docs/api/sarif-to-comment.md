@@ -290,7 +290,7 @@ One entry of the log's `inlineExternalProperties`<!-- -->, shown verbatim.
 
 </td><td>
 
-A proposed whole-file operation (`create` or `delete`<!-- -->) carried by a finding. The current publisher refuses these.
+A proposed whole-file operation (`create` or `delete`<!-- -->) carried by a finding. Publication presents each one in the review body.
 
 
 </td></tr>

@@ -202,7 +202,7 @@ export interface IInspectionFix {
 
 /**
  * A proposed whole-file operation (`create` or `delete`) carried by a
- * finding. The current publisher refuses these.
+ * finding. Publication presents each one in the review body.
  *
  * @public
  */

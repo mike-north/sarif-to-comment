@@ -1,0 +1,30 @@
+{
+  "phase": "completed",
+  "marker": "<!-- sarif-to-comment:review:638c212e-3df9-4e55-9e16-7a841ed8fd06 -->",
+  "destination": {
+    "owner": "mike-north",
+    "repo": "doc-linter",
+    "pullNumber": 32
+  },
+  "reviewedCommit": "a9f05fb5db10b470e14e94f40d6244baf24c77fc",
+  "receipt": {
+    "reviewId": 5347825990,
+    "htmlUrl": "https://github.com/mike-north/doc-linter/pull/32#pullrequestreview-5347825990",
+    "via": "created"
+  },
+  "request": {
+    "owner": "mike-north",
+    "repo": "doc-linter",
+    "pullNumber": 32,
+    "commitId": "a9f05fb5db10b470e14e94f40d6244baf24c77fc",
+    "body": "**Proposed new file:** `file-ops-fixture/docs/guide.md`\n\n**File details:** 217 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644\n\n```````````\n# Guide\n\nThree: ```js\n```\n````\n``````````\n~~~\n</details>\n<script>alert(1)</script>\n<!-- unterminated\n{{ template }} and {0}\n@octocat #1 [x](javascript:alert(1))\n**not bold** <img src=x onerror=alert(1)>\n```suggestion\n```````````\n\n**Location:** line 1 of the proposed file\n\nAdd this guide for the new option.\n\n<sub>— Live acceptance reviewer</sub>\n\n---\n\n**Proposed file deletion:** [file-ops-fixture/obsolete.txt at a9f05fb](https://github.com/mike-north/doc-linter/blob/a9f05fb5db10b470e14e94f40d6244baf24c77fc/file-ops-fixture/obsolete.txt)\n\nThe whole file is removed; this is not a proposal to empty it.\n\n**Source:** [file-ops-fixture/obsolete.txt line 2 at a9f05fb](https://github.com/mike-north/doc-linter/blob/a9f05fb5db10b470e14e94f40d6244baf24c77fc/file-ops-fixture/obsolete.txt#L2)\n\n```\nsecond line\n```\n\nThis file is obsolete; remove it.\n\n<sub>— Live acceptance reviewer</sub>\n\n---\n\n**Proposed new file:** `file-ops-fixture/bom-crlf.txt`\n\n**File details:** 11 bytes of UTF-8 text · begins with a byte-order mark · CRLF line endings · no newline at end of file · mode 100644\n\n```\none\r\ntwo\n```\n\nStaged creation of \\`file-ops-fixture/bom-crlf.txt\\`. No supplied finding was associated with this change.\n\n<sub>— sarif-to-comment 0.2.1 · rule `staged-change`</sub>\n\n---\n\n**Proposed new file:** `file-ops-fixture/empty.txt`\n\n**File details:** empty file (0 bytes) · mode 100644\n\nStaged creation of \\`file-ops-fixture/empty.txt\\`. No supplied finding was associated with this change.\n\n<sub>— sarif-to-comment 0.2.1 · rule `staged-change`</sub>\n\n---\n\n**Proposed file deletion:** [file-ops-fixture/huge.csv at a9f05fb](https://github.com/mike-north/doc-linter/blob/a9f05fb5db10b470e14e94f40d6244baf24c77fc/file-ops-fixture/huge.csv)\n\nThe whole file is removed; this is not a proposal to empty it.\n\nStaged deletion of \\`file-ops-fixture/huge.csv\\`. No supplied finding was associated with this change.\n\n<sub>— sarif-to-comment 0.2.1 · rule `staged-change`</sub>\n\n---\n\n**Proposed file deletion:** [file-ops-fixture/logo.png at a9f05fb](https://github.com/mike-north/doc-linter/blob/a9f05fb5db10b470e14e94f40d6244baf24c77fc/file-ops-fixture/logo.png)\n\nThe whole file is removed; this is not a proposal to empty it.\n\nStaged deletion of \\`file-ops-fixture/logo.png\\`. No supplied finding was associated with this change.\n\n<sub>— sarif-to-comment 0.2.1 · rule `staged-change`</sub>\n\n---\n\n**Proposed new file:** `file-ops-fixture/tool.sh`\n\n**File details:** 18 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100755 (executable)\n\n```\n#!/bin/sh\necho hi\n```\n\nStaged creation of \\`file-ops-fixture/tool.sh\\`. No supplied finding was associated with this change.\n\n<sub>— sarif-to-comment 0.2.1 · rule `staged-change`</sub>\n\n---\n\n**Proposed new file:** `file-ops-fixture/unicode.md`\n\n**File details:** 24 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644\n\n```\nhéllo 🎉\n\tindented  \n```\n\nStaged creation of \\`file-ops-fixture/unicode.md\\`. No supplied finding was associated with this change.\n\n<sub>— sarif-to-comment 0.2.1 · rule `staged-change`</sub>\n\n<!-- sarif-to-comment:review:638c212e-3df9-4e55-9e16-7a841ed8fd06 -->",
+    "comments": [
+      {
+        "path": "file-ops-fixture/notes.md",
+        "side": "RIGHT",
+        "line": 4,
+        "body": "Staged change to lines 4–4 of \\`file-ops-fixture/notes.md\\`. No supplied finding was associated with this change.\n\n<sub>— sarif-to-comment 0.2.1 · rule `staged-change`</sub>\n\n```suggestion\ngamma\n```"
+      }
+    ]
+  }
+}

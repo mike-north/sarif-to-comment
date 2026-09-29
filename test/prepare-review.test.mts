@@ -1109,9 +1109,20 @@ describe('native suggestions from standard fixes', () => {
 });
 
 describe('proposed file operations and artifacts (D23)', () => {
-  test('a proposed file creation is explicitly unsupported in this milestone', async () => {
+  test('the proposed-documentation example publishes its page as one general section (docs/file-operation-publication-contract.md)', async () => {
     const sarif = readJson(path.join(import.meta.dirname, '..', 'docs', 'examples', 'proposed-documentation.sarif.json'));
     const { outcome } = await prepare(sarif);
+    assertReady(outcome);
+    assert.deepEqual(outcome.review.comments, []);
+    assert.ok(outcome.review.body.startsWith('**Proposed new file:** `docs/new-feature.md`\n\n'), outcome.review.body);
+    assert.ok(outcome.review.body.includes('\n\n**Location:** line 1 of the proposed file\n\n'), outcome.review.body);
+    assert.ok(!outcome.review.body.includes('/blob/'), 'no permalink is invented for the absent file');
+  });
+
+  test('a proposed file edit operation stays unsupported: edits travel as SARIF fixes', async () => {
+    const { outcome } = await prepare(sarifLog([result('x', undefined, {
+      properties: { sarifToComment: { proposedFileChanges: [{ operation: 'edit', artifactIndex: 0 }] } },
+    })], { artifacts: [{ location: { uri: 'src/app.js' } }] }));
     assertBlocked(outcome, [['file-operation-unsupported', '/runs/0/results/0']]);
   });
 

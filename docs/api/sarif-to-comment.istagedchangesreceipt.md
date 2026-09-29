@@ -136,7 +136,7 @@ readonly [IProblem](./sarif-to-comment.iproblem.md)<!-- -->\[\]
 
 </td><td>
 
-Things to know, such as findings that only partly overlap a change (they are left unassociated) or proposals the current publisher refuses.
+Things to know, such as findings that only partly overlap a change (they are left unassociated).
 
 
 </td></tr>

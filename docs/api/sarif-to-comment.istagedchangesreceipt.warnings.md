@@ -4,7 +4,7 @@
 
 ## IStagedChangesReceipt.warnings property
 
-Things to know, such as findings that only partly overlap a change (they are left unassociated) or proposals the current publisher refuses.
+Things to know, such as findings that only partly overlap a change (they are left unassociated).
 
 **Signature:**
 
