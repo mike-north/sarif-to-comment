@@ -115,7 +115,7 @@ describe('library assessment + real GitHub client over HTTP', () => {
   });
 
   test('a refused credential (HTTP 401) is incomplete; publication rejects without writing', async () => {
-    const world = makeWorld({ refuseUnauthorized: true });
+    const world = makeWorld({ onlyCredential: TOKEN });
     const outcome = await validate(world, 'ghp_wrong_credential_000000000000');
     assert.equal(outcome['status'], 'incomplete', asString(outcome['markdown']));
     assert.match(asString(outcome['markdown']), /401/);
@@ -167,7 +167,7 @@ describe('CLI validate + real GitHub client over HTTP', () => {
   });
 
   test('a refused credential in human form: exit 1, the explanation on stdout, nothing written', () => {
-    const world = makeWorld({ refuseUnauthorized: true });
+    const world = makeWorld({ onlyCredential: TOKEN });
     const result = cli(world, [], 'ghp_wrong_credential_111111111111');
     assert.equal(result.status, 1, result.stdout + result.stderr);
     assert.match(result.stdout, /401/);

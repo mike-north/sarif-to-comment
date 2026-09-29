@@ -3,7 +3,7 @@
  * pull request review.
  *
  * @remarks
- * Six operations work on ordinary in-memory SARIF values:
+ * Seven operations work on ordinary in-memory SARIF values:
  *
  * - {@link createSarifDocument} and {@link addSarifComment} optionally author
  *   SARIF for your own findings, on lines or line ranges, and
@@ -15,6 +15,9 @@
  * - {@link addStagedChangesToSarif} adds the changes staged in a Git index as
  *   SARIF fixes.
  *
+ * - {@link validateSarifReview} optionally checks, without publishing, that a
+ *   complete document can be published faithfully to its pull request.
+ *
  * - {@link publishSarifReview} publishes a ready document as one draft review.
  *
  * Authoring is optional: SARIF from any producer can be inspected, extended
@@ -24,7 +27,7 @@
  *
  * The `sarif-to-comment` command-line interface provides the same operations
  * for files (`init`, `add-comment`, `remove-comment`, `inspect`,
- * `add-staged-changes`, `publish`). These declarations describe the package's CommonJS runtime
+ * `add-staged-changes`, `validate`, `publish`). These declarations describe the package's CommonJS runtime
  * entry; they are generated from its TypeScript implementation, checked by API
  * Extractor and compiled against CommonJS and ES module consumers by the
  * package tests.
@@ -34,7 +37,7 @@
 
 // The declaration entry (API Extractor's mainEntryPointFilePath is its
 // emitted declaration, dist/public-api.d.cts): exactly the public API, as ES
-// named exports of the six operations and every public type, each carrying
+// named exports of the seven operations and every public type, each carrying
 // its public documentation where it is implemented. The runtime entry is
 // src/index.cts, which proves at compile time that it exports exactly these
 // values; this module's own compiled JavaScript is never shipped or loaded.
@@ -51,6 +54,15 @@ export type {
   IRejectedOutcome,
   PublishSarifReviewOutcome,
 } from './publish-sarif-review.cjs';
+
+export { validateSarifReview } from './validate-sarif-review.cjs';
+export type {
+  IValidateSarifReviewInput,
+  IReadyAssessment,
+  IBlockedAssessment,
+  IIncompleteAssessment,
+  ValidateSarifReviewOutcome,
+} from './validate-sarif-review.cjs';
 
 export type { ISarifLog, IProblem, IInvalidSarifOutcome, IGitHubRepository, ISarifSourceBinding } from './public-types.cjs';
 

@@ -38,9 +38,12 @@
  *                                    fails the fetch as a network error
  *   shiftThreadLine: null | index    readback reports that comment one line
  *                                    lower than stored (an unfaithful host)
- *   refuseUnauthorized?: boolean     answer 401 Bad credentials, as GitHub
- *                                    does, to a request that does not carry
- *                                    exactly the expected credential
+ *   onlyCredential?: string          answer 401 Bad credentials, as GitHub
+ *                                    does, to any request whose Authorization
+ *                                    is not exactly "Bearer <onlyCredential>"
+ *                                    (independent of the credential the host
+ *                                    object records, so a child process
+ *                                    attached with another token is refused)
  *   failBlobReads?: boolean          answer 502 to every Git blob read (an
  *                                    operational source-read failure)
  *
@@ -112,7 +115,7 @@ export interface IHttpRepository {
 export interface IHttpHostConfig {
   readonly create: 'ok' | 'lose-response';
   readonly shiftThreadLine: number | null;
-  readonly refuseUnauthorized?: boolean | undefined;
+  readonly onlyCredential?: string | undefined;
   readonly failBlobReads?: boolean | undefined;
 }
 
@@ -187,7 +190,7 @@ const isHttpRepository: Guard<IHttpRepository> = isShape({
 const isHostConfig: Guard<IHttpHostConfig> = isShape({
   create: isOneOf('ok', 'lose-response'),
   shiftThreadLine: isEither(isNumber, isNull),
-  refuseUnauthorized: isOptional(isBoolean),
+  onlyCredential: isOptional(isString),
   failBlobReads: isOptional(isBoolean),
 });
 
@@ -363,7 +366,8 @@ export class FakeHttpGitHub {
     const authorized = this.expectedToken === null ? auth !== null : auth === `Bearer ${this.expectedToken}`;
     this.write('log.json', [...this.log(), { method, path: u.pathname, authorized }]);
     if (u.origin !== API) throw new Error(`fake host: unexpected origin ${u.origin}`);
-    if (!authorized && this.config().refuseUnauthorized === true) {
+    const onlyCredential = this.config().onlyCredential;
+    if (onlyCredential !== undefined && auth !== `Bearer ${onlyCredential}`) {
       return new Response(JSON.stringify({ message: 'Bad credentials', status: '401' }), {
         status: 401,
         headers: { 'content-type': 'application/json' },

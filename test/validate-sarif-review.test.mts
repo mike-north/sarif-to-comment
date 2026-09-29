@@ -73,8 +73,6 @@ function located(message: string, region: Record<string, unknown>, uri = 'src/ap
   return { message: { text: message }, locations: [{ physicalLocation: { artifactLocation: { uri }, region } }] };
 }
 
-const GENERAL = { message: { text: 'Consider documenting the new limits in the changelog.' } };
-
 /**
  * A finding on line 4 with a fix replacing exactly that line. On the pull
  * request as fetched ('ok': the diff ends at the reviewed commit) the fix is

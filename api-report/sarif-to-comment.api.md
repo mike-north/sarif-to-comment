@@ -51,6 +51,13 @@ export interface IAddStagedChangesInput {
 }
 
 // @public
+export interface IBlockedAssessment {
+    readonly markdown: string;
+    readonly problems: readonly IProblem[];
+    readonly status: 'blocked';
+}
+
+// @public
 export interface IBlockedOutcome {
     readonly markdown: string;
     readonly status: 'blocked';
@@ -73,6 +80,12 @@ export interface IFailedStagedChangesOutcome {
 export interface IGitHubRepository {
     readonly owner: string;
     readonly repo: string;
+}
+
+// @public
+export interface IIncompleteAssessment {
+    readonly markdown: string;
+    readonly status: 'incomplete';
 }
 
 // @public
@@ -281,6 +294,12 @@ export interface IPullRequestDestination {
 }
 
 // @public
+export interface IReadyAssessment {
+    readonly markdown: string;
+    readonly status: 'ready';
+}
+
+// @public
 export interface IRejectedOutcome {
     readonly markdown: string;
     readonly statePath: string;
@@ -399,6 +418,17 @@ export interface IUncertainOutcome {
 }
 
 // @public
+export interface IValidateSarifReviewInput {
+    readonly destination: IPullRequestDestination;
+    readonly oldSourceCommit?: string | undefined;
+    readonly options?: IPublishSarifReviewOptions | undefined;
+    readonly reviewedCommit: string;
+    readonly sarif: object;
+    readonly sourceRootUri?: string | undefined;
+    readonly token: string;
+}
+
+// @public
 export function publishSarifReview(input: IPublishSarifReviewInput): Promise<PublishSarifReviewOutcome>;
 
 // @public
@@ -409,5 +439,11 @@ export function removeSarifComment(sarif: object, selector: string): RemoveSarif
 
 // @public
 export type RemoveSarifCommentOutcome = IRemovedSarifCommentOutcome | IStaleSarifSelectorOutcome | IInvalidSarifOutcome;
+
+// @public
+export function validateSarifReview(input: IValidateSarifReviewInput): Promise<ValidateSarifReviewOutcome>;
+
+// @public
+export type ValidateSarifReviewOutcome = IReadyAssessment | IBlockedAssessment | IIncompleteAssessment;
 
 ```

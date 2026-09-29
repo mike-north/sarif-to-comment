@@ -13,6 +13,7 @@
  *   remove-comment      remove one finding, in place     removeSarifComment
  *   inspect             read-only view of a SARIF file   inspectSarif
  *   add-staged-changes  add staged Git changes to a copy addStagedChangesToSarif
+ *   validate            readiness, without publishing    validateSarifReview
  *   publish             create the GitHub draft review   publishSarifReview
  * A first argument beginning with "-" (or no argument) is the original
  * flag-only publisher, which keeps its exact behavior, output, credentials and
@@ -29,11 +30,14 @@
  *
  * Exit statuses: 0 success or help; 1 usage error or operational error; 2 the
  * content was refused (`invalid` / `failed` / `stale`). `publish` keeps the publisher's
- * statuses: 0 published, 2 blocked, 3 uncertain, 1 otherwise.
+ * statuses: 0 published, 2 blocked, 3 uncertain, 1 otherwise. `validate`
+ * (docs/readiness-assessment-contract.md): 0 ready, 2 blocked, 1 incomplete
+ * or otherwise.
  *
  * Receipts name only files actually written, archived, or deliberately not
  * written (`written: false`). The GitHub token (GH_TOKEN, else GITHUB_TOKEN)
- * is used only by `publish` and is redacted from every output in both modes.
+ * is used only by `validate` and `publish` and is redacted from every output
+ * in both modes.
  */
 
 import * as fs from 'node:fs';
@@ -41,7 +45,6 @@ import * as path from 'node:path';
 
 import * as files from './artifact-files.cjs';
 import type { IArchivedOutput, IJsonFile, ReleaseOwnership } from './artifact-files.cjs';
-import type { IPublishSarifReviewInternals } from './publish-sarif-review.cjs';
 import { publishSarifReviewWithInternals } from './publish-sarif-review.cjs';
 import type { ISarifSourceBinding } from './public-types.cjs';
 import { parseFindingSelector } from './finding-selectors.cjs';
@@ -52,17 +55,30 @@ import { inspectSarifWithUntypedInput, renderInspectionText } from './sarif-insp
 import type { IInspectSarifOptions } from './sarif-inspection.cjs';
 import { addStagedChangesToSarifWithUntypedInput } from './staged-changes.cjs';
 import type { IStagedChangesReceipt } from './staged-changes.cjs';
+import { validateSarifReviewWithInternals } from './validate-sarif-review.cjs';
+import type { IValidateSarifReviewInternals } from './validate-sarif-review.cjs';
 
 const md = String.raw;
 
 /** A CLI command, in workflow order. */
-type CliCommand = 'init' | 'add-comment' | 'remove-comment' | 'inspect' | 'add-staged-changes' | 'publish';
+type CliCommand = 'init' | 'add-comment' | 'remove-comment' | 'inspect' | 'add-staged-changes' | 'validate' | 'publish';
 
 /** The commands, in workflow order. */
-const COMMANDS: readonly CliCommand[] = ['init', 'add-comment', 'remove-comment', 'inspect', 'add-staged-changes', 'publish'];
+const COMMANDS: readonly CliCommand[] = ['init', 'add-comment', 'remove-comment', 'inspect', 'add-staged-changes', 'validate', 'publish'];
+
+/**
+ * The private test seam the executable passes to the GitHub-reading
+ * operations. Its client serves both: assessment needs the authenticated
+ * user as well as the review context, and publication validates its
+ * transport itself.
+ */
+type CliInternals = IValidateSarifReviewInternals;
 
 /** Exit statuses for non-publication outcomes (§5). */
 const EXIT: Readonly<{ ok: 0; usage: 1; error: 1; refused: 2 }> = Object.freeze({ ok: 0, usage: 1, error: 1, refused: 2 });
+
+/** Exit statuses for readiness assessment (docs/readiness-assessment-contract.md). */
+const VALIDATE_EXIT: Readonly<{ ready: 0; blocked: 2; incomplete: 1 }> = Object.freeze({ ready: 0, blocked: 2, incomplete: 1 });
 
 /** Exit statuses for publication, unchanged from the flag-only publisher. */
 const PUBLISH_EXIT: Readonly<{ published: 0; blocked: 2; uncertain: 3; rejected: 1 }> = Object.freeze({
@@ -79,14 +95,14 @@ const REPO_FLAG_PATTERN = /^([^/\s]+)\/([^/\s]+)$/;
 // Usage text
 // ---------------------------------------------------------------------------
 
-const PUBLISH_OPTIONS = md`  --sarif FILE                   SARIF 2.1.0 JSON file to publish.
-  --repo OWNER/REPO              Repository of the pull request.
+/** The pull request and reviewed commit, shared by publish and validate. */
+const REVIEW_TARGET_OPTIONS = md`  --repo OWNER/REPO              Repository of the pull request.
   --pull N                       Pull request number.
   --commit FULLSHA               Full 40-character commit the review is about.
-  --state ABSOLUTE_FILE          Durable publication state. Retry with the same
-                                 file; never delete it after an uncertain
-                                 result. A new file starts a separate review.
-  --source-root ABSOLUTE_FILE_URI
+`;
+
+/** How the document is read and judged, shared by publish and validate. */
+const REVIEW_POLICY_OPTIONS = md`  --source-root ABSOLUTE_FILE_URI
                                  Repository root in the SARIF producer's file
                                  system (file:///.../ ending in "/").
   --old-source-commit FULLSHA    Candidate commit for the diff's old side, used
@@ -96,7 +112,16 @@ const PUBLISH_OPTIONS = md`  --sarif FILE                   SARIF 2.1.0 JSON fil
                                  the hold, never validation).
 `;
 
-const CREDENTIALS = md`Credentials (publish only):
+const PUBLISH_OPTIONS = md`  --sarif FILE                   SARIF 2.1.0 JSON file to publish.
+${REVIEW_TARGET_OPTIONS}  --state ABSOLUTE_FILE          Durable publication state. Retry with the same
+                                 file; never delete it after an uncertain
+                                 result. A new file starts a separate review.
+${REVIEW_POLICY_OPTIONS}`;
+
+const VALIDATE_OPTIONS = md`  --sarif FILE                   SARIF 2.1.0 JSON file to check.
+${REVIEW_TARGET_OPTIONS}${REVIEW_POLICY_OPTIONS}`;
+
+const CREDENTIALS = md`Credentials (validate and publish only):
   GH_TOKEN, or else GITHUB_TOKEN: a GitHub personal access token or user token.
   GitHub App installation tokens (including the automatic Actions token) are
   not supported. There is no token flag.
@@ -116,6 +141,7 @@ Usage:
   sarif-to-comment remove-comment --sarif FILE --finding SELECTOR [options]
   sarif-to-comment inspect --sarif FILE [options]
   sarif-to-comment add-staged-changes --sarif IN --output OUT --worktree DIR --repo OWNER/REPO --commit FULLSHA [options]
+  sarif-to-comment validate --sarif FILE --repo OWNER/REPO --pull N --commit FULLSHA [options]
   sarif-to-comment publish --sarif FILE --repo OWNER/REPO --pull N --commit FULLSHA --state ABSOLUTE_FILE [options]
   sarif-to-comment --sarif FILE --repo OWNER/REPO --pull N --commit FULLSHA
                    --state ABSOLUTE_FILE [--source-root ABSOLUTE_FILE_URI]
@@ -128,6 +154,7 @@ Commands:
   remove-comment       Remove a finding and its attached fixes from the SARIF document.
   inspect              Show the findings, locations and fixes in a SARIF file.
   add-staged-changes   Add proposed changes from the Git index to a SARIF document.
+  validate             Check, without publishing, that a SARIF file can be published.
   publish              Publish a SARIF file as one GitHub draft pull request review.
 Every command reads and writes ordinary SARIF files; SARIF from any producer
 can be inspected, extended and published without init.
@@ -137,11 +164,12 @@ ${PUBLISH_OPTIONS}${FORMAT_OPTION}  --help                         Show help. Ne
 
 ${CREDENTIALS}
 Exit status:
-  0  success; published (or already published)
+  0  success; published (or already published); ready
   2  refused content: blocked (nothing was published), invalid/failed input,
      or a stale finding selector
   3  uncertain: delivery could not be confirmed; retry with the same --state
-  1  usage error, unreadable file, refused request, or operational failure
+  1  usage error, unreadable file, refused request, incomplete validation,
+     or operational failure
 `,
   init: md`sarif-to-comment init — create a SARIF document for your own findings
 
@@ -278,6 +306,30 @@ written. While it runs, the command owns OUT through a marker file
 
 Exit status: 0 written; 2 invalid SARIF or a staged change that cannot be
 represented faithfully (nothing written); 1 usage error or operational failure.
+`,
+  validate: md`sarif-to-comment validate — check that a SARIF file can be published as one GitHub draft review
+
+Usage:
+  sarif-to-comment validate --sarif FILE --repo OWNER/REPO --pull N --commit FULLSHA
+                            [--source-root ABSOLUTE_FILE_URI] [--old-source-commit FULLSHA]
+                            [--ignore-approval-hold] [--format human|json]
+
+Runs every check publish runs, reading the pull request and its source from
+GitHub, and stops before publishing: nothing is written to GitHub and no file
+is written. A ready result is not an approval: publish repeats every check
+against the pull request as it is then, and GitHub can still refuse the
+review (for example, a pending review of yours already on the pull request).
+Validation takes no publication state file and reserves no publication.
+
+Options:
+${VALIDATE_OPTIONS}${FORMAT_OPTION}
+${CREDENTIALS}
+Exit status:
+  0  ready: publish would create the review
+  2  blocked: publish would refuse; every problem is listed
+  1  incomplete: the check could not be completed (for example the credential,
+     the network or a source read failed), or a usage error, unreadable SARIF
+     file or operational failure
 `,
   publish: md`sarif-to-comment publish — publish a SARIF file as one GitHub draft review
 
@@ -1082,31 +1134,39 @@ async function addStagedChanges(argv: readonly string[], { cwd }: IHandlerContex
 }
 
 // ---------------------------------------------------------------------------
-// publish (and the flag-only publisher)
+// validate and publish (and the flag-only publisher)
 // ---------------------------------------------------------------------------
 
-const PUBLISH_SPEC: IOptionSpec = {
-  values: ['--sarif', '--repo', '--pull', '--commit', '--state', '--source-root', '--old-source-commit'],
+/** The review options publish and validate share: everything but --state. */
+const REVIEW_SPEC = {
+  values: ['--sarif', '--repo', '--pull', '--commit', '--source-root', '--old-source-commit'],
   booleans: ['--ignore-approval-hold'],
-  required: ['--sarif', '--repo', '--pull', '--commit', '--state'],
+  required: ['--sarif', '--repo', '--pull', '--commit'],
+} as const satisfies IOptionSpec;
+
+const PUBLISH_SPEC: IOptionSpec = {
+  values: [...REVIEW_SPEC.values.slice(0, 4), '--state', ...REVIEW_SPEC.values.slice(4)],
+  booleans: REVIEW_SPEC.booleans,
+  required: [...REVIEW_SPEC.required, '--state'],
 };
 
-/** Library input fields from publish options (everything but the SARIF and the token). */
-interface IPublishRequest {
-  readonly sarifPath: string;
-  readonly input: {
-    readonly destination: { readonly owner: string; readonly repo: string; readonly pullNumber: number };
-    readonly reviewedCommit: string;
-    readonly statePath: string;
-    readonly oldSourceCommit?: string;
-    readonly sourceRootUri?: string;
-    readonly options?: { readonly ignoreApprovalHold: true };
-  };
+/** Library input fields shared by publish and validate (everything but the SARIF, the token and the state path). */
+interface IReviewRequestInput {
+  readonly destination: { readonly owner: string; readonly repo: string; readonly pullNumber: number };
+  readonly reviewedCommit: string;
+  readonly oldSourceCommit?: string;
+  readonly sourceRootUri?: string;
+  readonly options?: { readonly ignoreApprovalHold: true };
 }
 
-/** Library input fields from publish options; throws UsageError. */
-function publishRequest(argv: readonly string[]): IPublishRequest {
-  const { values, flags } = parseOptions(argv, PUBLISH_SPEC);
+/** A review command's SARIF file and library input fields. */
+interface IReviewRequest<Input extends IReviewRequestInput> {
+  readonly sarifPath: string;
+  readonly input: Input;
+}
+
+/** The review target and policy from parsed options; throws UsageError. */
+function reviewRequestInput({ values, flags }: IParsedOptions): IReviewRequestInput {
   const repo = REPO_FLAG_PATTERN.exec(requiredValue(values, '--repo'));
   const owner = repo?.[1];
   const name = repo?.[2];
@@ -1115,21 +1175,82 @@ function publishRequest(argv: readonly string[]): IPublishRequest {
   if (!/^[1-9][0-9]*$/.test(pull) || !Number.isSafeInteger(Number(pull))) {
     throw new UsageError('--pull must be a positive pull request number');
   }
-  const statePath = requiredValue(values, '--state');
-  if (!path.isAbsolute(statePath)) throw new UsageError('--state must be an absolute file path');
   const destination = { owner, repo: name, pullNumber: Number(pull) };
   const reviewedCommit = commitValue(requiredValue(values, '--commit'), '--commit');
   const oldSourceCommit = commitFlag(values, '--old-source-commit');
   const sourceRootUri = sourceRootFlag(values);
-  const input = {
+  return {
     destination,
     reviewedCommit,
-    statePath,
     ...(oldSourceCommit === undefined ? {} : { oldSourceCommit }),
     ...(sourceRootUri === undefined ? {} : { sourceRootUri }),
     ...(flags.has('--ignore-approval-hold') ? { options: { ignoreApprovalHold: true as const } } : {}),
   };
-  return { sarifPath: requiredValue(values, '--sarif'), input };
+}
+
+/** Library input fields from publish options; throws UsageError. */
+function publishRequest(argv: readonly string[]): IReviewRequest<IReviewRequestInput & { readonly statePath: string }> {
+  const parsed = parseOptions(argv, PUBLISH_SPEC);
+  const target = reviewRequestInput(parsed);
+  const statePath = requiredValue(parsed.values, '--state');
+  if (!path.isAbsolute(statePath)) throw new UsageError('--state must be an absolute file path');
+  return { sarifPath: requiredValue(parsed.values, '--sarif'), input: { ...target, statePath } };
+}
+
+/** Library input fields from validate options (no --state); throws UsageError. */
+function validateRequest(argv: readonly string[]): IReviewRequest<IReviewRequestInput> {
+  const parsed = parseOptions(argv, REVIEW_SPEC);
+  return { sarifPath: requiredValue(parsed.values, '--sarif'), input: reviewRequestInput(parsed) };
+}
+
+/** The credential and SARIF a review command sends to the library, or the error outcome that stops it. */
+type ReviewInputs = { readonly token: string; readonly sarif: unknown } | { readonly error: IOutcome };
+
+/** Reads the token and the SARIF file for a GitHub-reading command. */
+function reviewInputs(command: 'validate' | 'publish', sarifPath: string, env: CliEnvironment): ReviewInputs {
+  const token = tokenFrom(env);
+  if (token === undefined) {
+    return { error: errorOutcome(command, 'no GitHub token: set GH_TOKEN (or GITHUB_TOKEN) to a personal access token or user token.') };
+  }
+  try {
+    return { token, sarif: files.readJsonFile(sarifPath, 'SARIF file').value };
+  } catch (err) {
+    if (!(err instanceof files.ArtifactError)) throw err;
+    // The flag-only publisher's wording for these failures, kept exactly.
+    const message = err.message.includes('is not valid UTF-8')
+      ? `SARIF file ${sarifPath} is not valid UTF-8; nothing was ${command === 'publish' ? 'published' : 'checked'}. SARIF files must be UTF-8 encoded JSON.`
+      : err.message;
+    return { error: errorOutcome(command, message) };
+  }
+}
+
+/**
+ * Readiness assessment. Every library outcome (ready, blocked, incomplete)
+ * is shown on stdout in human form, as publish shows its outcomes; the
+ * library's rejection for invalid input is an operational error. Nothing is
+ * written anywhere.
+ */
+async function validate(argv: readonly string[], { env }: IHandlerContext, internals: CliInternals | undefined): Promise<IOutcome> {
+  const request = validateRequest(argv);
+  const inputs = reviewInputs('validate', request.sarifPath, env);
+  if ('error' in inputs) return inputs.error;
+  let outcome;
+  try {
+    outcome = await validateSarifReviewWithInternals({ ...request.input, sarif: inputs.sarif, token: inputs.token }, internals);
+  } catch (err) {
+    return errorOutcome('validate', describeError(err));
+  }
+  const doc = {
+    command: 'validate',
+    status: outcome.status,
+    ...(outcome.status === 'blocked' ? { problems: outcome.problems } : {}),
+    message: outcome.markdown,
+  };
+  return {
+    exit: VALIDATE_EXIT[outcome.status],
+    doc,
+    out: outcome.markdown.endsWith('\n') ? outcome.markdown : `${outcome.markdown}\n`,
+  };
 }
 
 /**
@@ -1137,27 +1258,11 @@ function publishRequest(argv: readonly string[]): IPublishRequest {
  * library's Markdown on stdout, errors on stderr. The SARIF path is used as
  * given, as it always has been.
  */
-async function publish(
-  argv: readonly string[],
-  { env }: IHandlerContext,
-  internals: IPublishSarifReviewInternals | undefined,
-): Promise<IOutcome> {
+async function publish(argv: readonly string[], { env }: IHandlerContext, internals: CliInternals | undefined): Promise<IOutcome> {
   const request = publishRequest(argv);
-  const token = tokenFrom(env);
-  if (token === undefined) {
-    return errorOutcome('publish', 'no GitHub token: set GH_TOKEN (or GITHUB_TOKEN) to a personal access token or user token.');
-  }
-  let sarif: unknown;
-  try {
-    ({ value: sarif } = files.readJsonFile(request.sarifPath, 'SARIF file'));
-  } catch (err) {
-    if (!(err instanceof files.ArtifactError)) throw err;
-    // The flag-only publisher's wording for these failures, kept exactly.
-    const message = err.message.includes('is not valid UTF-8')
-      ? `SARIF file ${request.sarifPath} is not valid UTF-8; nothing was published. SARIF files must be UTF-8 encoded JSON.`
-      : err.message;
-    return errorOutcome('publish', message);
-  }
+  const inputs = reviewInputs('publish', request.sarifPath, env);
+  if ('error' in inputs) return inputs.error;
+  const { sarif, token } = inputs;
   let outcome;
   try {
     outcome = await publishSarifReviewWithInternals({ ...request.input, sarif, token }, internals);
@@ -1187,7 +1292,7 @@ async function publish(
 type Handler = (
   argv: readonly string[],
   context: IHandlerContext,
-  internals: IPublishSarifReviewInternals | undefined,
+  internals: CliInternals | undefined,
 ) => IOutcome | Promise<IOutcome>;
 
 const HANDLERS: Readonly<Record<CliCommand, Handler>> = {
@@ -1196,6 +1301,7 @@ const HANDLERS: Readonly<Record<CliCommand, Handler>> = {
   'remove-comment': removeComment,
   inspect,
   'add-staged-changes': addStagedChanges,
+  validate,
   publish,
 };
 
@@ -1227,12 +1333,13 @@ export interface ICliIo {
  * Runs the CLI and returns its exit status; expected failures never throw.
  *
  * @param io - `{ argv, env, stdout, stderr, stdin?, cwd? }` (see ICliIo)
- * @param internals - passed to publishSarifReview (private test seam; the
- *   shipped executable's test wrapper injects a fake GitHub client through it)
+ * @param internals - passed to publishSarifReview and validateSarifReview
+ *   (private test seam; the shipped executable's test wrappers inject a fake
+ *   GitHub client through it)
  */
 async function main(
   { argv, env, stdout, stderr, stdin = process.stdin, cwd = process.cwd() }: ICliIo,
-  internals?: IPublishSarifReviewInternals,
+  internals?: CliInternals,
 ): Promise<number> {
   const token = tokenFrom(env);
   const safe = (text: string): string => (token === undefined ? text : text.split(token).join('[redacted]'));
