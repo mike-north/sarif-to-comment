@@ -1,0 +1,22 @@
+{
+  "command": "publish",
+  "status": "published",
+  "review": {
+    "id": 5354085442,
+    "url": "https://github.com/mike-north/doc-linter/pull/36#pullrequestreview-5354085442"
+  },
+  "suggestions": [
+    {
+      "number": 38,
+      "url": "https://github.com/mike-north/doc-linter/pull/38",
+      "branch": "sarif-to-comment/suggestions/36/5f72b5f4-8dd1-462a-948b-71b0767ecafe"
+    },
+    {
+      "number": 39,
+      "url": "https://github.com/mike-north/doc-linter/pull/39",
+      "branch": "sarif-to-comment/suggestions/36/ec69538b-1cf2-4801-b7e1-ae96d9076ff1"
+    }
+  ],
+  "statePath": "<working-logs>/live/state-a/review.json",
+  "message": "## Draft review published\n\nCreated the draft [review 5354085442](https://github.com/mike-north/doc-linter/pull/36#pullrequestreview-5354085442) on mike-north/doc-linter#36 at commit `89bf101d454c10d98df84e504c05494e9627375b`. It stays a draft until someone submits it on GitHub.\n\nSuggestion pull requests (drafts into `sarif-issue5-20260929-reviewed`, labeled `suggestion`):\n\n- [#38](https://github.com/mike-north/doc-linter/pull/38) from `sarif-to-comment/suggestions/36/5f72b5f4-8dd1-462a-948b-71b0767ecafe`\n- [#39](https://github.com/mike-north/doc-linter/pull/39) from `sarif-to-comment/suggestions/36/ec69538b-1cf2-4801-b7e1-ae96d9076ff1`"
+}

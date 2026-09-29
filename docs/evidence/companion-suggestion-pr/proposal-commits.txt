@@ -1,0 +1,75 @@
+# Proposal commits fetched from mike-north/doc-linter and compared locally
+
+## suggestions-36/5f72b5f4-8dd1-462a-948b-71b0767ecafe (reviewed commit 89bf101d454c10d98df84e504c05494e9627375b)
+commit 3b5e3710f9b2cf54f0c9a8c2cdcf8fcdad86b84a
+parents 89bf101d454c10d98df84e504c05494e9627375b
+tree aec61b85394124935932a0f72ebeee1e0978f706
+subject Suggestion for #36: retry-with-check (2 changes)
+--- git diff --name-status 89bf101d454c10d98df84e504c05494e9627375b suggestions-36/5f72b5f4-8dd1-462a-948b-71b0767ecafe
+A	docs/experiments/sarif-issue5/client-test.md
+M	docs/experiments/sarif-issue5/client.md
+--- git diff --stat
+ docs/experiments/sarif-issue5/client-test.md | 3 +++
+ docs/experiments/sarif-issue5/client.md      | 2 +-
+ 2 files changed, 4 insertions(+), 1 deletion(-)
+
+## suggestions-36/ec69538b-1cf2-4801-b7e1-ae96d9076ff1 (reviewed commit 89bf101d454c10d98df84e504c05494e9627375b)
+commit aaa2a0c85faf65c1636f23839dbba2233e1b391f
+parents 89bf101d454c10d98df84e504c05494e9627375b
+tree 4a0c4e8089ce379d255997c8dc3f647a6d6ddfe9
+subject Suggestion for #36: delete docs/experiments/sarif-issue5/obsolete.md
+--- git diff --name-status 89bf101d454c10d98df84e504c05494e9627375b suggestions-36/ec69538b-1cf2-4801-b7e1-ae96d9076ff1
+D	docs/experiments/sarif-issue5/obsolete.md
+--- git diff --stat
+ docs/experiments/sarif-issue5/obsolete.md | 3 ---
+ 1 file changed, 3 deletions(-)
+
+## suggestions-37/d692636b-46f9-4185-8e44-1b961e27bfc4 (reviewed commit 83b57cf731f0026f993691ff11ba48b42a674753)
+commit ff055e310d5ee974f6f85be4e7f8bfa658800e27
+parents 83b57cf731f0026f993691ff11ba48b42a674753
+tree b40da0f3b16ea8441228e68c4ced34f62e2e857d
+subject Suggestion for #37: recovery-pair (2 changes)
+--- git diff --name-status 83b57cf731f0026f993691ff11ba48b42a674753 suggestions-37/d692636b-46f9-4185-8e44-1b961e27bfc4
+A	docs/experiments/sarif-issue5/recovery-a.md
+A	docs/experiments/sarif-issue5/recovery-b.md
+--- git diff --stat
+ docs/experiments/sarif-issue5/recovery-a.md | 1 +
+ docs/experiments/sarif-issue5/recovery-b.md | 1 +
+ 2 files changed, 2 insertions(+)
+
+--- full diff of the grouped suggestion
+diff --git a/docs/experiments/sarif-issue5/client-test.md b/docs/experiments/sarif-issue5/client-test.md
+new file mode 100644
+index 0000000..24d6c48
+--- /dev/null
++++ b/docs/experiments/sarif-issue5/client-test.md
+@@ -0,0 +1,3 @@
++# Retry client checks (fixture)
++
++- A timed-out request is retried once.
+diff --git a/docs/experiments/sarif-issue5/client.md b/docs/experiments/sarif-issue5/client.md
+index 50ad309..eea963b 100644
+--- a/docs/experiments/sarif-issue5/client.md
++++ b/docs/experiments/sarif-issue5/client.md
+@@ -1,5 +1,5 @@
+ # Retry client (fixture)
+ 
+-Requests are sent once.
++Requests are sent once, and retried once on timeout.
+ Timeouts are not retried.
+ The clinet reports failures.
+
+## Exact bytes: expected blob ids (git hash-object of the SARIF-derived content) vs blob ids on the proposal branches
+expected client.md        eea963b69dba040562c46f62e16e61134783223e
+actual   client.md        eea963b69dba040562c46f62e16e61134783223e
+expected client-test.md   24d6c4850aa168577ccac35520f20f1a8bb03128
+actual   client-test.md   24d6c4850aa168577ccac35520f20f1a8bb03128
+expected recovery-a.md    f3552c66a64831fb8681459d80118601a23d12b3
+actual   recovery-a.md    f3552c66a64831fb8681459d80118601a23d12b3
+expected recovery-b.md    13d2211a41a9ceb62dfc385de1a257c87a01be52
+actual   recovery-b.md    13d2211a41a9ceb62dfc385de1a257c87a01be52
+
+## Nothing else differs from the reviewed commit
+group suggestion: only client.md and client-test.md differ
+deletion suggestion: only obsolete.md differs
+recovery suggestion: only recovery-a.md and recovery-b.md differ

@@ -1,0 +1,29 @@
+{
+  "outcome": {
+    "status": "published",
+    "review": {
+      "id": 5354106412,
+      "url": "https://github.com/mike-north/doc-linter/pull/37#pullrequestreview-5354106412"
+    },
+    "suggestions": [
+      {
+        "number": 40,
+        "url": "https://github.com/mike-north/doc-linter/pull/40",
+        "branch": "sarif-to-comment/suggestions/37/d692636b-46f9-4185-8e44-1b961e27bfc4"
+      }
+    ],
+    "statePath": "<working-logs>/live/state-b/review.json",
+    "markdown": "## Draft review published\n\nCreated the draft [review 5354106412](https://github.com/mike-north/doc-linter/pull/37#pullrequestreview-5354106412) on mike-north/doc-linter#37 at commit `83b57cf731f0026f993691ff11ba48b42a674753`. It stays a draft until someone submits it on GitHub.\n\nSuggestion pull requests (drafts into `sarif-issue5-20260929-recovery`, labeled `suggestion`):\n\n- [#40](https://github.com/mike-north/doc-linter/pull/40) from `sarif-to-comment/suggestions/37/d692636b-46f9-4185-8e44-1b961e27bfc4`"
+  },
+  "requests": [
+    "GET /user -> HTTP 200",
+    "GET /repos/mike-north/doc-linter/pulls?head=mike-north%3Asarif-to-comment%2Fsuggestions%2F37%2Fd692636b-46f9-4185-8e44-1b961e27bfc4&state=all&per_page=100&page=1 -> HTTP 200",
+    "POST /repos/mike-north/doc-linter/issues/40/labels -> HTTP 200 received by GitHub; response discarded",
+    "GET /repos/mike-north/doc-linter/issues/40/labels?per_page=100&page=1 -> HTTP 200",
+    "GET /user -> HTTP 200",
+    "POST /repos/mike-north/doc-linter/pulls/37/reviews -> HTTP 200",
+    "GET /repos/mike-north/doc-linter/pulls/37/reviews?per_page=100&page=1 -> HTTP 200",
+    "GET /repos/mike-north/doc-linter/pulls/37/reviews/5354106412/comments?per_page=100&page=1 -> HTTP 200",
+    "POST /graphql -> HTTP 200"
+  ]
+}
