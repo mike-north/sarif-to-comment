@@ -394,7 +394,7 @@ describe('recognition and verification (§2.5–§2.8)', () => {
 
   const skipped: readonly (readonly [string, IStoredPull, RegExp, number | null])[] = [
     ['the marker was removed', suggestion(40, 37, { body: 'Suggested in a review of #37.' }), /no suggestion marker/, null],
-    ['the marker was changed', suggestion(40, 37, { body: `${suggestionBody(40, 37).replace('"version":1', '"version": 1')}` }), /canonical/, null],
+    ['the marker was changed', suggestion(40, 37, { body: suggestionBody(40, 37).replace('"version":1', '"version": 1') }), /canonical/, null],
     ['the marker is quoted twice', suggestion(40, 37, { body: `${suggestionBody(40, 37)}\n\n> ${markerLine(40, 37)}\n${markerLine(40, 37)}` }), /more than one/, null],
     ['the marker names another repository', suggestion(40, 37, { body: `Moved.\n\n${markerLine(40, 37, '"owner":"elsewhere","pullNumber":37,"repo":"widgets"')}` }), /another repository \(elsewhere\/widgets\)/, null],
     ['its head is in a fork', suggestion(40, 37, { headRepo: 'someone/widgets' }), /someone\/widgets/, 37],
@@ -429,38 +429,54 @@ describe('recognition and verification (§2.5–§2.8)', () => {
     assert.deepEqual(results(outcome), [[40, 37, 'closed']]);
   });
 
-  test('a suggestion someone closed after the listing is reported already-closed and not closed again', async () => {
-    const world = makeWorld(ended(suggestion(40, 37)));
-    // The fresh read sees what a person did between the listing and the check.
-    const listing = world.host.fetch.bind(world.host);
+  /** Cleanup where a person acts right after the labeled listing is answered; the fresh read sees it. */
+  async function cleanupWithChangeAfterListing(world: IWorld, change: () => void): Promise<Json> {
+    const host = world.host.fetch.bind(world.host);
     const people: typeof world.host.fetch = async (input, init) => {
-      const response = await listing(input, init);
-      if (String(input).includes('/issues?')) world.host.editPull(40, { state: 'closed' });
+      const response = await host(input, init);
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes('/issues?')) change();
       return response;
     };
-    const outcome = asRecord(await closeOperation()(
+    const outcome: unknown = await closeOperation()(
       { repository: { owner: OWNER, repo: REPO }, token: TOKEN },
       { createGitHubClient: (options: ICreateGitHubClientOptions) => createGitHubClient({ ...options, fetch: people }) },
-    ));
+    );
+    return asRecord(outcome);
+  }
+
+  test('a suggestion someone closed after the listing is reported already-closed and not closed again', async () => {
+    const world = makeWorld(ended(suggestion(40, 37)));
+    const outcome = await cleanupWithChangeAfterListing(world, () => {
+      world.host.editPull(40, { state: 'closed' });
+    });
     assert.deepEqual(results(outcome), [[40, 37, 'already-closed']]);
     assert.deepEqual(writes(world), []);
   });
 
   test('a suggestion whose label was removed after the listing is reported unlabeled and not closed', async () => {
     const world = makeWorld(ended(suggestion(40, 37)));
-    const listing = world.host.fetch.bind(world.host);
-    const people: typeof world.host.fetch = async (input, init) => {
-      const response = await listing(input, init);
-      if (String(input).includes('/issues?')) world.host.removeLabel(40, 'suggestion');
-      return response;
-    };
-    const outcome = asRecord(await closeOperation()(
-      { repository: { owner: OWNER, repo: REPO }, token: TOKEN },
-      { createGitHubClient: (options: ICreateGitHubClientOptions) => createGitHubClient({ ...options, fetch: people }) },
-    ));
+    const outcome = await cleanupWithChangeAfterListing(world, () => {
+      world.host.removeLabel(40, 'suggestion');
+    });
     assert.deepEqual(results(outcome), [[40, 37, 'unlabeled']]);
     assert.deepEqual(writes(world), []);
   });
+
+  for (const [what, body] of [
+    ['removed', 'Rewritten without the marker.'],
+    ['replaced by another publication\'s marker for the same branch', suggestionBody(40, 37).replace(PUBLICATION, 'cccccccc-cccc-4ccc-8ccc-cccccccccccc')],
+  ] as const) {
+    test(`a suggestion whose marker was ${what} after the listing is not closed`, async () => {
+      const world = makeWorld(ended(suggestion(40, 37)));
+      const outcome = await cleanupWithChangeAfterListing(world, () => {
+        world.host.editPull(40, { body });
+      });
+      assert.deepEqual(results(outcome), [[40, 37, 'not-ours']]);
+      assert.match(asString(entry(outcome, 40)['reason']), /changed while it was being checked/);
+      assert.deepEqual(writes(world), []);
+    });
+  }
 
   test('a suggestion that cannot be re-read is failed, not closed', async () => {
     const world = makeWorld(ended(suggestion(40, 37)), { pullReads: { '40': 'server-error' } });

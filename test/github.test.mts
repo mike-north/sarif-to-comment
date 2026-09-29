@@ -884,10 +884,11 @@ describe('client construction', () => {
     assert.equal(typeof createGitHubClient({ token: TOKEN }).getAuthenticatedUser, 'function');
   });
 
-  test('the client exposes exactly the transport methods, fetchContext and the suggestion pull request transport', () => {
+  test('the client exposes exactly the transport methods, fetchContext, the suggestion pull request transport and the cleanup transport', () => {
     const c = client(new FakeHost());
     assert.deepEqual(Object.keys(c).sort(), [
       'addLabel',
+      'closePullRequest',
       'createBranch',
       'createProposalCommit',
       'createPullRequest',
@@ -896,8 +897,11 @@ describe('client construction', () => {
       'findLabel',
       'getAuthenticatedUser',
       'getBranch',
+      'getPullRequest',
       'listBranchPullRequests',
+      'listCrossReferencingPullRequests',
       'listLabels',
+      'listOpenLabeledPullRequests',
       'listReviewComments',
       'listReviews',
       'readSuggestionTarget',
