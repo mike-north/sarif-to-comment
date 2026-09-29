@@ -1,12 +1,13 @@
 /**
  * Public library entry point.
  *
- * Five operations, each on ordinary in-memory SARIF 2.1.0 values (no files,
+ * Six operations, each on ordinary in-memory SARIF 2.1.0 values (no files,
  * builders, sessions or private formats); the CLI (src/cli.cts) is a file
  * transport over exactly these functions:
  *
  *   createSarifDocument(options?)          optional authoring: a new document
  *   addSarifComment(sarif, comment)        optional authoring: one finding
+ *   removeSarifComment(sarif, selector)    optional authoring: remove one finding
  *   inspectSarif(sarif, options?)          read-only view of any SARIF
  *   addStagedChangesToSarif(input)         staged Git changes as SARIF fixes
  *   publishSarifReview(input, internals?)  one GitHub draft review
@@ -35,6 +36,7 @@ import type * as PublicApi from './public-api.cjs';
 
 const createSarifDocument = authoring.createSarifDocument;
 const addSarifComment = authoring.addSarifComment;
+const removeSarifComment = authoring.removeSarifComment;
 const inspectSarif = inspection.inspectSarif;
 const addStagedChangesToSarif = staged.addStagedChangesToSarif;
 const publishSarifReview = publication.publishSarifReview;
@@ -48,14 +50,16 @@ type Identical<Runtime, Declared> = Equals<Runtime, Declared> extends true ? Dec
 
 // Compile-time proof that the runtime object has exactly the value exports of
 // the declaration entry (no extras, none missing), each with the identical
-// type. The key order is the one 0.2.0 shipped, which Object.keys reports.
-export = { createSarifDocument, addSarifComment, inspectSarif, addStagedChangesToSarif, publishSarifReview } satisfies Identical<
+// type. The key order is the one 0.2.0 shipped, which Object.keys reports,
+// with later additions appended so that order is kept.
+export = { createSarifDocument, addSarifComment, inspectSarif, addStagedChangesToSarif, publishSarifReview, removeSarifComment } satisfies Identical<
   {
     createSarifDocument: typeof createSarifDocument;
     addSarifComment: typeof addSarifComment;
     inspectSarif: typeof inspectSarif;
     addStagedChangesToSarif: typeof addStagedChangesToSarif;
     publishSarifReview: typeof publishSarifReview;
+    removeSarifComment: typeof removeSarifComment;
   },
   typeof PublicApi
 >;

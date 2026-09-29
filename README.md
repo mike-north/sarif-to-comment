@@ -10,6 +10,7 @@ It is sent in a single create-review request.
 
 The SARIF can come from any analyzer. Or you can write it yourself, with no analyzer:
 - create a document and add findings on lines or line ranges;
+- correct a finding by removing it and adding it again;
 - add the changes you staged with Git as suggested fixes on those findings;
 - inspect the result before publishing.
 
@@ -129,17 +130,26 @@ GH_TOKEN=... npx sarif-to-comment publish --sarif review.staged.sarif --repo acm
   --commit c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de --state /var/lib/reviews/acme-widgets-42.json
 ```
 
-The library has the same operations for in-memory SARIF: `createSarifDocument`, `addSarifComment`, `inspectSarif`, `addStagedChangesToSarif` and `publishSarifReview`. Each returns a new document or a view and never changes its input.
+To correct a finding before `add-staged-changes`, remove it by the selector `inspect` shows for it, then add the corrected one:
+
+```sh
+npx sarif-to-comment inspect --sarif review.sarif            # each finding shows "Selector: /runs/0/results/0@…"
+npx sarif-to-comment remove-comment --sarif review.sarif --finding '/runs/0/results/0@…'
+npx sarif-to-comment add-comment --sarif review.sarif --file src/parse.js --line 2 --message "…"
+```
+
+The library has the same operations for in-memory SARIF: `createSarifDocument`, `addSarifComment`, `removeSarifComment`, `inspectSarif`, `addStagedChangesToSarif` and `publishSarifReview`. Each returns a new document or a view and never changes its input.
 
 - **Line numbers** refer to the reviewed commit. For a file the reviewed commit doesn't have, they refer to its staged content.
 - **Associating changes with findings.** Only the staged index is read. A staged change becomes a fix on a finding only when the finding's lines lie within the lines the change replaces; neither is enlarged.
   - A finding that only partly overlaps a change stays a comment. The receipt says so.
   - A change that no finding explains is kept as a short factual finding attributed to `sarif-to-comment`. A change that only adds lines replaces no reviewed line, so it is never credited to a nearby finding; the receipt marks it `insertion: true`.
   - Findings that already have fixes are never changed. If your staged change differs from such a fix on the same lines, the command fails rather than choose between them.
-- **Files.** `init` refuses to overwrite an existing file. `add-comment` updates its SARIF file in place, atomically. `add-staged-changes` writes a separate output; if that output file already exists, it's first renamed to `<UTC time>.old.<name>`, and a failed run writes no output.
+- **Removing findings.** `remove-comment` removes one finding with every fix attached to it; all other findings and fixes stay, including identical ones. Its selector belongs to the file exactly as inspected, so inspect again after any change: an old selector is refused (exit status 2), never applied to whichever finding has moved into its place. Removal only changes the local file, never a published review. Correct the file you authored and run `add-staged-changes` again, rather than editing its output.
+- **Files.** `init` refuses to overwrite an existing file. `add-comment` and `remove-comment` update their SARIF file in place, atomically. `add-staged-changes` writes a separate output; if that output file already exists, it's first renamed to `<UTC time>.old.<name>`, and a failed run writes no output.
 - **Output.** `inspect` shows every finding in full, with its locations and fixes, plus log-level and inline external properties verbatim. Only fix previews are shortened, visibly. It doesn't check whether the file can be published.
   - `--format json` on any command prints one JSON document for every outcome, errors included. Exit statuses are the same in both formats.
-  - Exit statuses: 0 success; 2 content refused (not valid SARIF, or a staged change that can't be represented); 1 usage or operational error. `publish` keeps the exit statuses below.
+  - Exit statuses: 0 success; 2 content refused (not valid SARIF, a stale finding selector, or a staged change that can't be represented); 1 usage or operational error. `publish` keeps the exit statuses below.
 - **Changes that can't be represented.** Staged edits to UTF-8 text files become fixes. Publication still checks native-suggestion compatibility: empty reviewed files, or files containing only a byte-order mark, have no source line for an inline suggestion and are blocked. File creations and deletions become proposed file operations: `inspect` shows them, but `publish` doesn't support them yet and blocks the review. `add-staged-changes` fails, naming the path, for mode changes, symbolic links, submodules, binary or non-UTF-8 files, conflicts and intent-to-add entries.
 
 See the [getting-started guide](https://unpkg.com/sarif-to-comment/docs/getting-started.md#write-a-review-yourself) for complete, tested examples of both surfaces and of SARIF from an analyzer.
@@ -221,7 +231,7 @@ If that comparison can't establish the old side, you may pass `oldSourceCommit` 
 - The durability steps (write, flush, then send) are ordered for crash safety, but that has not been tested against power loss.
 - GitHub Enterprise Server and GitHub App installation tokens are not supported.
 - There is no review maintenance, re-review or synchronisation back to SARIF.
-- Authoring can't yet remove or correct a finding in place, and there's no standalone check that a document can be published; `publish` performs every check. Staged file creations and deletions can be recorded in SARIF, but can't be published yet.
+- A finding is corrected by removing it and adding it again, not edited in place. There's no standalone check that a document can be published; `publish` performs every check. Staged file creations and deletions can be recorded in SARIF, but can't be published yet.
 - npm attaches a provenance attestation only when the source repository is public at publish time. A release published while the repository is private has no provenance attestation (see [Releasing](#releasing)).
 
 ## Development

@@ -329,5 +329,26 @@ Index of its run.
 
 
 </td></tr>
+<tr><td>
+
+[selector](./sarif-to-comment.iinspectionfinding.selector.md)
+
+
+</td><td>
+
+`readonly`
+
+
+</td><td>
+
+string
+
+
+</td><td>
+
+Selects this finding for [removeSarifComment()](./sarif-to-comment.removesarifcomment.md)<!-- -->. It is bound to the document exactly as inspected: after any change to the document, inspect again for current selectors. Treat it as opaque.
+
+
+</td></tr>
 </tbody></table>
 

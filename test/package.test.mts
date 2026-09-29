@@ -195,7 +195,9 @@ describe('manifest', () => {
     assert.equal(resolved, path.join(ROOT, 'dist', 'index.cjs'));
     const declarations = fs.readFileSync(path.join(ROOT, asString(PKG['types'], 'package.json types')), 'utf8');
     const declared = [...declarations.matchAll(/^export declare function (\w+)\(/gm)].map((m) => m[1] ?? '');
-    assert.deepEqual(declared.sort(), ['addSarifComment', 'addStagedChangesToSarif', 'createSarifDocument', 'inspectSarif', 'publishSarifReview']);
+    assert.deepEqual(declared.sort(), [
+      'addSarifComment', 'addStagedChangesToSarif', 'createSarifDocument', 'inspectSarif', 'publishSarifReview', 'removeSarifComment',
+    ]);
     const loaded: unknown = require(resolved);
     assert.deepEqual(Object.keys(asRecord(loaded, 'the module.exports object')).sort(), declared, 'the runtime exports exactly the declared API');
   });
@@ -587,6 +589,12 @@ export async function main(): Promise<void> { ${workflow} }` },
           log: doc,
           commentAdded: lib.addSarifComment(doc, { file: 'a.txt', line: 1, endLine: 2, message: 'm', messageFormat: 'markdown', level: 'note', ruleId: 'R' }),
           commentInvalid: lib.addSarifComment(notSarif, { file: 'a.txt', line: 1, message: 'm' }),
+          commentRemoved: (() => {
+            const upstreamView = lib.inspectSarif(rich).view;
+            return lib.removeSarifComment(rich, upstreamView.findings[4].selector);
+          })(),
+          commentStale: lib.removeSarifComment(doc, '/runs/0/results/0@0123456789abcdef'),
+          commentRemoveInvalid: lib.removeSarifComment(notSarif, '/runs/0/results/0@0123456789abcdef'),
           inspected: lib.inspectSarif(rich, { previewLines: 1 }),
           inspectedUpstream: lib.inspectSarif(upstream),
           inspectInvalid: lib.inspectSarif(notSarif),
@@ -620,9 +628,9 @@ export async function main(): Promise<void> { ${workflow} }` },
     const outcomes = asRecord(parseJson(run.stdout), 'the installed outcomes');
     const status = (key: string): unknown => expectType(outcomes[key], isShape({ status: isUnknown }), `the ${key} outcome`).status;
     assert.deepEqual(
-      [status('commentAdded'), status('commentInvalid'), status('inspected'), status('inspectInvalid'),
-        status('stagedAdded'), status('stagedFailed'), status('stagedInvalid')],
-      ['added', 'invalid', 'inspected', 'invalid', 'added', 'failed', 'invalid'],
+      [status('commentAdded'), status('commentInvalid'), status('commentRemoved'), status('commentStale'), status('commentRemoveInvalid'),
+        status('inspected'), status('inspectInvalid'), status('stagedAdded'), status('stagedFailed'), status('stagedInvalid')],
+      ['added', 'invalid', 'removed', 'stale', 'invalid', 'inspected', 'invalid', 'added', 'failed', 'invalid'],
       'each declared outcome variant is exercised',
     );
     // The evidence-bearing optional fields really occur, so the literal checks below cover them.
@@ -645,6 +653,9 @@ export async function main(): Promise<void> { ${workflow} }` },
       log: 'ISarifLog',
       commentAdded: 'AddSarifCommentOutcome',
       commentInvalid: 'AddSarifCommentOutcome',
+      commentRemoved: 'RemoveSarifCommentOutcome',
+      commentStale: 'RemoveSarifCommentOutcome',
+      commentRemoveInvalid: 'RemoveSarifCommentOutcome',
       inspected: 'InspectSarifOutcome',
       inspectedUpstream: 'InspectSarifOutcome',
       inspectInvalid: 'InspectSarifOutcome',
@@ -678,19 +689,21 @@ export async function main(): Promise<void> { ${workflow} }` },
       ['createSarifDocument', 'function'],
       ['inspectSarif', 'function'],
       ['publishSarifReview', 'function'],
+      ['removeSarifComment', 'function'],
     ]);
   });
 
-  test('CommonJS and ES module consumers see the same five functions with no __esModule marker', { skip, timeout: 300_000 }, () => {
+  test('CommonJS and ES module consumers see the same six functions with no __esModule marker', { skip, timeout: 300_000 }, () => {
     // Interop shape of 0.2.0 (plain `module.exports = { ... }`): require()
-    // yields the five functions in the documented order (src/index.cjs module
+    // yields the six functions in the documented order (src/index.cjs module
     // doc); import() yields a namespace whose default export is that very
     // object and whose named exports are exactly those functions. No
     // __esModule marker exists, so bundlers and esModuleInterop consumers keep
     // treating the package as plain CommonJS. Node 24 additionally exposes a
     // 'module.exports' namespace key (Node 22 does not); it is the same object.
     const { consumer } = installIntoConsumer();
-    const names = ['createSarifDocument', 'addSarifComment', 'inspectSarif', 'addStagedChangesToSarif', 'publishSarifReview'];
+    // 0.2.0's five in their shipped order; later additions are appended, so that order is kept.
+    const names = ['createSarifDocument', 'addSarifComment', 'inspectSarif', 'addStagedChangesToSarif', 'publishSarifReview', 'removeSarifComment'];
     fs.writeFileSync(
       path.join(consumer, 'interop-probe.mjs'),
       [
@@ -733,7 +746,7 @@ export async function main(): Promise<void> { ${workflow} }` },
     assert.deepEqual(
       seen.namespaceKeys.filter((k) => k !== 'default' && k !== 'module.exports'),
       [...names].sort(),
-      'named exports are exactly the five functions',
+      'named exports are exactly the six functions',
     );
     assert.ok(seen.namespaceKeys.includes('default'));
     assert.equal(seen.defaultIsRequire, true, 'the default export is the require() object itself');

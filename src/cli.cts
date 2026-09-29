@@ -10,6 +10,7 @@
  * Commands (contract: docs/second-milestone-contract-proposal.md §3, §5, §6):
  *   init                create a SARIF file              createSarifDocument
  *   add-comment         add one finding, in place        addSarifComment
+ *   remove-comment      remove one finding, in place     removeSarifComment
  *   inspect             read-only view of a SARIF file   inspectSarif
  *   add-staged-changes  add staged Git changes to a copy addStagedChangesToSarif
  *   publish             create the GitHub draft review   publishSarifReview
@@ -27,7 +28,7 @@
  * outcomes to stdout and usage/operational errors to stderr.
  *
  * Exit statuses: 0 success or help; 1 usage error or operational error; 2 the
- * content was refused (`invalid` / `failed`). `publish` keeps the publisher's
+ * content was refused (`invalid` / `failed` / `stale`). `publish` keeps the publisher's
  * statuses: 0 published, 2 blocked, 3 uncertain, 1 otherwise.
  *
  * Receipts name only files actually written, archived, or deliberately not
@@ -43,7 +44,8 @@ import type { IArchivedOutput, IJsonFile, ReleaseOwnership } from './artifact-fi
 import type { IPublishSarifReviewInternals } from './publish-sarif-review.cjs';
 import { publishSarifReviewWithInternals } from './publish-sarif-review.cjs';
 import type { ISarifSourceBinding } from './public-types.cjs';
-import { createSarifDocument, addSarifCommentWithUntypedInput } from './sarif-authoring.cjs';
+import { parseFindingSelector } from './finding-selectors.cjs';
+import { createSarifDocument, addSarifCommentWithUntypedInput, removeSarifCommentWithUntypedInput } from './sarif-authoring.cjs';
 import type { ICreateSarifDocumentOptions, INewSarifRun, ISarifComment } from './sarif-authoring.cjs';
 import { isNormalizedRepositoryPath, OWNER_PATTERN, REPO_PATTERN } from './sarif-common.cjs';
 import { inspectSarifWithUntypedInput, renderInspectionText } from './sarif-inspection.cjs';
@@ -54,10 +56,10 @@ import type { IStagedChangesReceipt } from './staged-changes.cjs';
 const md = String.raw;
 
 /** A CLI command, in workflow order. */
-type CliCommand = 'init' | 'add-comment' | 'inspect' | 'add-staged-changes' | 'publish';
+type CliCommand = 'init' | 'add-comment' | 'remove-comment' | 'inspect' | 'add-staged-changes' | 'publish';
 
 /** The commands, in workflow order. */
-const COMMANDS: readonly CliCommand[] = ['init', 'add-comment', 'inspect', 'add-staged-changes', 'publish'];
+const COMMANDS: readonly CliCommand[] = ['init', 'add-comment', 'remove-comment', 'inspect', 'add-staged-changes', 'publish'];
 
 /** Exit statuses for non-publication outcomes (§5). */
 const EXIT: Readonly<{ ok: 0; usage: 1; error: 1; refused: 2 }> = Object.freeze({ ok: 0, usage: 1, error: 1, refused: 2 });
@@ -111,6 +113,7 @@ const USAGE: Readonly<Record<'top' | CliCommand, string>> = {
 Usage:
   sarif-to-comment init --output FILE [options]
   sarif-to-comment add-comment --sarif FILE --file PATH --line N (--message TEXT | --message-file FILE|-) [options]
+  sarif-to-comment remove-comment --sarif FILE --finding SELECTOR [options]
   sarif-to-comment inspect --sarif FILE [options]
   sarif-to-comment add-staged-changes --sarif IN --output OUT --worktree DIR --repo OWNER/REPO --commit FULLSHA [options]
   sarif-to-comment publish --sarif FILE --repo OWNER/REPO --pull N --commit FULLSHA --state ABSOLUTE_FILE [options]
@@ -122,6 +125,7 @@ Usage:
 Commands:
   init                 Create a SARIF document for your own findings.
   add-comment          Add one finding on a line or line range to a SARIF file.
+  remove-comment       Remove a finding and its attached fixes from the SARIF document.
   inspect              Show the findings, locations and fixes in a SARIF file.
   add-staged-changes   Add proposed changes from the Git index to a SARIF document.
   publish              Publish a SARIF file as one GitHub draft pull request review.
@@ -134,7 +138,8 @@ ${PUBLISH_OPTIONS}${FORMAT_OPTION}  --help                         Show help. Ne
 ${CREDENTIALS}
 Exit status:
   0  success; published (or already published)
-  2  refused content: blocked (nothing was published), or invalid/failed input
+  2  refused content: blocked (nothing was published), invalid/failed input,
+     or a stale finding selector
   3  uncertain: delivery could not be confirmed; retry with the same --state
   1  usage error, unreadable file, refused request, or operational failure
 `,
@@ -193,15 +198,46 @@ taken over.
 Exit status: 0 added; 2 the SARIF file is not valid SARIF; 1 usage error or
 the file could not be read or replaced.
 `,
+  'remove-comment': md`sarif-to-comment remove-comment — Remove a finding and its attached fixes from the SARIF document.
+
+Usage:
+  sarif-to-comment remove-comment --sarif FILE --finding SELECTOR [--format human|json]
+
+Removes the whole finding, with every fix and proposed file operation attached
+to it. Every other finding and fix stays as it is, including identical ones.
+The SARIF file is updated in place (atomically); no GitHub review is changed.
+
+Take SELECTOR from inspect: "Selector:" under each finding, or "selector" in
+JSON. It belongs to the file exactly as inspected, so inspect again after any
+change. A selector the file no longer fits is refused, never applied to
+whichever finding has moved into its place.
+
+To correct a finding, remove it and add the corrected one with add-comment.
+If you made an output with add-staged-changes, run it again on the corrected
+file rather than editing that output.
+
+Options:
+  --sarif FILE                   SARIF file to update.
+  --finding SELECTOR             The finding's selector from inspect.
+${FORMAT_OPTION}
+While it runs, the command owns FILE through a marker file
+".<name>.sarif-to-comment-lock" beside it; another command's marker is never
+taken over.
+
+Exit status: 0 removed; 2 the selector is stale (the file changed since it was
+inspected) or the file is not valid SARIF; 1 usage error or the file could not
+be read or replaced.
+`,
   inspect: md`sarif-to-comment inspect — show the findings and fixes in a SARIF file
 
 Usage:
   sarif-to-comment inspect --sarif FILE [--preview-lines N|all] [--preview-chars N|all]
                            [--source-root ABSOLUTE_FILE_URI] [--format human|json]
 
-Shows every finding with its full text, locations and fixes. Only fix previews
-are shortened, and visibly so. The file is not changed and nothing is contacted.
-Inspection is not a check that the file can be published.
+Shows every finding with its full text, locations and fixes, and the selector
+remove-comment takes. Only fix previews are shortened, and visibly so. The file
+is not changed and nothing is contacted. Inspection is not a check that the
+file can be published.
 
 Options:
   --sarif FILE                   SARIF file to inspect.
@@ -734,31 +770,10 @@ async function addComment(argv: readonly string[], { cwd, stdin }: IHandlerConte
     ...(run === undefined ? {} : { run }),
   };
 
-  // Edit the real file behind any symbolic link, so the link itself survives.
-  let target: string;
-  try {
-    target = fs.realpathSync(sarifPath);
-  } catch (err) {
-    return errorOutcome('add-comment', `cannot read SARIF file ${sarifPath}: ${String(messageProperty(err))}`, notWritten);
-  }
-  let release: ReleaseOwnership;
-  try {
-    release = files.acquireOwnership(target);
-  } catch (err) {
-    if (err instanceof files.ArtifactError) return errorOutcome('add-comment', err.message, notWritten);
-    throw err;
-  }
-  try {
-    let read: IJsonFile;
-    try {
-      read = files.readJsonFile(target, 'SARIF file');
-    } catch (err) {
-      if (err instanceof files.ArtifactError) return errorOutcome('add-comment', err.message, notWritten);
-      throw err;
-    }
+  return editInPlace('add-comment', sarifPath, (value) => {
     let outcome;
     try {
-      outcome = addSarifCommentWithUntypedInput(read.value, comment);
+      outcome = addSarifCommentWithUntypedInput(value, comment);
     } catch (err) {
       if (err instanceof TypeError) {
         throw new UsageError(`${err.message}. Select a run with --run N, or add one with --new-run-tool NAME.`);
@@ -767,23 +782,125 @@ async function addComment(argv: readonly string[], { cwd, stdin }: IHandlerConte
     }
     if (outcome.status === 'invalid') {
       return {
-        exit: EXIT.refused,
-        doc: { command: 'add-comment', status: 'invalid', ...notWritten, problems: outcome.problems },
-        out: refusedText(outcome.markdown, [`${sarifPath} was not changed.`]),
+        outcome: {
+          exit: EXIT.refused,
+          doc: { command: 'add-comment', status: 'invalid', ...notWritten, problems: outcome.problems },
+          out: refusedText(outcome.markdown, [`${sarifPath} was not changed.`]),
+        },
       };
-    }
-    try {
-      files.replaceIfUnchanged(target, read.bytes, serialize(outcome.sarif));
-    } catch (err) {
-      if (err instanceof files.ArtifactError) return errorOutcome('add-comment', err.message, notWritten);
-      throw err;
     }
     const finding = { ref: outcome.finding.ref, path: file, line, endLine: endLine ?? line, tool: outcome.finding.tool };
     return {
-      exit: EXIT.ok,
-      doc: { command: 'add-comment', status: 'added', sarif: { path: sarifPath, written: true }, finding },
-      out: `Added ${finding.ref} (tool "${finding.tool}") on ${file}:${lineRange(line, endLine)} to ${sarifPath}.\n`,
+      replacement: serialize(outcome.sarif),
+      outcome: {
+        exit: EXIT.ok,
+        doc: { command: 'add-comment', status: 'added', sarif: { path: sarifPath, written: true }, finding },
+        out: `Added ${finding.ref} (tool "${finding.tool}") on ${file}:${lineRange(line, endLine)} to ${sarifPath}.\n`,
+      },
     };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// remove-comment
+// ---------------------------------------------------------------------------
+
+function removeComment(argv: readonly string[], { cwd }: IHandlerContext): IOutcome {
+  const { values } = parseOptions(argv, { values: ['--sarif', '--finding'], required: ['--sarif', '--finding'] });
+  const selector = requiredValue(values, '--finding');
+  if (parseFindingSelector(selector) === null) {
+    throw new UsageError('--finding must be a finding selector such as /runs/0/results/1@0123456789abcdef: run '
+      + '"sarif-to-comment inspect --sarif FILE" and copy the finding\'s selector (a position or message alone does not select a finding)');
+  }
+  const command = 'remove-comment';
+  const sarifPath = path.resolve(cwd, requiredValue(values, '--sarif'));
+  const notWritten = { sarif: { path: sarifPath, written: false } };
+  return editInPlace(command, sarifPath, (value) => {
+    let outcome;
+    try {
+      outcome = removeSarifCommentWithUntypedInput(value, selector);
+    } catch (err) {
+      if (err instanceof TypeError) throw new UsageError(err.message);
+      throw err;
+    }
+    if (outcome.status === 'invalid' || outcome.status === 'stale') {
+      return {
+        outcome: {
+          exit: EXIT.refused,
+          doc: { command, status: outcome.status, ...notWritten, problems: outcome.problems },
+          out: refusedText(outcome.markdown, [`${sarifPath} was not changed.`]),
+        },
+      };
+    }
+    const { finding } = outcome;
+    const proposals = finding.fileProposals === 0 ? '' : ` and ${String(finding.fileProposals)} proposed file operation(s)`;
+    return {
+      replacement: serialize(outcome.sarif),
+      outcome: {
+        exit: EXIT.ok,
+        doc: { command, status: 'removed', sarif: { path: sarifPath, written: true }, finding },
+        out: `Removed ${finding.ref} (tool "${finding.tool}") and its ${String(finding.fixes)} attached fix(es)${proposals} from ${sarifPath}.\n`
+          + 'Selectors from earlier inspections no longer apply; inspect the file again before another removal.\n',
+      },
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// In-place edits (add-comment, remove-comment)
+// ---------------------------------------------------------------------------
+
+/**
+ * What an in-place edit computed from a SARIF file's parsed content: the
+ * outcome to report and, when the file is to change, its new content. The
+ * outcome is reported only after that content has replaced the file.
+ */
+interface IInPlaceEdit {
+  readonly outcome: IOutcome;
+  readonly replacement?: string;
+}
+
+/**
+ * Applies `edit` to the SARIF file at `sarifPath` in place (contract §3.2):
+ * the real file behind any symbolic link is edited, so the link survives;
+ * the command owns the file through its marker for the whole edit; and the
+ * new content replaces the file atomically, only if the file still holds the
+ * bytes the edit was computed from. Every failure leaves the file unchanged
+ * and reports it with `written: false`. A UsageError thrown by `edit`
+ * propagates after ownership is released.
+ */
+function editInPlace(command: 'add-comment' | 'remove-comment', sarifPath: string, edit: (value: unknown) => IInPlaceEdit): IOutcome {
+  const notWritten = { sarif: { path: sarifPath, written: false } };
+  let target: string;
+  try {
+    target = fs.realpathSync(sarifPath);
+  } catch (err) {
+    return errorOutcome(command, `cannot read SARIF file ${sarifPath}: ${String(messageProperty(err))}`, notWritten);
+  }
+  let release: ReleaseOwnership;
+  try {
+    release = files.acquireOwnership(target);
+  } catch (err) {
+    if (err instanceof files.ArtifactError) return errorOutcome(command, err.message, notWritten);
+    throw err;
+  }
+  try {
+    let read: IJsonFile;
+    try {
+      read = files.readJsonFile(target, 'SARIF file');
+    } catch (err) {
+      if (err instanceof files.ArtifactError) return errorOutcome(command, err.message, notWritten);
+      throw err;
+    }
+    const { outcome, replacement } = edit(read.value);
+    if (replacement === undefined) return outcome;
+    try {
+      files.replaceIfUnchanged(target, read.bytes, replacement);
+    } catch (err) {
+      if (err instanceof files.ArtifactError) return errorOutcome(command, err.message, notWritten);
+      throw err;
+    }
+    return outcome;
   } finally {
     release();
   }
@@ -1076,6 +1193,7 @@ type Handler = (
 const HANDLERS: Readonly<Record<CliCommand, Handler>> = {
   init,
   'add-comment': addComment,
+  'remove-comment': removeComment,
   inspect,
   'add-staged-changes': addStagedChanges,
   publish,

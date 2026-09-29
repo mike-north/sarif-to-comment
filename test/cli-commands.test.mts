@@ -198,7 +198,7 @@ describe('command dispatch and help', () => {
     const result = run(['--help']);
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stderr, '');
-    for (const command of ['init', 'add-comment', 'inspect', 'add-staged-changes', 'publish']) {
+    for (const command of ['init', 'add-comment', 'remove-comment', 'inspect', 'add-staged-changes', 'publish']) {
       assert.match(result.stdout, new RegExp(`\\b${command}\\b`), `help omits ${command}`);
     }
     assert.match(result.stdout, /--format human\|json/);
@@ -211,6 +211,7 @@ describe('command dispatch and help', () => {
       'add-comment',
       ['--sarif', '--file', '--line', '--end-line', '--message', '--message-file', '--markdown', '--rule-id', '--level', '--run', '--new-run-tool', '--new-run-tool-version', '--repo', '--commit', '--format'],
     ],
+    ['remove-comment', ['--sarif', '--finding', '--format']],
     ['inspect', ['--sarif', '--preview-lines', '--preview-chars', '--source-root', '--format']],
     ['add-staged-changes', ['--sarif', '--output', '--worktree', '--repo', '--commit', '--source-root', '--format']],
     ['publish', ['--sarif', '--repo', '--pull', '--commit', '--state', '--source-root', '--old-source-commit', '--ignore-approval-hold', '--format']],
@@ -223,6 +224,13 @@ describe('command dispatch and help', () => {
       for (const flag of flags) assert.ok(result.stdout.includes(flag), `${command} help omits ${flag}`);
     });
   }
+
+  test('remove-comment help states exactly what removal removes', () => {
+    // The selected help sentence (docs/second-milestone-interface-design.md, removal semantics).
+    const result = run(['remove-comment', '--help']);
+    assert.ok(result.stdout.includes('Remove a finding and its attached fixes from the SARIF document.'), result.stdout);
+    assert.match(result.stdout, /inspect/, 'the help says where selectors come from');
+  });
 
   test('the staged command says what it does and does not do', () => {
     const result = run(['add-staged-changes', '--help']);
@@ -681,6 +689,198 @@ describe('add-comment edits the SARIF file in place', () => {
     const retry = json(run(['add-comment', '--sarif', file, '--file', 'a.txt', '--line', '1', '--message', 'x', '--format', 'json']));
     assert.equal(retry.status, 'added');
     assert.deepEqual(fs.readdirSync(dir), ['review.sarif'], 'the marker is released after completion');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// remove-comment (docs/finding-removal-contract.md §4)
+// ---------------------------------------------------------------------------
+
+describe('remove-comment edits the SARIF file in place', () => {
+  /** The selector `inspect --format json` gives the finding at `ref` in `file`. */
+  function selectorFor(file: string, ref: string): string {
+    const doc = json(run(['inspect', '--sarif', file, '--format', 'json']));
+    const finding = asArray(at(doc.view, 'findings')).find((f) => at(f, 'ref') === ref);
+    assert.ok(finding !== undefined, `inspection has no finding ${ref}`);
+    return asString(at(finding, 'selector'));
+  }
+
+  /** A file with two authored findings (lines 3 and 5 of src/parse.js), the first carrying one fix. */
+  function twoFindings(dir: string): string {
+    const file = initFile(dir, 'review.sarif', ['--tool-name', 'Review agent']);
+    json(run(['add-comment', '--sarif', file, '--file', 'src/parse.js', '--line', '3', '--message', 'Wrong line.', '--format', 'json']));
+    json(run(['add-comment', '--sarif', file, '--file', 'src/parse.js', '--line', '5', '--message', 'Keep me.', '--format', 'json']));
+    const sarif = asRecord(readJson(file));
+    asRecord(at(sarif, 'runs', 0, 'results', 0))['fixes'] = [
+      { artifactChanges: [{ artifactLocation: { uri: 'src/parse.js' }, replacements: [{ deletedRegion: { startLine: 3 }, insertedContent: { text: 'x\n' } }] }] },
+    ];
+    writeJson(file, sarif);
+    return file;
+  }
+
+  test('removal by an inspected selector: exact receipt, file is the library document, nothing left behind', () => {
+    const dir = tempDir('remove');
+    const file = twoFindings(dir);
+    const before = asRecord(readJson(file));
+    const selector = selectorFor(file, '/runs/0/results/0');
+    const result = run(['remove-comment', '--sarif', file, '--finding', selector, '--format', 'json']);
+    assert.equal(result.status, 0, result.stdout);
+    const doc = json(result);
+    assert.deepEqual(doc, {
+      command: 'remove-comment',
+      status: 'removed',
+      sarif: { path: file, written: true },
+      finding: { ref: '/runs/0/results/0', runIndex: 0, resultIndex: 0, tool: 'Review agent', fixes: 1, fileProposals: 0 },
+    });
+    assert.deepEqual(Object.keys(doc), ['command', 'status', 'sarif', 'finding']);
+    const after = readJson(file);
+    const expected = structuredClone(before);
+    asArray(at(expected, 'runs', 0, 'results')).splice(0, 1);
+    assert.deepEqual(after, expected, 'exactly the selected result is gone');
+    const expectedOutcome = library.removeSarifComment(before, selector);
+    assert.equal(expectedOutcome.status, 'removed');
+    assert.equal(fs.readFileSync(file, 'utf8'), `${JSON.stringify(at(expectedOutcome, 'sarif'), null, 2)}\n`, 'the CLI writes what the library returns');
+    assert.deepEqual(fs.readdirSync(dir), ['review.sarif'], 'no lock or temporary file remains');
+  });
+
+  test('identical findings in different runs: removing one by its selector keeps the other', () => {
+    const dir = tempDir('remove-identical');
+    const file = initFile(dir, 'review.sarif', ['--tool-name', 'Review agent']);
+    const same = ['--file', 'src/parse.js', '--line', '2', '--message', 'Handle the empty-input case.', '--format', 'json'];
+    json(run(['add-comment', '--sarif', file, ...same]));
+    json(run(['add-comment', '--sarif', file, ...same, '--new-run-tool', 'Review agent']));
+    const before = asRecord(readJson(file));
+    const first = selectorFor(file, '/runs/0/results/0');
+    const second = selectorFor(file, '/runs/1/results/0');
+    assert.notEqual(first, second);
+    const doc = json(run(['remove-comment', '--sarif', file, '--finding', second, '--format', 'json']));
+    assert.equal(at(doc.finding, 'ref'), '/runs/1/results/0');
+    const after = readJson(file);
+    assert.deepEqual(at(after, 'runs', 0), at(before, 'runs', 0), 'the identical finding in run 0 is untouched');
+    assert.deepEqual(at(after, 'runs', 1, 'results'), []);
+  });
+
+  test('a stale selector is refused with exit 2 in both formats and the file is untouched', () => {
+    const dir = tempDir('remove-stale');
+    const file = twoFindings(dir);
+    const first = selectorFor(file, '/runs/0/results/0');
+    const second = selectorFor(file, '/runs/0/results/1');
+    json(run(['remove-comment', '--sarif', file, '--finding', first, '--format', 'json']));
+    const before = bytesOf(file);
+    for (const selector of [first, second]) {
+      const result = run(['remove-comment', '--sarif', file, '--finding', selector, '--format', 'json']);
+      assert.equal(result.status, 2, result.stdout);
+      const doc = json(result);
+      assert.equal(doc.command, 'remove-comment');
+      assert.equal(doc.status, 'stale');
+      assert.deepEqual(doc.sarif, { path: file, written: false });
+      assert.ok(asArray(doc.problems).length > 0);
+      assert.match(asString(at(doc.problems, 0, 'message')), /inspect/i);
+      assert.deepEqual(bytesOf(file), before, 'the finding now at the old position survives');
+    }
+    const human = run(['remove-comment', '--sarif', file, '--finding', first]);
+    assert.equal(human.status, 2);
+    assert.match(human.stdout, /inspect/i);
+    assert.ok(human.stdout.includes(`${file} was not changed.`), human.stdout);
+    assert.deepEqual(bytesOf(file), before);
+    assert.deepEqual(fs.readdirSync(dir), ['review.sarif']);
+  });
+
+  test('human output names what was removed, how many fixes went with it, and the file', () => {
+    const dir = tempDir('remove-human');
+    const file = twoFindings(dir);
+    const result = run(['remove-comment', '--sarif', file, '--finding', selectorFor(file, '/runs/0/results/0')]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stderr, '');
+    assert.ok(result.stdout.includes('/runs/0/results/0'), result.stdout);
+    assert.ok(result.stdout.includes('Review agent'), result.stdout);
+    assert.match(result.stdout, /\b1 attached fix/);
+    assert.ok(result.stdout.includes(file), result.stdout);
+    assert.match(result.stdout, /inspect/i, 'it says to inspect again for new selectors');
+  });
+
+  const removeUsageCases: readonly (readonly [string, readonly string[], string])[] = [
+    ['no --finding', [], '--finding'],
+    ['a bare ref instead of a selector', ['--finding', '/runs/0/results/0'], 'inspect'],
+    ['a guessed message', ['--finding', 'Wrong line.'], 'inspect'],
+    ['an unknown option', ['--finding', '/runs/0/results/0@0123456789abcdef', '--line', '3'], '--line'],
+  ];
+  for (const [label, args, mention] of removeUsageCases) {
+    test(`usage error: ${label}; the file is untouched`, () => {
+      const dir = tempDir('remove-usage');
+      const file = twoFindings(dir);
+      const before = bytesOf(file);
+      const result = run(['remove-comment', '--sarif', file, ...args, '--format', 'json']);
+      assert.equal(result.status, 1, result.stdout);
+      const doc = json(result);
+      assert.equal(doc.status, 'usage-error');
+      assert.ok(asString(doc.message).includes(mention), asString(doc.message));
+      assert.deepEqual(bytesOf(file), before);
+      assert.deepEqual(fs.readdirSync(dir), ['review.sarif']);
+    });
+  }
+
+  test('schema-invalid SARIF: exit 2, the library problems, nothing written', () => {
+    const dir = tempDir('remove-invalid');
+    const file = path.join(dir, 'bad.sarif');
+    writeJson(file, NOT_SARIF);
+    const before = bytesOf(file);
+    const selector = '/runs/0/results/0@0123456789abcdef';
+    const result = run(['remove-comment', '--sarif', file, '--finding', selector, '--format', 'json']);
+    assert.equal(result.status, 2);
+    const doc = json(result);
+    assert.equal(doc.status, 'invalid');
+    assert.deepEqual(doc.sarif, { path: file, written: false });
+    assert.deepEqual(doc.problems, at(library.removeSarifComment(NOT_SARIF, selector), 'problems'));
+    assert.deepEqual(bytesOf(file), before);
+  });
+
+  test('a missing SARIF file is an operational error', () => {
+    const dir = tempDir('remove-missing');
+    const file = path.join(dir, 'absent.sarif');
+    const result = run(['remove-comment', '--sarif', file, '--finding', '/runs/0/results/0@0123456789abcdef', '--format', 'json']);
+    assert.equal(result.status, 1);
+    const doc = json(result);
+    assert.equal(doc.status, 'error');
+    assert.ok(asString(doc.message).includes(file));
+    assert.deepEqual(fs.readdirSync(dir), []);
+  });
+
+  test('another cooperating writer\'s ownership marker causes a refusal, never a takeover', () => {
+    const dir = tempDir('remove-owned');
+    const file = twoFindings(dir);
+    const selector = selectorFor(file, '/runs/0/results/0');
+    const before = bytesOf(file);
+    const marker = path.join(dir, '.review.sarif.sarif-to-comment-lock');
+    fs.writeFileSync(marker, 'held by another command');
+    const result = run(['remove-comment', '--sarif', file, '--finding', selector, '--format', 'json']);
+    assert.equal(result.status, 1);
+    const doc = json(result);
+    assert.equal(doc.status, 'error');
+    assert.ok(asString(doc.message).includes(marker));
+    assert.deepEqual(doc.sarif, { path: file, written: false });
+    assert.deepEqual(bytesOf(file), before);
+    assert.equal(fs.readFileSync(marker, 'utf8'), 'held by another command');
+  });
+
+  test('a symbolic link is followed: the target is edited and the link survives', () => {
+    const dir = tempDir('remove-link');
+    const target = twoFindings(dir);
+    const link = path.join(dir, 'link.sarif');
+    fs.symlinkSync(target, link);
+    json(run(['remove-comment', '--sarif', link, '--finding', selectorFor(link, '/runs/0/results/0'), '--format', 'json']));
+    assert.ok(fs.lstatSync(link).isSymbolicLink());
+    assert.deepEqual(asArray(at(readJson(target), 'runs', 0, 'results')).map((r) => at(r, 'message', 'text')), ['Keep me.']);
+  });
+
+  test('human inspection shows each finding\'s selector', () => {
+    const dir = tempDir('remove-inspect-human');
+    const file = twoFindings(dir);
+    const human = run(['inspect', '--sarif', file]);
+    assert.equal(human.status, 0, human.stderr);
+    for (const ref of ['/runs/0/results/0', '/runs/0/results/1']) {
+      assert.ok(human.stdout.includes(`Selector: ${selectorFor(file, ref)}`), human.stdout);
+    }
   });
 });
 
