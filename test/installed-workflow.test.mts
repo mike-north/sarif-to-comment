@@ -14,6 +14,11 @@
  *   2. Library authoring: the same with the installed functions, in memory.
  *   3. Upstream SARIF with no initialization: inspect → add-staged-changes →
  *      publish; plus direct publication of ready upstream SARIF.
+ *   4. Correction, through the CLI and the library: a mistaken finding is
+ *      removed by its inspected selector (a stale reuse is refused), its
+ *      replacement is added, and the enriched artifact is regenerated
+ *      separately from the corrected authored input before publication
+ *      (docs/finding-removal-contract.md).
  *
  * The expectations come from the parent's independent source oracle
  * (docs/evidence/second-milestone/source-oracle.json and
@@ -406,6 +411,132 @@ describe('the installed package runs the complete workflow', () => {
     for (const comment of present(w.host.reviews()[0], 'the stored review').request.comments) {
       assert.ok(comment.body.includes('Independent fixture producer'), 'the upstream tool is credited');
     }
+  });
+
+  test('CLI correction: remove a mistaken finding by its selector, add the replacement, regenerate, publish', { skip, timeout: 300_000 }, () => {
+    const { consumer, bin } = installIntoConsumer();
+    const w = world('installed-correction-cli');
+    const work = fs.mkdtempSync(path.join(w.root, 'artifacts-'));
+    const authored = path.join(work, 'review.sarif');
+    const enriched = path.join(work, 'enriched.sarif');
+    const MISTAKE = 'MISTAKEN finding on the wrong line.';
+    const cli = (args: readonly string[], expectedExit = 0): unknown => {
+      const result = spawnSync(bin, [...args, '--format', 'json'], { cwd: consumer, env: w.env, encoding: 'utf8', timeout: 120_000 });
+      assert.equal(result.status, expectedExit, result.stdout + result.stderr);
+      assert.equal(result.stderr, '');
+      return parseJson(result.stdout);
+    };
+    const isView = isShape({
+      view: isShape({ findings: isArrayOf(isShape({ ref: isString, selector: isString, message: isShape({ text: isUnknown }) })) }),
+    });
+    const inspect = (file: string) => expectType(cli(['inspect', '--sarif', file]), isView, 'an inspection with selectors').view.findings;
+
+    cli(['init', '--output', authored, '--tool-name', 'Review agent', '--repo', w.repoFlag, '--commit', w.head]);
+    // The mistake: finding A's text on a line no staged change replaces.
+    cli(['add-comment', '--sarif', authored, '--file', ORACLE.path, '--line', String(FINDING_B.endLine + 1), '--message', MISTAKE]);
+    cli(['add-comment', '--sarif', authored, '--file', ORACLE.path, '--line', String(FINDING_B.line), '--end-line', String(FINDING_B.endLine), '--message', FINDING_B.message]);
+    const staleEnriched = cli(['add-staged-changes', '--sarif', authored, '--output', enriched, '--worktree', w.dir, '--repo', w.repoFlag, '--commit', w.head]);
+    assert.equal(expectType(staleEnriched, isOutcome, 'the first staged outcome').status, 'added');
+
+    const [mistaken, kept] = inspect(authored);
+    assert.equal(present(mistaken, 'the mistaken finding').message.text, MISTAKE);
+    const removal = expectType(
+      cli(['remove-comment', '--sarif', authored, '--finding', present(mistaken, 'the mistaken finding').selector]),
+      isShape({ status: isUnknown, sarif: isUnknown, finding: isUnknown }),
+      'the removal outcome',
+    );
+    assert.equal(removal.status, 'removed');
+    assert.deepEqual(removal.sarif, { path: authored, written: true });
+    assert.deepEqual(removal.finding, { ref: '/runs/0/results/0', runIndex: 0, resultIndex: 0, tool: 'Review agent', fixes: 0, fileProposals: 0 });
+    assert.deepEqual(inspect(authored).map((f) => f.message.text), [FINDING_B.message], 'only the selected finding is gone');
+
+    const again = expectType(
+      cli(['remove-comment', '--sarif', authored, '--finding', present(mistaken, 'the mistaken finding').selector], 2),
+      isOutcome,
+      'the stale outcome',
+    );
+    assert.equal(again.status, 'stale', 'the old selector no longer deletes the finding now at its position');
+    assert.deepEqual(inspect(authored).map((f) => f.message.text), [FINDING_B.message]);
+    assert.notEqual(present(kept, 'the kept finding').selector, present(inspect(authored)[0], 'the kept finding now').selector);
+
+    cli(['add-comment', '--sarif', authored, '--file', ORACLE.path, '--line', String(FINDING_A.line), '--message', FINDING_A.message]);
+    const regenerated = expectType(
+      cli(['add-staged-changes', '--sarif', authored, '--output', enriched, '--worktree', w.dir, '--repo', w.repoFlag, '--commit', w.head]),
+      isShape({ status: isUnknown, archived: isShape({ path: isString }) }),
+      'the regenerated staged outcome',
+    );
+    assert.equal(regenerated.status, 'added');
+    assert.ok(fs.readFileSync(regenerated.archived.path, 'utf8').includes(MISTAKE), 'the earlier enriched artifact is preserved, not edited');
+    const text = fs.readFileSync(enriched, 'utf8');
+    assert.ok(!text.includes(MISTAKE), 'the regenerated artifact reflects the correction');
+    assertStagedFidelity(text);
+
+    const published = expectType(
+      cli(['publish', '--sarif', enriched, '--repo', w.repoFlag, '--pull', w.pull, '--commit', w.head, '--state', path.join(work, 'state.json')]),
+      isOutcome,
+      'the publish outcome',
+    );
+    assert.equal(published.status, 'published', published.message);
+    assertOracleReview(w.host, w);
+    assert.ok(!JSON.stringify(w.host.reviews()).includes(MISTAKE), 'the removed finding is never published');
+  });
+
+  test('library correction: the same in memory through the installed functions', { skip, timeout: 300_000 }, () => {
+    const { consumer } = installIntoConsumer();
+    const w = world('installed-correction-library');
+    const js = String.raw;
+    const script = js`
+      import assert from 'node:assert/strict';
+      import { createSarifDocument, addSarifComment, removeSarifComment, inspectSarif, addStagedChangesToSarif, publishSarifReview } from 'sarif-to-comment';
+      const oracle = JSON.parse(process.env.ORACLE);
+      const [A, B] = oracle.findings;
+      const [owner, repo] = process.env.REVIEW_REPOSITORY.split('/');
+      const reviewedCommit = process.env.REVIEW_COMMIT;
+      const MISTAKE = 'MISTAKEN finding on the wrong line.';
+
+      let sarif = createSarifDocument({ tool: { name: 'Review agent' }, source: { owner, repo, commit: reviewedCommit } });
+      sarif = addSarifComment(sarif, { file: oracle.path, line: B.endLine + 1, message: MISTAKE }).sarif;
+      sarif = addSarifComment(sarif, { file: oracle.path, line: B.line, endLine: B.endLine, message: B.message }).sarif;
+
+      const [mistaken] = inspectSarif(sarif).view.findings;
+      const authored = sarif;
+      const removal = removeSarifComment(sarif, mistaken.selector);
+      assert.equal(removal.status, 'removed', removal.markdown);
+      assert.equal(authored.runs[0].results.length, 2, 'the input document is unchanged');
+      sarif = removal.sarif;
+      assert.equal(removeSarifComment(sarif, mistaken.selector).status, 'stale');
+      sarif = addSarifComment(sarif, { file: oracle.path, line: A.line, message: A.message }).sarif;
+
+      const staged = await addStagedChangesToSarif({ sarif, worktree: process.env.WORKTREE, reviewedCommit, repository: { owner, repo } });
+      assert.equal(staged.status, 'added', staged.markdown);
+      const outcome = await publishSarifReview({
+        sarif: staged.sarif,
+        destination: { owner, repo, pullNumber: Number(process.env.REVIEW_PULL) },
+        reviewedCommit,
+        statePath: process.env.REVIEW_STATE,
+        token: process.env.GH_TOKEN,
+      });
+      assert.equal(outcome.status, 'published', outcome.markdown);
+      process.stdout.write(JSON.stringify({ enriched: staged.sarif, removed: removal.finding }));
+    `;
+    const file = path.join(consumer, 'library-correction.mjs');
+    fs.writeFileSync(file, script);
+    const env = {
+      ...w.env,
+      ORACLE: JSON.stringify(ORACLE),
+      REVIEW_REPOSITORY: w.repoFlag,
+      REVIEW_COMMIT: w.head,
+      REVIEW_PULL: w.pull,
+      REVIEW_STATE: path.join(w.root, 'library-correction.json'),
+      WORKTREE: w.dir,
+    };
+    const result = spawnSync(process.execPath, [file], { cwd: consumer, env, encoding: 'utf8', timeout: 120_000 });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    const report = expectType(parseJson(result.stdout), isShape({ enriched: isUnknown, removed: isUnknown }), 'the library correction report');
+    assert.deepEqual(report.removed, { ref: '/runs/0/results/0', runIndex: 0, resultIndex: 0, tool: 'Review agent', fixes: 0, fileProposals: 0 });
+    assertStagedFidelity(JSON.stringify(report.enriched));
+    assertOracleReview(w.host, w);
+    assert.ok(!JSON.stringify(w.host.reviews()).includes('MISTAKEN'), 'the removed finding is never published');
   });
 
   test('ready upstream SARIF publishes directly, with no authoring or staged step', { skip, timeout: 300_000 }, () => {

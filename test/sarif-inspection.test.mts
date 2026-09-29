@@ -230,11 +230,11 @@ describe('inspectSarif: a complete view of upstream SARIF', () => {
     assert.deepStrictEqual(Object.keys(defined(view.runs[0], 'run 0')), ['index', 'ref', 'tool', 'source', 'columnKind', 'approval', 'otherContent']);
     assert.deepStrictEqual(Object.keys(defined(view.runs[1], 'run 1')), ['index', 'ref', 'tool', 'source', 'columnKind', 'otherContent']);
     assert.deepStrictEqual(Object.keys(defined(view.findings[1], 'finding 1')), [
-      'ref', 'runIndex', 'resultIndex', 'ruleId', 'level', 'kind', 'approval',
+      'ref', 'selector', 'runIndex', 'resultIndex', 'ruleId', 'level', 'kind', 'approval',
       'message', 'locations', 'relatedLocations', 'otherContent', 'fixes', 'fileProposals',
     ]);
     assert.deepStrictEqual(Object.keys(defined(view.findings[3], 'finding 3')), [
-      'ref', 'runIndex', 'resultIndex', 'message', 'locations', 'relatedLocations', 'otherContent', 'fixes', 'fileProposals',
+      'ref', 'selector', 'runIndex', 'resultIndex', 'message', 'locations', 'relatedLocations', 'otherContent', 'fixes', 'fileProposals',
     ], 'absent optional fields are omitted, not present as undefined');
     assert.deepStrictEqual(Object.keys(defined(view.findings[2], 'finding 2').message), ['id', 'text', 'markdown', 'resolved']);
     assert.deepStrictEqual(Object.keys(defined(view.findings[0]?.locations[0], 'location 0 of finding 0')),
@@ -269,7 +269,11 @@ describe('inspectSarif: a complete view of upstream SARIF', () => {
 
   EXPECTED_FINDINGS.forEach((expected, i) => {
     test(`finding ${expected.ref} is complete`, () => {
-      assert.deepStrictEqual(inspected(inspect()).view.findings[i], expected);
+      // The removal selector is `<ref>@<document digest>` (docs/finding-removal-contract.md §2);
+      // its digest is opaque, so only its form is fixed here.
+      const { selector, ...finding } = defined(inspected(inspect()).view.findings[i], `finding ${expected.ref}`);
+      assert.match(selector, new RegExp(`^${expected.ref}@[0-9a-f]{16}$`));
+      assert.deepStrictEqual(finding, expected);
     });
   });
 

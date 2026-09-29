@@ -304,6 +304,20 @@ describe('verified authoring examples run against the installed package in a rea
     assertW1Review(w, MESSAGE);
   });
 
+  test('the correction example removes a misplaced finding by its selector and publishes only the corrected one', { skip, timeout: 300_000 }, () => {
+    const { language, code } = example(GUIDE, 'correction-cli');
+    assert.equal(language, 'sh');
+    const w = world('docs-correction-cli');
+    const script = path.join(w.root, 'correction.sh');
+    fs.writeFileSync(script, code);
+    const result = spawnSync('bash', [script], { cwd: w.dir, env: w.env, encoding: 'utf8', timeout: 180_000 });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /Removed \/runs\/0\/results\/0/);
+    assert.ok(!(result.stdout + result.stderr).includes(w.token));
+    // Exactly one comment, on line 2: the misplaced one on line 3 was removed before publication.
+    assertW1Review(w, MESSAGE);
+  });
+
   test('the analyzer example adds staged changes to SARIF that was never initialized', { skip, timeout: 300_000 }, () => {
     const { language, code } = example(GUIDE, 'upstream-cli');
     assert.equal(language, 'sh');

@@ -255,6 +255,37 @@ console.log(outcome.markdown);
 if (outcome.status !== 'published') process.exitCode = 1;
 ```
 
+### Correcting a finding
+
+To correct a finding, remove it and add the corrected one. `remove-comment` removes one finding and the fixes attached to it; every other finding and fix stays as it is. It takes a selector, which `inspect` shows for every finding (`Selector: …` in human output, `selector` in JSON). A selector belongs to the document as it was inspected: after any change to the file, inspect again. An old selector is refused (exit status 2) rather than removing whichever finding has moved into its place. This example corrects a comment that was put on the wrong line:
+
+<!-- verified-example: correction-cli -->
+```sh
+set -e
+npx --no-install sarif-to-comment init --output review.sarif --tool-name "Review agent"
+npx --no-install sarif-to-comment add-comment --sarif review.sarif \
+  --file src/parse.js --line 3 --message "Handle the empty-input case."
+
+# Oops: that belongs on line 2. Take the finding's selector from inspect, remove it, add it again.
+selector=$(npx --no-install sarif-to-comment inspect --sarif review.sarif --format json \
+  | node -e 'let s = ""; process.stdin.on("data", (d) => (s += d)).on("end", () => console.log(JSON.parse(s).view.findings[0].selector))')
+npx --no-install sarif-to-comment remove-comment --sarif review.sarif --finding "$selector"
+npx --no-install sarif-to-comment add-comment --sarif review.sarif \
+  --file src/parse.js --line 2 --message "Handle the empty-input case."
+
+# Regenerate the separate output from the corrected file, then publish it.
+npx --no-install sarif-to-comment add-staged-changes --sarif review.sarif \
+  --output review.staged.sarif --worktree . \
+  --repo "$REVIEW_REPOSITORY" --commit "$REVIEW_COMMIT"
+npx --no-install sarif-to-comment publish --sarif review.staged.sarif \
+  --repo "$REVIEW_REPOSITORY" --pull "$REVIEW_PULL" \
+  --commit "$REVIEW_COMMIT" --state "$REVIEW_STATE"
+```
+
+- Correct the file you authored and run `add-staged-changes` again, rather than editing its output: removal never re-derives fixes, and the previous output is kept as `<UTC time>.old.review.staged.sarif`.
+- Removal only changes the local file. A review you already published stays as it is on GitHub; publishing the corrected file needs a new state path and creates a separate draft review.
+- In the library, `removeSarifComment(sarif, selector)` does the same in memory and returns `removed` with the new document, or `stale` / `invalid` with the reason; the input is never changed.
+
 ### SARIF from an analyzer
 
 An analyzer's SARIF needs no `init`. This adds your staged changes to `results.sarif` from an analyzer that reported line 2 of `src/parse.js`, then publishes:
