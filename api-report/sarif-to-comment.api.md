@@ -17,6 +17,12 @@ export type AddStagedChangesOutcome = IAddedStagedChangesOutcome | IInvalidSarif
 export function addStagedChangesToSarif(input: IAddStagedChangesInput): Promise<AddStagedChangesOutcome>;
 
 // @public
+export function closeSuggestionPullRequests(input: ICloseSuggestionPullRequestsInput): Promise<ICloseSuggestionPullRequestsOutcome>;
+
+// @public
+export type CloseSuggestionPullRequestsStatus = 'complete' | 'permission-limited' | 'incomplete';
+
+// @public
 export function createSarifDocument(options?: ICreateSarifDocumentOptions): ISarifLog;
 
 // @public
@@ -61,6 +67,33 @@ export interface IBlockedAssessment {
 export interface IBlockedOutcome {
     readonly markdown: string;
     readonly status: 'blocked';
+}
+
+// @public
+export interface ICheckedSuggestionPullRequest {
+    readonly number: number;
+    readonly original: number | null;
+    readonly reason?: string;
+    readonly result: SuggestionCleanupResult;
+    readonly url: string;
+}
+
+// @public
+export interface ICloseSuggestionPullRequestsInput {
+    readonly dryRun?: boolean | undefined;
+    readonly label?: string | undefined;
+    readonly originalPullNumber?: number | undefined;
+    readonly repository: IGitHubRepository;
+    readonly token: string;
+}
+
+// @public
+export interface ICloseSuggestionPullRequestsOutcome {
+    readonly dryRun: boolean;
+    readonly markdown: string;
+    readonly originals: readonly IOriginalPullRequest[];
+    readonly status: CloseSuggestionPullRequestsStatus;
+    readonly suggestions: readonly ICheckedSuggestionPullRequest[];
 }
 
 // @public
@@ -247,6 +280,13 @@ export function inspectSarif(sarif: object, options?: IInspectSarifOptions): Ins
 
 // @public
 export type InspectSarifOutcome = IInspectedOutcome | IInvalidSarifOutcome;
+
+// @public
+export interface IOriginalPullRequest {
+    readonly number: number;
+    readonly reason?: string;
+    readonly state: OriginalPullRequestState;
+}
 
 // @public
 export interface IProblem {
@@ -440,6 +480,9 @@ export interface IValidateSarifReviewInput {
 }
 
 // @public
+export type OriginalPullRequestState = 'open' | 'merged' | 'closed' | 'unverified';
+
+// @public
 export function publishSarifReview(input: IPublishSarifReviewInput): Promise<PublishSarifReviewOutcome>;
 
 // @public
@@ -450,6 +493,9 @@ export function removeSarifComment(sarif: object, selector: string): RemoveSarif
 
 // @public
 export type RemoveSarifCommentOutcome = IRemovedSarifCommentOutcome | IStaleSarifSelectorOutcome | IInvalidSarifOutcome;
+
+// @public
+export type SuggestionCleanupResult = 'closed' | 'would-close' | 'already-closed' | 'left-open' | 'unverified' | 'permission-limited' | 'failed' | 'not-ours' | 'unlabeled';
 
 // @public
 export function validateSarifReview(input: IValidateSarifReviewInput): Promise<ValidateSarifReviewOutcome>;

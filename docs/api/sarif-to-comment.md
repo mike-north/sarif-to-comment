@@ -8,7 +8,7 @@ Author, inspect and extend SARIF 2.1.0, and publish it as one GitHub draft pull 
 
 ## Remarks
 
-Seven operations work on ordinary in-memory SARIF values:
+Seven operations work on ordinary in-memory SARIF values, and one cleans up after publication:
 
 - [createSarifDocument()](./sarif-to-comment.createsarifdocument.md) and [addSarifComment()](./sarif-to-comment.addsarifcomment.md) optionally author  SARIF for your own findings, on lines or line ranges, and  [removeSarifComment()](./sarif-to-comment.removesarifcomment.md) removes a finding selected through inspection,  so a finding can be corrected by removing it and adding it again.
 
@@ -20,9 +20,11 @@ Seven operations work on ordinary in-memory SARIF values:
 
 - [publishSarifReview()](./sarif-to-comment.publishsarifreview.md) publishes a ready document as one draft review.
 
+- [closeSuggestionPullRequests()](./sarif-to-comment.closesuggestionpullrequests.md) closes the companion suggestion pull  requests publication created once their original pull request has merged  or closed.
+
 Authoring is optional: SARIF from any producer can be inspected, extended and published directly, and no operation depends on how a document was made. There is no builder, session or private format; each operation that changes a document returns a new one and leaves its input untouched.
 
-The `sarif-to-comment` command-line interface provides the same operations for files (`init`<!-- -->, `add-comment`<!-- -->, `remove-comment`<!-- -->, `inspect`<!-- -->,`add-staged-changes`<!-- -->, `validate`<!-- -->, `publish`<!-- -->). These declarations describe the package's CommonJS runtime entry; they are generated from its TypeScript implementation, checked by API Extractor and compiled against CommonJS and ES module consumers by the package tests.
+The `sarif-to-comment` command-line interface provides the same operations for files (`init`<!-- -->, `add-comment`<!-- -->, `remove-comment`<!-- -->, `inspect`<!-- -->,`add-staged-changes`<!-- -->, `validate`<!-- -->, `publish`<!-- -->), and `close-suggestion-prs`<!-- -->. These declarations describe the package's CommonJS runtime entry; they are generated from its TypeScript implementation, checked by API Extractor and compiled against CommonJS and ES module consumers by the package tests.
 
 ## Functions
 
@@ -56,6 +58,17 @@ Adds one finding on a line or line range to a copy of a SARIF document.
 </td><td>
 
 Adds the changes staged in a Git index, relative to a reviewed commit, to a copy of a SARIF document as fixes on the findings they belong to.
+
+
+</td></tr>
+<tr><td>
+
+[closeSuggestionPullRequests(input)](./sarif-to-comment.closesuggestionpullrequests.md)
+
+
+</td><td>
+
+Closes this tool's open companion suggestion pull requests whose original pull request has merged or closed, in one repository.
 
 
 </td></tr>
@@ -192,6 +205,39 @@ Publication of this document would be blocked. Nothing was published and nothing
 </td><td>
 
 The document cannot be published faithfully. Nothing was written to GitHub and no state file was created.
+
+
+</td></tr>
+<tr><td>
+
+[ICheckedSuggestionPullRequest](./sarif-to-comment.icheckedsuggestionpullrequest.md)
+
+
+</td><td>
+
+One pull request cleanup checked.
+
+
+</td></tr>
+<tr><td>
+
+[ICloseSuggestionPullRequestsInput](./sarif-to-comment.iclosesuggestionpullrequestsinput.md)
+
+
+</td><td>
+
+Input to [closeSuggestionPullRequests()](./sarif-to-comment.closesuggestionpullrequests.md)<!-- -->. Unknown fields are refused.
+
+
+</td></tr>
+<tr><td>
+
+[ICloseSuggestionPullRequestsOutcome](./sarif-to-comment.iclosesuggestionpullrequestsoutcome.md)
+
+
+</td><td>
+
+The outcome of [closeSuggestionPullRequests()](./sarif-to-comment.closesuggestionpullrequests.md)<!-- -->.
 
 
 </td></tr>
@@ -401,6 +447,17 @@ The input is not schema-valid SARIF 2.1.0, or cannot take the requested change. 
 </td><td>
 
 Adds the finding to a new run with its own tool identity, so that feedback added to another producer's SARIF is never attributed to that producer.
+
+
+</td></tr>
+<tr><td>
+
+[IOriginalPullRequest](./sarif-to-comment.ioriginalpullrequest.md)
+
+
+</td><td>
+
+An original pull request cleanup resolved.
 
 
 </td></tr>
@@ -685,12 +742,36 @@ Every outcome of [addStagedChangesToSarif()](./sarif-to-comment.addstagedchanges
 </td></tr>
 <tr><td>
 
+[CloseSuggestionPullRequestsStatus](./sarif-to-comment.closesuggestionpullrequestsstatus.md)
+
+
+</td><td>
+
+Whether cleanup established everything it set out to:
+
+- `complete`<!-- -->: every pull request checked has its final result (a dry run  too). - `permission-limited`<!-- -->: everything else is done, but some eligible  suggestion pull requests could not be closed with this account. - `incomplete`<!-- -->: an original could not be verified or an action failed;  running cleanup again is safe.
+
+
+</td></tr>
+<tr><td>
+
 [InspectSarifOutcome](./sarif-to-comment.inspectsarifoutcome.md)
 
 
 </td><td>
 
 Every outcome of [inspectSarif()](./sarif-to-comment.inspectsarif.md)<!-- -->, discriminated by `status`<!-- -->.
+
+
+</td></tr>
+<tr><td>
+
+[OriginalPullRequestState](./sarif-to-comment.originalpullrequeststate.md)
+
+
+</td><td>
+
+An original pull request's state: `unverified` when it could not be read, which is never treated as ended.
 
 
 </td></tr>
@@ -713,6 +794,19 @@ Every outcome of [publishSarifReview()](./sarif-to-comment.publishsarifreview.md
 </td><td>
 
 Every outcome of [removeSarifComment()](./sarif-to-comment.removesarifcomment.md)<!-- -->, discriminated by `status`<!-- -->.
+
+
+</td></tr>
+<tr><td>
+
+[SuggestionCleanupResult](./sarif-to-comment.suggestioncleanupresult.md)
+
+
+</td><td>
+
+What cleanup did with one pull request:
+
+- `closed`<!-- -->: it was closed now. - `would-close`<!-- -->: a dry run would close it. - `already-closed`<!-- -->: it is no longer open. - `left-open`<!-- -->: its original is still open. - `unverified`<!-- -->: its original could not be verified, so it was left open. - `permission-limited`<!-- -->: GitHub refused to let this account close it. - `failed`<!-- -->: reading or closing it failed; running cleanup again is safe. - `not-ours`<!-- -->: it is not recognizably one of this tool's suggestion pull  requests (no, several or a changed marker, another repository or  original, a fork, or another branch), so it was not touched. - `unlabeled`<!-- -->: it does not carry the label, so it was not touched.
 
 
 </td></tr>

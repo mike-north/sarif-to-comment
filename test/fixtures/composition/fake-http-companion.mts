@@ -80,6 +80,12 @@ import type { Guard, UnknownRecord } from '../../support/runtime-types.mts';
 /** The writes whose behavior a test can change. */
 export type CompanionWrite = 'blob' | 'tree' | 'commit' | 'ref' | 'pull' | 'label';
 
+/** How the host answers a read of one pull request instead of serving it (cleanup, fake-http-cleanup.mts). */
+export type PullReadFailure = 'forbidden' | 'not-found' | 'server-error' | 'malformed';
+
+/** How the host answers a close of one pull request instead of closing it (cleanup, fake-http-cleanup.mts). */
+export type CloseFailure = 'forbidden' | 'not-found' | 'rate-limited' | 'secondary-rate-limit' | 'too-many-requests' | 'server-error' | 'lose-response';
+
 /** Companion behavior (config.json `companion`). */
 export interface ICompanionConfig {
   readonly loseResponse?: readonly CompanionWrite[] | undefined;
@@ -87,6 +93,22 @@ export interface ICompanionConfig {
   readonly refuse?: Readonly<Partial<Record<CompanionWrite, number>>> | undefined;
   readonly failRefReadsAfter?: number | undefined;
   readonly failRepositoryRead?: boolean | undefined;
+  /** Pull request number -> how its GET pulls/{n} fails. */
+  readonly pullReads?: Readonly<Record<string, PullReadFailure>> | undefined;
+  /** Pull request number -> how its close (PATCH) fails. A lost response closes it first. */
+  readonly closes?: Readonly<Record<string, CloseFailure>> | undefined;
+  /** The labeled issues listing answers 502. */
+  readonly failIssueListing?: boolean | undefined;
+  /**
+   * The labeled issues listing shifts by one between pages, as when a pull
+   * request is opened while it is read: each later page repeats the previous
+   * page's last entry first.
+   */
+  readonly shiftIssueListing?: boolean | undefined;
+  /** Cross-reference events per GraphQL timeline page (default 100, the page size the client asks for). */
+  readonly timelinePageSize?: number | undefined;
+  /** The GraphQL timeline query answers with an `errors` array. */
+  readonly failTimeline?: boolean | undefined;
 }
 
 /** One entry of a Git tree, as the trees API lists it. */
@@ -105,7 +127,12 @@ export interface ICreatedCommit {
   readonly message: string;
 }
 
-/** A created pull request. */
+/**
+ * A created pull request, or one a test seeded (seedPulls): an original, a
+ * suggestion, an ordinary pull request, an issue sharing the number space
+ * (`isIssue`), or a pull request in another repository that references this
+ * one (`repository`).
+ */
 export interface IStoredPull {
   readonly number: number;
   readonly title: string;
@@ -117,6 +144,14 @@ export interface IStoredPull {
   readonly merged: boolean;
   readonly labels: readonly string[];
   readonly authorId: number;
+  /** The head branch's repository (`owner/repo`); default this repository; null when it was deleted. */
+  readonly headRepo?: string | null | undefined;
+  /** The repository holding this pull request (`owner/repo`); default this repository. */
+  readonly repository?: string | undefined;
+  /** An issue, not a pull request: listed without `pull_request`, never served as a pull request. */
+  readonly isIssue?: boolean | undefined;
+  /** How many cross-reference events each reference in the body produces on the original's timeline (default 1). */
+  readonly referenceEvents?: number | undefined;
 }
 
 /** Everything the companion routes store (companion.json). */
@@ -165,6 +200,12 @@ export const isCompanionConfig: Guard<ICompanionConfig> = isShape({
   refuse: isOptional(isRecordOf(isNumber)),
   failRefReadsAfter: isOptional(isNumber),
   failRepositoryRead: isOptional(isBoolean),
+  pullReads: isOptional(isRecordOf(isOneOf('forbidden', 'not-found', 'server-error', 'malformed'))),
+  closes: isOptional(isRecordOf(isOneOf('forbidden', 'not-found', 'rate-limited', 'secondary-rate-limit', 'too-many-requests', 'server-error', 'lose-response'))),
+  failIssueListing: isOptional(isBoolean),
+  shiftIssueListing: isOptional(isBoolean),
+  timelinePageSize: isOptional(isNumber),
+  failTimeline: isOptional(isBoolean),
 });
 
 const isTreeEntry: Guard<ICompanionTreeEntry> = isShape({
@@ -192,6 +233,10 @@ export const isCompanionState: Guard<ICompanionState> = isShape({
       merged: isBoolean,
       labels: isArrayOf(isString),
       authorId: isNumber,
+      headRepo: isOptional(isEither(isString, isNull)),
+      repository: isOptional(isString),
+      isIssue: isOptional(isBoolean),
+      referenceEvents: isOptional(isNumber),
     }),
   ),
   hidden: isShape({ refs: isNumber, pulls: isNumber, labels: isNumber }),
@@ -498,8 +543,9 @@ export function companionRoute(host: ICompanionHost, method: string, u: URL, bod
 }
 
 /** A pull request as the REST API answers it (the fields the client reads, and a few more). */
-function pullJson(repository: ICompanionRepository, user: { readonly id: number; readonly login: string }, pull: IStoredPull): UnknownRecord {
-  const fullName = `${repository.owner}/${repository.repo}`;
+export function pullJson(repository: ICompanionRepository, user: { readonly id: number; readonly login: string }, pull: IStoredPull): UnknownRecord {
+  const fullName = pull.repository ?? `${repository.owner}/${repository.repo}`;
+  const headRepo = pull.headRepo === undefined ? fullName : pull.headRepo;
   return {
     number: pull.number,
     html_url: `https://github.com/${fullName}/pull/${String(pull.number)}`,
@@ -507,9 +553,10 @@ function pullJson(repository: ICompanionRepository, user: { readonly id: number;
     body: pull.body,
     state: pull.state,
     draft: pull.draft,
+    merged: pull.merged,
     merged_at: pull.merged ? '2026-09-29T00:00:00Z' : null,
     user: { id: pull.authorId, login: pull.authorId === user.id ? user.login : 'someone-else' },
-    head: { ref: pull.head, repo: { full_name: fullName } },
+    head: { ref: pull.head, repo: headRepo === null ? null : { full_name: headRepo } },
     base: { ref: pull.base, repo: { full_name: fullName } },
     labels: pull.labels.map((name) => ({ name })),
   };

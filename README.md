@@ -237,6 +237,43 @@ It is **off by default**. Without it, creations and deletions are shown in the r
 - **Retries.** The state path holds a plan, and each branch, pull request and label gets its own record beside it (`<state>.suggestion-1-branch` and so on), written before that request is sent. A retry never sends a step twice: it finds a pull request whose response was lost by its branch and marker, continues the steps never sent, and only then publishes the review. Keep all of these files. The setting and label are part of the publication's identity.
 - **People's changes are kept.** A branch someone moved before its pull request exists stops the publication as `uncertain`; nothing is recreated or overwritten. A suggestion pull request someone edited, closed or merged is left as it is.
 - The published outcome lists them in `suggestions` (`number`, `url`, `branch`), and the CLI's JSON adds the same array. The full contract is in the source repository (`docs/companion-suggestion-pr-contract.md`).
+- Suggestion pull requests stay open until someone merges or closes them. Once their original pull request has ended, [cleanup](#closing-suggestion-pull-requests-after-the-original-ends) closes the ones still open.
+
+## Closing suggestion pull requests after the original ends
+
+When an original pull request merges or is closed, its suggestion pull requests that nobody merged are left open. `close-suggestion-prs` (`closeSuggestionPullRequests`) closes them, on demand:
+
+```sh
+sarif-to-comment close-suggestion-prs --repo acme/widgets --dry-run   # what would be closed
+sarif-to-comment close-suggestion-prs --repo acme/widgets             # close them
+sarif-to-comment close-suggestion-prs --repo acme/widgets --original 42
+```
+
+```js
+import { closeSuggestionPullRequests } from 'sarif-to-comment';
+
+const cleanup = await closeSuggestionPullRequests({
+  repository: { owner: 'acme', repo: 'widgets' },
+  token: process.env.GH_TOKEN,
+});
+for (const s of cleanup.suggestions) console.log(`#${s.number}: ${s.result}`);
+```
+
+- **What it checks.** By default, every open pull request carrying the suggestion label (`suggestion`, or `--label` / `label`), page by page. With `--original N` (`originalPullNumber`), only the pull requests that reference pull request N. A pull request is one of this tool's suggestions only if its description carries the tool's hidden marker, exactly as the publisher wrote it; titles are never read.
+- **When it closes.** Only after the original named by the marker has been read and found **merged or closed**. An original that can't be read (not found, no access, a network or server error) is `unverified`, never treated as ended. The suggestion itself is then read again and closed only if it is still open, still carries the same marker and the label, and comes from its own proposal branch in the same repository.
+- **What it changes.** It closes pull requests, nothing else. Branches are never deleted; nothing is edited, labeled, commented on or reopened, and the original is never touched. Everything is read before the first close. `--dry-run` (`dryRun`) reads and verifies everything and closes nothing.
+- **Permissions.** Each close is attempted with your token. Pull requests GitHub doesn't let you close are reported as `permission-limited`, separately from failures; someone allowed to close them can run cleanup for the rest.
+- **Running it again is safe.** Closed suggestions are no longer listed (with `--original`, they are reported `already-closed`).
+
+Each pull request checked gets one `result`: `closed`, `would-close` (dry run), `already-closed`, `left-open` (the original is still open), `unverified`, `permission-limited`, `failed`, `not-ours` (no recognizable marker, another repository or original, or another branch; never touched) or `unlabeled`.
+
+| Library `status` | CLI exit | Meaning |
+| --- | --- | --- |
+| `complete` | 0 | Every pull request checked has its final result (a dry run too). |
+| `permission-limited` | 2 | Everything else is done; some eligible suggestions could not be closed with this token. |
+| `incomplete` | 3 | An original could not be verified or an action failed. Run it again later. |
+
+Invalid input rejects with a `TypeError`, and a failure while listing rejects, both before anything is closed (CLI exit 1). With `--format json`, the CLI prints `{ command, status, dryRun, originals, suggestions, message }`. Labels containing a comma are refused, here and for `suggestionLabel`, because GitHub's label filter would read them as several labels. The full contract is in the source repository (`docs/suggestion-cleanup-contract.md`).
 
 ## Supported SARIF (first-milestone profile)
 
@@ -284,7 +321,7 @@ If that comparison can't establish the old side, you may pass `oldSourceCommit` 
   - branch advance;
   - read-only recovery after a discarded create response and after a process kill.
 
-  These bounded fixture runs do not establish every host failure mode or suggestion shape. Native application of one-line-to-three, two-lines-to-one and middle-line deletion suggestions was verified by exact resulting file bytes and Git blob identities. Inline-only and CRLF-source review bodies also read back exactly. A review proposing new files (including an empty file, an executable, CRLF and byte-order-mark content and adversarial fences and HTML) and deletions (including a binary file and one over the source size limit) read back byte for byte, with every proposed file's content in its own rendered code block. A submitted comment review read back as `COMMENTED` with its exact body, commit and inline comments, including after a discarded create response, without duplicates. Suggestion pull requests were created as drafts into the reviewed branch with exactly the proposed bytes, found again by label and marker, and resumed after discarded branch, pull request and label responses without a second create. The evidence is recorded in the source repository (`docs/milestone-e2e-evidence.md`, `docs/suggestion-application-e2e.md`, `docs/file-operation-publication-e2e-evidence.md`, `docs/submitted-review-e2e-evidence.md` and `docs/companion-suggestion-pr-e2e-evidence.md`).
+  These bounded fixture runs do not establish every host failure mode or suggestion shape. Native application of one-line-to-three, two-lines-to-one and middle-line deletion suggestions was verified by exact resulting file bytes and Git blob identities. Inline-only and CRLF-source review bodies also read back exactly. A review proposing new files (including an empty file, an executable, CRLF and byte-order-mark content and adversarial fences and HTML) and deletions (including a binary file and one over the source size limit) read back byte for byte, with every proposed file's content in its own rendered code block. A submitted comment review read back as `COMMENTED` with its exact body, commit and inline comments, including after a discarded create response, without duplicates. Suggestion pull requests were created as drafts into the reviewed branch with exactly the proposed bytes, found again by label and marker, and resumed after discarded branch, pull request and label responses without a second create. Cleanup closed only the suggestion whose original had been closed, left the others open, kept every branch, and changed nothing on a rerun; merged, closed and missing originals were resolved read-only. Permission-limited closes and multi-page listings are verified only against a simulated host. The evidence is recorded in the source repository (`docs/milestone-e2e-evidence.md`, `docs/suggestion-application-e2e.md`, `docs/file-operation-publication-e2e-evidence.md`, `docs/submitted-review-e2e-evidence.md`, `docs/companion-suggestion-pr-e2e-evidence.md` and `docs/suggestion-cleanup-e2e-evidence.md`).
 - Only `https://api.github.com` is supported.
 - The hidden marker only identifies a review; it is not a secret. A human edit to an unconfirmed draft leaves delivery `uncertain` rather than being "fixed".
 - The durability steps (write, flush, then send) are ordered for crash safety, but that has not been tested against power loss.

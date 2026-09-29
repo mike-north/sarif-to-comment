@@ -1,0 +1,6 @@
+0a7b03fe399255a62118311cbc3e1bd6fe64cb23	refs/heads/sarif-issue5-20260929-base
+83b57cf731f0026f993691ff11ba48b42a674753	refs/heads/sarif-issue5-20260929-recovery
+89bf101d454c10d98df84e504c05494e9627375b	refs/heads/sarif-issue5-20260929-reviewed
+3b5e3710f9b2cf54f0c9a8c2cdcf8fcdad86b84a	refs/heads/sarif-to-comment/suggestions/36/5f72b5f4-8dd1-462a-948b-71b0767ecafe
+aaa2a0c85faf65c1636f23839dbba2233e1b391f	refs/heads/sarif-to-comment/suggestions/36/ec69538b-1cf2-4801-b7e1-ae96d9076ff1
+ff055e310d5ee974f6f85be4e7f8bfa658800e27	refs/heads/sarif-to-comment/suggestions/37/d692636b-46f9-4185-8e44-1b961e27bfc4

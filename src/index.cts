@@ -1,9 +1,10 @@
 /**
  * Public library entry point.
  *
- * Seven operations, each on ordinary in-memory SARIF 2.1.0 values (no files,
- * builders, sessions or private formats); the CLI (src/cli.cts) is a file
- * transport over exactly these functions:
+ * Seven operations on ordinary in-memory SARIF 2.1.0 values (no files,
+ * builders, sessions or private formats), and one on the suggestion pull
+ * requests publication creates; the CLI (src/cli.cts) is a file transport
+ * over exactly these functions:
  *
  *   createSarifDocument(options?)          optional authoring: a new document
  *   addSarifComment(sarif, comment)        optional authoring: one finding
@@ -13,13 +14,17 @@
  *   publishSarifReview(input, internals?)  one GitHub draft review
  *   validateSarifReview(input, internals?) optional readiness assessment:
  *                                          publication's checks, no writes
+ *   closeSuggestionPullRequests(input, internals?)
+ *                                          close suggestion pull requests
+ *                                          whose original ended
  *
  * Authoring is optional and freestanding: SARIF from any producer can be
  * inspected, extended and published without it, and nothing downstream
  * depends on how a document was made. Each operation is implemented in its
  * own module (src/sarif-authoring.cts, src/sarif-inspection.cts,
  * src/staged-changes.cts, src/publish-sarif-review.cts,
- * src/validate-sarif-review.cts) and re-exported here
+ * src/validate-sarif-review.cts, src/close-suggestion-pull-requests.cts) and
+ * re-exported here
  * unchanged; their contracts are in those modules, and the public API as a
  * whole is declared by src/public-api.cts.
  *
@@ -36,6 +41,7 @@ import inspection = require('./sarif-inspection.cjs');
 import staged = require('./staged-changes.cjs');
 import publication = require('./publish-sarif-review.cjs');
 import assessment = require('./validate-sarif-review.cjs');
+import cleanup = require('./close-suggestion-pull-requests.cjs');
 import type * as PublicApi from './public-api.cjs';
 
 const createSarifDocument = authoring.createSarifDocument;
@@ -45,6 +51,7 @@ const inspectSarif = inspection.inspectSarif;
 const addStagedChangesToSarif = staged.addStagedChangesToSarif;
 const publishSarifReview = publication.publishSarifReview;
 const validateSarifReview = assessment.validateSarifReview;
+const closeSuggestionPullRequests = cleanup.closeSuggestionPullRequests;
 
 /** True exactly when X and Y are the same type (the standard exact-equality idiom). */
 // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- the exact-type-equality idiom needs each T once per side; that is what makes the comparison exact
@@ -65,6 +72,7 @@ export = {
   publishSarifReview,
   removeSarifComment,
   validateSarifReview,
+  closeSuggestionPullRequests,
 } satisfies Identical<
   {
     createSarifDocument: typeof createSarifDocument;
@@ -74,6 +82,7 @@ export = {
     publishSarifReview: typeof publishSarifReview;
     removeSarifComment: typeof removeSarifComment;
     validateSarifReview: typeof validateSarifReview;
+    closeSuggestionPullRequests: typeof closeSuggestionPullRequests;
   },
   typeof PublicApi
 >;

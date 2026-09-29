@@ -10,11 +10,14 @@
  *     src/prepare-review.cts (fetchContext, and the readSource it returns);
  *   - the companion suggestion pull request transport consumed by
  *     src/review-preflight.cts and src/companion-publication.cts (see
- *     "Companion suggestion pull requests" below).
+ *     "Companion suggestion pull requests" below);
+ *   - the suggestion cleanup transport consumed by
+ *     src/close-suggestion-pull-requests.cts (see "Suggestion cleanup"
+ *     below).
  *
- * It never decides placement, rendering, or delivery; it never retries a
- * write, never submits an existing review, edits or deletes a review, and
- * never invents
+ * It never decides placement, rendering, delivery or what to close; it never
+ * retries a write, never submits an existing review, edits or deletes a
+ * review, and never invents
  * coordinates or source text. Anything it cannot establish exactly is an
  * error, not an approximation.
  *
@@ -50,10 +53,11 @@
  *     than per_page=100 and page exactly one greater. The next request is
  *     rebuilt canonically under /repos/{owner}/{repo}. At most `maxPages`.
  *   - The only non-GET requests are the single create-review POST, GraphQL
- *     POSTs whose document is a query (never a mutation), and the companion
+ *     POSTs whose document is a query (never a mutation), the companion
  *     writes below (Git blobs, trees and commits, one branch, one pull
- *     request, one label). Nothing here ever updates or deletes a branch,
- *     pull request, label or review.
+ *     request, one label), and cleanup's close of one pull request (a PATCH
+ *     whose body is exactly { state: 'closed' }). Nothing here ever deletes a
+ *     branch, pull request, label or review, and nothing else updates one.
  *
  * Errors: GitHubError { code, status?, hostRejected, message, cause? }.
  *   hostRejected is true only when the create-review POST received one of the
@@ -69,7 +73,8 @@
  *   'anchor-unavailable', 'anchor-ambiguous', 'anchor-malformed',
  *   'old-source-unverified', 'rename-unsupported', 'patch-unavailable',
  *   'source-inconsistent', 'not-a-file', 'blob-integrity',
- *   'undecodable-source', 'source-too-large'. Malformed caller input is a
+ *   'undecodable-source', 'source-too-large', 'rate-limited' (a close refused
+ *   by a rate limit rather than by permission). Malformed caller input is a
  *   TypeError before any request.
  *
  * ---------------------------------------------------------------------------
@@ -225,6 +230,43 @@
  *   addLabel) classify their answers like create-review: hostRejected only
  *   for the understood refusal statuses.
  *
+ * ---------------------------------------------------------------------------
+ * Suggestion cleanup (docs/suggestion-cleanup-contract.md)
+ *
+ *   listOpenLabeledPullRequests({ owner, repo, label })
+ *       -> [{ number, htmlUrl, body, labels }]
+ *     Every page of GET issues?labels={label}&state=open (the label filter is
+ *     applied by the host; a label containing a comma, which GitHub reads as
+ *     a list, is refused). Entries without a `pull_request` object are issues
+ *     and are left out. A null body is ''. Host order; not deduplicated.
+ *   getPullRequest({ owner, repo, pullNumber })
+ *       -> { number, htmlUrl, state: 'open' | 'closed', merged, body, headRef,
+ *            headRepository, baseRepository, labels }
+ *     GET pull. The answer must name the requested pull request, with state
+ *     open or closed and a boolean merged that is false while open;
+ *     headRepository is null when the head repository was deleted. Anything
+ *     else is 'malformed-response', never a guess.
+ *   listCrossReferencingPullRequests({ owner, repo, pullNumber })
+ *       -> [{ number, htmlUrl, repository, state: 'open' | 'closed' | 'merged',
+ *             body, labels }]
+ *     Every page of a GraphQL query of the pull request's timelineItems
+ *     restricted to CROSS_REFERENCED_EVENT, following each event's source
+ *     through a PullRequest fragment (variables { owner, repo, number, after }).
+ *     Sources that are not pull requests, and sources in any other repository
+ *     (compared case-insensitively), are left out before their state or
+ *     labels are read or checked, so a foreign repository can never stop the
+ *     traversal. `repository` is the source's repository as GitHub names it.
+ *     A source with more than 100 labels has its labels read in full with
+ *     listLabels. Timeline order; not deduplicated. Pagination is checked as
+ *     for review threads.
+ *   closePullRequest({ owner, repo, pullNumber })
+ *     PATCH pull with exactly { state: 'closed' }; the answer must name the
+ *     pull request as closed ('malformed-response' otherwise). A 429, or a 403
+ *     with a rate-limit signal (x-ratelimit-remaining: 0, a retry-after
+ *     header, or a message naming a rate limit), is 'rate-limited'; any other
+ *     refusal is 'http-status' with its status. Never retried; hostRejected is
+ *     always false.
+ *
  * @see https://docs.github.com/en/rest/using-the-rest-api/getting-started-with-the-rest-api
  * @see https://docs.github.com/en/rest/using-the-rest-api/using-pagination-in-the-rest-api
  * @see https://docs.github.com/en/rest/pulls/pulls#get-a-pull-request
@@ -241,6 +283,10 @@
  * @see https://docs.github.com/en/rest/pulls/pulls#list-pull-requests
  * @see https://docs.github.com/en/rest/issues/labels
  * @see https://docs.github.com/en/rest/repos/repos#get-a-repository
+ * @see https://docs.github.com/en/rest/issues/issues#list-repository-issues
+ * @see https://docs.github.com/en/rest/pulls/pulls#update-a-pull-request
+ * @see https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api
+ * @see https://docs.github.com/en/graphql/reference/objects#crossreferencedevent
  */
 
 import * as crypto from 'node:crypto';
@@ -271,7 +317,8 @@ export type GitHubErrorCode =
   | 'not-a-file'
   | 'blob-integrity'
   | 'undecodable-source'
-  | 'source-too-large';
+  | 'source-too-large'
+  | 'rate-limited';
 
 /** Optional GitHubError details. An omitted `status` leaves the error without an own `status` key. */
 export interface IGitHubErrorOptions {
@@ -286,8 +333,8 @@ export type ReviewSide = 'LEFT' | 'RIGHT';
 /** Why a changed file's patch was dropped from the review context. */
 export type FileDiagnosticReason = 'patch-omitted' | 'patch-inconsistent';
 
-/** The HTTP methods this adapter ever sends. */
-type HttpMethod = 'GET' | 'POST';
+/** The HTTP methods this adapter ever sends (PATCH only to close a pull request). */
+type HttpMethod = 'GET' | 'POST' | 'PATCH';
 
 /**
  * The request options this adapter passes to fetch. `body` is present as
@@ -301,7 +348,7 @@ export interface IFetchInit {
   readonly redirect: 'manual';
 }
 
-/** The response headers this adapter reads (only the pagination Link header). */
+/** The response headers this adapter reads: the pagination Link header, and a refused close's rate-limit headers. */
 export interface IFetchResponseHeaders {
   get(name: string): string | null;
 }
@@ -552,11 +599,53 @@ export interface IBranchPullRequest {
   readonly baseRef: unknown;
 }
 
+/** One open pull request carrying a label, as the labeled issues listing reports it. */
+export interface ILabeledPullRequest {
+  readonly number: number;
+  readonly htmlUrl: string;
+  /** The description ('' when it has none). */
+  readonly body: string;
+  /** Label names as GitHub reports them. */
+  readonly labels: readonly string[];
+}
+
+/** A pull request's current state and the fields suggestion cleanup verifies. */
+export interface IPullRequestSnapshot {
+  readonly number: number;
+  readonly htmlUrl: string;
+  readonly state: 'open' | 'closed';
+  /** Whether it was merged; always false while open. */
+  readonly merged: boolean;
+  /** The description ('' when it has none). */
+  readonly body: string;
+  readonly headRef: string;
+  /** The head branch's repository (`owner/repo`), or null when it was deleted. */
+  readonly headRepository: string | null;
+  /** The pull request's own repository (`owner/repo`). */
+  readonly baseRepository: string;
+  /** Label names as GitHub reports them. */
+  readonly labels: readonly string[];
+}
+
+/** A pull request whose body or comments reference another pull request (a cross-reference backlink). */
+export interface ICrossReferencingPullRequest {
+  readonly number: number;
+  readonly htmlUrl: string;
+  /** The repository holding it (`owner/name`), as GitHub names it: always the requested one, possibly in another letter case. */
+  readonly repository: string;
+  readonly state: 'open' | 'closed' | 'merged';
+  /** The description ('' when it has none). */
+  readonly body: string;
+  /** Every label name, as GitHub reports it. */
+  readonly labels: readonly string[];
+}
+
 /**
  * The frozen client createGitHubClient returns: the publication transport
  * (getAuthenticatedUser, createReview, listReviews, listReviewComments),
- * fetchContext, and the companion suggestion pull request transport. Every
- * method re-validates its input at runtime.
+ * fetchContext, the companion suggestion pull request transport, and the
+ * suggestion cleanup transport. Every method re-validates its input at
+ * runtime.
  */
 export interface IGitHubClient {
   readonly getAuthenticatedUser: () => Promise<IAuthenticatedUser>;
@@ -586,6 +675,10 @@ export interface IGitHubClient {
   readonly listBranchPullRequests: (request: { readonly owner: string; readonly repo: string; readonly branch: string }) => Promise<readonly IBranchPullRequest[]>;
   readonly addLabel: (request: { readonly owner: string; readonly repo: string; readonly number: number; readonly label: string }) => Promise<void>;
   readonly listLabels: (request: { readonly owner: string; readonly repo: string; readonly number: number }) => Promise<readonly string[]>;
+  readonly listOpenLabeledPullRequests: (request: { readonly owner: string; readonly repo: string; readonly label: string }) => Promise<readonly ILabeledPullRequest[]>;
+  readonly getPullRequest: (request: IPullRequestDestination) => Promise<IPullRequestSnapshot>;
+  readonly listCrossReferencingPullRequests: (request: IPullRequestDestination) => Promise<readonly ICrossReferencingPullRequest[]>;
+  readonly closePullRequest: (request: IPullRequestDestination) => Promise<void>;
 }
 
 /**
@@ -693,6 +786,19 @@ const PER_PAGE = 100;
 /** Page size requested from the GraphQL reviewThreads connection (its maximum). */
 const THREADS_PER_PAGE = 100;
 
+/** Page size requested from the GraphQL timelineItems connection (its maximum). */
+const TIMELINE_PER_PAGE = 100;
+
+/** Labels read with each cross-referencing pull request (the connection's maximum); more are read through REST. */
+const SOURCE_LABELS = 100;
+
+/** GraphQL pull request states, as cleanup names them. */
+const GRAPHQL_PULL_STATES: ReadonlyMap<unknown, ICrossReferencingPullRequest['state']> = new Map([
+  ['OPEN', 'open'],
+  ['CLOSED', 'closed'],
+  ['MERGED', 'merged'],
+]);
+
 const DEFAULT_LIMITS: Readonly<IGitHubClientLimits> = Object.freeze({ maxSourceBytes: 1_000_000, maxPullFiles: 3000, maxPages: 100 });
 
 /**
@@ -758,6 +864,36 @@ const REVIEW_THREADS_QUERY = gql`query ($owner: String!, $repo: String!, $number
           originalStartLine
           comments(first: 1) {
             nodes { databaseId pullRequestReview { databaseId } originalCommit { oid } }
+          }
+        }
+      }
+    }
+  }
+}`;
+
+/**
+ * The pull requests that cross-reference one pull request: its timeline's
+ * cross-reference events, each followed to its source when that is a pull
+ * request (D21). The first 100 labels of each source share the request.
+ */
+const CROSS_REFERENCES_QUERY = gql`query ($owner: String!, $repo: String!, $number: Int!, $after: String) {
+  repository(owner: $owner, name: $repo) {
+    pullRequest(number: $number) {
+      timelineItems(first: ${String(TIMELINE_PER_PAGE)}, after: $after, itemTypes: [CROSS_REFERENCED_EVENT]) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          ... on CrossReferencedEvent {
+            source {
+              __typename
+              ... on PullRequest {
+                number
+                url
+                body
+                state
+                repository { nameWithOwner }
+                labels(first: ${String(SOURCE_LABELS)}) { pageInfo { hasNextPage } nodes { name } }
+              }
+            }
           }
         }
       }
@@ -1096,9 +1232,8 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
     }
   }
 
-  /** An http-status error carrying the host's redacted explanation. */
-  async function statusError(response: IFetchResponse, what: string, hostRejected = false): Promise<GitHubError> {
-    let explanation = '';
+  /** The host's explanation in an error answer (its message and errors), or '' when it gives none. */
+  async function explanationOf(response: IFetchResponse): Promise<string> {
     try {
       const parsed: unknown = JSON.parse(await response.text());
       const parts: string[] = [];
@@ -1106,14 +1241,22 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
       if (isPlainObject(parsed) && isList(parsed['errors'])) {
         for (const e of parsed['errors']) parts.push(typeof e === 'string' ? e : JSON.stringify(e));
       }
-      if (parts.length > 0) explanation = `: ${parts.join('; ')}`;
+      return parts.join('; ');
     } catch {
       // The status alone still classifies the failure.
+      return '';
     }
-    return new GitHubError('http-status', redact(`GitHub answered the ${what} with HTTP ${String(response.status)}${explanation}`), {
-      status: response.status,
-      hostRejected,
-    });
+  }
+
+  /** The redacted text of an error answer to `what`. */
+  function answeredWith(response: IFetchResponse, what: string, explanation: string): string {
+    return redact(`GitHub answered the ${what} with HTTP ${String(response.status)}${explanation === '' ? '' : `: ${explanation}`}`);
+  }
+
+  /** An http-status error carrying the host's redacted explanation. */
+  async function statusError(response: IFetchResponse, what: string, hostRejected = false): Promise<GitHubError> {
+    const explanation = await explanationOf(response);
+    return new GitHubError('http-status', answeredWith(response, what, explanation), { status: response.status, hostRejected });
   }
 
   /** GET a REST resource; returns { body, link }. */
@@ -2008,6 +2151,178 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
     return listed.map((label) => hostString(optionalMember(label, 'name'), 'label name'));
   }
 
+  // ---------------------------------------------------------------------------
+  // Suggestion cleanup (docs/suggestion-cleanup-contract.md)
+  // ---------------------------------------------------------------------------
+
+  /** Label names of a host answer's `labels` list, or a malformed-response error. */
+  function labelNames(value: unknown, what: string): string[] {
+    if (!isList(value)) throw new GitHubError('malformed-response', `The ${what} has no label list.`);
+    return value.map((label) => hostString(optionalMember(label, 'name'), `${what}'s label name`));
+  }
+
+  /** A description as a string: GitHub answers null for an empty one. */
+  function bodyText(value: unknown, what: string): string {
+    if (value === null) return '';
+    if (typeof value !== 'string') throw new GitHubError('malformed-response', `The ${what} has no description text.`);
+    return value;
+  }
+
+  async function listOpenLabeledPullRequests({ owner, repo, label }: Unchecked<'owner' | 'repo' | 'label'> = {}): Promise<readonly ILabeledPullRequest[]> {
+    requireInput(isRepoName(owner) && isRepoName(repo), 'owner and repo must be GitHub names');
+    requireInput(typeof label === 'string' && label.length > 0, 'label must be a non-empty string');
+    requireInput(!label.includes(','), 'label must not contain a comma (GitHub reads a comma as a list of labels)');
+    const listed = await listAll(owner, repo, '/issues', 'labeled issue list', { labels: label, state: 'open' });
+    const pulls: ILabeledPullRequest[] = [];
+    for (const item of listed) {
+      const number = optionalMember(item, 'number');
+      if (!isPositiveInteger(number)) throw new GitHubError('malformed-response', 'A listed issue has no number.');
+      // Pull requests are issues with a `pull_request` object; plain issues carry none.
+      if (!isPlainObject(optionalMember(item, 'pull_request'))) continue;
+      const what = `listed pull request ${String(number)}`;
+      pulls.push({
+        number,
+        htmlUrl: hostString(optionalMember(item, 'html_url'), `${what}'s URL`),
+        body: bodyText(optionalMember(item, 'body'), what),
+        labels: labelNames(optionalMember(item, 'labels'), what),
+      });
+    }
+    return pulls;
+  }
+
+  async function getPullRequest({
+    owner: ownerInput,
+    repo: repoInput,
+    pullNumber: pullNumberInput,
+  }: Unchecked<'owner' | 'repo' | 'pullNumber'> = {}): Promise<IPullRequestSnapshot> {
+    const destination = { owner: ownerInput, repo: repoInput, pullNumber: pullNumberInput };
+    requireDestination(destination);
+    const { owner, repo, pullNumber } = destination;
+    const { body: pull } = await restGet(`${API_ORIGIN}${repoPath(owner, repo)}/pulls/${String(pullNumber)}`, 'pull request read');
+    const what = `pull request ${String(pullNumber)} answer`;
+    if (optionalMember(pull, 'number') !== pullNumber) throw new GitHubError('malformed-response', `The ${what} names another pull request.`);
+    const state = optionalMember(pull, 'state');
+    const merged = optionalMember(pull, 'merged');
+    if (state !== 'open' && state !== 'closed') throw new GitHubError('malformed-response', `The ${what} has no valid state.`);
+    if (typeof merged !== 'boolean' || (state === 'open' && merged)) {
+      throw new GitHubError('malformed-response', `The ${what} has no valid merged flag.`);
+    }
+    const headRepo = optionalMember(pull, 'head', 'repo');
+    return {
+      number: pullNumber,
+      htmlUrl: hostString(optionalMember(pull, 'html_url'), `${what}'s URL`),
+      state,
+      merged,
+      body: bodyText(optionalMember(pull, 'body'), what),
+      headRef: hostString(optionalMember(pull, 'head', 'ref'), `${what}'s head branch`),
+      headRepository: headRepo === null ? null : hostString(optionalMember(headRepo, 'full_name'), `${what}'s head repository`),
+      baseRepository: hostString(optionalMember(pull, 'base', 'repo', 'full_name'), `${what}'s base repository`),
+      labels: labelNames(optionalMember(pull, 'labels'), what),
+    };
+  }
+
+  /**
+   * One cross-reference timeline node as a pull request source of `owner/repo`,
+   * or null when its source is not a pull request or is in another
+   * repository. A foreign source is left out before anything else about it is
+   * read or checked: its labels may be unreadable (a private repository
+   * refuses their listing) or absent, and it is never a suggestion here (D25).
+   */
+  async function crossReferenceSource(node: unknown, owner: string, repo: string): Promise<ICrossReferencingPullRequest | null> {
+    const source = optionalMember(node, 'source');
+    if (!isPlainObject(source) || source['__typename'] !== 'PullRequest') return null;
+    const number = source['number'];
+    if (!isPositiveInteger(number)) throw new GitHubError('malformed-response', 'A cross-referencing pull request has no number.');
+    const what = `cross-referencing pull request ${String(number)}`;
+    const repository = hostString(optionalMember(source, 'repository', 'nameWithOwner'), `${what}'s repository`);
+    if (repository.toLowerCase() !== `${owner}/${repo}`.toLowerCase()) return null;
+    const state = GRAPHQL_PULL_STATES.get(source['state']);
+    if (state === undefined) throw new GitHubError('malformed-response', `The ${what} has no valid state.`);
+    const labels = source['labels'];
+    const more = optionalMember(labels, 'pageInfo', 'hasNextPage');
+    if (!isPlainObject(labels) || typeof more !== 'boolean') throw new GitHubError('malformed-response', `The ${what} has no label connection.`);
+    return {
+      number,
+      htmlUrl: hostString(source['url'], `${what}'s URL`),
+      repository,
+      state,
+      body: bodyText(source['body'], what),
+      // A source with more labels than the connection holds is read in full
+      // from this repository's REST listing.
+      labels: more ? await listLabels({ owner, repo, number }) : labelNames(labels['nodes'], what),
+    };
+  }
+
+  async function listCrossReferencingPullRequests({
+    owner: ownerInput,
+    repo: repoInput,
+    pullNumber: pullNumberInput,
+  }: Unchecked<'owner' | 'repo' | 'pullNumber'> = {}): Promise<readonly ICrossReferencingPullRequest[]> {
+    const destination = { owner: ownerInput, repo: repoInput, pullNumber: pullNumberInput };
+    requireDestination(destination);
+    const { owner, repo, pullNumber } = destination;
+    const found: ICrossReferencingPullRequest[] = [];
+    const seen = new Set<string>();
+    let after: string | null = null;
+    for (let pages = 1; ; pages += 1) {
+      if (pages > limits.maxPages) throw new GitHubError('pagination', `Cross-references exceeded ${String(limits.maxPages)} pages.`);
+      const response = await send('POST', `${API_ORIGIN}/graphql`, {
+        graphql: true,
+        body: { query: CROSS_REFERENCES_QUERY, variables: { owner, repo, number: pullNumber, after } },
+      });
+      if (!response.ok) throw await statusError(response, 'cross-reference query');
+      const body = await jsonBody(response, 'cross-reference query');
+      if (isPlainObject(body) && isList(body['errors']) && body['errors'].length > 0) {
+        const types = body['errors'].map((e) => (isPlainObject(e) ? e['type'] || e['message'] : String(e))).join('; ');
+        throw new GitHubError('graphql-errors', redact(`The cross-reference query returned errors: ${types}`));
+      }
+      const items = optionalMember(body, 'data', 'repository', 'pullRequest', 'timelineItems');
+      if (!isPlainObject(items) || !isList(items['nodes']) || !isPlainObject(items['pageInfo'])) {
+        throw new GitHubError('malformed-response', 'The cross-reference query returned no timeline connection.');
+      }
+      for (const node of items['nodes']) {
+        const source = await crossReferenceSource(node, owner, repo);
+        if (source !== null) found.push(source);
+      }
+      const { hasNextPage, endCursor } = items['pageInfo'];
+      if (hasNextPage === false) return found;
+      if (hasNextPage !== true || typeof endCursor !== 'string' || endCursor === '' || seen.has(endCursor)) {
+        throw new GitHubError('pagination', 'The cross-reference pagination is missing or repeats a cursor.');
+      }
+      seen.add(endCursor);
+      after = endCursor;
+    }
+  }
+
+  /** Whether a refused answer is a rate limit (primary or secondary) rather than a permission refusal. */
+  function isRateLimit(response: IFetchResponse, explanation: string): boolean {
+    if (response.status === 429) return true;
+    return (
+      response.status === 403 &&
+      (response.headers.get('x-ratelimit-remaining') === '0' || response.headers.get('retry-after') !== null || /rate limit/i.test(explanation))
+    );
+  }
+
+  async function closePullRequest({
+    owner: ownerInput,
+    repo: repoInput,
+    pullNumber: pullNumberInput,
+  }: Unchecked<'owner' | 'repo' | 'pullNumber'> = {}): Promise<void> {
+    const destination = { owner: ownerInput, repo: repoInput, pullNumber: pullNumberInput };
+    requireDestination(destination);
+    const { owner, repo, pullNumber } = destination;
+    const response = await send('PATCH', `${API_ORIGIN}${repoPath(owner, repo)}/pulls/${String(pullNumber)}`, { body: { state: 'closed' } });
+    if (!response.ok) {
+      const explanation = await explanationOf(response);
+      const code = isRateLimit(response, explanation) ? 'rate-limited' : 'http-status';
+      throw new GitHubError(code, answeredWith(response, 'close-pull-request request', explanation), { status: response.status });
+    }
+    const closed = await jsonBody(response, 'close-pull-request');
+    if (optionalMember(closed, 'number') !== pullNumber || optionalMember(closed, 'state') !== 'closed') {
+      throw new GitHubError('malformed-response', `The close answer does not show pull request ${String(pullNumber)} closed; the outcome is unknown.`);
+    }
+  }
+
   return Object.freeze({
     getAuthenticatedUser,
     createReview,
@@ -2023,5 +2338,9 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
     listBranchPullRequests,
     addLabel,
     listLabels,
+    listOpenLabeledPullRequests,
+    getPullRequest,
+    listCrossReferencingPullRequests,
+    closePullRequest,
   });
 }

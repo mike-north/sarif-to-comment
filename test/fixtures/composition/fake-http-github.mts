@@ -23,7 +23,10 @@
  *   POST /graphql                                  reviewThreads with the
  *                                                  original anchors
  * and the branches, pull requests and labels of companion suggestion pull
- * requests (fake-http-companion.mts). The pull request reports its head
+ * requests (fake-http-companion.mts), and the labeled listing, pull request
+ * reads and closes and GraphQL cross-references that suggestion cleanup uses
+ * (fake-http-cleanup.mts; pull requests are seeded with seedPulls). The pull
+ * request under review is open and unmerged. The pull request reports its head
  * branch (`pull.headRef`, default `feature`), base branch and repositories;
  * the repository reports its default branch (default `main`), the account's
  * push permission (`push`, default true) and its labels (`labels`, default
@@ -94,6 +97,7 @@ import {
   readJson,
 } from '../../support/runtime-types.mts';
 import type { Guard, UnknownRecord } from '../../support/runtime-types.mts';
+import { cleanupRoute, timelineQuery } from './fake-http-cleanup.mts';
 import {
   EMPTY_COMPANION_STATE,
   companionRoute,
@@ -445,8 +449,8 @@ export class FakeHttpGitHub {
     const repoPath = `/repos/${owner}/${repo}`;
     const pull = `${repoPath}/pulls/${String(pullNumber)}`;
     const p = u.pathname;
-    const json = (body: unknown, status = 200): Response =>
-      new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+    const json = (body: unknown, status = 200, headers: Readonly<Record<string, string>> = {}): Response =>
+      new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', ...headers } });
     let m: RegExpExecArray | null;
 
     if (method === 'GET' && p === '/user') return json(USER);
@@ -456,6 +460,11 @@ export class FakeHttpGitHub {
       const headRepo = branches.headRepo === undefined ? fullName : branches.headRepo;
       return json({
         number: pullNumber,
+        html_url: `https://github.com/${fullName}/pull/${String(pullNumber)}`,
+        state: 'open',
+        merged: false,
+        body: null,
+        labels: [],
         head: { sha: head, ref: branches.headRef ?? 'feature', repo: headRepo === null ? null : { full_name: headRepo } },
         base: { sha: base, ref: branches.baseRef ?? 'main', repo: { full_name: fullName } },
         changed_files: repository.pullFiles.length,
@@ -528,7 +537,12 @@ export class FakeHttpGitHub {
         })),
       );
     }
-    if (method === 'POST' && p === '/graphql') return this.reviewThreads(parseJson(bodyText(init)), json);
+    if (method === 'POST' && p === '/graphql') {
+      const query = parseJson(bodyText(init));
+      return timelineQuery(this.companionHost(), query, json) ?? this.reviewThreads(query, json);
+    }
+    const cleanup = cleanupRoute(this.companionHost(), method, u, () => bodyText(init), json);
+    if (cleanup) return cleanup;
     const companion = companionRoute(this.companionHost(), method, u, () => bodyText(init), json);
     if (companion) return companion;
     return json({ message: `fake host: no route for ${method} ${p}` }, 404);
@@ -577,8 +591,14 @@ export class FakeHttpGitHub {
     this.write('companion.json', { ...state, refs: sha === null ? refs : { ...refs, [branch]: sha } });
   }
 
+  /** Adds pull requests (originals, suggestions, ordinary pull requests or issues) as if people had opened them. */
+  seedPulls(pulls: readonly IStoredPull[]): void {
+    const state = this.companion();
+    this.write('companion.json', { ...state, pulls: [...state.pulls, ...pulls] });
+  }
+
   /** A person edits, closes or merges a suggestion pull request. */
-  editPull(number: number, change: Partial<Pick<IStoredPull, 'title' | 'body' | 'state' | 'merged'>>): void {
+  editPull(number: number, change: Partial<Pick<IStoredPull, 'title' | 'body' | 'state' | 'merged' | 'head' | 'headRepo' | 'labels'>>): void {
     const state = this.companion();
     if (!state.pulls.some((pr) => pr.number === number)) throw new Error(`fake host: no pull request ${String(number)}`);
     this.write('companion.json', { ...state, pulls: state.pulls.map((pr) => (pr.number === number ? { ...pr, ...change } : pr)) });

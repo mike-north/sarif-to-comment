@@ -201,7 +201,7 @@ describe('command dispatch and help', () => {
     const result = run(['--help']);
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stderr, '');
-    for (const command of ['init', 'add-comment', 'remove-comment', 'inspect', 'add-staged-changes', 'validate', 'publish']) {
+    for (const command of ['init', 'add-comment', 'remove-comment', 'inspect', 'add-staged-changes', 'validate', 'publish', 'close-suggestion-prs']) {
       assert.match(result.stdout, new RegExp(`\\b${command}\\b`), `help omits ${command}`);
     }
     assert.match(result.stdout, /--format human\|json/);
@@ -219,6 +219,7 @@ describe('command dispatch and help', () => {
     ['add-staged-changes', ['--sarif', '--output', '--worktree', '--repo', '--commit', '--source-root', '--format']],
     ['validate', ['--sarif', '--repo', '--pull', '--commit', '--source-root', '--old-source-commit', '--ignore-approval-hold', '--submit', '--format']],
     ['publish', ['--sarif', '--repo', '--pull', '--commit', '--state', '--source-root', '--old-source-commit', '--ignore-approval-hold', '--submit', '--format']],
+    ['close-suggestion-prs', ['--repo', '--label', '--original', '--dry-run', '--format']],
   ];
   for (const [command, flags] of commands) {
     test(`${command} --help documents its options and needs no token`, () => {

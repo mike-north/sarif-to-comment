@@ -18,6 +18,9 @@
  *                       (a draft; --submit: submitted;
  *                       --suggestion-prs: with companion
  *                       suggestion pull requests)
+ *   close-suggestion-prs close suggestion pull requests  closeSuggestionPullRequests
+ *                       whose original ended
+ *                       (docs/suggestion-cleanup-contract.md)
  * A first argument beginning with "-" (or no argument) is the original
  * flag-only publisher, which keeps its exact behavior, output, credentials and
  * exit statuses. Anything else is a usage error.
@@ -35,12 +38,14 @@
  * content was refused (`invalid` / `failed` / `stale`). `publish` keeps the publisher's
  * statuses: 0 published, 2 blocked, 3 uncertain, 1 otherwise. `validate`
  * (docs/readiness-assessment-contract.md): 0 ready, 2 blocked, 1 incomplete
- * or otherwise.
+ * or otherwise. `close-suggestion-prs`: 0 complete (a dry run too), 2
+ * permission-limited, 3 incomplete, 1 usage or operational error (before
+ * anything was closed).
  *
  * Receipts name only files actually written, archived, or deliberately not
  * written (`written: false`). The GitHub token (GH_TOKEN, else GITHUB_TOKEN)
- * is used only by `validate` and `publish` and is redacted from every output
- * in both modes.
+ * is used only by `validate`, `publish` and `close-suggestion-prs` and is
+ * redacted from every output in both modes.
  */
 
 import * as fs from 'node:fs';
@@ -48,11 +53,14 @@ import * as path from 'node:path';
 
 import * as files from './artifact-files.cjs';
 import type { IArchivedOutput, IJsonFile, ReleaseOwnership } from './artifact-files.cjs';
+import { closeSuggestionPullRequestsWithInternals } from './close-suggestion-pull-requests.cjs';
+import type { CloseSuggestionPullRequestsStatus, ICloseSuggestionPullRequestsInternals } from './close-suggestion-pull-requests.cjs';
 import { publishSarifReviewWithInternals } from './publish-sarif-review.cjs';
 import type { ISarifSourceBinding } from './public-types.cjs';
 import { parseFindingSelector } from './finding-selectors.cjs';
 import { createSarifDocument, addSarifCommentWithUntypedInput, removeSarifCommentWithUntypedInput } from './sarif-authoring.cjs';
 import type { ICreateSarifDocumentOptions, INewSarifRun, ISarifComment } from './sarif-authoring.cjs';
+import { LABEL_RULE, isLabelName } from './review-preflight.cjs';
 import { isNormalizedRepositoryPath, OWNER_PATTERN, REPO_PATTERN } from './sarif-common.cjs';
 import { inspectSarifWithUntypedInput, renderInspectionText } from './sarif-inspection.cjs';
 import type { IInspectSarifOptions } from './sarif-inspection.cjs';
@@ -64,24 +72,31 @@ import type { IValidateSarifReviewInternals } from './validate-sarif-review.cjs'
 const md = String.raw;
 
 /** A CLI command, in workflow order. */
-type CliCommand = 'init' | 'add-comment' | 'remove-comment' | 'inspect' | 'add-staged-changes' | 'validate' | 'publish';
+type CliCommand = 'init' | 'add-comment' | 'remove-comment' | 'inspect' | 'add-staged-changes' | 'validate' | 'publish' | 'close-suggestion-prs';
 
 /** The commands, in workflow order. */
-const COMMANDS: readonly CliCommand[] = ['init', 'add-comment', 'remove-comment', 'inspect', 'add-staged-changes', 'validate', 'publish'];
+const COMMANDS: readonly CliCommand[] = ['init', 'add-comment', 'remove-comment', 'inspect', 'add-staged-changes', 'validate', 'publish', 'close-suggestion-prs'];
 
 /**
- * The private test seam the executable passes to the GitHub-reading
- * operations. Its client serves both: assessment needs the authenticated
- * user as well as the review context, and publication validates its
- * transport itself.
+ * The private test seam the executable passes to the GitHub-using
+ * operations. Its client serves all of them: assessment needs the
+ * authenticated user as well as the review context, publication validates its
+ * transport itself, and cleanup checks for its own methods.
  */
-type CliInternals = IValidateSarifReviewInternals;
+type CliInternals = IValidateSarifReviewInternals & ICloseSuggestionPullRequestsInternals;
 
 /** Exit statuses for non-publication outcomes (§5). */
 const EXIT: Readonly<{ ok: 0; usage: 1; error: 1; refused: 2 }> = Object.freeze({ ok: 0, usage: 1, error: 1, refused: 2 });
 
 /** Exit statuses for readiness assessment (docs/readiness-assessment-contract.md). */
 const VALIDATE_EXIT: Readonly<{ ready: 0; blocked: 2; incomplete: 1 }> = Object.freeze({ ready: 0, blocked: 2, incomplete: 1 });
+
+/** Exit statuses for suggestion pull request cleanup (docs/suggestion-cleanup-contract.md §2.10). */
+const CLEANUP_EXIT: Readonly<Record<CloseSuggestionPullRequestsStatus, number>> = Object.freeze({
+  complete: 0,
+  'permission-limited': 2,
+  incomplete: 3,
+});
 
 /** Exit statuses for publication, unchanged from the flag-only publisher. */
 const PUBLISH_EXIT: Readonly<{ published: 0; blocked: 2; uncertain: 3; rejected: 1 }> = Object.freeze({
@@ -134,7 +149,7 @@ ${REVIEW_POLICY_OPTIONS}`;
 const VALIDATE_OPTIONS = md`  --sarif FILE                   SARIF 2.1.0 JSON file to check.
 ${REVIEW_TARGET_OPTIONS}${REVIEW_POLICY_OPTIONS}`;
 
-const CREDENTIALS = md`Credentials (validate and publish only):
+const CREDENTIALS = md`Credentials (validate, publish and close-suggestion-prs only):
   GH_TOKEN, or else GITHUB_TOKEN: a GitHub personal access token or user token.
   GitHub App installation tokens (including the automatic Actions token) are
   not supported. There is no token flag.
@@ -156,6 +171,7 @@ Usage:
   sarif-to-comment add-staged-changes --sarif IN --output OUT --worktree DIR --repo OWNER/REPO --commit FULLSHA [options]
   sarif-to-comment validate --sarif FILE --repo OWNER/REPO --pull N --commit FULLSHA [options]
   sarif-to-comment publish --sarif FILE --repo OWNER/REPO --pull N --commit FULLSHA --state ABSOLUTE_FILE [options]
+  sarif-to-comment close-suggestion-prs --repo OWNER/REPO [options]
   sarif-to-comment --sarif FILE --repo OWNER/REPO --pull N --commit FULLSHA
                    --state ABSOLUTE_FILE [--source-root ABSOLUTE_FILE_URI]
                    [--old-source-commit FULLSHA] [--ignore-approval-hold] [--submit]
@@ -171,6 +187,8 @@ Commands:
   validate             Check, without publishing, that a SARIF file can be published.
   publish              Publish a SARIF file as one GitHub pull request review (a draft
                        unless --submit).
+  close-suggestion-prs Close suggestion pull requests whose original pull request has
+                       merged or closed.
 Every command reads and writes ordinary SARIF files; SARIF from any producer
 can be inspected, extended and published without init.
 
@@ -179,10 +197,11 @@ ${PUBLISH_OPTIONS}${FORMAT_OPTION}  --help                         Show help. Ne
 
 ${CREDENTIALS}
 Exit status:
-  0  success; published (or already published); ready
+  0  success; published (or already published); ready; cleanup complete
   2  refused content: blocked (nothing was published), invalid/failed input,
-     or a stale finding selector
-  3  uncertain: delivery could not be confirmed; retry with the same --state
+     or a stale finding selector; cleanup left pull requests it may not close
+  3  uncertain: delivery could not be confirmed; retry with the same --state;
+     cleanup incomplete (safe to run again)
   1  usage error, unreadable file, refused request, incomplete validation,
      or operational failure
 `,
@@ -366,6 +385,38 @@ Exit status:
   2  blocked: nothing was published
   3  uncertain: delivery could not be confirmed; retry with the same --state
   1  usage error, unreadable SARIF file, refused request, or operational failure
+`,
+  'close-suggestion-prs': md`sarif-to-comment close-suggestion-prs — close suggestion pull requests whose original ended
+
+Usage:
+  sarif-to-comment close-suggestion-prs --repo OWNER/REPO [--label NAME] [--original N]
+                                        [--dry-run] [--format human|json]
+
+Closes this tool's open suggestion pull requests (made by publish
+--suggestion-prs) whose original pull request has merged or closed. They are
+recognized by the marker in their description, never by their title. A
+suggestion is closed only after its original has been read and found merged
+or closed and the suggestion itself has been read again; an original that
+cannot be read is never treated as ended. Everything is read before anything
+is closed. Closing never deletes a branch, and nothing else is changed.
+Running it again is safe.
+
+Options:
+  --repo OWNER/REPO              Repository whose suggestion pull requests are checked.
+  --label NAME                   The suggestion label (default: suggestion).
+  --original N                   Check only the pull requests that reference
+                                 original pull request N, instead of every open
+                                 pull request with the label.
+  --dry-run                      Read and verify everything, close nothing.
+${FORMAT_OPTION}
+${CREDENTIALS}
+Exit status:
+  0  complete: nothing left to do (also a dry run)
+  2  permission-limited: some suggestion pull requests could not be closed with
+     this token; someone allowed to close them can finish
+  3  incomplete: an original could not be verified or an action failed; run
+     it again later
+  1  usage error, missing token, or operational failure (nothing was closed)
 `,
 };
 
@@ -1318,6 +1369,50 @@ async function publish(argv: readonly string[], { env }: IHandlerContext, intern
 }
 
 // ---------------------------------------------------------------------------
+// close-suggestion-prs
+// ---------------------------------------------------------------------------
+
+/**
+ * Suggestion pull request cleanup. The outcome's Markdown is shown on stdout
+ * for every status; a rejection (invalid input, or a failure before anything
+ * was closed) is an operational error.
+ */
+async function closeSuggestionPrs(argv: readonly string[], { env }: IHandlerContext, internals: CliInternals | undefined): Promise<IOutcome> {
+  const command = 'close-suggestion-prs';
+  const { values, flags } = parseOptions(argv, { values: ['--repo', '--label', '--original'], booleans: ['--dry-run'], required: ['--repo'] });
+  const repository = repositoryFlag(values);
+  const label = values.get('--label');
+  if (label !== undefined && !isLabelName(label)) throw new UsageError(`--label must be ${LABEL_RULE}`);
+  const originalPullNumber = positiveFlag(values, '--original');
+  const token = tokenFrom(env);
+  if (token === undefined) {
+    return errorOutcome(command, 'no GitHub token: set GH_TOKEN (or GITHUB_TOKEN) to a personal access token or user token.');
+  }
+  const input = {
+    repository,
+    token,
+    ...(label === undefined ? {} : { label }),
+    ...(originalPullNumber === undefined ? {} : { originalPullNumber }),
+    ...(flags.has('--dry-run') ? { dryRun: true } : {}),
+  };
+  let outcome;
+  try {
+    outcome = await closeSuggestionPullRequestsWithInternals(input, internals);
+  } catch (err) {
+    return errorOutcome(command, describeError(err), {}, ['Nothing was closed.']);
+  }
+  const doc = {
+    command,
+    status: outcome.status,
+    dryRun: outcome.dryRun,
+    originals: outcome.originals,
+    suggestions: outcome.suggestions,
+    message: outcome.markdown,
+  };
+  return { exit: CLEANUP_EXIT[outcome.status], doc, out: `${outcome.markdown}\n` };
+}
+
+// ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
 
@@ -1336,6 +1431,7 @@ const HANDLERS: Readonly<Record<CliCommand, Handler>> = {
   'add-staged-changes': addStagedChanges,
   validate,
   publish,
+  'close-suggestion-prs': closeSuggestionPrs,
 };
 
 /** Whether an argument names a command. */
@@ -1366,9 +1462,9 @@ export interface ICliIo {
  * Runs the CLI and returns its exit status; expected failures never throw.
  *
  * @param io - `{ argv, env, stdout, stderr, stdin?, cwd? }` (see ICliIo)
- * @param internals - passed to publishSarifReview and validateSarifReview
- *   (private test seam; the shipped executable's test wrappers inject a fake
- *   GitHub client through it)
+ * @param internals - passed to publishSarifReview, validateSarifReview and
+ *   closeSuggestionPullRequests (private test seam; the shipped executable's
+ *   test wrappers inject a fake GitHub client through it)
  */
 async function main(
   { argv, env, stdout, stderr, stdin = process.stdin, cwd = process.cwd() }: ICliIo,

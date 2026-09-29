@@ -139,8 +139,8 @@ const SHARED_KEYS: readonly string[] = ['sarif', 'destination', 'reviewedCommit'
 /** Every accepted option: the approval-hold override, the explicit submitted mode, and suggestion pull requests. */
 const OPTION_KEYS: ReadonlySet<string> = new Set(['ignoreApprovalHold', 'submit', 'suggestionPullRequests', 'suggestionLabel']);
 
-/** The label suggestion pull requests carry unless the caller names another. */
-const DEFAULT_SUGGESTION_LABEL = 'suggestion';
+/** The label suggestion pull requests carry unless the caller names another (also cleanup's default). */
+export const DEFAULT_SUGGESTION_LABEL = 'suggestion';
 
 /** Characters a label name may not hold: controls and invisible formatting characters. */
 const INVISIBLE_IN_LABEL = /[\u0000-\u001F\u007F-\u009F\uFEFF\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069\u2028\u2029]/;
@@ -267,10 +267,26 @@ class InputRefusals {
   }
 }
 
-/** Whether `value` can name a GitHub label exactly: 1-50 UTF-16 code units, none invisible, not whitespace-padded. */
-function isLabelName(value: unknown): value is string {
-  return typeof value === 'string' && value.length >= 1 && value.length <= 50 && !INVISIBLE_IN_LABEL.test(value) && !/^\s|\s$/.test(value);
+/**
+ * Whether `value` can name a suggestion label exactly: 1-50 UTF-16 code
+ * units, none invisible, not whitespace-padded, and no comma. GitHub's label
+ * filter reads a comma as a list of labels, so cleanup could never select a
+ * label containing one (docs/suggestion-cleanup-contract.md §2.2); publication
+ * and cleanup share this rule.
+ */
+export function isLabelName(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length >= 1 &&
+    value.length <= 50 &&
+    !INVISIBLE_IN_LABEL.test(value) &&
+    !/^\s|\s$/.test(value) &&
+    !value.includes(',')
+  );
 }
+
+/** What a valid suggestion label is, for refusals naming the field or flag that gave one. */
+export const LABEL_RULE = '1-50 characters without commas, control or invisible formatting characters or surrounding whitespace';
 
 function isCommit(value: unknown): value is string {
   return typeof value === 'string' && COMMIT_PATTERN.test(value);
@@ -380,7 +396,7 @@ export function captureReviewInput<Own extends object>(input: unknown, spec: IRe
       throw invalid('options.suggestionLabel applies only with options.suggestionPullRequests: true');
     }
     if (label !== undefined && !isLabelName(label)) {
-      throw invalid('options.suggestionLabel must be 1-50 characters without control or invisible formatting characters or surrounding whitespace');
+      throw invalid(`options.suggestionLabel must be ${LABEL_RULE}`);
     }
     if (enabled === true) suggestionLabel = label ?? DEFAULT_SUGGESTION_LABEL;
   }

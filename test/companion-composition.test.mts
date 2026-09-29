@@ -609,6 +609,20 @@ describe('default-off behavior is unchanged', () => {
     await assert.rejects(publish(world, plain(), { suggestionPullRequests: 'yes' }), /suggestionPullRequests must be a boolean/);
     assert.deepEqual(world.host.log(), []);
   });
+
+  test('a suggestion label containing a comma is refused before any request: cleanup could never select it', async () => {
+    // docs/suggestion-cleanup-contract.md §2.2: GitHub's label filter is a
+    // comma-separated list, so such a label could never be swept.
+    const world = makeWorld({}, repository({ labels: ['a,b'] }));
+    for (const call of [publish, validate]) {
+      await assert.rejects(
+        call(world, groupedAdditions(), { suggestionPullRequests: true, suggestionLabel: 'a,b' }),
+        (err: unknown) => err instanceof TypeError && /options\.suggestionLabel must be .*without commas/.test(err.message),
+      );
+    }
+    assert.deepEqual(world.host.log(), []);
+    assert.equal(fs.existsSync(world.statePath), false);
+  });
 });
 
 describe('group rules (§2.3–§2.4), identical in validate and publish', () => {
@@ -1139,6 +1153,18 @@ describe('CLI + real GitHub client over HTTP', () => {
       const result = cli(world, [name, '--sarif', file, ...target, ...rest, '--suggestion-label', 'x']);
       assert.equal(result.status, 1, result.stdout + result.stderr);
       assert.match(result.stderr, /--suggestion-label requires --suggestion-prs/);
+    }
+    assert.deepEqual(world.host.log(), []);
+  });
+
+  test('--suggestion-label with a comma is refused (exit 1), and nothing is requested', () => {
+    const world = makeWorld({}, repository({ labels: ['a,b'] }));
+    const file = sarifFile(world, groupedAdditions());
+    for (const command of [['validate'], ['publish', '--state', world.statePath]]) {
+      const [name = '', ...rest] = command;
+      const result = cli(world, [name, '--sarif', file, ...target, ...rest, '--suggestion-prs', '--suggestion-label', 'a,b']);
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.match(result.stderr, /suggestionLabel must be .*without commas/);
     }
     assert.deepEqual(world.host.log(), []);
   });
