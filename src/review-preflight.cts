@@ -332,6 +332,14 @@ export function destinationLabel(captured: ICapturedReview): string {
 }
 
 /**
+ * GitHub answered with review context for another pull request or reviewed
+ * commit. This is the host's answer, not a defect in this package, so
+ * readiness assessment reports it as incomplete; publication rejects with it.
+ * The name stays `Error`, as publication's rejection always was.
+ */
+export class ReviewContextMismatchError extends Error {}
+
+/**
  * Refuses a context that is not for exactly the requested pull request and
  * reviewed commit. The review is never retargeted to another pull request or
  * to the pull request's current head.
@@ -342,12 +350,12 @@ function verifyContext(context: unknown, captured: ICapturedReview): asserts con
   if (!isPlainObject(context)) throw new Error(`GitHub returned no usable review context for ${wanted}.`);
   const sameName = (a: unknown, b: string): boolean => typeof a === 'string' && a.toLowerCase() === b.toLowerCase();
   if (!sameName(context['owner'], owner) || !sameName(context['repo'], repo) || context['pullNumber'] !== pullNumber) {
-    throw new Error(
+    throw new ReviewContextMismatchError(
       `GitHub returned review context for pull request ${templateText(context['owner'])}/${templateText(context['repo'])}#${templateText(context['pullNumber'])}, not the requested pull request ${wanted}.`,
     );
   }
   if (context['reviewedCommit'] !== captured.reviewedCommit) {
-    throw new Error(
+    throw new ReviewContextMismatchError(
       `GitHub returned review context for reviewed commit ${templateText(context['reviewedCommit'])}, not the requested reviewed commit ${captured.reviewedCommit}. A review is never retargeted to another commit.`,
     );
   }

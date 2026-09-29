@@ -32,9 +32,14 @@
  *   { status: 'blocked', problems: [{ message, pointer? }], markdown }
  *       // markdown is publication's own blocked explanation
  *   { status: 'incomplete', markdown }
- *       // anything publication would reject with after capture: GitHub or
- *       // network failures, source reads, a context for another pull request
- *       // or commit, an account without a numeric id. Never a verdict.
+ *       // an operational failure: anything the GitHub client reports (HTTP,
+ *       // network, authentication, source reads), its answer that the account
+ *       // has no numeric id, or context for another pull request or commit.
+ *       // Never a verdict.
+ * Any other failure after capture is a defect in this package or its client
+ * boundary (an internal invariant, a client answer outside its contract). It
+ * rejects, as publication does, rather than being disguised as a transient
+ * condition with retry advice.
  * The token never appears in an outcome.
  *
  * internals (private seam, not caller API):
@@ -49,6 +54,7 @@ import { authenticatedUserId, validatePreparedReview } from './publication.cjs';
 import type { IPublishSarifReviewOptions, IPullRequestDestination } from './publish-sarif-review.cjs';
 import type { IProblem } from './public-types.cjs';
 import {
+  ReviewContextMismatchError,
   blockedReviewMarkdown,
   captureReviewInput,
   destinationLabel,
@@ -225,20 +231,90 @@ function redacted(outcome: ValidateSarifReviewOutcome, token: string): ValidateS
 }
 
 // ---------------------------------------------------------------------------
+// Operational failures
+
+/**
+ * The failures assessment reports as `incomplete`: those raised by the GitHub
+ * client itself (its context fetch, its source reader and its user lookup),
+ * recorded by identity as they pass through. Anything else that reaches the
+ * caller is this package's own defect and is rethrown.
+ */
+class OperationalFailures {
+  private readonly seen = new Set<unknown>();
+
+  /** Records `err` as operational and returns it for rethrowing. */
+  record(err: unknown): unknown {
+    this.seen.add(err);
+    return err;
+  }
+
+  has(err: unknown): boolean {
+    return this.seen.has(err);
+  }
+
+  /** `client` with every failure of its calls recorded as operational. */
+  observe(client: IAssessingClient): IAssessingClient {
+    return {
+      fetchContext: async (request) => {
+        let fetched;
+        try {
+          fetched = await client.fetchContext(request);
+        } catch (err) {
+          throw this.record(err);
+        }
+        return { context: fetched.context, readSource: this.observeReader(fetched.readSource) };
+      },
+      getAuthenticatedUser: async () => {
+        try {
+          return await client.getAuthenticatedUser();
+        } catch (err) {
+          throw this.record(err);
+        }
+      },
+    };
+  }
+
+  /**
+   * The source reader with its failures recorded. A reader that is not a
+   * function is passed on unchanged, for preparation to refuse as the
+   * contract violation it is.
+   */
+  private observeReader(readSource: unknown): unknown {
+    if (typeof readSource !== 'function') return readSource;
+    return async (...args: readonly unknown[]): Promise<unknown> => {
+      try {
+        const text: unknown = await Reflect.apply(readSource, undefined, args);
+        return text;
+      } catch (err) {
+        throw this.record(err);
+      }
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Entry point
 
 async function assess(captured: ICapturedReview, createGitHubClient: (options: ICreateGitHubClientOptions) => IAssessingClient): Promise<ValidateSarifReviewOutcome> {
+  const operational = new OperationalFailures();
   let ready: IReadyOutcome;
   try {
-    const client = createGitHubClient({ token: captured.token, fetch: globalThis.fetch });
+    const client = operational.observe(createGitHubClient({ token: captured.token, fetch: globalThis.fetch }));
     const prepared = await prepareForDestination(captured, client);
     if (prepared.status === 'blocked') {
       return { status: 'blocked', problems: prepared.diagnostics.map(problemOf), markdown: blockedReviewMarkdown(prepared) };
     }
     validatePreparedReview({ body: prepared.review.body, comments: prepared.review.comments });
-    await authenticatedUserId(client);
+    try {
+      await authenticatedUserId(client);
+    } catch (err) {
+      // The client's failure, or its answer that the account has no numeric
+      // id (not user/PAT authentication): both are the host's, not a defect.
+      throw operational.record(err);
+    }
     ready = prepared;
   } catch (err) {
+    if (!operational.has(err) && !(err instanceof ReviewContextMismatchError)) throw withoutCredential(err, captured.token);
     return { status: 'incomplete', markdown: incompleteMarkdown(withoutCredential(err, captured.token)) };
   }
   return { status: 'ready', markdown: readyMarkdown(ready, captured) };
@@ -262,9 +338,11 @@ async function assess(captured: ICapturedReview, createGitHubClient: (options: I
  * @returns `ready`, `blocked` with its problems, or `incomplete` when the
  * assessment itself could not be completed. `status` plus `markdown` (and
  * `problems`) is the stable contract.
- * @throws `TypeError` for invalid input, before any network request. Other
- * failures are reported as `incomplete`, never thrown. A result never
- * contains the token.
+ * @throws `TypeError` for invalid input, before any network request; an
+ * `Error` for a defect in this package (an internal invariant failure), as
+ * `publishSarifReview` does. Operational failures (GitHub, network,
+ * authentication, source reads) are reported as `incomplete`, never thrown.
+ * Neither a result nor a rejection contains the token.
  *
  * @example
  * ```ts

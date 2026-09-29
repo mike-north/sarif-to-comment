@@ -56,7 +56,7 @@ Promise&lt;[ValidateSarifReviewOutcome](./sarif-to-comment.validatesarifreviewou
 
 ## Exceptions
 
-`TypeError` for invalid input, before any network request. Other failures are reported as `incomplete`<!-- -->, never thrown. A result never contains the token.
+`TypeError` for invalid input, before any network request; an`Error` for a defect in this package (an internal invariant failure), as`publishSarifReview` does. Operational failures (GitHub, network, authentication, source reads) are reported as `incomplete`<!-- -->, never thrown. Neither a result nor a rejection contains the token.
 
 ## Remarks
 
