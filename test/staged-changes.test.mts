@@ -714,7 +714,10 @@ test('creation: a finding on a real proposed line carries the create operation a
   assert.deepEqual(outcome.receipt.changes, [
     { path: 'docs/new.md', operation: 'create', associated: ['/runs/0/results/0'], explainedBy: 'finding' },
   ]);
-  assert.ok(outcome.receipt.warnings.some((w) => /does not publish|publisher/i.test(w.message)));
+  // Publication now presents creations and deletions in the review body
+  // (docs/file-operation-publication-contract.md), so the receipt no longer
+  // warns that the publisher refuses them.
+  assert.ok(!outcome.receipt.warnings.some((w) => /does not publish|publisher/i.test(w.message)), JSON.stringify(outcome.receipt.warnings));
 });
 
 test('creation: a finding beyond the proposed file fails (A25)', async () => {

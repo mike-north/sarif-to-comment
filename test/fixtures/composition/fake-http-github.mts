@@ -46,6 +46,9 @@
  *                                    attached with another token is refused)
  *   failBlobReads?: boolean          answer 502 to every Git blob read (an
  *                                    operational source-read failure)
+ *   failTreeReads?: boolean          answer 502 to every Git tree read (an
+ *                                    operational failure of any source read
+ *                                    or existence check)
  *
  * Every document the host reads back (its repository, config, reviews, log
  * and the create-review request body) is checked against the shape it was
@@ -106,9 +109,20 @@ export interface IHttpRepository {
   readonly commits: { readonly base: string; readonly head: string };
   /** File text by commit, then by path, split into lines (terminators kept). */
   readonly snapshots: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>>;
+  /**
+   * Files given as exact bytes (base64) by commit, then by path, with an
+   * optional Git mode (default 100644): binary, non-UTF-8 or executable files.
+   */
+  readonly rawFiles?: Readonly<Record<string, Readonly<Record<string, IHttpRawFile>>>> | undefined;
   readonly pullFiles: readonly IHttpPullFile[];
   /** Hand-authored expectations for tests (repository.json only); the host does not read them. */
   readonly expected?: unknown;
+}
+
+/** A file given as exact bytes. */
+export interface IHttpRawFile {
+  readonly base64: string;
+  readonly mode?: string | undefined;
 }
 
 /** Host behavior (config.json). */
@@ -117,6 +131,7 @@ export interface IHttpHostConfig {
   readonly shiftThreadLine: number | null;
   readonly onlyCredential?: string | undefined;
   readonly failBlobReads?: boolean | undefined;
+  readonly failTreeReads?: boolean | undefined;
 }
 
 /** One inline comment of a create-review request body (GitHub's wire format). */
@@ -181,6 +196,7 @@ const isHttpRepository: Guard<IHttpRepository> = isShape({
   destination: isShape({ owner: isString, repo: isString, pullNumber: isNumber }),
   commits: isShape({ base: isString, head: isString }),
   snapshots: isRecordOf(isRecordOf(isArrayOf(isString))),
+  rawFiles: isOptional(isRecordOf(isRecordOf(isShape({ base64: isString, mode: isOptional(isString) })))),
   pullFiles: isArrayOf(
     isShape({ filename: isString, status: isString, additions: isNumber, deletions: isNumber, patch: isArrayOf(isString) }),
   ),
@@ -192,6 +208,7 @@ const isHostConfig: Guard<IHttpHostConfig> = isShape({
   shiftThreadLine: isEither(isNumber, isNull),
   onlyCredential: isOptional(isString),
   failBlobReads: isOptional(isBoolean),
+  failTreeReads: isOptional(isBoolean),
 });
 
 const isWireReviewRequest: Guard<IWireReviewRequest> = isShape({
@@ -245,7 +262,12 @@ function buildObjects(repository: IHttpRepository): IGitObjects {
   const commits: IGitObjects['commits'] = {};
   const trees: IGitObjects['trees'] = {};
   const blobs: IGitObjects['blobs'] = {};
-  for (const [commit, files] of Object.entries(repository.snapshots)) {
+  const commitIds = new Set([...Object.keys(repository.snapshots), ...Object.keys(repository.rawFiles ?? {})]);
+  for (const commit of commitIds) {
+    const files: [string, Buffer, string][] = [
+      ...Object.entries(repository.snapshots[commit] ?? {}).map(([p, lines]): [string, Buffer, string] => [p, Buffer.from(lines.join(''), 'utf8'), '100644']),
+      ...Object.entries(repository.rawFiles?.[commit] ?? {}).map(([p, raw]): [string, Buffer, string] => [p, Buffer.from(raw.base64, 'base64'), raw.mode ?? '100644']),
+    ];
     const dirs = new Map<string, Map<string, ITreeEntry>>([['', new Map()]]);
     /** The entries of a directory already recorded in `dirs`. */
     const entriesOf = (dir: string): Map<string, ITreeEntry> => {
@@ -253,8 +275,7 @@ function buildObjects(repository: IHttpRepository): IGitObjects {
       if (!entries) throw new Error(`fake host: directory ${dir} was not recorded`);
       return entries;
     };
-    for (const [filePath, lines] of Object.entries(files)) {
-      const bytes = Buffer.from(lines.join(''), 'utf8');
+    for (const [filePath, bytes, mode] of files) {
       const sha = gitBlobSha(bytes);
       blobs[sha] = bytes;
       const parts = filePath.split('/');
@@ -269,7 +290,7 @@ function buildObjects(repository: IHttpRepository): IGitObjects {
       }
       const name = parts[parts.length - 1];
       if (name === undefined) throw new Error(`fake host: empty path in snapshot ${commit}`);
-      entriesOf(dir).set(name, { mode: '100644', type: 'blob', sha, size: bytes.length });
+      entriesOf(dir).set(name, { mode, type: 'blob', sha, size: bytes.length });
     }
     for (const [dir, entries] of dirs) {
       trees[treeId(`${commit}:${dir}`)] = [...entries].map(([name, e]) => ({ path: name, ...e }));
@@ -401,6 +422,7 @@ export class FakeHttpGitHub {
       return tree ? json({ sha, tree: { sha: tree } }) : json({ message: 'Not Found' }, 404);
     }
     if (method === 'GET' && (m = new RegExp(`^${repoPath}/git/trees/([0-9a-f]{40})$`).exec(p))) {
+      if (this.config().failTreeReads === true) return json({ message: 'Server Error' }, 502);
       const sha = captured(m);
       const tree = objects.trees[sha];
       return tree ? json({ sha, truncated: false, tree }) : json({ message: 'Not Found' }, 404);

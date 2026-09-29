@@ -1736,6 +1736,93 @@ describe('readSource', () => {
   });
 });
 
+// The existence check behind whole-file proposals
+// (docs/file-operation-publication-contract.md §3): the same tree walk as
+// readSource, but no blob is ever downloaded or decoded, so a binary or
+// oversized file is confirmed as present.
+describe('fileExists', () => {
+  async function prepared(options: IPullScenarioOptions = {}, limits?: { maxSourceBytes: number }): Promise<{ host: FakeHost; fileExists: IFetchedContext['fileExists'] }> {
+    const host = pullScenario(options);
+    const { fileExists } = await (limits === undefined ? contextFor(host, options.request) : client(host, { limits }).fetchContext({
+      destination: DESTINATION,
+      reviewedCommit: HEAD,
+    }));
+    host.requests.length = 0;
+    return { host, fileExists };
+  }
+  const blobRequests = (host: FakeHost): string[] => host.urls().filter((u) => u.includes('/git/blobs/'));
+
+  test('a regular file exists: its commit and each tree on the path are read, never its blob', async () => {
+    const { host, fileExists } = await prepared();
+    assert.equal(await fileExists(HEAD, 'docs/guide notes/Überblick.md'), true);
+    assert.deepEqual(host.urls(), [
+      commitUrl(HEAD),
+      treeUrl(treeAt(host, HEAD, '').sha),
+      treeUrl(treeAt(host, HEAD, 'docs').sha),
+      treeUrl(treeAt(host, HEAD, 'docs/guide notes').sha),
+    ]);
+    assertHttpDiscipline(host);
+  });
+
+  test('an executable file exists', async () => {
+    const { fileExists } = await prepared();
+    assert.equal(await fileExists(HEAD, 'bin/run.sh'), true);
+  });
+
+  test('a file that is not UTF-8 exists, without being decoded', async () => {
+    const { host, fileExists } = await prepared();
+    assert.equal(await fileExists(HEAD, 'src/latin1.txt'), true);
+    assert.deepEqual(blobRequests(host), []);
+  });
+
+  test('a file beyond the source size limit exists, without being downloaded', async () => {
+    const { host, fileExists } = await prepared({}, { maxSourceBytes: 16 });
+    assert.equal(await fileExists(HEAD, 'src/big.txt'), true);
+    assert.deepEqual(blobRequests(host), []);
+  });
+
+  test('a path absent from a complete tree does not exist', async () => {
+    const { host, fileExists } = await prepared();
+    assert.equal(await fileExists(HEAD, 'src/missing.js'), false);
+    assert.equal(await fileExists(HEAD, 'nowhere/missing.js'), false);
+    assert.equal(await fileExists(HEAD, 'src/app.js/child'), false);
+    assertHttpDiscipline(host);
+  });
+
+  test('a file removed by the pull request is absent at the head', async () => {
+    const { fileExists } = await prepared();
+    assert.equal(await fileExists(HEAD, 'src/old.js'), false);
+  });
+
+  for (const [label, filePath] of [
+    ['a symlink', 'links/app-link.js'],
+    ['a path below a symlinked directory', 'linkdir/app.js'],
+    ['a submodule', 'vendor/lib'],
+    ['a directory', 'src'],
+  ] as const) {
+    test(`refuses ${label}, as readSource does`, async () => {
+      const { fileExists } = await prepared();
+      await rejectsWith(fileExists(HEAD, filePath), 'not-a-file');
+    });
+  }
+
+  test('a missing commit (HTTP 404) is an operational failure, never absence', async () => {
+    const host = pullScenario();
+    const { fileExists } = await contextFor(host);
+    replaceRoute(host, commitUrl(HEAD), () => jsonResponse(404, NOT_FOUND));
+    await rejectsWith(fileExists(HEAD, 'src/app.js'), 'http-status');
+  });
+
+  test('refuses malformed paths or commits before any request', async () => {
+    const { host, fileExists } = await prepared();
+    for (const bad of ['', '/src/app.js', '../etc/passwd', 'src//app.js', 'src\\app.js', 'src/app.js\0']) {
+      await assert.rejects(fileExists(HEAD, bad), TypeError, JSON.stringify(bad));
+    }
+    await assert.rejects(fileExists(HEAD.slice(0, 7), 'src/app.js'), TypeError);
+    assert.equal(host.requests.length, 0);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Runtime shape of the adapter's values
 //
