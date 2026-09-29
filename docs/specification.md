@@ -152,6 +152,8 @@ If the full proposal cannot fit any supported faithful representation, report an
 
 ### R16. Select publication forms using the suggestion-PR setting
 
+> **Status note (September 29, 2026).** Suggestion PRs have since been implemented (merged, unreleased) under the provisional [companion suggestion PR contract](companion-suggestion-pr-contract.md). That proposal leaves them **disabled when the setting is omitted**, departing from the low-conviction default below, and records its evaluation against PR clutter and triggered automation. The text below remains as recorded, pending owner acceptance. See [status](status.md).
+
 The caller MUST be able to allow or disallow suggestion PRs. Small edits eligible for native suggestions MUST prefer that presentation in either configuration. When suggestion PRs are enabled, whole-file creation and deletion MUST prefer a suggestion PR, and an explicitly supplied group of distinct edits requiring acceptance as a unit MUST use a suggestion PR containing the complete group. Such a PR targets the original PR's branch and preserves its supplied feedback. **[D22; A27–A29]**
 
 When this setting is omitted, suggestion PRs MUST currently be enabled. This is a low-conviction product default to validate through real user feedback, particularly PR clutter and repository automation triggered by PR creation. The caller's explicit disable choice remains supported. **[D22]**
