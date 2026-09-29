@@ -14,7 +14,7 @@ This record covers design and the first milestone (ready SARIF to a GitHub draft
 - **First milestone accepted.** The user accepted the ready-SARIF-to-draft-review first milestone, stating that waiting projects need only this increment. [First milestone](first-milestone.md) records the consumer outcome, tests-first acceptance cases, later increments and delivery evidence.
 - **Placement is the primary gate.** The user emphasized rigorous testing and exceptionally reliable placement on the right source line. Exact placement became the primary release gate. It is backed by independently authored expected locations, boundary and diff-side cases, wrong-placement negative controls, and real GitHub readback and rendering.
 - **Surfaces.** The user selected both an importable library (primary, taking in-memory SARIF) and a CLI. The [engineering plan](milestone-engineering-plan.md) records the sequence.
-- **Sharing material with the implementation service.** The user explicitly authorized sending the repository's relevant material to the AI coding service used for implementation and independent review. An automated approval check had initially refused the transfer, and no workaround was attempted.
+- **Sharing material with the implementation service.** The user gave an explicit written authorization to send the repository's relevant material to the AI coding service used for implementation and independent review. The quote is recorded verbatim at line 31 of `git show 146c599:docs/work-record.md`. An automated approval check had initially refused the transfer, and no workaround was attempted.
 
 ## First milestone: engineering evidence
 

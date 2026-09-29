@@ -104,4 +104,4 @@ It drew these lessons:
 - Check changed, deleted and untracked generated output.
 - Keep handbacks concise, with pointers to evidence.
 
-No global guidance changes or history rewrites were adopted at the time. Optional follow-up proposals, such as helper consolidation and narrowing the private seams, are triaged in [#12](https://github.com/mike-north/sarif-to-comment/issues/12).
+No global guidance changes or history rewrites were adopted at the time. The record also stated a decision: a claimed prohibition on agent and model labels in work records had not been established, so those labels were kept as provenance of the delegation. That decision is superseded by the September 28, 2026 reconciliation, which removed the labels from committed documentation; see the [editorial note](status.md#editorial-note). The original wording is at `git show 146c599:docs/typescript-migration-work-record.md`. Optional follow-up proposals, such as helper consolidation and narrowing the private seams, are triaged in [#12](https://github.com/mike-north/sarif-to-comment/issues/12).

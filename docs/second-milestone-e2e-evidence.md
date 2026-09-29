@@ -21,7 +21,7 @@ The product purpose and requirements are in [the milestone goal](second-mileston
 
 | Item | Value |
 |---|---|
-| Reviewed source manifest | `reviewed-source.sha256`, 325 entries, file SHA-256 `823bef633b25c49908aebb6b774aba6462bef9759a2131e0c41dc7223dfc60d7` |
+| Reviewed source manifest | `reviewed-source.sha256`, 325 entries, file SHA-256 `823bef633b25c49908aebb6b774aba6462bef9759a2131e0c41dc7223dfc60d7`. The hashes identify files at commit `da3c138`, apart from the three versioning files below. Several listed documents were edited later: `README.md`, `docs/getting-started.md`, `docs/second-milestone.md`, `docs/second-milestone-contract-proposal.md`, `docs/second-milestone-goal.md` and generated `docs/api/` pages. Verify with `git show da3c138:<path> \| shasum -a 256`. |
 | Post-versioning differences from the manifest | Only `package.json` (0.1.1 → 0.2.0), `CHANGELOG.md` and the consumed `.changeset/authoring-inspection-staged-changes.md`. `version-preparation.json` records that code, types, API and lockfile are unchanged. A re-check of the manifest against the working tree on September 28 found exactly these three differing entries. |
 | Packed artifact | `sarif-to-comment-0.2.0.tgz`, SHA-256 `13b75f537f36453968b7720e09d6210571aca500116b5bb77bce7e11e994c1f1`. The installed `src/` hashes equal the reviewed source hashes (`acceptance-evidence.json`, `installedPackage`). |
 | Registry | **Released and verified.** These live runs used the locally packed artifact; all 246 published files match it exactly. See [release verification](second-milestone-release-verification.md). |

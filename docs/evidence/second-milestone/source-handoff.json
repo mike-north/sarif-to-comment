@@ -19,7 +19,7 @@
     "rawLogSha256": "0ca265830215946cdcc00492760eedd19f891df2e873a5ce61d5779fd4bdd8ce"
   },
   "independentReview": {
-    "reviewer": "independent reviewer, separate from the authors",
+    "conversation": "<session identifier removed; independent reviewer separate from the authors>",
     "review02ExitCode": 0,
     "review03ExitCode": 0,
     "verdict": "No material defect within reviewed scope",

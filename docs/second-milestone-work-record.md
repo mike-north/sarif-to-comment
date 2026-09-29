@@ -91,6 +91,7 @@ A retrospective by the implementation author is retained in `docs/evidence/secon
 
 ## Delivery and release
 
+- **Renewed sharing authorization.** Before the contract design started, the user gave a renewed, explicit written authorization to send repository material and saved session context to the external AI service used for implementation. The quote is recorded verbatim at lines 51 and 83 of `git show 146c599:docs/second-milestone-work-record.md`. Until then, automated approval checks had refused the launch, and no workaround was attempted.
 - **Push approval.** An automated approval check refused the first push of release commit `da3c138`, because it would trigger npm publication and the authorization in its context was not current. No alternate route was attempted.
 - **Standing authority.** The user then explicitly authorized end-to-end work on `mike-north/sarif-to-comment`. That covers default-branch pushes and npm patch or minor publication below 1.0.0 through the existing Changesets and trusted-publishing workflow, including pushes that trigger publication. Releases at 1.0.0 or above, visibility changes, weakened safeguards and out-of-scope destructive actions still require approval.
 - **Release.** Commit `da3c138897d45deaf90817bf10afbb426717cda5` was pushed.
