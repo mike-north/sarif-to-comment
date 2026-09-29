@@ -74,7 +74,7 @@
  * internals (private seam, not caller API):
  *   createGitHubClient({ token, fetch }) -> client with the publication
  *     transport methods and fetchContext({ destination, reviewedCommit,
- *     oldSourceCommit? }) -> { context, readSource }. Defaults to
+ *     oldSourceCommit? }) -> { context, readSource, fileExists }. Defaults to
  *     src/github.cts.
  */
 

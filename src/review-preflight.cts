@@ -30,8 +30,9 @@
  *   "Invalid <spec.operation> input: ".
  *
  * prepareForDestination(captured, client) -> Promise<ready | blocked>
- *   One fetchContext, verifyContext, then prepareReview. Operational
- *   failures (GitHub, network, source reads, a context for another pull
+ *   One fetchContext, verifyContext, then prepareReview with the context's
+ *   source reader and existence check. Operational failures (GitHub,
+ *   network, source reads, existence checks, a context for another pull
  *   request or commit) reject.
  */
 
@@ -82,13 +83,16 @@ export interface IReviewInputSpec<Own extends object> {
 }
 
 /**
- * What the preflight needs from a GitHub client: the review context and its
- * source reader. Both answers are checked where they are used (verifyContext
- * here, the caller boundary of prepareReview), so they are `unknown` until
- * then.
+ * What the preflight needs from a GitHub client: the review context, its
+ * source reader and, optionally, its existence check (preparation falls back
+ * to the source reader without one). The answers are checked where they are
+ * used (verifyContext here, the caller boundary of prepareReview), so they are
+ * `unknown` until then.
  */
 export interface IContextClient {
-  readonly fetchContext: (request: IFetchContextRequest) => Promise<{ readonly context: unknown; readonly readSource: unknown }>;
+  readonly fetchContext: (
+    request: IFetchContextRequest,
+  ) => Promise<{ readonly context: unknown; readonly readSource: unknown; readonly fileExists?: unknown }>;
 }
 
 /** Every accepted shared top-level input field. */
@@ -373,13 +377,14 @@ export async function prepareForDestination(captured: ICapturedReview, client: I
     reviewedCommit: captured.reviewedCommit,
     ...(captured.oldSourceCommit === undefined ? {} : { oldSourceCommit: captured.oldSourceCommit }),
   };
-  const { context, readSource } = await client.fetchContext(contextRequest);
+  const { context, readSource, fileExists } = await client.fetchContext(contextRequest);
   verifyContext(context, captured);
 
   const prepareInput = {
     sarif: captured.sarif,
     context: captured.sourceRootUri === undefined ? context : { ...context, sourceRootUri: captured.sourceRootUri },
     readSource,
+    ...(fileExists === undefined ? {} : { fileExists }),
     ...(captured.ignoreApprovalHold === undefined ? {} : { options: { ignoreApprovalHold: captured.ignoreApprovalHold } }),
   };
   const prepared = await prepareReview(prepareInput);

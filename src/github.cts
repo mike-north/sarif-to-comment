@@ -107,7 +107,7 @@
  * Review context
  *
  *   fetchContext({ destination: { owner, repo, pullNumber }, reviewedCommit,
- *                  oldSourceCommit? }) -> { context, readSource }
+ *                  oldSourceCommit? }) -> { context, readSource, fileExists }
  *
  *   Requests, in order: GET pull; every GET pull files page; GET pull again
  *   (its head must equal the first, else 'head-race'); then, only when no
@@ -128,6 +128,16 @@
  *   listed count and be at most maxPullFiles; filenames must be unique.
  *   baseCommit is the caller's oldSourceCommit or the compare merge base; it is
  *   only a candidate until readSource verifies each old-side read.
+ *
+ *   fileExists(commit, path) -> boolean
+ *     The same tree walk as readSource, with the same path and commit
+ *     validation and the same refusals, but it never requests or decodes a
+ *     blob and has no size limit: true for a regular file (100644, 100755),
+ *     false when a complete listing shows the path absent (or below a regular
+ *     file). A directory, symlink or submodule at or above the path is
+ *     'not-a-file'. Reads at every full commit are direct, including the
+ *     diff base: a commit's own trees decide what exists in it. Used to
+ *     confirm whole-file proposals (docs/file-operation-publication-contract.md).
  *
  *   readSource(commit, path) -> string | null
  *     commit: full lowercase 40-hex. path: repository-relative, "/" separated;
@@ -409,10 +419,18 @@ export interface IReviewContext {
 /** Exact text of the regular file at a path in a full commit, or null when it does not exist there. */
 export type ReadSource = (commit: string, path: string) => Promise<string | null>;
 
-/** The review context and the source-snapshot reader bound to it. */
+/**
+ * Whether a regular file exists at a path in a full commit, decided from Git
+ * trees alone: no blob is downloaded or decoded, so the answer does not depend
+ * on the file's size or encoding.
+ */
+export type FileExists = (commit: string, path: string) => Promise<boolean>;
+
+/** The review context and the snapshot readers bound to it. */
 export interface IFetchedContext {
   readonly context: IReviewContext;
   readonly readSource: ReadSource;
+  readonly fileExists: FileExists;
 }
 
 /**
@@ -1419,6 +1437,27 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
     return null;
   }
 
+  /**
+   * The tree entry of the regular file at a path in a pinned commit, or null
+   * when the path does not exist there. Directories, symlinks and submodules
+   * are refused.
+   */
+  async function regularFileAt(owner: string, repo: string, commit: unknown, filePath: string): Promise<ITreeEntry | null> {
+    const entry = await entryAt(owner, repo, commit, filePath);
+    if (entry === null) return null;
+    if (!REGULAR_FILE_MODES.has(entry.mode)) {
+      // Looked up by property key like the member expression it mirrors: a
+      // mode outside this table (possible only when the tree entry also had no
+      // type) reads as whatever that key holds, usually undefined.
+      const kind: unknown = Reflect.get(
+        { [TREE_MODE]: 'a directory', [SYMLINK_MODE]: 'a symbolic link', [SUBMODULE_MODE]: 'a submodule' },
+        String(entry.mode),
+      );
+      throw new GitHubError('not-a-file', redact(`${filePath} is ${String(kind)} at this commit, not a regular file.`));
+    }
+    return entry;
+  }
+
   /** Decodes one git blob answer, bound to the requested blob id. */
   function decodeBlob(body: unknown, blobSha: unknown, expectedSize: number | undefined, filePath: string): string {
     if (!isPlainObject(body)) throw new GitHubError('malformed-response', 'The blob answer is not an object.');
@@ -1458,18 +1497,8 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
    * never evidence of absence.
    */
   async function readBlob(owner: string, repo: string, commit: unknown, filePath: string): Promise<string | null> {
-    const entry = await entryAt(owner, repo, commit, filePath);
+    const entry = await regularFileAt(owner, repo, commit, filePath);
     if (entry === null) return null;
-    if (!REGULAR_FILE_MODES.has(entry.mode)) {
-      // Looked up by property key like the member expression it mirrors: a
-      // mode outside this table (possible only when the tree entry also had no
-      // type) reads as whatever that key holds, usually undefined.
-      const kind: unknown = Reflect.get(
-        { [TREE_MODE]: 'a directory', [SYMLINK_MODE]: 'a symbolic link', [SUBMODULE_MODE]: 'a submodule' },
-        String(entry.mode),
-      );
-      throw new GitHubError('not-a-file', redact(`${filePath} is ${String(kind)} at this commit, not a regular file.`));
-    }
     if (entry.size !== undefined && entry.size > limits.maxSourceBytes) {
       throw new GitHubError('source-too-large', redact(`${filePath} exceeds the ${String(limits.maxSourceBytes)}-byte source limit.`));
     }
@@ -1579,6 +1608,14 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
       return readBlob(owner, repo, commit, filePath);
     }
 
+    // Checked from unknown like readSource. Existence is decided by the
+    // commit's own trees, so the diff base needs no patch verification here.
+    async function fileExists(commit: unknown, filePath: unknown): Promise<boolean> {
+      requireFullSha(commit, 'commit');
+      requireRepositoryPath(filePath);
+      return (await regularFileAt(owner, repo, commit, filePath)) !== null;
+    }
+
     const context: IReviewContext = {
       owner,
       repo,
@@ -1589,7 +1626,7 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
       diff: { baseCommit, headCommit: head, files },
       fileDiagnostics,
     };
-    return { context, readSource };
+    return { context, readSource, fileExists };
   }
 
   return Object.freeze({ getAuthenticatedUser, createReview, listReviews, listReviewComments, fetchContext });

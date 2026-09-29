@@ -183,6 +183,7 @@ interface IWorld {
 function makeWorld(config: Partial<IHttpHostConfig> = {}): IWorld {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'file-ops-composition-')));
   FakeHttpGitHub.create(path.join(root, 'host'), config, REPOSITORY);
+  fs.mkdirSync(path.join(root, 'state'));
   return { root, statePath: path.join(root, 'state', 'review.json'), host: new FakeHttpGitHub(path.join(root, 'host'), TOKEN) };
 }
 

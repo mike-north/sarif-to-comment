@@ -36,6 +36,14 @@
  *                    // repository-validated provenance revision, and only with
  *                    // paths that resolved inside the repository. A thrown
  *                    // error is operational and propagates unchanged.
+ *   fileExists?: async (commit, path) => boolean
+ *                    // trusted existence check at the same boundary: whether
+ *                    // a regular file exists there, without reading its
+ *                    // content. Called only with the reviewed commit and a
+ *                    // path a whole-file proposal names. Without it, the
+ *                    // source reader's answer decides (which cannot read
+ *                    // binary or oversized files). A thrown error is
+ *                    // operational and propagates unchanged.
  *   options?: {
  *     ignoreApprovalHold?: boolean,   // bypasses only an approval hold
  *     maxComments?: number,           // default 100 inline comments
@@ -71,6 +79,8 @@
  *     fixSource?, replacement?: { startLine, endLine, originalText,
  *     replacementText } (exact replacement-module output), suggestionPayload?,
  *     attribution: { tool, version?, component?: { name, version? }, ruleId? },
+ *     fileOperation?: { operation, path, fileMode?, byteLength?,
+ *       proposedLines? } (a general result's whole-file proposal),
  *     taxa? (retained, not rendered),
  *     approval: 'none'|'declared-ready'|'hold-overridden',
  *     uninterpretedProperties? }
@@ -131,12 +141,23 @@
  * - Explicitly unsupported (blocking): multiple locations, logical-only
  *   locations, related locations, code flows, graphs, stacks, attachments,
  *   suppressions, alternative fixes, multi-file or multi-replacement fixes,
- *   binary replacements, nested artifacts, sarifToComment.proposedFileChanges.
+ *   binary replacements, nested artifacts.
  * - Owned namespace properties.sarifToComment on runs and results: `approval`
  *   ('awaiting-approval' holds; 'ready' is a declared, unverified state) and,
  *   on results, `proposedFileChanges`; any other key or value blocks. Other
  *   properties are retained in evidence as uninterpreted metadata. Artifacts
  *   with contents and no proposed operation are context, reported as warnings.
+ * - Whole-file proposals (docs/file-operation-publication-contract.md): one
+ *   `create` or `delete` per result, naming an artifact of its run, relative
+ *   to the reviewed commit. A creation is UTF-8 text (mode 100644 or 100755)
+ *   whose path is absent there and that a code block plus stated details
+ *   show exactly; a deletion names a file present there, of any content.
+ *   Existence is checked without reading content. A creation finding's
+ *   region is read in the proposed text; a deletion finding's region is
+ *   quoted from the reviewed file and never narrows the deletion. Findings
+ *   carrying the same proposal share one body section; conflicting
+ *   proposals, and fixes on a proposed path, block. `edit` operations are
+ *   unsupported: edits are SARIF fixes.
  *
  * Rendering:
  *   item      = message [ "\n\n**Fix:** " fix description ] "\n\n<sub>— " attribution "</sub>"
@@ -145,9 +166,18 @@
  *   comment   = items joined by "\n\n---\n\n" [ "\n\n```suggestion\n" replacementText "```" ]
  *   section   = [ "**Source:** [" path " " lines " at " short commit "](" permalink ")\n\n"
  *                 fence "\n" source text "\n" fence "\n\n" ] item
- *   body      = sections joined by "\n\n---\n\n" ('' when there are none)
+ *   proposal  = creation: "**Proposed new file:** " code span of path "\n\n**File details:** "
+ *                 facts joined by " · " [ "\n\n" fence "\n" content "\n" fence ]
+ *               deletion: "**Proposed file deletion:** [" path " at " short commit "]("
+ *                 permalink ")\n\nThe whole file is removed; this is not a proposal to empty it."
+ *               then "\n\n" and its items joined by "\n\n---\n\n", each preceded by
+ *               "**Location:** line(s) N[-M] of the proposed file\n\n" (creation) or
+ *               rendered as a section with its quoted source (deletion)
+ *   body      = sections and proposals joined by "\n\n---\n\n" ('' when there are none)
  *   Source fences are longer than any backtick run they enclose.
  */
+
+import * as crypto from 'node:crypto';
 
 import type { SchemaObject, ValidateFunction } from 'ajv';
 import type AjvDraft04Module = require('ajv-draft-04');
@@ -292,9 +322,16 @@ interface ISarifProvenance extends ISarifVersionControlDetails {
   readonly revisionId?: string;
 }
 
-/** SARIF artifact (3.24) with its (context-only) contents. */
+/**
+ * SARIF artifact (3.24): contents are context unless a whole-file proposal
+ * names the artifact, whose encoding, length and hashes then describe the
+ * proposed bytes.
+ */
 interface ISarifArtifactView extends ISarifArtifact {
   readonly contents?: ISarifArtifactContent;
+  readonly encoding?: string;
+  readonly length?: number;
+  readonly hashes?: Readonly<Record<string, string>>;
 }
 
 /** Result properties that carry meaning this profile cannot present (see UNSUPPORTED_RESULT_FEATURES). */
@@ -325,6 +362,7 @@ interface ISarifRunView extends ISarifRun {
   readonly artifacts?: readonly ISarifArtifactView[];
   readonly versionControlProvenance?: readonly ISarifProvenance[];
   readonly columnKind?: ColumnKind;
+  readonly defaultEncoding?: string;
   readonly newlineSequences?: readonly string[];
   readonly invocations?: readonly ISarifInvocation[];
   /** Values are one reference (`conversion`) or arrays of them; only their presence matters. */
@@ -365,6 +403,13 @@ interface IPreparationContext extends Pick<IReviewContext, 'owner' | 'repo' | 'p
  */
 type SnapshotReader = (commit: string, path: string) => unknown;
 
+/**
+ * The trusted existence check: whether a regular file exists at a path in a
+ * full commit, without reading its content (true or false; anything else is
+ * misuse). The review context's FileExists (src/github.cts) is one.
+ */
+type ExistenceCheck = (commit: string, path: string) => unknown;
+
 /** Caller options; every limit defaults to PRODUCT_LIMITS. */
 interface IPrepareReviewOptions {
   readonly ignoreApprovalHold?: boolean | undefined;
@@ -379,6 +424,7 @@ export interface IPrepareReviewInput {
   readonly sarif: Readonly<Record<string, unknown>>;
   readonly context: IPreparationContext;
   readonly readSource: SnapshotReader;
+  readonly fileExists?: ExistenceCheck | undefined;
   readonly options?: IPrepareReviewOptions | undefined;
 }
 
@@ -499,6 +545,24 @@ type DeclaredApproval = 'hold' | 'ready';
 /** A result's approval as recorded in evidence. */
 export type EvidenceApproval = 'none' | 'declared-ready' | 'hold-overridden';
 
+/** The Git modes a proposed new file may have. */
+type ProposedFileMode = '100644' | '100755';
+
+/**
+ * A validated whole-file proposal (docs/file-operation-publication-contract.md):
+ * a new file's exact text and mode, or the deletion of a file that exists at
+ * the reviewed commit.
+ */
+type PreparedFileOperation =
+  | { readonly operation: 'create'; readonly path: string; readonly fileMode: ProposedFileMode; readonly text: string }
+  | { readonly operation: 'delete'; readonly path: string; readonly commit: string };
+
+/** Lines of a proposed new file that a finding names (never lines of the reviewed snapshot). */
+interface IProposedLines {
+  readonly startLine: number;
+  readonly endLine: number;
+}
+
 /** A validated fix: one exact replacement presented as a native suggestion. */
 interface IPreparedSuggestion {
   readonly path: string;
@@ -524,6 +588,8 @@ interface IPreparedItem {
   readonly taxa: readonly ISarifReportingDescriptorReference[] | undefined;
   readonly placement: PreparedPlacement | null;
   readonly suggestion: IPreparedSuggestion | null;
+  readonly fileOperation: PreparedFileOperation | null;
+  readonly proposedLines: IProposedLines | null;
 }
 
 /** Fields every evidence record carries; optional ones are omitted when absent. */
@@ -563,11 +629,21 @@ interface IInlineEvidence extends IEvidenceRecord {
   readonly anchor: IInlineAnchor;
 }
 
+/** The whole-file proposal a general result carries, as presented. */
+interface IFileOperationEvidence {
+  readonly operation: 'create' | 'delete';
+  readonly path: string;
+  readonly fileMode?: ProposedFileMode;
+  readonly byteLength?: number;
+  readonly proposedLines?: IProposedLines;
+}
+
 /** A result presented as a general body section. */
 interface IGeneralEvidence extends IEvidenceRecord {
   readonly treatment: 'general';
   readonly bodySectionIndex: number;
   readonly source?: EvidenceSource;
+  readonly fileOperation?: IFileOperationEvidence;
 }
 
 /** One evidence record per SARIF result, in SARIF order. */
@@ -614,14 +690,38 @@ interface IPreparationState {
   readonly report: Report;
   readonly applyFix: ApplyReplacement;
   readonly readSource: (commit: string, path: string) => Promise<unknown>;
+  readonly fileExists: (commit: string, path: string) => Promise<boolean>;
   readonly sourceRoot: ParsedReference | null;
 }
+
+/** One entry of proposedFileChanges: its operation name and every field as written. */
+type ProposedOperationEntry = Readonly<Record<string, unknown>> & { readonly operation: string };
 
 /** An owned property namespace, as parseOwned reads it. */
 interface IOwnedProperties {
   approval: DeclaredApproval | undefined;
-  proposedFileChanges: undefined;
+  proposedFileChanges: readonly ProposedOperationEntry[] | undefined;
 }
+
+/** A result's whole-file proposal, with where its finding points. */
+interface IFileOperationPlacement {
+  readonly operation: PreparedFileOperation;
+  /** A deletion finding's quoted lines at the reviewed commit. */
+  readonly placement: PreparedPlacement | null;
+  /** A creation finding's lines of the proposed content. */
+  readonly proposedLines: IProposedLines | null;
+}
+
+/** A rendered whole-file proposal section's path and size, named when the body is too large. */
+interface IRenderedProposal {
+  readonly path: string;
+  readonly characters: number;
+}
+
+/** One general body section before rendering: a single finding, or a proposal and its findings. */
+type BodySection =
+  | { readonly kind: 'item'; readonly item: IPreparedItem }
+  | { readonly kind: 'operation'; readonly operation: PreparedFileOperation; readonly items: IPreparedItem[] };
 
 /** Source text read at a location's resolved repository path and revision. */
 interface ILocatedSource {
@@ -693,8 +793,34 @@ const OWNED_RESULT_KEYS: ReadonlySet<string> = new Set(['approval', 'proposedFil
 const APPROVAL_HOLD = 'awaiting-approval';
 const APPROVAL_READY = 'ready';
 
-/** Proposed file operations the product recognizes but does not publish in this milestone (D23). */
-const KNOWN_FILE_OPERATIONS: ReadonlySet<string> = new Set(['create', 'delete', 'edit']);
+/** Fields of a proposedFileChanges entry this version interprets (D23); any other may change its meaning. */
+const OPERATION_FIELDS: ReadonlySet<string> = new Set(['operation', 'artifactIndex', 'fileMode']);
+
+/** The mode of a proposed new file when none is stated, as extraction writes it. */
+const DEFAULT_FILE_MODE: ProposedFileMode = '100644';
+
+/** SARIF hash algorithm names (3.24.11) whose digest of the proposed bytes is verified. */
+const VERIFIABLE_HASHES: ReadonlyMap<string, string> = new Map([
+  ['sha-256', 'sha256'], ['sha-1', 'sha1'], ['sha-384', 'sha384'], ['sha-512', 'sha512'], ['md5', 'md5'],
+]);
+
+/** Byte-order mark: kept in a proposed file, stated in its details rather than shown. */
+const BOM = '\uFEFF';
+
+/**
+ * Characters a rendered code block cannot show exactly: C0 controls other
+ * than tab, LF and CR; DEL and C1 controls; a byte-order mark; the Arabic
+ * letter mark and the bidirectional marks, embeddings, overrides and
+ * isolates, which reorder text invisibly; and the line and paragraph
+ * separators.
+ */
+const INVISIBLE_IN_CONTENT = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\uFEFF\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069\u2028\u2029]/;
+
+/** The same, plus tab, LF and CR: a path is shown on one line, in a code span or link text. */
+const INVISIBLE_IN_PATH = /[\u0000-\u001F\u007F-\u009F\uFEFF\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069\u2028\u2029]/;
+
+/** A UTF-16 surrogate without its pair: not a Unicode scalar value, so not UTF-8 text. */
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
 
 /** The two SARIF column units; a region without columnKind must mean the same text in both. */
 const COLUMN_KINDS: readonly ColumnKind[] = ['utf16CodeUnits', 'unicodeCodePoints'];
@@ -804,12 +930,14 @@ async function prepareReview(input: unknown, internals: IPrepareReviewInternals 
     return blocked(report);
   }
 
+  const cachedSource = cachedReader(readSource);
   const state: IPreparationState = {
     context,
     options,
     report,
     applyFix: (internals && internals.applyReplacement) || productionApplyReplacement,
-    readSource: cachedReader(readSource),
+    readSource: cachedSource,
+    fileExists: existenceCheck(input.fileExists === undefined ? undefined : cachedReader(input.fileExists), cachedSource),
     sourceRoot: context.sourceRootUri === undefined ? null : parseBaseUri(context.sourceRootUri),
   };
 
@@ -832,7 +960,7 @@ async function prepareReview(input: unknown, internals: IPrepareReviewInternals 
 
   const assembled = assemble(items, state);
   if (report.errors.length > 0) return blocked(report);
-  enforceLimits(assembled.review, items, state);
+  enforceLimits(assembled.review, assembled.proposals, state);
   if (report.errors.length > 0) return blocked(report);
 
   return {
@@ -840,7 +968,7 @@ async function prepareReview(input: unknown, internals: IPrepareReviewInternals 
     review: assembled.review,
     evidence: assembled.evidence,
     warnings: report.warnings,
-    markdown: readyMarkdown(assembled.review, report),
+    markdown: readyMarkdown(assembled.review, assembled.sectionCount, report),
   };
 }
 
@@ -872,6 +1000,8 @@ function validateCallerInput(input: unknown): asserts input is IPrepareReviewInp
     }
   }
   if (typeof input['readSource'] !== 'function') fail('`readSource` must be a function (commit, path) => Promise<string|null>.');
+  const fileExists = input['fileExists'];
+  if (fileExists !== undefined && typeof fileExists !== 'function') fail('`fileExists` must be a function (commit, path) => Promise<boolean>.');
   const options = input['options'];
   if (options !== undefined) {
     if (!isPlainObject(options)) fail('`options` must be an object.');
@@ -884,8 +1014,32 @@ function validateCallerInput(input: unknown): asserts input is IPrepareReviewInp
   }
 }
 
+/**
+ * Whether a regular file exists at a path in a commit: the caller's existence
+ * check when given, which reads no content; otherwise whether the source
+ * reader finds the file. An answer of the wrong type is caller misuse.
+ */
+function existenceCheck(
+  check: ((commit: string, path: string) => Promise<unknown>) | undefined,
+  readSource: (commit: string, path: string) => Promise<unknown>,
+): (commit: string, path: string) => Promise<boolean> {
+  if (check === undefined) {
+    return async (commit, path) => {
+      const text = await readSource(commit, path);
+      if (text === null || text === undefined) return false;
+      if (typeof text !== 'string') throw new TypeError(`readSource(${commit}, ${path}) returned a non-string.`);
+      return true;
+    };
+  }
+  return async (commit, path) => {
+    const exists = await check(commit, path);
+    if (typeof exists !== 'boolean') throw new TypeError(`fileExists(${commit}, ${path}) returned a non-boolean.`);
+    return exists;
+  };
+}
+
 /** Reads each (commit, path) snapshot at most once. */
-function cachedReader(readSource: SnapshotReader): (commit: string, path: string) => Promise<unknown> {
+function cachedReader(readSource: SnapshotReader | ExistenceCheck): (commit: string, path: string) => Promise<unknown> {
   const cache = new Map<string, Promise<unknown>>();
   return (commit, path) => {
     const key = `${commit}\0${path}`;
@@ -942,8 +1096,7 @@ function blockedMarkdown(report: Report): string {
     + `nothing was published.\n\n${report.errors.map(diagnosticLine).join('\n')}${warningsMarkdown(report)}`;
 }
 
-function readyMarkdown(review: IPreparedReview, report: Report): string {
-  const sections = review.body === '' ? 0 : review.body.split(SEPARATOR).length;
+function readyMarkdown(review: IPreparedReview, sections: number, report: Report): string {
   return `**Review prepared:** ${String(review.comments.length)} inline comment(s) and ${String(sections)} general section(s) `
     + `for commit ${codeSpan(review.commitId)}.${warningsMarkdown(report)}`;
 }
@@ -1115,21 +1268,14 @@ function parseOwned(
     if (!Array.isArray(operations) || !operations.every(isProposedOperation)) {
       state.report.error('owned-property-invalid', pointer, 'proposedFileChanges must be an array of operations.');
     } else {
-      for (const { operation } of operations) {
-        if (KNOWN_FILE_OPERATIONS.has(operation)) {
-          state.report.error('file-operation-unsupported', pointer,
-            `Proposed file ${operation} operations are not published in this milestone.`);
-        } else {
-          state.report.error('file-operation-unknown', pointer, `Unknown proposed file operation ${JSON.stringify(operation)}.`);
-        }
-      }
+      outcome.proposedFileChanges = operations;
     }
   }
   return outcome;
 }
 
-/** Whether a proposedFileChanges entry names its operation (the only field read). */
-function isProposedOperation(value: unknown): value is { readonly operation: string } {
+/** Whether a proposedFileChanges entry is an object naming its operation. */
+function isProposedOperation(value: unknown): value is ProposedOperationEntry {
   return isPlainObject(value) && typeof value['operation'] === 'string';
 }
 
@@ -1189,11 +1335,19 @@ async function prepareResult(
   }
 
   let placement: PreparedPlacement | null = null;
-  if (locations.length === 1 && onlyLocation !== undefined) placement = await placeLocation(onlyLocation, pointer, runInfo, state);
-
   let suggestion: IPreparedSuggestion | null = null;
-  if (Array.isArray(result.fixes) && result.fixes.length > 0) {
-    suggestion = await prepareFix(result.fixes, pointer, runInfo, state);
+  let fileOperation: IFileOperationPlacement | null = null;
+  const fixes = Array.isArray(result.fixes) && result.fixes.length > 0 ? result.fixes : null;
+  const operations = owned.proposedFileChanges || [];
+  if (operations.length > 0) {
+    // A whole-file proposal decides how its finding's location is read: a
+    // created file's lines are in the proposed content, never the reviewed
+    // snapshot, and a deletion is never narrowed to a line.
+    fileOperation = await prepareFileOperation(operations, locations.length === 1 ? onlyLocation : undefined, fixes !== null, pointer, runInfo, state);
+    placement = fileOperation ? fileOperation.placement : null;
+  } else {
+    if (locations.length === 1 && onlyLocation !== undefined) placement = await placeLocation(onlyLocation, pointer, runInfo, state);
+    if (fixes) suggestion = await prepareFix(fixes, pointer, runInfo, state);
   }
   // D3/D4: a result's explanation travels with its fix only when the result's
   // own source lies within the fix's replacement lines; it is never moved to
@@ -1223,6 +1377,8 @@ async function prepareResult(
     taxa: Array.isArray(result.taxa) && result.taxa.length > 0 ? result.taxa : undefined,
     placement,
     suggestion,
+    fileOperation: fileOperation ? fileOperation.operation : null,
+    proposedLines: fileOperation ? fileOperation.proposedLines : null,
   };
 }
 
@@ -1664,6 +1820,217 @@ function lineOf(starts: readonly number[], text: string, index: number): number 
 }
 
 // ---------------------------------------------------------------------------
+// Whole-file proposals (docs/file-operation-publication-contract.md)
+
+/**
+ * Validates a result's whole-file proposal (the D23 extension extraction
+ * writes) and its finding's location. A creation must name UTF-8 text that a
+ * code block and its stated details reproduce exactly, at a path absent from
+ * the reviewed commit; a deletion must name a file present there. Existence
+ * is checked without reading content. Returns the proposal, or null after
+ * recording errors.
+ */
+async function prepareFileOperation(
+  operations: readonly ProposedOperationEntry[],
+  location: ISarifLocation | undefined,
+  hasFixes: boolean,
+  pointer: string,
+  runInfo: IRunInfo,
+  state: IPreparationState,
+): Promise<IFileOperationPlacement | null> {
+  const { report, context } = state;
+  const fail = (code: string, message: string): null => {
+    report.error(code, pointer, message);
+    return null;
+  };
+  if (operations.length > 1) {
+    return fail('file-operation-multiple-unsupported',
+      `The finding proposes ${String(operations.length)} file operations; one finding carries one whole-file proposal. Give each operation its own finding.`);
+  }
+  const entry = itemAt(operations, 0);
+  const name = entry.operation;
+  if (name === 'edit') {
+    return fail('file-operation-unsupported', 'A proposed file edit operation is not published; propose edits as SARIF fixes.');
+  }
+  if (name !== 'create' && name !== 'delete') return fail('file-operation-unknown', `Unknown proposed file operation ${JSON.stringify(name)}.`);
+  if (hasFixes) {
+    return fail('file-operation-conflict',
+      `The finding carries both fixes and a proposed file ${name === 'create' ? 'creation' : 'deletion'}; they cannot be accepted together. Keep one of them.`);
+  }
+  const uninterpreted = Object.keys(entry).filter((key) => !OPERATION_FIELDS.has(key));
+  if (uninterpreted.length > 0) {
+    return fail('file-operation-invalid',
+      `The proposed ${name} has field(s) ${uninterpreted.join(', ')} that this version does not interpret; they could change what is proposed.`);
+  }
+  const index = entry['artifactIndex'];
+  const artifact = typeof index === 'number' && Number.isInteger(index) && index >= 0 ? (runInfo.run.artifacts || [])[index] : undefined;
+  if (!artifact || !artifact.location) {
+    return fail('file-operation-invalid', `artifactIndex ${JSON.stringify(index)} names no artifact with a location in this run.`);
+  }
+  if (artifact.parentIndex !== undefined) {
+    return fail('nested-artifact-unsupported', 'The proposed file is nested inside another artifact, which is not supported.');
+  }
+  const resolved = resolveArtifactPath(artifact.location, runInfo);
+  if (resolved.error) return fail(resolved.error[0], resolved.error[1]);
+  const path = resolved.path;
+  const pathProblem = pathRepresentationProblem(path);
+  if (pathProblem) return fail('file-operation-path-unrepresentable', `The path ${JSON.stringify(path)} ${pathProblem}.`);
+  if (runInfo.provenanceError) return fail(runInfo.provenanceError[0], runInfo.provenanceError[1]);
+  const reviewed = context.reviewedCommit;
+  if (runInfo.sourceCommit !== reviewed) {
+    return fail('file-operation-source-not-reviewed',
+      `The run's source revision is ${runInfo.sourceCommit}, but a whole-file proposal is published relative to the reviewed commit ${reviewed}.`);
+  }
+
+  let operation: PreparedFileOperation;
+  if (name === 'create') {
+    const mode = entry['fileMode'] === undefined ? DEFAULT_FILE_MODE : entry['fileMode'];
+    if (mode !== '100644' && mode !== '100755') {
+      return fail('file-operation-invalid', `File mode ${JSON.stringify(mode)} is not a regular file mode (100644 or 100755).`);
+    }
+    const contents = artifact.contents;
+    if (contents && contents.binary !== undefined) {
+      return fail('file-operation-binary-unsupported', `${path}: binary contents cannot be presented as a proposed file.`);
+    }
+    if (!contents || typeof contents.text !== 'string') return fail('file-operation-invalid', `${path}: the proposed file has no text contents.`);
+    const encoding = artifact.encoding !== undefined ? artifact.encoding : runInfo.run.defaultEncoding;
+    if (encoding !== undefined && !/^utf-?8$/i.test(encoding)) {
+      return fail('file-operation-encoding-unsupported', `${path}: encoding ${encoding} describes bytes other than the UTF-8 text a review can show.`);
+    }
+    const text = contents.text;
+    const contentProblem = contentRepresentationProblem(text);
+    if (contentProblem) {
+      return fail('file-operation-content-unrepresentable', `${path}: ${contentProblem}, so the review could not show the proposed file exactly.`);
+    }
+    const described = describedBytesProblem(artifact, Buffer.from(text, 'utf8'));
+    if (described) return fail('file-operation-invalid', `${path}: ${described}.`);
+    if (await state.fileExists(reviewed, path)) {
+      return fail('file-operation-target-exists', `${path} already exists at ${reviewed}; a proposed new file must not replace it.`);
+    }
+    operation = { operation: 'create', path, fileMode: mode, text };
+  } else {
+    if (entry['fileMode'] !== undefined) return fail('file-operation-invalid', 'A deletion does not take a file mode.');
+    if (artifact.contents !== undefined || artifact.length !== undefined || artifact.hashes !== undefined) {
+      return fail('file-operation-invalid',
+        `${path}: a deletion's artifact describes content, a length or hashes, which cannot be verified without reading the file; name only its location.`);
+    }
+    if (!(await state.fileExists(reviewed, path))) {
+      return fail('file-operation-target-missing', `${path} does not exist at ${reviewed}, so it cannot be deleted.`);
+    }
+    operation = { operation: 'delete', path, commit: reviewed };
+  }
+
+  const located = await locateFileOperationFinding(location, operation, pointer, runInfo, state);
+  return located && { operation, ...located };
+}
+
+/**
+ * Where a finding carrying a whole-file proposal points: nowhere (no
+ * location, or no region), lines of the proposed content (a creation), or
+ * quoted lines of the reviewed file (a deletion; context only). The location
+ * must name the proposed file. Returns null after recording errors.
+ */
+async function locateFileOperationFinding(
+  location: ISarifLocation | undefined,
+  operation: PreparedFileOperation,
+  pointer: string,
+  runInfo: IRunInfo,
+  state: IPreparationState,
+): Promise<Pick<IFileOperationPlacement, 'placement' | 'proposedLines'> | null> {
+  const none = { placement: null, proposedLines: null };
+  if (location === undefined) return none;
+  const fail = (code: string, message: string): null => {
+    state.report.error(code, pointer, message);
+    return null;
+  };
+  const physical = location.physicalLocation;
+  if (!physical || !physical.artifactLocation) {
+    return fail('location-without-physical-source', 'Only physical source locations are supported; this location has no artifact.');
+  }
+  const resolved = resolveArtifactPath(physical.artifactLocation, runInfo);
+  if (resolved.error) return fail(resolved.error[0], resolved.error[1]);
+  if (resolved.path !== operation.path) {
+    return fail('file-operation-association-unsupported',
+      `The finding is located in ${resolved.path} but proposes ${operation.operation === 'create' ? 'creating' : 'deleting'} ${operation.path}; `
+      + 'presenting them together would move the feedback. Locate the finding in the proposed file, or separate it from the proposal.');
+  }
+  if (physical.region === undefined) return none;
+  if (runInfo.newlineError) return fail(runInfo.newlineError[0], runInfo.newlineError[1]);
+  if (operation.operation === 'create') {
+    const span = resolveSourceRegion(operation.text, physical.region, runInfo.columnKind);
+    if (span.error) return fail(span.error[0], `${operation.path} (proposed content): ${span.error[1]}`);
+    return { placement: null, proposedLines: { startLine: span.startLine, endLine: span.endLine } };
+  }
+  const text = await state.readSource(operation.commit, operation.path);
+  if (typeof text !== 'string') throw new TypeError(`readSource(${operation.commit}, ${operation.path}) returned no text for a file that exists.`);
+  const span = resolveSourceRegion(text, physical.region, runInfo.columnKind);
+  if (span.error) return fail(span.error[0], `${operation.path} at ${operation.commit}: ${span.error[1]}`);
+  // Placement supplies the exact quoted lines; a deletion finding is always
+  // general feedback, so any inline anchor it offers is not used.
+  const outcome = classifyPlacement({
+    source: { commit: operation.commit, path: operation.path, text },
+    range: { startLine: span.startLine, endLine: span.endLine },
+    diff: state.context.diff,
+  });
+  if (outcome.kind === 'rejected') {
+    const code = outcome.reason === 'invalid-range' || outcome.reason === 'range-out-of-bounds' ? 'source-range-invalid' : 'diff-context-inconsistent';
+    return fail(code, `${outcome.reason}: ${outcome.message}`);
+  }
+  return { placement: { treatment: 'general', source: outcome.source }, proposedLines: null };
+}
+
+/** Why a path cannot be shown exactly on one line of Markdown, or null. */
+function pathRepresentationProblem(path: string): string | null {
+  const invisible = INVISIBLE_IN_PATH.exec(path);
+  if (invisible) return `contains ${codePointName(invisible[0])}, which cannot be shown exactly`;
+  if (/^\s|\s$/.test(path)) return 'begins or ends with whitespace, which Markdown does not show';
+  return null;
+}
+
+/**
+ * Why proposed text cannot be shown exactly as a code block plus its stated
+ * details (contract §2), or null. The details state one line-ending style, a
+ * leading byte-order mark and the final newline; everything else must be
+ * visible text.
+ */
+function contentRepresentationProblem(text: string): string | null {
+  const lineAt = (index: number): string => `line ${String(text.slice(0, index).split('\n').length)}`;
+  const surrogate = LONE_SURROGATE.exec(text);
+  if (surrogate) return `${lineAt(surrogate.index)} contains an unpaired surrogate, which is not UTF-8 text`;
+  const body = text.startsWith(BOM) ? text.slice(BOM.length) : text;
+  const offset = text.length - body.length;
+  const invisible = INVISIBLE_IN_CONTENT.exec(body);
+  if (invisible) return `${lineAt(invisible.index + offset)} contains ${codePointName(invisible[0])}, which a code block does not show`;
+  const bareCr = /\r(?!\n)/.exec(body);
+  if (bareCr) return `${lineAt(bareCr.index + offset)} contains a carriage return that does not end a CRLF line`;
+  if (body.includes('\r\n') && /(?<!\r)\n/.test(body)) return 'it mixes CRLF and LF line endings, and its details can state only one';
+  return null;
+}
+
+/** "U+XXXX" for a character, as diagnostics name invisible characters. */
+function codePointName(character: string): string {
+  return `U+${(character.codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(4, '0')}`;
+}
+
+/**
+ * Why an artifact's declared length or verifiable hashes disagree with the
+ * proposed bytes, or null. A length of -1 means unknown (SARIF 3.24.9); hash
+ * algorithms outside VERIFIABLE_HASHES are not compared.
+ */
+function describedBytesProblem(artifact: ISarifArtifactView, bytes: Buffer): string | null {
+  if (artifact.length !== undefined && artifact.length !== -1 && artifact.length !== bytes.length) {
+    return `the declared length ${String(artifact.length)} differs from the ${String(bytes.length)}-byte proposed content`;
+  }
+  for (const [name, value] of Object.entries(artifact.hashes || {})) {
+    const algorithm = VERIFIABLE_HASHES.get(name.toLowerCase());
+    if (algorithm !== undefined && value.toLowerCase() !== crypto.createHash(algorithm).update(bytes).digest('hex')) {
+      return `the declared ${name} hash does not match the proposed content`;
+    }
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Fixes
 
 /**
@@ -1813,17 +2180,31 @@ function suggestionPayload(
 /**
  * Builds the review: inline comments in SARIF order of first appearance, with
  * identical suggestions merged and overlapping different suggestions
- * blocked; general sections in SARIF order; one evidence record per result.
+ * blocked; general sections in SARIF order, where every finding carrying the
+ * same whole-file proposal joins the section of the first one and different
+ * proposals for one path (or a fix editing a proposed path) block; one
+ * evidence record per result.
  */
 function assemble(
   items: readonly IPreparedItem[],
   state: IPreparationState,
-): { readonly review: IPreparedReview; readonly evidence: Evidence[]; readonly commentItems: ICommentEntry[] } {
+): {
+  readonly review: IPreparedReview;
+  readonly evidence: Evidence[];
+  readonly commentItems: ICommentEntry[];
+  readonly sectionCount: number;
+  readonly proposals: readonly IRenderedProposal[];
+} {
   const { context, report } = state;
   const commentItems: ICommentEntry[] = [];
-  const sections: string[] = [];
+  const sections: BodySection[] = [];
   const evidence: Evidence[] = [];
   const suggestionComments = new Map<string, number>();
+  /** Body section of each distinct proposal, by its identity. */
+  const proposalSections = new Map<string, number>();
+  /** The identity of the proposal for each proposed path. */
+  const proposedPaths = new Map<string, string>();
+  const suggestedPaths = new Set<string>();
 
   for (const item of items) {
     const record: IEvidenceRecord = {
@@ -1835,8 +2216,35 @@ function assemble(
       ...(item.classification ? { classification: item.classification } : {}),
       ...(item.locationMessage !== undefined ? { locationMessage: item.locationMessage } : {}),
     };
-    if (item.suggestion) {
+    if (item.fileOperation) {
+      const operation = item.fileOperation;
+      const key = proposalKey(operation);
+      const other = proposedPaths.get(operation.path);
+      if ((other !== undefined && other !== key) || suggestedPaths.has(operation.path)) {
+        report.error('file-operation-conflict', item.pointer,
+          `${operation.path} already has a different proposed change in this review; one of them must be chosen before publication.`);
+        continue;
+      }
+      proposedPaths.set(operation.path, key);
+      let index = proposalSections.get(key);
+      if (index === undefined) {
+        index = sections.length;
+        proposalSections.set(key, index);
+        sections.push({ kind: 'operation', operation, items: [] });
+      }
+      const section = itemAt(sections, index);
+      if (section.kind === 'operation') section.items.push(item);
+      evidence.push({ ...record, treatment: 'general', bodySectionIndex: index,
+        ...(item.placement ? { source: item.placement.source } : {}),
+        fileOperation: fileOperationEvidence(operation, item.proposedLines) });
+    } else if (item.suggestion) {
       const s = item.suggestion;
+      if (proposedPaths.has(s.path)) {
+        report.error('file-operation-conflict', item.pointer,
+          `The fix edits ${s.path}, which this review proposes to create or delete; the proposals conflict.`);
+        continue;
+      }
+      suggestedPaths.add(s.path);
       const key = JSON.stringify([s.path, s.startLine, s.endLine, s.replacementText]);
       let index = suggestionComments.get(key);
       if (index === undefined) {
@@ -1871,9 +2279,15 @@ function assemble(
     } else {
       evidence.push({ ...record, treatment: 'general', bodySectionIndex: sections.length,
         ...(item.placement ? { source: item.placement.source } : {}) });
-      sections.push(renderSection(item, context));
+      sections.push({ kind: 'item', item });
     }
   }
+
+  const rendered = sections.map((section) => (section.kind === 'item'
+    ? renderSection(section.item, context)
+    : renderProposalSection(section.operation, section.items, context)));
+  const proposals = sections.flatMap((section, i): IRenderedProposal[] => (section.kind === 'operation'
+    ? [{ path: section.operation.path, characters: itemAt(rendered, i).length }] : []));
 
   // Each comment's body follows its coordinates, once every item it presents is known.
   const comments: PreparedComment[] = commentItems.map((entry) => {
@@ -1886,9 +2300,29 @@ function assemble(
     };
   });
   return {
-    review: { commitId: context.reviewedCommit, body: sections.join(SEPARATOR), comments },
+    review: { commitId: context.reviewedCommit, body: rendered.join(SEPARATOR), comments },
     evidence,
     commentItems,
+    sectionCount: sections.length,
+    proposals,
+  };
+}
+
+/** The identity of a proposal: equal proposals share one section (R8). */
+function proposalKey(operation: PreparedFileOperation): string {
+  return JSON.stringify(operation.operation === 'create'
+    ? ['create', operation.path, operation.fileMode, operation.text]
+    : ['delete', operation.path]);
+}
+
+function fileOperationEvidence(operation: PreparedFileOperation, proposedLines: IProposedLines | null): IFileOperationEvidence {
+  if (operation.operation === 'delete') return { operation: 'delete', path: operation.path };
+  return {
+    operation: 'create',
+    path: operation.path,
+    fileMode: operation.fileMode,
+    byteLength: Buffer.byteLength(operation.text, 'utf8'),
+    ...(proposedLines ? { proposedLines } : {}),
   };
 }
 
@@ -1912,8 +2346,11 @@ function inlineCoordinates(path: string, anchor: IInlineAnchor): CommentCoordina
   return { path, side: anchor.side, line: anchor.line };
 }
 
-/** Enforces the product limits on the complete prepared review; never truncates. */
-function enforceLimits(review: IPreparedReview, _items: readonly IPreparedItem[], state: IPreparationState): void {
+/**
+ * Enforces the product limits on the complete prepared review; never
+ * truncates. A body over its limit names each whole-file proposal's share.
+ */
+function enforceLimits(review: IPreparedReview, proposals: readonly IRenderedProposal[], state: IPreparationState): void {
   const { options, report } = state;
   // A limit explicitly set to undefined compares false, exactly as it always did.
   const { maxComments, maxCommentBodyChars, maxPayloadBytes } = options;
@@ -1927,8 +2364,11 @@ function enforceLimits(review: IPreparedReview, _items: readonly IPreparedItem[]
       `Inline comment ${String(long)} is ${String(itemAt(review.comments, long).body.length)} characters; the limit is ${String(maxCommentBodyChars)}.`);
   }
   if (maxCommentBodyChars !== undefined && review.body.length > maxCommentBodyChars) {
+    const shares = proposals.map((p) => `${p.path} (${String(p.characters)} characters)`);
     report.error('body-too-large', undefined,
-      `The review body is ${String(review.body.length)} characters; the limit is ${String(maxCommentBodyChars)}.`);
+      `The review body is ${String(review.body.length)} characters; the limit is ${String(maxCommentBodyChars)}.`
+      + (shares.length === 0 ? '' : ` Whole-file proposals in the body: ${shares.join(', ')}.`)
+      + ' Nothing is truncated or split.');
   }
   const bytes = Buffer.byteLength(JSON.stringify({ body: review.body, comments: review.comments }), 'utf8');
   if (maxPayloadBytes !== undefined && bytes > maxPayloadBytes) {
@@ -1969,6 +2409,50 @@ function renderSection(item: IPreparedItem, context: IPreparationContext): strin
   const fence = '`'.repeat(Math.max(3, longestRun(source.text, '`') + 1));
   return `**Source:** [${escapePlainInline(source.path)} ${lines} at ${short}](${link})\n\n`
     + `${fence}\n${source.text}\n${fence}\n\n${renderItem(item)}`;
+}
+
+/**
+ * A whole-file proposal's body section (contract §2): the proposal once,
+ * then each finding carrying it. A creation shows its content in a fence
+ * longer than any backtick run inside, with details that, together with the
+ * block, determine its exact bytes; a deletion links the file at the reviewed
+ * commit and never shows or narrows it.
+ */
+function renderProposalSection(operation: PreparedFileOperation, items: readonly IPreparedItem[], context: IPreparationContext): string {
+  if (operation.operation === 'delete') {
+    const source: IWholeFileSource = { commit: operation.commit, path: operation.path };
+    return `**Proposed file deletion:** [${escapePlainInline(operation.path)} at ${operation.commit.slice(0, 7)}](${permalink(context, source)})\n\n`
+      + `The whole file is removed; this is not a proposal to empty it.\n\n${items.map((item) => renderSection(item, context)).join(SEPARATOR)}`;
+  }
+  const { text, fileMode } = operation;
+  const bytes = Buffer.byteLength(text, 'utf8');
+  const hasBom = text.startsWith(BOM);
+  const body = hasBom ? text.slice(BOM.length) : text;
+  const finalTerminator = body.endsWith('\r\n') ? '\r\n' : body.endsWith('\n') ? '\n' : '';
+  const facts: string[] = [];
+  if (bytes === 0) {
+    facts.push('empty file (0 bytes)');
+  } else {
+    facts.push(`${String(bytes)} byte${bytes === 1 ? '' : 's'} of UTF-8 text`);
+    if (hasBom) facts.push('begins with a byte-order mark');
+    if (body === '') {
+      facts.push('no content after the byte-order mark');
+    } else {
+      facts.push(body.includes('\r\n') ? 'CRLF line endings' : body.includes('\n') ? 'LF line endings' : 'no line breaks');
+      facts.push(finalTerminator === '' ? 'no newline at end of file' : 'ends with a newline');
+    }
+  }
+  facts.push(fileMode === '100755' ? 'mode 100755 (executable)' : 'mode 100644');
+  const displayed = body.slice(0, body.length - finalTerminator.length);
+  const fence = '`'.repeat(Math.max(3, longestRun(displayed, '`') + 1));
+  const block = body === '' ? '' : `\n\n${fence}\n${displayed}\n${fence}`;
+  const rendered = items.map((item) => {
+    const lines = item.proposedLines;
+    if (!lines) return renderItem(item);
+    const named = lines.startLine === lines.endLine ? `line ${String(lines.startLine)}` : `lines ${String(lines.startLine)}-${String(lines.endLine)}`;
+    return `**Location:** ${named} of the proposed file\n\n${renderItem(item)}`;
+  });
+  return `**Proposed new file:** ${codeSpan(operation.path)}\n\n**File details:** ${facts.join(' · ')}${block}\n\n${rendered.join(SEPARATOR)}`;
 }
 
 /** GitHub permalink to an exact revision, path and optional line range. */

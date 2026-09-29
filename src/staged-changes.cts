@@ -23,8 +23,8 @@
  *     mechanical conflict and fails. No winner is chosen (R4).
  *   - Creation and deletion are whole-file proposals in the owned
  *     `properties.sarifToComment.proposedFileChanges` extension (D23), kept
- *     distinct from emptying a file (D6). The current publisher blocks them;
- *     that is a support limit, not an extraction error.
+ *     distinct from emptying a file (D6). Publication presents them in the
+ *     review body (docs/file-operation-publication-contract.md).
  *   - A staged change that no supplied finding explains becomes a neutral,
  *     tool-attributed result with factual text only (contract §10 Q1).
  *   - Strict: any unsupported meaningful change fails the whole operation
@@ -161,7 +161,7 @@ export interface IStagedChangesReceipt {
   readonly addedRun: number | null;
   /**
    * Things to know, such as findings that only partly overlap a change (they
-   * are left unassociated) or proposals the current publisher refuses.
+   * are left unassociated).
    */
   readonly warnings: readonly IProblem[];
 }
@@ -1198,7 +1198,6 @@ function incorporate(captured: ICapturedInput, sarif: IStagedSarifLog, changes: 
       receiptChanges.push(incorporateEdit(change, onPath, suppliedEdits, attachedRuns, neutralResults, warnings, problems));
     } else {
       receiptChanges.push(incorporateFileOperation(change, onPath, suppliedEdits, suppliedOps, attachedRuns, neutralResults, neutralArtifacts, problems));
-      warnings.push({ path: change.path, message: `The staged ${change.operation === 'create' ? 'creation' : 'deletion'} is represented as a proposed file operation, which the current publisher does not publish; publication will block this artifact until that is supported.` });
     }
   }
   if (problems.length > 0) throw new ExtractionFailure(problems);
