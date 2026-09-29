@@ -88,7 +88,7 @@ Shows every finding, location and fix in a SARIF document, from any producer, wi
 
 </td><td>
 
-Publishes a ready SARIF document as one GitHub draft review — or explains why it is blocked, uncertain or refused.
+Publishes a ready SARIF document as one GitHub review — a draft unless`options.submit` asks for a submitted comment review — or explains why it is blocked, uncertain or refused.
 
 
 </td></tr>
@@ -110,7 +110,7 @@ Removes one finding, with the fixes attached to it, from a copy of a SARIF docum
 
 </td><td>
 
-Checks whether a complete SARIF document can be published faithfully as one draft review of a pull request, without publishing anything.
+Checks whether a complete SARIF document can be published faithfully as one review of a pull request (a draft, or a submitted comment review with`options.submit`<!-- -->), without publishing anything.
 
 
 </td></tr>
@@ -422,7 +422,7 @@ A problem that prevented an operation, with where it is.
 
 </td><td>
 
-The publication is complete: the draft review was created and confirmed now, confirmed after an earlier uncertain attempt, or recorded as complete in the state file by an earlier call.
+The publication is complete: the review (a draft, or a submitted comment review when `options.submit` was set) was created and confirmed now, confirmed after an earlier uncertain attempt, or recorded as complete in the state file by an earlier call.
 
 
 </td></tr>
@@ -433,7 +433,7 @@ The publication is complete: the draft review was created and confirmed now, con
 
 </td><td>
 
-The draft review on GitHub.
+The review on GitHub.
 
 
 </td></tr>
@@ -455,7 +455,7 @@ Input to [publishSarifReview()](./sarif-to-comment.publishsarifreview.md)<!-- --
 
 </td><td>
 
-Options that change how a ready document is judged. Unknown options are refused.
+Options that change how a document is judged or published. Unknown options are refused.
 
 
 </td></tr>

@@ -190,10 +190,13 @@ function code(text: string): string {
 }
 
 function readyMarkdown(prepared: IReadyOutcome, captured: ICapturedReview): string {
+  // The mode changes no check (docs/submitted-review-contract.md §2.6); a
+  // submitted assessment only says what publication would create.
+  const as = captured.submit === true ? ' as a submitted comment review' : '';
   return [
     '## Ready to publish',
     '',
-    `The complete document can be published faithfully to ${destinationLabel(captured)} at commit ${code(captured.reviewedCommit)}.`,
+    `The complete document can be published faithfully to ${destinationLabel(captured)} at commit ${code(captured.reviewedCommit)}${as}.`,
     '',
     prepared.markdown.trim(),
     '',
@@ -326,7 +329,8 @@ async function assess(captured: ICapturedReview, createGitHubClient: (options: I
 
 /**
  * Checks whether a complete SARIF document can be published faithfully as
- * one draft review of a pull request, without publishing anything.
+ * one review of a pull request (a draft, or a submitted comment review with
+ * `options.submit`), without publishing anything.
  *
  * @remarks
  * Runs the same checks as `publishSarifReview` — the SARIF schema, approval
