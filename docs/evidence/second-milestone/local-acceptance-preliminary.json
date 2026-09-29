@@ -28,8 +28,8 @@
     "remoteAcceptance": "not executed by this runner"
   },
   "oracle": "docs/evidence/second-milestone/source-oracle.json",
-  "runner": "logs/opus/m2/installed-local-acceptance.cjs",
-  "log": "logs/opus/m2/parent-local-acceptance-03.txt",
+  "runner": "<working-logs>/m2/installed-local-acceptance.cjs",
+  "log": "<working-logs>/m2/parent-local-acceptance-03.txt",
   "checks": [
     "exact caller messages and ranges",
     "authored CLI/library equality",

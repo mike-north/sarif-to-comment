@@ -6,7 +6,7 @@
       "id": 5333375577,
       "url": "https://github.com/mike-north/doc-linter/pull/16#pullrequestreview-5333375577"
     },
-    "statePath": "/Users/mnorth/Development/sarif-to-comment/logs/opus/e2e/state/pr16-suggestions.json",
+    "statePath": "<working-logs>/e2e/state/pr16-suggestions.json",
     "markdown": "## Draft review published\n\nCreated the draft [review 5333375577](https://github.com/mike-north/doc-linter/pull/16#pullrequestreview-5333375577) on mike-north/doc-linter#16 at commit `54cae057bc66ef7b49c3186923e0be0a0a0917ae`. It stays a draft until someone submits it on GitHub."
   }
 }

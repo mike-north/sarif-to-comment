@@ -1,7 +1,7 @@
 {
   "consumer": "/private/tmp/sarif-ts-final-acceptance-53yshrdg/consumer",
   "packageDir": "/private/tmp/sarif-ts-final-acceptance-53yshrdg/consumer/node_modules/sarif-to-comment",
-  "tarball": "/Users/mnorth/Development/sarif-to-comment/logs/opus/typescript/evidence/parent-verification/final/sarif-to-comment-0.2.0.tgz",
+  "tarball": "<working-logs>/typescript/evidence/parent-verification/final/sarif-to-comment-0.2.0.tgz",
   "tarballSha256": "c7da8fe618dbb1f8e980941e1650d9ab4197bae3e4c87d4d86f2721a8ec5611c",
   "sourceCommit": "dc5dfeed61f7ef5c0a774fa0d2256887d2193ef2",
   "sourceFiles": {
@@ -411,8 +411,8 @@
   ],
   "workingTreeStatus": " M .gitignore\n",
   "runnerHashes": {
-    "logs/opus/m2/installed-typescript-acceptance.cjs": "8518c2e25d83c4248ce5d750f150cefdc2fdffa8ce213045646f501754dabb23",
-    "logs/opus/m2/installed-insertion-acceptance.cjs": "1b59c357b628416eb690c76f996ce96d5ae85c3f4fb693dffebe534792e37703",
+    "<working-logs>/m2/installed-typescript-acceptance.cjs": "8518c2e25d83c4248ce5d750f150cefdc2fdffa8ce213045646f501754dabb23",
+    "<working-logs>/m2/installed-insertion-acceptance.cjs": "1b59c357b628416eb690c76f996ce96d5ae85c3f4fb693dffebe534792e37703",
     "docs/evidence/second-milestone/source-oracle.json": "8a51cec87afc8e60f3c5139273e74503a4ead44794c2de6fd8099cd1565cefcd",
     "docs/evidence/second-milestone/insertion-source-oracle.json": "ae50e0264dbb8f0b229edf575b56903475cdbae9f8777f5863e418c678562f70"
   },

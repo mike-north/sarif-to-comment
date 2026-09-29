@@ -1,7 +1,7 @@
 {
   "format": "sarif-to-comment.second-milestone-acceptance-evidence",
   "note": "Compact, sanitized consolidation. Profile blobs, credentials, process environments and absolute temporary paths are omitted. Each publication lists the working records it was copied from (logs/ is a local, git-ignored working area; this file is the durable copy).",
-  "generator": "logs/opus/m2/build-acceptance-evidence.cjs",
+  "generator": "<working-logs>/m2/build-acceptance-evidence.cjs",
   "reviewedSource": {
     "manifest": "docs/evidence/second-milestone/reviewed-source.sha256",
     "manifestSha256": "823bef633b25c49908aebb6b774aba6462bef9759a2131e0c41dc7223dfc60d7",
@@ -21,7 +21,7 @@
     }
   },
   "installedPackage": {
-    "source": "logs/opus/m2/parent-installed-final.json",
+    "source": "<working-logs>/m2/parent-installed-final.json",
     "version": "0.2.0",
     "tarball": "sarif-to-comment-0.2.0.tgz",
     "tarballSha256": "13b75f537f36453968b7720e09d6210571aca500116b5bb77bce7e11e994c1f1",
@@ -46,8 +46,8 @@
   "localAcceptance": {
     "replacements": {
       "source": [
-        "logs/opus/m2/parent-local-final.txt",
-        "logs/opus/m2/parent-local-final/local-acceptance.json"
+        "<working-logs>/m2/parent-local-final.txt",
+        "<working-logs>/m2/parent-local-final/local-acceptance.json"
       ],
       "status": "passed",
       "packageVersion": "0.2.0",
@@ -60,7 +60,7 @@
       "remoteAcceptance": "not executed by this runner"
     },
     "insertions": {
-      "source": "logs/opus/m2/parent-insertion-final.txt",
+      "source": "<working-logs>/m2/parent-insertion-final.txt",
       "status": "local-passed",
       "mode": "insertions",
       "reviewedCommit": "998d7cfc7c858adf3bbcea82ef126a900d51ebc3",
@@ -88,7 +88,7 @@
         "reviewId": 5341773653
       },
       "hostReadback": {
-        "verifier": "logs/opus/m2/live-readback.cjs (independent read-only oracle; asserts, then writes the flags below)",
+        "verifier": "<working-logs>/m2/live-readback.cjs (independent read-only oracle; asserts, then writes the flags below)",
         "state": "PENDING",
         "commitId": "998d7cfc7c858adf3bbcea82ef126a900d51ebc3",
         "authorLogin": "mike-north",
@@ -126,16 +126,16 @@
         }
       ],
       "sources": [
-        "logs/opus/m2/parent-live-final/authored-library.json",
-        "logs/opus/m2/parent-live-final/authored-library.state.json",
-        "logs/opus/m2/parent-live-final/authored-library.readback.json",
-        "logs/opus/m2/parent-live-final/authored-library.review.json",
-        "logs/opus/m2/parent-live-final/authored-library.comments.json",
-        "logs/opus/m2/parent-live-final/authored-library.threads.json",
-        "logs/opus/m2/parent-live-final/authored-library.reviews.json",
-        "logs/opus/m2/parent-live-final/authored-library.before-delete.json",
-        "logs/opus/m2/parent-live-final/authored-library.deleted.json",
-        "logs/opus/m2/parent-live-final/authored-library-retry.json"
+        "<working-logs>/m2/parent-live-final/authored-library.json",
+        "<working-logs>/m2/parent-live-final/authored-library.state.json",
+        "<working-logs>/m2/parent-live-final/authored-library.readback.json",
+        "<working-logs>/m2/parent-live-final/authored-library.review.json",
+        "<working-logs>/m2/parent-live-final/authored-library.comments.json",
+        "<working-logs>/m2/parent-live-final/authored-library.threads.json",
+        "<working-logs>/m2/parent-live-final/authored-library.reviews.json",
+        "<working-logs>/m2/parent-live-final/authored-library.before-delete.json",
+        "<working-logs>/m2/parent-live-final/authored-library.deleted.json",
+        "<working-logs>/m2/parent-live-final/authored-library-retry.json"
       ],
       "lifecycle": {
         "action": "pending draft deleted by the parent after readback",
@@ -181,7 +181,7 @@
         "reviewId": 5341790476
       },
       "hostReadback": {
-        "verifier": "logs/opus/m2/live-readback.cjs (independent read-only oracle; asserts, then writes the flags below)",
+        "verifier": "<working-logs>/m2/live-readback.cjs (independent read-only oracle; asserts, then writes the flags below)",
         "state": "PENDING",
         "commitId": "998d7cfc7c858adf3bbcea82ef126a900d51ebc3",
         "authorLogin": "mike-north",
@@ -219,15 +219,15 @@
         }
       ],
       "sources": [
-        "logs/opus/m2/parent-live-final/upstream-enriched.json",
-        "logs/opus/m2/parent-live-final/upstream-enriched.state.json",
-        "logs/opus/m2/parent-live-final/upstream-enriched.readback.json",
-        "logs/opus/m2/parent-live-final/upstream-enriched.review.json",
-        "logs/opus/m2/parent-live-final/upstream-enriched.comments.json",
-        "logs/opus/m2/parent-live-final/upstream-enriched.threads.json",
-        "logs/opus/m2/parent-live-final/upstream-enriched.reviews.json",
-        "logs/opus/m2/parent-live-final/upstream-enriched.before-delete.json",
-        "logs/opus/m2/parent-live-final/upstream-enriched.deleted.json"
+        "<working-logs>/m2/parent-live-final/upstream-enriched.json",
+        "<working-logs>/m2/parent-live-final/upstream-enriched.state.json",
+        "<working-logs>/m2/parent-live-final/upstream-enriched.readback.json",
+        "<working-logs>/m2/parent-live-final/upstream-enriched.review.json",
+        "<working-logs>/m2/parent-live-final/upstream-enriched.comments.json",
+        "<working-logs>/m2/parent-live-final/upstream-enriched.threads.json",
+        "<working-logs>/m2/parent-live-final/upstream-enriched.reviews.json",
+        "<working-logs>/m2/parent-live-final/upstream-enriched.before-delete.json",
+        "<working-logs>/m2/parent-live-final/upstream-enriched.deleted.json"
       ],
       "lifecycle": {
         "action": "pending draft deleted by the parent after readback",
@@ -266,7 +266,7 @@
         "reviewId": 5341805378
       },
       "hostReadback": {
-        "verifier": "logs/opus/m2/live-readback.cjs (independent read-only oracle; asserts, then writes the flags below)",
+        "verifier": "<working-logs>/m2/live-readback.cjs (independent read-only oracle; asserts, then writes the flags below)",
         "state": "PENDING",
         "commitId": "998d7cfc7c858adf3bbcea82ef126a900d51ebc3",
         "authorLogin": "mike-north",
@@ -304,15 +304,15 @@
         }
       ],
       "sources": [
-        "logs/opus/m2/parent-live-final/upstream-direct.json",
-        "logs/opus/m2/parent-live-final/upstream-direct.state.json",
-        "logs/opus/m2/parent-live-final/upstream-direct.readback.json",
-        "logs/opus/m2/parent-live-final/upstream-direct.review.json",
-        "logs/opus/m2/parent-live-final/upstream-direct.comments.json",
-        "logs/opus/m2/parent-live-final/upstream-direct.threads.json",
-        "logs/opus/m2/parent-live-final/upstream-direct.reviews.json",
-        "logs/opus/m2/parent-live-final/upstream-direct.before-delete.json",
-        "logs/opus/m2/parent-live-final/upstream-direct.deleted.json"
+        "<working-logs>/m2/parent-live-final/upstream-direct.json",
+        "<working-logs>/m2/parent-live-final/upstream-direct.state.json",
+        "<working-logs>/m2/parent-live-final/upstream-direct.readback.json",
+        "<working-logs>/m2/parent-live-final/upstream-direct.review.json",
+        "<working-logs>/m2/parent-live-final/upstream-direct.comments.json",
+        "<working-logs>/m2/parent-live-final/upstream-direct.threads.json",
+        "<working-logs>/m2/parent-live-final/upstream-direct.reviews.json",
+        "<working-logs>/m2/parent-live-final/upstream-direct.before-delete.json",
+        "<working-logs>/m2/parent-live-final/upstream-direct.deleted.json"
       ],
       "lifecycle": {
         "action": "pending draft deleted by the parent after readback",
@@ -351,7 +351,7 @@
         "reviewId": 5341813827
       },
       "hostReadback": {
-        "verifier": "logs/opus/m2/live-readback.cjs (independent read-only oracle; asserts, then writes the flags below)",
+        "verifier": "<working-logs>/m2/live-readback.cjs (independent read-only oracle; asserts, then writes the flags below)",
         "state": "PENDING",
         "commitId": "998d7cfc7c858adf3bbcea82ef126a900d51ebc3",
         "authorLogin": "mike-north",
@@ -389,15 +389,15 @@
         }
       ],
       "sources": [
-        "logs/opus/m2/parent-live-final/authored-cli.json",
-        "logs/opus/m2/parent-live-final/authored-cli.state.json",
-        "logs/opus/m2/parent-live-final/authored-cli.readback.json",
-        "logs/opus/m2/parent-live-final/authored-cli.review.json",
-        "logs/opus/m2/parent-live-final/authored-cli.comments.json",
-        "logs/opus/m2/parent-live-final/authored-cli.threads.json",
-        "logs/opus/m2/parent-live-final/authored-cli.reviews.json",
-        "logs/opus/m2/parent-live-final/authored-cli.before-submit.json",
-        "logs/opus/m2/parent-live-final/authored-cli.submitted.json"
+        "<working-logs>/m2/parent-live-final/authored-cli.json",
+        "<working-logs>/m2/parent-live-final/authored-cli.state.json",
+        "<working-logs>/m2/parent-live-final/authored-cli.readback.json",
+        "<working-logs>/m2/parent-live-final/authored-cli.review.json",
+        "<working-logs>/m2/parent-live-final/authored-cli.comments.json",
+        "<working-logs>/m2/parent-live-final/authored-cli.threads.json",
+        "<working-logs>/m2/parent-live-final/authored-cli.reviews.json",
+        "<working-logs>/m2/parent-live-final/authored-cli.before-submit.json",
+        "<working-logs>/m2/parent-live-final/authored-cli.submitted.json"
       ],
       "lifecycle": {
         "action": "submitted by the parent (required for GitHub Apply) and retained",
@@ -430,7 +430,7 @@
         "reviewId": 5341820039
       },
       "hostReadback": {
-        "verifier": "logs/opus/m2/live-readback.cjs (independent read-only oracle; asserts, then writes the flags below)",
+        "verifier": "<working-logs>/m2/live-readback.cjs (independent read-only oracle; asserts, then writes the flags below)",
         "state": "PENDING",
         "commitId": "998d7cfc7c858adf3bbcea82ef126a900d51ebc3",
         "authorLogin": "mike-north",
@@ -477,15 +477,15 @@
         }
       ],
       "sources": [
-        "logs/opus/m2/parent-insertion-final/insertions.json",
-        "logs/opus/m2/parent-insertion-final/insertions.state.json",
-        "logs/opus/m2/parent-insertion-final/insertions.readback.json",
-        "logs/opus/m2/parent-insertion-final/insertions.review.json",
-        "logs/opus/m2/parent-insertion-final/insertions.comments.json",
-        "logs/opus/m2/parent-insertion-final/insertions.threads.json",
-        "logs/opus/m2/parent-insertion-final/insertions.reviews.json",
-        "logs/opus/m2/parent-insertion-final/insertions.before-submit.json",
-        "logs/opus/m2/parent-insertion-final/insertions.submitted.json"
+        "<working-logs>/m2/parent-insertion-final/insertions.json",
+        "<working-logs>/m2/parent-insertion-final/insertions.state.json",
+        "<working-logs>/m2/parent-insertion-final/insertions.readback.json",
+        "<working-logs>/m2/parent-insertion-final/insertions.review.json",
+        "<working-logs>/m2/parent-insertion-final/insertions.comments.json",
+        "<working-logs>/m2/parent-insertion-final/insertions.threads.json",
+        "<working-logs>/m2/parent-insertion-final/insertions.reviews.json",
+        "<working-logs>/m2/parent-insertion-final/insertions.before-submit.json",
+        "<working-logs>/m2/parent-insertion-final/insertions.submitted.json"
       ],
       "lifecycle": {
         "action": "submitted by the parent (required for GitHub Apply) and retained",

@@ -6,7 +6,7 @@
       "id": 5333330277,
       "url": "https://github.com/mike-north/doc-linter/pull/15#pullrequestreview-5333330277"
     },
-    "statePath": "/Users/mnorth/Development/sarif-to-comment/logs/opus/e2e/state/pr15-library-3.json",
+    "statePath": "<working-logs>/e2e/state/pr15-library-3.json",
     "markdown": "## Draft review published\n\nThe draft [review 5333330277](https://github.com/mike-north/doc-linter/pull/15#pullrequestreview-5333330277) on mike-north/doc-linter#15 at commit `c96e4c386527de44b29b507907e2c97d2351d45e` was confirmed on GitHub for this publication; nothing was resent."
   }
 }
