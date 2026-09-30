@@ -112,6 +112,11 @@ export interface ICompanionConfig {
   readonly failSweep?: boolean | undefined;
   /** Items per sweep page at most, whatever the query asks for (default: what it asks for). */
   readonly sweepPageSize?: number | undefined;
+  /**
+   * Each sweep page after the first repeats the previous page's last node
+   * first, as when an item is added ahead of it while the listing is read.
+   */
+  readonly repeatSweepNode?: boolean | undefined;
   /** Cross-reference events per GraphQL timeline page (default 100, the page size the client asks for). */
   readonly timelinePageSize?: number | undefined;
   /** The GraphQL timeline query answers with an `errors` array. */
@@ -214,6 +219,7 @@ export const isCompanionConfig: Guard<ICompanionConfig> = isShape({
   closes: isOptional(isRecordOf(isOneOf('forbidden', 'not-found', 'rate-limited', 'secondary-rate-limit', 'too-many-requests', 'server-error', 'lose-response'))),
   failSweep: isOptional(isBoolean),
   sweepPageSize: isOptional(isNumber),
+  repeatSweepNode: isOptional(isBoolean),
   timelinePageSize: isOptional(isNumber),
   failTimeline: isOptional(isBoolean),
 });

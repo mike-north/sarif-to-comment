@@ -267,6 +267,19 @@ describe('pagination and duplicate references (A31)', () => {
     assert.deepEqual(pullReads(world).sort((a, b) => a - b), [36, 37, 305], 'one read per original, and only the ended one\'s suggestion');
   });
 
+  for (const [what, extra] of [['the default sweep by suggestion branch', {}], ['a label sweep', { label: 'suggestion-pr' }]] as const) {
+    test(`regression: a pull request repeated across pages of ${what} (the listing shifted while being read) counts once, and is closed once`, async () => {
+      const pulls = [original(37, 'closed'), ...[40, 41, 42, 43, 44].map((n) => suggestion(n, 37))];
+      const world = makeWorld(pulls, { sweepPageSize: 2, repeatSweepNode: true });
+      const outcome = await cleanup(world, extra);
+      assert.deepEqual(results(outcome), [[40, 37, 'closed'], [41, 37, 'closed'], [42, 37, 'closed'], [43, 37, 'closed'], [44, 37, 'closed']]);
+      assert.deepEqual(outcome['counts'], { candidates: 5, checked: 5, labeled: 5, conforming: 5 });
+      assert.deepEqual(writes(world), closes(40, 41, 42, 43, 44), 'none is closed twice');
+      // Five items, two per page, each later page repeating one: 2 + 1 + 1 + 1 new items.
+      assert.equal(world.host.log().filter((r) => r.path === '/graphql').length, 4, 'the host did repeat a node on every later page');
+    });
+  }
+
   test('a pull request into another repository from a suggestion branch here (a fork\'s pull request into its upstream) is left out', async () => {
     const world = makeWorld([original(37, 'closed'), suggestion(40, 37), { ...suggestion(41, 37), repository: 'upstream/widgets', headRepo: `${OWNER}/${REPO}` }]);
     const outcome = await cleanup(world);

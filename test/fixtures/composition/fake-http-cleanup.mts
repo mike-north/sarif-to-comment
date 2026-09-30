@@ -31,7 +31,8 @@
  *     its author's login (the authenticated user's for `authorId` equal to
  *     its id, otherwise `someone-else`) and at most 100 labels, with
  *     `hasNextPage` beyond that. Sweeps page by the query's `first`, capped
- *     by `sweepPageSize`, with opaque cursors.
+ *     by `sweepPageSize`, with opaque cursors; with `repeatSweepNode`, each
+ *     later page first repeats the previous page's last node.
  *
  * Behavior (config.json `companion`, see ICompanionConfig): per pull request
  * read and close failures, failing sweeps, the sweep and timeline page sizes
@@ -214,12 +215,26 @@ function pullNode(host: ICompanionHost, pr: IStoredPull): UnknownRecord {
 /** The greatest `first` GitHub accepts on a connection. */
 const MAX_FIRST = 100;
 
-/** One page of `items` from an offset cursor, with GitHub's pageInfo. */
-function page<T>(items: readonly T[], first: number, after: unknown, size: number | undefined, tag: string): { readonly nodes: T[]; readonly pageInfo: UnknownRecord } {
+/**
+ * One page of `items` from an offset cursor, with GitHub's pageInfo. With
+ * `repeat`, each page after the first starts with the previous page's last
+ * item, as when an item is added ahead of it while the listing is read; the
+ * page then holds one new item fewer.
+ */
+function page<T>(
+  items: readonly T[],
+  first: number,
+  after: unknown,
+  size: number | undefined,
+  tag: string,
+  repeat: boolean,
+): { readonly nodes: T[]; readonly pageInfo: UnknownRecord } {
   const start = typeof after === 'string' ? Number(after.slice(tag.length + 1)) : 0;
-  const nodes = items.slice(start, start + Math.min(first, size ?? first));
-  const end = start + nodes.length;
-  return { nodes, pageInfo: { hasNextPage: end < items.length, endCursor: nodes.length === 0 ? null : `${tag}:${String(end)}` } };
+  const limit = Math.min(first, size ?? first);
+  const previous = repeat && start > 0 ? items.slice(start - 1, start) : [];
+  const fresh = items.slice(start, start + limit - previous.length);
+  const end = start + fresh.length;
+  return { nodes: [...previous, ...fresh], pageInfo: { hasNextPage: end < items.length, endCursor: fresh.length === 0 ? null : `${tag}:${String(end)}` } };
 }
 
 /** This repository's branches: every stored pull request's head branch here, and every branch the companion state records. */
@@ -268,7 +283,7 @@ export function sweepQuery(host: ICompanionHost, request: unknown, json: Json): 
     if (typeof prefix !== 'string' || !prefix.startsWith('refs/heads/')) return json({ message: 'fake host: unexpected ref prefix' }, 400);
     const under = prefix.slice('refs/heads/'.length);
     const refs = branchesOf(host).filter((branch) => branch.startsWith(under));
-    const { nodes, pageInfo } = page(refs, first, after, config.sweepPageSize, 'refs');
+    const { nodes, pageInfo } = page(refs, first, after, config.sweepPageSize, 'refs', config.repeatSweepNode === true);
     return json({
       data: {
         repository: {
@@ -294,6 +309,6 @@ export function sweepQuery(host: ICompanionHost, request: unknown, json: Json): 
   const labeled = pulls
     .filter((pr) => isLocalPull(host, pr) && pr.state === 'open' && pr.labels.some((l) => l.toLowerCase() === label.toLowerCase()))
     .sort((a, b) => a.number - b.number);
-  const { nodes, pageInfo } = page(labeled, first, after, config.sweepPageSize, 'pulls');
+  const { nodes, pageInfo } = page(labeled, first, after, config.sweepPageSize, 'pulls', config.repeatSweepNode === true);
   return json({ data: { repository: { pullRequests: { totalCount: labeled.length, pageInfo, nodes: nodes.map((pr) => pullNode(host, pr)) } } } });
 }
