@@ -10,7 +10,7 @@
  * After a rewritten history, a whole-file deletion that cannot be re-applied
  * is published as a review-body proposal with a `suggestion-pr-fallback`
  * warning and a headline, and a group that cannot be re-applied refuses the
- * review with `suggestion-group-not-reapplied`, writing nothing.
+ * review with `suggestion-group-pr-unavailable`, writing nothing.
  *
  * @see https://github.com/mike-north/sarif-to-comment/issues/37
  * @see docs/companion-suggestion-pr-contract.md §2.5.1
@@ -82,7 +82,7 @@ describe('the installed package falls back, or refuses a group, after a rewritte
     assert.equal(refused.status, 2, refused.stdout + refused.stderr);
     const refusal = asRecord(parseJson(refused.stdout));
     assert.equal(refusal['status'], 'blocked');
-    assert.deepEqual(asArray(refusal['diagnostics']).map((d) => asRecord(d)['code']), ['suggestion-group-not-reapplied']);
+    assert.deepEqual(asArray(refusal['diagnostics']).map((d) => asRecord(d)['code']), ['suggestion-group-pr-unavailable']);
     assert.deepEqual(writes(refusedWorld), []);
     assert.equal(fs.existsSync(refusedWorld.statePath), false);
   });
@@ -124,7 +124,7 @@ describe('the installed package falls back, or refuses a group, after a rewritte
 
     const blocked = script(refusedWorld, 'validateSarifReview', input(refusedWorld, ['reword', 'remark'], false));
     assert.equal(blocked['status'], 'blocked');
-    assert.deepEqual(asArray(blocked['problems']).map((p) => asRecord(p)['code']), ['suggestion-group-not-reapplied']);
+    assert.deepEqual(asArray(blocked['problems']).map((p) => asRecord(p)['code']), ['suggestion-group-pr-unavailable']);
     assert.deepEqual(writes(refusedWorld), []);
   });
 });

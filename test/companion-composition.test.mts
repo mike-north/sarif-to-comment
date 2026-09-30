@@ -754,32 +754,32 @@ describe('group rules (§2.3–§2.4), identical in validate and publish', () =>
     assert.deepEqual(review.request.comments, []);
   });
 
-  test('regression: a suggestion pull request body over 60,000 characters blocks the review; nothing is truncated', async () => {
+  /**
+   * Issue #37: a creation whose suggestion pull request cannot be made falls
+   * back to the review body, and is then judged exactly as without suggestion
+   * pull requests: here too large for the review body. validate and publish
+   * both block with that refusal and the fallback warning, and write nothing.
+   */
+  async function assertFallsBackThenBlocked(sarif: Json, reason: RegExp): Promise<void> {
+    const disallowed = await publish(makeWorld(), sarif, null);
+    assert.equal(status(disallowed), 'blocked', markdown(disallowed));
+    const world = makeWorld();
+    for (const outcome of [await validate(world, sarif), await publish(world, sarif)]) {
+      assert.equal(status(outcome), 'blocked', markdown(outcome));
+      const diagnostics = asArray(outcome['diagnostics']).map((d) => asRecord(d));
+      assert.deepEqual(diagnostics.filter((d) => d['severity'] === 'error'), disallowed['diagnostics'], 'the refusal without suggestion pull requests');
+      const warnings = diagnostics.filter((d) => d['severity'] === 'warning');
+      assert.deepEqual(warnings.map((d) => d['code']), ['suggestion-pr-fallback']);
+      assert.match(asString(warnings[0]?.['message']), reason);
+    }
+    assert.deepEqual(writes(world), [], 'no write of any kind');
+    assert.equal(fs.existsSync(world.statePath), false);
+  }
+
+  test('a suggestion pull request body over 60,000 characters falls back to the review body, which is then too large (issue #37); nothing is truncated', async () => {
     const message = 'x'.repeat(60_000);
     const sarif = document([result({ text: message, operation: createOp(0) })], [created('docs/guide.md', GUIDE)]);
-    // The body §2.11 defines, with a marker of the same length (its ids are v4 UUIDs, 36 characters each).
-    const uuid = '00000000-0000-4000-8000-000000000000';
-    const body = [
-      `Suggested in a review of #7 at commit ${HEAD}.`,
-      '',
-      'Merging this pull request into `feature/retry` applies this change:',
-      '',
-      '- New file `docs/guide.md`: 25 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644',
-      '',
-      DRAFT_NOTE,
-      '',
-      '---',
-      '',
-      message,
-      '',
-      attribution,
-      '',
-      markerFor(uuid, uuid),
-    ].join('\n');
-    assert.ok(body.length > 60_000);
-    await assertBlockedEverywhere(makeWorld(), sarif, [
-      `- \`suggestion-body-too-large\` at \`/runs/0/results/0\`: The suggestion pull request for the proposed change to docs/guide.md would have a ${String(body.length)}-character body; the limit is 60000. Nothing is truncated or split.`,
-    ]);
+    await assertFallsBackThenBlocked(sarif, /its suggestion pull request's description would be \d+ characters, and the limit is 60000/);
   });
 
   test('more than ten suggestion pull requests', async () => {
@@ -790,12 +790,10 @@ describe('group rules (§2.3–§2.4), identical in validate and publish', () =>
     ]);
   });
 
-  test('a created file over 1,000,000 bytes', async () => {
+  test('a created file over 1,000,000 bytes falls back to the review body, which is then too large (issue #37)', async () => {
     const big = `${'x'.repeat(1_000_000)}\n`;
     const sarif = document([result({ text: 'Big.', operation: createOp(0) })], [created('docs/big.md', big)]);
-    await assertBlockedEverywhere(makeWorld(), sarif, [
-      '- `suggestion-file-too-large` at `/runs/0/results/0`: docs/big.md: the proposed file is 1000001 bytes; a suggestion pull request carries at most 1000000 bytes per file.',
-    ]);
+    await assertFallsBackThenBlocked(sarif, /`docs\/big\.md` is 1000001 bytes, and a suggestion pull request carries at most 1000000 bytes per file/);
   });
 });
 

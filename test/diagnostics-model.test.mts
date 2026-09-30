@@ -43,7 +43,7 @@ describe('the code catalog (docs/diagnostics.md "Code catalog")', () => {
       assert.ok(CATALOG.has(code), code);
     }
     // Issue #37 names the fallback warning, and refuses a group that cannot be re-applied.
-    for (const code of ['suggestion-pr-fallback', 'suggestion-group-not-reapplied']) assert.ok(CATALOG.has(code), code);
+    for (const code of ['suggestion-pr-fallback', 'suggestion-group-pr-unavailable']) assert.ok(CATALOG.has(code), code);
     // docs/diagnostics.md "Renamed codes".
     const renames: readonly (readonly [string, string])[] = [
       ['inline-unavailable', 'inline-placement-unavailable'],
@@ -64,7 +64,7 @@ describe('the code catalog (docs/diagnostics.md "Code catalog")', () => {
 
   test('each severity is used, and warnings and notes the model calls out have that severity', () => {
     assert.equal(CATALOG.get('suggestion-pr-fallback')?.severity, 'warning');
-    assert.equal(CATALOG.get('suggestion-group-not-reapplied')?.severity, 'error');
+    assert.equal(CATALOG.get('suggestion-group-pr-unavailable')?.severity, 'error');
     assert.equal(CATALOG.get('finding-partially-overlaps-change')?.severity, 'warning');
     assert.equal(CATALOG.get('suggestion-branch-moved')?.severity, 'note');
     assert.equal(CATALOG.get('usage-error')?.severity, 'error');

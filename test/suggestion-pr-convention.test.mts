@@ -579,23 +579,41 @@ describe('publication identity (§2.2): every setting is bound to the state path
   });
 });
 
-describe('not yet supported: forks and non-default bases name the missing capability (§2.5)', () => {
+describe('not yet supported: forks and non-default bases fall back as if suggestion pull requests were not allowed (§2.5, issue #37)', () => {
+  /** The owner's decision on #37: the creation is proposed in the review body, with a warning naming why no suggestion pull request is made. */
+  const fallbackMessage = (reason: string): string =>
+    `Suggestion pull requests are allowed, but the creation of \`docs/guide.md\` is not proposed as one: ${reason}. `
+    + 'It is handled as if suggestion pull requests were not allowed: the review body proposes it, with its findings.';
+  const FORK = "the pull request's head branch `feature/retry` is in the fork fork-owner/widgets, and suggestion pull requests are not yet supported for a pull request from a fork";
+  const BASE_BRANCH = 'the pull request merges into `release`, which is not the default branch `main` of octo/widgets, and suggestion pull requests are not yet supported for such a pull request';
+
+  /** validate is ready and publish publishes the review alone, both with exactly this fallback warning. */
+  async function assertFallsBackEverywhere(world: IWorld, reason: string): Promise<void> {
+    const expected = [{
+      severity: 'warning', code: 'suggestion-pr-fallback', title: 'A change is handled as if suggestion pull requests were not allowed',
+      message: fallbackMessage(reason), location: { pointer: '/runs/0/results/0', path: 'docs/guide.md' },
+    }];
+    const assessed = await validate(world);
+    assert.equal(status(assessed), 'ready', markdown(assessed));
+    assert.deepEqual(assessed['diagnostics'], expected);
+    const published = await publish(world);
+    assert.equal(status(published), 'published', markdown(published));
+    assert.deepEqual(published['diagnostics'], expected);
+    assert.deepEqual(world.host.pulls(), []);
+    assert.deepEqual(writes(world), [`POST /repos/${OWNER}/${REPO}/pulls/${String(PULL)}/reviews`], 'only the review');
+  }
+
   test('a fork', async () => {
-    await assertBlockedEverywhere(makeWorld(repository({ pull: { headRef: HEAD_REF, baseRef: 'main', headRepo: 'fork-owner/widgets' } })), [
-      problem('suggestion-pr-fork-unsupported', 'Suggestion pull requests are not yet supported for a pull request from a fork: its head branch `feature/retry` is in fork-owner/widgets, so a suggestion would have to be opened there, as a pull request into that branch, and this tool opens suggestion pull requests only in octo/widgets.'),
-    ]);
+    await assertFallsBackEverywhere(makeWorld(repository({ pull: { headRef: HEAD_REF, baseRef: 'main', headRepo: 'fork-owner/widgets' } })), FORK);
   });
 
   test('a deleted head repository', async () => {
-    await assertBlockedEverywhere(makeWorld(repository({ pull: { headRef: HEAD_REF, baseRef: 'main', headRepo: null } })), [
-      problem('suggestion-pr-fork-unsupported', 'The pull request\'s head repository was deleted, so there is no branch to propose a suggestion into.'),
-    ]);
+    await assertFallsBackEverywhere(makeWorld(repository({ pull: { headRef: HEAD_REF, baseRef: 'main', headRepo: null } })),
+      "the pull request's head repository was deleted, so there is no branch to propose it into");
   });
 
   test('a base that is not the default branch', async () => {
-    await assertBlockedEverywhere(makeWorld(repository({ pull: { headRef: HEAD_REF, baseRef: 'release' } })), [
-      problem('suggestion-pr-base-unsupported', 'Suggestion pull requests are not yet supported for a pull request into `release`, which is not the default branch `main` of octo/widgets: following a suggestion through a pull request that merges into another branch (for example one of a stack of pull requests, which GitHub retargets when the branch below it merges) is not built yet.'),
-    ]);
+    await assertFallsBackEverywhere(makeWorld(repository({ pull: { headRef: HEAD_REF, baseRef: 'release' } })), BASE_BRANCH);
   });
 
   test('the base is compared with the repository\'s actual default branch, whatever its name', async () => {
@@ -618,14 +636,9 @@ describe('not yet supported: forks and non-default bases name the missing capabi
     assert.deepEqual(commits.map((c) => c.parents), [[BASE]], 'the proposal is based on the reviewed commit');
   });
 
-  test('everything is reported together, in a fixed order', async () => {
+  test('a fork into another base: both reasons, in a fixed order; with nothing to create, permission and labels are not needed', async () => {
     const world = makeWorld(repository({ labels: [], push: false, pull: { headRef: HEAD_REF, baseRef: 'release', headRepo: 'fork-owner/widgets' } }));
-    await assertBlockedEverywhere(world, [
-      problem('suggestion-pr-fork-unsupported', 'Suggestion pull requests are not yet supported for a pull request from a fork: its head branch `feature/retry` is in fork-owner/widgets, so a suggestion would have to be opened there, as a pull request into that branch, and this tool opens suggestion pull requests only in octo/widgets.'),
-      problem('suggestion-pr-base-unsupported', 'Suggestion pull requests are not yet supported for a pull request into `release`, which is not the default branch `main` of octo/widgets: following a suggestion through a pull request that merges into another branch (for example one of a stack of pull requests, which GitHub retargets when the branch below it merges) is not built yet.'),
-      problem('suggestion-pr-permission-missing', 'The authenticated account cannot push to octo/widgets, which creating proposal branches requires.'),
-      missingDefault,
-    ]);
+    await assertFallsBackEverywhere(world, `${FORK}; ${BASE_BRANCH}`);
   });
 });
 

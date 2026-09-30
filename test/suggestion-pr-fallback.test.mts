@@ -1,6 +1,8 @@
 /**
- * Falling back as if suggestion pull requests were not allowed when one
- * cannot be re-applied after a rewritten history (issue #37), through the
+ * Falling back as if suggestion pull requests were not allowed wherever one
+ * cannot be made (issue #37): after a rewritten history, for a pull request
+ * from a fork or into a base that is not the default branch, and for a
+ * change too large for one. Through the
  * production composition: the real public library and CLI with the real
  * GitHub client (src/github.cts), talking HTTP to the fake GitHub host of
  * test/fixtures/rewritten-history. Only `fetch` is replaced.
@@ -17,7 +19,7 @@
  *
  * Every fallback is a `suggestion-pr-fallback` warning naming the change,
  * the reason and the disallowed-mode handling; the refusal is a
- * `suggestion-group-not-reapplied` error stating that suggestion pull
+ * `suggestion-group-pr-unavailable` error stating that suggestion pull
  * requests are allowed, why this change cannot become one, that a group
  * cannot be published without one, and the two ways forward. A published or
  * ready outcome with warnings states their count and nature directly under
@@ -57,7 +59,7 @@ import { asArray, asRecord, asString, parseJson } from './support/runtime-types.
 
 const FALLBACK_TITLE = 'A change is handled as if suggestion pull requests were not allowed';
 const FALLBACK_REMEDY = "To propose the change as a suggestion pull request, review the pull request's current head again and publish that review.";
-const REFUSAL_TITLE = 'A group cannot be re-applied after a rewritten history';
+const REFUSAL_TITLE = "A group's suggestion pull request cannot be made";
 const REVIEW_AGAIN = "Review the pull request's current head again, and publish that review.";
 const GROUP_REMEDIES = [REVIEW_AGAIN, 'Or remove the group (`ungroup-fixes`), so that its changes are published on their own.'];
 const FIX_REMEDIES = [REVIEW_AGAIN, 'Or split the fix into separate findings, one change each, so that its changes are published on their own.'];
@@ -73,16 +75,33 @@ function fallbackMessage(change: string, head: string, reasons: readonly string[
     + 'It is handled as if suggestion pull requests were not allowed: the review body proposes it, with its findings.';
 }
 
-/** The fallback warning as a diagnostic. */
+/** The fallback warning as a diagnostic, after a rewritten history. */
 function fallback(pointer: string, filePath: string, change: string, head: string, reasons: readonly string[]): Json {
+  return fallbackDiagnostic(pointer, filePath, fallbackMessage(change, head, reasons), [FALLBACK_REMEDY]);
+}
+
+/** A fallback warning with its message and remedies (none when there is nothing to do). */
+function fallbackDiagnostic(pointer: string, filePath: string, message: string, remedies: readonly string[]): Json {
   return {
     severity: 'warning',
     code: 'suggestion-pr-fallback',
     title: FALLBACK_TITLE,
-    message: fallbackMessage(change, head, reasons),
+    message,
     location: { pointer, path: filePath },
-    remedies: [FALLBACK_REMEDY],
+    ...(remedies.length === 0 ? {} : { remedies }),
   };
+}
+
+/** The fallback message for any reason a suggestion pull request cannot be made (the owner's decision on #37 of September 30, 2026). */
+function fallbackFor(change: string, reason: string): string {
+  return `Suggestion pull requests are allowed, but the ${change} is not proposed as one: ${reason}. `
+    + 'It is handled as if suggestion pull requests were not allowed: the review body proposes it, with its findings.';
+}
+
+/** The refusal message of the group `reword` for any reason its suggestion pull request cannot be made. */
+function groupRefusalFor(reason: string): string {
+  return `Suggestion pull requests are allowed, but suggestion group "reword" cannot become one: ${reason}. `
+    + 'Without a suggestion pull request, a group cannot be published: its changes are accepted together or not at all, and are never split or published in part.';
 }
 
 /** The refusal of the group `reword`: suggestion pull requests are allowed, why it cannot be one, and that a group then cannot be published. */
@@ -100,7 +119,8 @@ function fixRefusalMessage(head: string, reasons: readonly string[]): string {
 }
 
 function refusal(message: string, remedies: readonly string[], pointer = '/runs/0/results/0'): Json {
-  return { severity: 'error', code: 'suggestion-group-not-reapplied', title: REFUSAL_TITLE, message, location: { pointer }, remedies };
+  if (remedies.length === 0) return { severity: 'error', code: 'suggestion-group-pr-unavailable', title: REFUSAL_TITLE, message, location: { pointer } };
+  return { severity: 'error', code: 'suggestion-group-pr-unavailable', title: REFUSAL_TITLE, message, location: { pointer }, remedies };
 }
 
 /** The headline under a published outcome's heading for `count` fallbacks and nothing else. */
@@ -179,7 +199,7 @@ function assertExactDiagnostics(outcome: Json, expected: readonly Json[]): void 
   assertDiagnostics(outcome['diagnostics'], expected.map((e) => ({
     code: asString(e['code']),
     location: asRecord(e['location']),
-    remedies: asArray(e['remedies']).map((r) => asString(r)),
+    remedies: e['remedies'] === undefined ? [] : asArray(e['remedies']).map((r) => asString(r)),
   })));
   assert.deepEqual(diagnosticsOf(outcome), expected);
 }
@@ -451,7 +471,7 @@ function humanBlock(d: Json): string {
     `${badge}  ${asString(d['title'])}  [${asString(d['code'])}]`,
     `  ${where}`,
     `  ${asString(d['message'])}`,
-    ...asArray(d['remedies']).map((r) => `  → ${asString(r)}`),
+    ...(d['remedies'] === undefined ? [] : asArray(d['remedies'])).map((r) => `  → ${asString(r)}`),
   ].join('\n');
 }
 
@@ -526,5 +546,147 @@ describe('a fallback is held to the limits of publication without suggestion pul
     assert.deepEqual(codes(allowed).filter((c) => c !== 'suggestion-pr-fallback'), codes(disallowed));
     assert.equal(codes(allowed).includes('suggestion-file-too-large'), false, 'no suggestion pull request carries the file');
     assert.ok(codes(allowed).includes('suggestion-pr-fallback'));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Wherever a suggestion pull request cannot be made (the owner's decision on
+// #37 of September 30, 2026): not only after a rewritten history, but also
+// for a pull request from a fork or whose head repository was deleted, one
+// whose base is not the default branch (neither yet supported), and a created
+// file over the suggestion pull request size limit.
+
+const REMOVE_GROUP = 'Remove the group (`ungroup-fixes`), so that its changes are published on their own.';
+const FORK_REASON = "the pull request's head branch `feature/retry` is in the fork fork-owner/widgets, and suggestion pull requests are not yet supported for a pull request from a fork";
+const DELETED_REASON = "the pull request's head repository was deleted, so there is no branch to propose it into";
+const BASE_REASON = 'the pull request merges into `release`, which is not the default branch `main` of octo/widgets, and suggestion pull requests are not yet supported for such a pull request';
+
+describe('a pull request suggestion pull requests do not support yet: every change is handled as if they were not allowed (#37)', () => {
+  const targets = [
+    ['a fork', { pull: { headRef: 'feature/retry', baseRef: 'main', headRepo: 'fork-owner/widgets' } }, FORK_REASON],
+    ['a deleted head repository', { pull: { headRef: 'feature/retry', baseRef: 'main', headRepo: null } }, DELETED_REASON],
+    ['a base that is not the default branch', { pull: { headRef: 'feature/retry', baseRef: 'release' } }, BASE_REASON],
+  ] as const;
+
+  for (const [what, repository, reason] of targets) {
+    for (const [parts, change, filePath] of [
+      [['create', 'remark'], CREATION, 'docs/new.md'],
+      [['delete', 'remark'], DELETION, 'obsolete.txt'],
+    ] as const) {
+      test(`${what}: the ${change.split(' ')[0] ?? ''} is proposed in the review body with a fallback warning; validate agrees`, async () => {
+        const expected = [fallbackDiagnostic('/runs/0/results/0', filePath, fallbackFor(change, reason), [])];
+        const assessedWorld = makeWorld(REVIEWED, {}, repository);
+        const assessed = await validateDoc(assessedWorld, documentWith(parts));
+        assert.equal(status(assessed), 'ready', markdown(assessed));
+        assertExactDiagnostics(assessed, expected);
+        assertReadyHeadline(assessed, readyHeadline(1));
+        assertNothingWritten(assessedWorld);
+        const world = makeWorld(REVIEWED, {}, repository);
+        const outcome = await publishDoc(world, documentWith(parts));
+        assert.equal(status(outcome), 'published', markdown(outcome));
+        assert.deepEqual(world.host.pulls(), []);
+        assert.deepEqual(writes(world), [`/pulls/${String(PULL)}/reviews`], 'only the review is written');
+        assert.equal(reviewBodyOf(world), await disallowedBody(REVIEWED, documentWith(parts)));
+        assertExactDiagnostics(outcome, expected);
+        assertPublishedHeadline(outcome, publishedHeadline(1));
+      });
+    }
+
+    test(`${what}: a group refuses the whole review, naming the reason; nothing is written`, async () => {
+      const expected = refusal(groupRefusalFor(reason), [REMOVE_GROUP]);
+      for (const operation of [validateDoc, publishDoc]) {
+        const world = makeWorld(REVIEWED, {}, repository);
+        const outcome = await operation(world, documentWith(['reword', 'create', 'remark']));
+        assert.equal(status(outcome), 'blocked', markdown(outcome));
+        assertExactDiagnostics(outcome, [expected, fallbackDiagnostic('/runs/0/results/2', 'docs/new.md', fallbackFor(CREATION, reason), [])]);
+        assertNothingWritten(world);
+      }
+    });
+  }
+
+  test('a fork whose base is not the default branch either: both reasons, and neither labels nor push permission are needed', async () => {
+    const world = makeWorld(REVIEWED, {}, { pull: { headRef: 'feature/retry', baseRef: 'release', headRepo: 'fork-owner/widgets' }, labels: [], push: false });
+    const outcome = await publishDoc(world, documentWith(['create']));
+    assert.equal(status(outcome), 'published', markdown(outcome));
+    assertExactDiagnostics(outcome, [fallbackDiagnostic('/runs/0/results/0', 'docs/new.md', fallbackFor(CREATION, `${FORK_REASON}; ${BASE_REASON}`), [])]);
+  });
+});
+
+describe('a change too large for a suggestion pull request is handled as if they were not allowed (#37)', () => {
+  const SIZE_REMEDY = 'To propose the change as a suggestion pull request, reduce the proposed file to at most 1,000,000 bytes.';
+
+  /** `parts` with the new page's content replaced by `text`. */
+  function withPage(parts: readonly DocumentPart[], text: string): Json {
+    const document = documentWith(parts);
+    const [page] = asArray(asRecord(asArray(document['runs'])[0])['artifacts']);
+    asRecord(asRecord(page)['contents'])['text'] = text;
+    return document;
+  }
+
+  test('a creation over 1,000,000 bytes falls back, and is then judged exactly as without suggestion pull requests (here, too large for the review body)', async () => {
+    const big = withPage(['create'], `${'x'.repeat(1_000_000)}\n`);
+    const allowed = await publishDoc(makeWorld(REVIEWED), big);
+    const disallowed = await call('publishSarifReview', makeWorld(REVIEWED), big, false);
+    assert.equal(status(disallowed), 'blocked', markdown(disallowed));
+    assert.equal(status(allowed), 'blocked', markdown(allowed));
+    const fallbackWarning = fallbackDiagnostic('/runs/0/results/0', 'docs/new.md',
+      fallbackFor(CREATION, '`docs/new.md` is 1000001 bytes, and a suggestion pull request carries at most 1000000 bytes per file'), [SIZE_REMEDY]);
+    assert.deepEqual(diagnosticsOf(allowed), [...diagnosticsOf(disallowed), fallbackWarning], 'the refusal without suggestion pull requests, and the fallback');
+    const assessed = await validateDoc(makeWorld(REVIEWED), big);
+    assert.deepEqual(diagnosticsOf(assessed), diagnosticsOf(allowed));
+  });
+
+  test('a creation whose suggestion pull request description would be too long falls back, and is judged as without suggestion pull requests', async () => {
+    const document = documentWith(['create']);
+    const [result] = asArray(asRecord(asArray(document['runs'])[0])['results']);
+    asRecord(asRecord(result)['message'])['text'] = 'Long. '.repeat(10_500);
+    const allowed = await publishDoc(makeWorld(REVIEWED), document);
+    const disallowed = await call('publishSarifReview', makeWorld(REVIEWED), document, false);
+    assert.equal(status(allowed), status(disallowed), markdown(allowed));
+    const codes = (outcome: Json): unknown[] => diagnosticsOf(outcome).map((d) => asRecord(d)['code']);
+    assert.deepEqual(codes(allowed), [...codes(disallowed), 'suggestion-pr-fallback']);
+    const [warning] = diagnosticsOf(allowed).map((d) => asRecord(d)).filter((d) => d['code'] === 'suggestion-pr-fallback');
+    assert.match(asString(warning?.['message']), /is not proposed as one: its suggestion pull request's description would be \d+ characters, and the limit is 60000\./);
+  });
+
+  test('a group holding a creation over 1,000,000 bytes refuses the whole review, naming the file', async () => {
+    const document = withPage(['reword', 'create'], `${'x'.repeat(1_000_000)}\n`);
+    const results = asArray(asRecord(asArray(document['runs'])[0])['results']);
+    asRecord(asRecord(results[2])['properties'])['sarifToComment'] = { proposedFileChanges: [{ operation: 'create', artifactIndex: 0 }], suggestionGroup: 'reword' };
+    for (const operation of [validateDoc, publishDoc]) {
+      const world = makeWorld(REVIEWED);
+      const outcome = await operation(world, document);
+      assert.equal(status(outcome), 'blocked', markdown(outcome));
+      assertExactDiagnostics(outcome, [refusal(
+        groupRefusalFor('`docs/new.md` is 1000001 bytes, and a suggestion pull request carries at most 1000000 bytes per file'),
+        ['Reduce the proposed file to at most 1,000,000 bytes.', 'Or remove the group (`ungroup-fixes`), so that its changes are published on their own.'],
+      )]);
+      assertNothingWritten(world);
+    }
+  });
+});
+
+describe('CLI (#37): a base that is not the default branch, in every format', () => {
+  const repository = { pull: { headRef: 'feature/retry', baseRef: 'release' } };
+  const warning = fallbackDiagnostic('/runs/0/results/0', 'obsolete.txt', fallbackFor(DELETION, BASE_REASON), []);
+
+  test('human, json and toon, for validate and publish (exit 0)', () => {
+    for (const command of ['validate', 'publish'] as const) {
+      for (const format of ['human', 'json', 'toon'] as const) {
+        const world = makeWorld(REVIEWED, {}, repository);
+        const flags = [...target(world, documentWith(['delete', 'remark'])), ...(command === 'publish' ? ['--state', world.statePath] : []), '--format', format];
+        const run = cli(world, [command, ...flags]);
+        assert.equal(run.status, 0, run.stdout + run.stderr);
+        if (format === 'human') {
+          const heading = command === 'validate' ? `## Ready to publish\n\n${readyHeadline(1)}\n\n` : `## Draft review published\n\n${publishedHeadline(1)}\n\n`;
+          assert.ok(run.stdout.startsWith(heading), run.stdout);
+          assert.equal(run.stderr, `${humanBlock(warning)}\n\n1 warning\n`);
+        } else {
+          const doc = asRecord(format === 'json' ? parseJson(run.stdout) : decode(run.stdout));
+          assert.deepEqual(doc['diagnostics'], [warning]);
+          assert.equal(run.stderr, '');
+        }
+      }
+    }
   });
 });

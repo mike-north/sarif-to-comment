@@ -197,9 +197,14 @@ export interface IWorld {
   readonly host: FakeHttpGitHub;
 }
 
-export function makeWorld(head: string, config: Partial<IHttpHostConfig> = {}): IWorld {
+/**
+ * A world whose pull request's head is `head`; `repository` overrides parts
+ * of that pull request's repository (for example a fork's head or another
+ * base branch).
+ */
+export function makeWorld(head: string, config: Partial<IHttpHostConfig> = {}, repository: Partial<IHttpRepository> = {}): IWorld {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'force-push-composition-')));
-  FakeHttpGitHub.create(path.join(root, 'host'), config, repositoryAt(head));
+  FakeHttpGitHub.create(path.join(root, 'host'), config, { ...repositoryAt(head), ...repository });
   fs.mkdirSync(path.join(root, 'state'));
   return { root, statePath: path.join(root, 'state', 'review.json'), host: new FakeHttpGitHub(path.join(root, 'host'), TOKEN) };
 }
