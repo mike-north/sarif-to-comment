@@ -37,17 +37,22 @@
  *
  * prepareForDestination(captured, client) -> Promise<ready | blocked>
  *   One fetchContext, verifyContext, then prepareReview with the context's
- *   source reader and existence check. With suggestion pull requests
- *   enabled (docs/companion-suggestion-pr-contract.md §2.8), the client's
- *   readSuggestionTarget is read before preparation (its head branch is named
- *   in the suggestion texts); a ready review that needs suggestion pull
- *   requests is then checked against the repository — same repository, a
- *   base that is the default branch, the reviewed head, push permission, the
+ *   source reader, existence check and tree read. With suggestion pull
+ *   requests enabled (docs/companion-suggestion-pr-contract.md §2.8), the
+ *   client's readSuggestionTarget is read before preparation (its head branch
+ *   is named in the suggestion texts); when the head is not the reviewed
+ *   commit and the pull request is one suggestion pull requests support, the
+ *   client's compareCommits tests ancestry (§2.5): a reviewed commit that is
+ *   not an ancestor of the head makes preparation re-apply each suggestion
+ *   onto the head or not create it (§2.5.1). A ready review that needs
+ *   suggestion pull requests is then checked against the repository — same
+ *   repository, a base that is the default branch, push permission, the
  *   repository configuration read through readDefaultBranchFile
  *   (docs/suggestion-pr-convention.md §4), and every label (canonical and
  *   extra) read through findLabel — all reported together as a block.
  *   Ready carries the head branch, the labels as GitHub names them (the
- *   canonical label first) and whether to create them ready for review.
+ *   canonical label first), whether to create them ready for review, and the
+ *   commit they are re-applied onto, if they are.
  *   Operational failures (GitHub, network, source reads, existence checks,
  *   repository, configuration and label reads, a context for another pull
  *   request or commit) reject.
@@ -55,7 +60,7 @@
 
 import * as util from 'node:util';
 
-import type { IDefaultBranchFile, IFetchContextRequest, IPullRequestDestination, ISuggestionTarget } from './github.cjs';
+import type { CommitComparison, IDefaultBranchFile, IFetchContextRequest, IPullRequestDestination, ISuggestionTarget } from './github.cjs';
 import { blockedBy, codeSpan, prepareReview } from './prepare-review.cjs';
 import type { IBlockedOutcome, IDiagnostic, IReadyOutcome } from './prepare-review.cjs';
 import type { IJsonObject, IPlainObject, JsonValue } from './sarif-common.cjs';
@@ -137,9 +142,13 @@ export interface IReviewInputSpec<Own extends object> {
 export interface IContextClient {
   readonly fetchContext: (
     request: IFetchContextRequest,
-  ) => Promise<{ readonly context: unknown; readonly readSource: unknown; readonly fileExists?: unknown }>;
+  ) => Promise<{ readonly context: unknown; readonly readSource: unknown; readonly fileExists?: unknown; readonly readEntry?: unknown }>;
   /** Read only with suggestion pull requests enabled; a client without it cannot publish them. */
   readonly readSuggestionTarget?: ((request: IPullRequestDestination) => Promise<ISuggestionTarget>) | undefined;
+  /** Read only with suggestion pull requests enabled, when the head is not the reviewed commit: their ancestry. */
+  readonly compareCommits?:
+    | ((request: { readonly owner: string; readonly repo: string; readonly base: string; readonly head: string }) => Promise<CommitComparison>)
+    | undefined;
   /** Read only when a ready review needs suggestion pull requests. */
   readonly findLabel?: ((request: { readonly owner: string; readonly repo: string; readonly name: string }) => Promise<string | null>) | undefined;
   /** Read only when a ready review needs suggestion pull requests: the repository configuration. */
@@ -156,6 +165,12 @@ export interface IReadySuggestionPullRequests {
   readonly labels: readonly string[];
   /** Whether they are created ready for review instead of as drafts. */
   readonly ready: boolean;
+  /**
+   * The pull request's head they are re-applied onto, because the reviewed
+   * commit is not its ancestor (contract §2.5.1); absent when they are
+   * proposed on the reviewed commit.
+   */
+  readonly reappliedOnto?: string;
 }
 
 /**
@@ -498,24 +513,29 @@ export async function prepareForDestination(captured: ICapturedReview, client: I
     reviewedCommit: captured.reviewedCommit,
     ...(captured.oldSourceCommit === undefined ? {} : { oldSourceCommit: captured.oldSourceCommit }),
   };
-  const { context, readSource, fileExists } = await client.fetchContext(contextRequest);
+  const { context, readSource, fileExists, readEntry } = await client.fetchContext(contextRequest);
   verifyContext(context, captured);
 
   const settings = captured.suggestionPullRequests;
   let target: ISuggestionTarget | undefined;
+  let rewrittenHead: string | undefined;
   if (settings !== undefined) {
     if (client.readSuggestionTarget === undefined) throw new Error('This GitHub client cannot publish suggestion pull requests.');
     target = await client.readSuggestionTarget(captured.destination);
+    rewrittenHead = await rewrittenHeadOf(target, captured, client);
   }
   const options = {
     ...(captured.ignoreApprovalHold === undefined ? {} : { ignoreApprovalHold: captured.ignoreApprovalHold }),
-    ...(target === undefined || settings === undefined ? {} : { suggestionPullRequests: { headRef: target.headRef, ready: settings.markReady } }),
+    ...(target === undefined || settings === undefined ? {} : {
+      suggestionPullRequests: { headRef: target.headRef, ready: settings.markReady, ...(rewrittenHead === undefined ? {} : { rewrittenHead }) },
+    }),
   };
   const prepareInput = {
     sarif: captured.sarif,
     context: captured.sourceRootUri === undefined ? context : { ...context, sourceRootUri: captured.sourceRootUri },
     readSource,
     ...(fileExists === undefined ? {} : { fileExists }),
+    ...(readEntry === undefined ? {} : { readEntry }),
     ...(Object.keys(options).length === 0 ? {} : { options }),
   };
   const prepared = await prepareReview(prepareInput);
@@ -525,7 +545,25 @@ export async function prepareForDestination(captured: ICapturedReview, client: I
     throw new Error('Review preparation returned an unexpected outcome; nothing was published.');
   }
   if (prepared.suggestions === undefined || target === undefined || settings === undefined) return prepared;
-  return checkSuggestionTarget(prepared, target, settings, captured, client);
+  return checkSuggestionTarget(prepared, target, settings, captured, client, rewrittenHead);
+}
+
+/**
+ * The pull request's head when the reviewed commit is not its ancestor, so
+ * that suggestions must be re-applied onto it or not created (contract §2.5,
+ * §2.5.1); undefined when the head is the reviewed commit or has only moved
+ * forward from it. Read only for a pull request suggestion pull requests
+ * support (same repository, default-branch base): the others are refused
+ * anyway if they need one. A failed read is operational.
+ */
+async function rewrittenHeadOf(target: ISuggestionTarget, captured: ICapturedReview, client: IContextClient): Promise<string | undefined> {
+  const supported = target.headRepository !== null && target.headRepository.toLowerCase() === target.baseRepository.toLowerCase()
+    && target.baseRef === target.defaultBranch;
+  if (target.headSha === captured.reviewedCommit || !supported) return undefined;
+  if (client.compareCommits === undefined) throw new Error('This GitHub client cannot publish suggestion pull requests.');
+  const { owner, repo } = captured.destination;
+  const comparison = await client.compareCommits({ owner, repo, base: captured.reviewedCommit, head: target.headSha });
+  return comparison === 'ahead' || comparison === 'identical' ? undefined : target.headSha;
 }
 
 /** A label a suggestion pull request must carry, and where it came from (for the missing-label problem). */
@@ -537,9 +575,10 @@ interface IWantedLabel {
 /**
  * The repository facts suggestion pull requests need, all reported together
  * in a fixed order (contract §2.5, §2.7): the same repository, a base that is
- * the default branch, the reviewed head, push permission, a valid repository
- * configuration, and every label. Ready with the head branch, the labels'
- * own names and the ready setting, or blocked.
+ * the default branch, push permission, a valid repository configuration, and
+ * every label. A head that moved is never among them (§2.5). Ready with the
+ * head branch, the labels' own names, the ready setting and the commit they
+ * are re-applied onto (if any), or blocked.
  */
 async function checkSuggestionTarget(
   prepared: IReadyOutcome,
@@ -547,6 +586,7 @@ async function checkSuggestionTarget(
   settings: ICapturedSuggestionSettings,
   captured: ICapturedReview,
   client: IContextClient,
+  rewrittenHead: string | undefined,
 ): Promise<DestinationOutcome> {
   const { owner, repo } = captured.destination;
   const repository = `${owner}/${repo}`;
@@ -571,10 +611,6 @@ async function checkSuggestionTarget(
     problem('suggestion-pr-base-unsupported',
       `Suggestion pull requests are not yet supported for a pull request into ${codeSpan(target.baseRef)}, which is not the default branch ${codeSpan(target.defaultBranch)} of ${repository}: following a suggestion through a pull request that merges into another branch (for example one of a stack of pull requests, which GitHub retargets when the branch below it merges) is not built yet.`);
   }
-  if (target.headSha !== captured.reviewedCommit) {
-    problem('suggestion-pr-historical-unsupported',
-      `The reviewed commit ${captured.reviewedCommit} is no longer the pull request's head ${target.headSha}. Proposing a suggestion on top of later commits needs a check that the reviewed commit is still part of the branch, which is not yet supported. Review the current head, or publish without suggestion pull requests.`);
-  }
   if (!target.canPush) {
     problem('suggestion-pr-permission-missing', `The authenticated account cannot push to ${repository}, which creating proposal branches requires.`);
   }
@@ -596,7 +632,12 @@ async function checkSuggestionTarget(
     else found.push(name);
   }
   if (problems.length > 0) return blockedBy(problems, prepared.warnings);
-  return { ...prepared, suggestionPullRequests: { headRef: target.headRef, labels: uniqueLabels(found), ready: settings.markReady } };
+  return {
+    ...prepared,
+    suggestionPullRequests: {
+      headRef: target.headRef, labels: uniqueLabels(found), ready: settings.markReady, ...(rewrittenHead === undefined ? {} : { reappliedOnto: rewrittenHead }),
+    },
+  };
 }
 
 /** The missing-label problem: the label, where it came from, and what to do. */

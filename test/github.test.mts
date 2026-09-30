@@ -889,6 +889,7 @@ describe('client construction', () => {
     assert.deepEqual(Object.keys(c).sort(), [
       'addLabels',
       'closePullRequest',
+      'compareCommits',
       'createBranch',
       'createProposalCommit',
       'createPullRequest',

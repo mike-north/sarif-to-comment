@@ -38,6 +38,7 @@ import { describe, test } from 'node:test';
 import { createGitHubClient } from '../dist/github.cjs';
 import library from '../dist/index.cjs';
 import type { ICreateGitHubClientOptions, IGitHubClient } from '../dist/github.cjs';
+import { findSuggestionMarker } from '../dist/suggestion-marker.cjs';
 import { FakeHttpGitHub } from './fixtures/composition/fake-http-github.mts';
 import type { IHttpHostConfig, IHttpPullFile, IHttpRepository } from './fixtures/composition/fake-http-github.mts';
 import type { IStoredPull } from './fixtures/composition/fake-http-companion.mts';
@@ -499,11 +500,11 @@ describe('rewritten history, and everything the suggestions touch is unchanged: 
   test('the version 2 marker is recognized by cleanup\'s reader (convention §7)', async () => {
     const world = makeWorld(AMENDED);
     await publish(world);
-    const { findSuggestionMarker } = await import('../dist/suggestion-marker.cjs');
     for (const pull of threePulls(world)) {
       const reading = findSuggestionMarker(pull.body);
       assert.equal(reading.kind, 'marker');
-      assert.equal(reading.kind === 'marker' ? reading.fields.reappliedOnto : undefined, AMENDED);
+      assert.equal(reading.fields.reappliedOnto, AMENDED);
+      assert.equal(reading.fields.reviewedCommit, REVIEWED);
     }
   });
 });
@@ -648,12 +649,16 @@ describe('recovery and retry after a re-application (§2.9, §2.10)', () => {
     assert.ok(markdown(again).includes(`re-applied onto commit \`${AMENDED}\`):`), markdown(again));
   });
 
-  test('when nothing is re-applied, a lost review response is recovered once, as for any review', async () => {
+  test('when nothing is re-applied, a lost review response is rediscovered and never resent, as for any review', async () => {
     const world = makeWorld(DROPPED, { create: 'lose-response' });
-    assert.equal(status(await publish(world)), 'uncertain');
+    const first = await publish(world);
+    assert.equal(status(first), 'published', markdown(first));
+    assert.ok(markdown(first).includes('was confirmed on GitHub for this publication; nothing was resent.'), markdown(first));
     world.host.setConfig({ create: 'ok' });
+    const before = writes(world).length;
     const retried = await publish(world);
     assert.equal(status(retried), 'published', markdown(retried));
+    assert.equal(writes(world).length, before, 'the retry is answered from the receipt');
     assert.equal(world.host.reviews().length, 1);
     assert.deepEqual(world.host.pulls(), []);
   });

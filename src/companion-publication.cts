@@ -21,6 +21,11 @@
  * markers' `batch`), every suggestion (id, branch, title, body, commit
  * message, exact changes, rendered section parts) and the review's body
  * sections and inline comments, bound by a fingerprint over all of it.
+ * Version 2 adds `reappliedOnto`: the commit every proposal is based on
+ * instead of the reviewed commit, because the pull request's history was
+ * rewritten (docs/companion-suggestion-pr-contract.md §2.5.1); its markers
+ * are then version 2 of the convention. It is decided once, when planned,
+ * and never again.
  * Each step that a person could see has its own record beside it,
  * `<statePath>.suggestion-<n>-branch|pull|labels` (format
  * 'sarif-to-comment.companion-step', version 1), claimed exclusively
@@ -149,6 +154,8 @@ export interface IStartCompanionInput extends ICompanionIdentity {
   readonly labels: readonly string[];
   /** Whether the pull requests are created ready for review instead of as drafts. */
   readonly ready: boolean;
+  /** The commit the suggestions are re-applied onto after a rewritten history; absent when they are based on the reviewed commit. */
+  readonly reappliedOnto?: string;
 }
 
 /** One planned suggestion: its prepared texts plus the identity chosen for it. */
@@ -161,7 +168,8 @@ interface IPlanSuggestion extends IPreparedCompanion {
 /** The plan record (see the module documentation). */
 interface IPlanRecord {
   readonly format: typeof PLAN_FORMAT;
-  readonly version: typeof RECORD_VERSION;
+  /** 1, or 2 exactly when `reappliedOnto` is present. */
+  readonly version: typeof RECORD_VERSION | typeof REAPPLIED_PLAN_VERSION;
   readonly publication: string;
   readonly destination: IDestination;
   readonly reviewedCommit: string;
@@ -171,6 +179,8 @@ interface IPlanRecord {
   readonly headRef: string;
   readonly labels: readonly string[];
   readonly ready: boolean;
+  /** The commit every proposal is based on after a rewritten history (version 2 only). */
+  readonly reappliedOnto?: string;
   readonly suggestions: readonly IPlanSuggestion[];
   readonly review: { readonly sections: readonly (string | number)[]; readonly comments: readonly PreparedComment[] };
   readonly planFingerprint: string;
@@ -245,6 +255,8 @@ export interface ICompanionPublished {
   readonly headRef: string;
   readonly labels: readonly string[];
   readonly ready: boolean;
+  /** The commit the suggestions were re-applied onto, when they were. */
+  readonly reappliedOnto?: string;
 }
 
 export interface ICompanionUncertain {
@@ -280,6 +292,8 @@ type UnknownObject = Readonly<Record<string, unknown>>;
 const PLAN_FORMAT = 'sarif-to-comment.companion-publication-state';
 const STEP_FORMAT = 'sarif-to-comment.companion-step';
 const RECORD_VERSION = 1;
+/** The plan version whose suggestions are re-applied onto a rewritten head. */
+const REAPPLIED_PLAN_VERSION = 2;
 
 const FULL_SHA = /^[0-9a-f]{40}$/;
 const FINGERPRINT = /^sha256:[0-9a-f]{64}$/;
@@ -344,8 +358,9 @@ function isPreparedComment(value: unknown): value is PreparedComment {
 /** Why a parsed value is not a consistent plan, or null. */
 function planProblem(record: unknown): string | null {
   if (!isPlainObject(record) || record['format'] !== PLAN_FORMAT) return 'not a companion publication plan';
-  if (record['version'] !== RECORD_VERSION) return 'unsupported plan version';
-  if (!hasExactKeys(record, PLAN_KEYS)) return 'plan fields are not the expected set';
+  const version = record['version'];
+  if (version !== RECORD_VERSION && version !== REAPPLIED_PLAN_VERSION) return 'unsupported plan version';
+  if (!hasExactKeys(record, version === RECORD_VERSION ? PLAN_KEYS : [...PLAN_KEYS, 'reappliedOnto'])) return 'plan fields are not the expected set';
   const destination = record['destination'];
   if (!isPlainObject(destination) || !hasExactKeys(destination, ['owner', 'pullNumber', 'repo'])
     || !isNonEmptyString(destination['owner']) || !isNonEmptyString(destination['repo']) || !isPositiveInteger(destination['pullNumber'])) {
@@ -353,6 +368,10 @@ function planProblem(record: unknown): string | null {
   }
   if (typeof record['publication'] !== 'string' || !UUID.test(record['publication'])) return 'malformed publication id';
   if (typeof record['reviewedCommit'] !== 'string' || !FULL_SHA.test(record['reviewedCommit'])) return 'malformed reviewedCommit';
+  const reappliedOnto = record['reappliedOnto'];
+  if (version === REAPPLIED_PLAN_VERSION && (typeof reappliedOnto !== 'string' || !FULL_SHA.test(reappliedOnto) || reappliedOnto === record['reviewedCommit'])) {
+    return 'malformed reappliedOnto';
+  }
   if (typeof record['inputFingerprint'] !== 'string' || !FINGERPRINT.test(record['inputFingerprint'])) return 'malformed inputFingerprint';
   if (!isPositiveInteger(record['authorId'])) return 'malformed authorId';
   if (typeof record['submit'] !== 'boolean') return 'malformed mode';
@@ -489,10 +508,11 @@ export async function startCompanionPublication(input: IStartCompanionInput, int
   const authorId = await authenticatedUserId(input.transport);
   const publication = crypto.randomUUID();
   const { owner, repo, pullNumber } = input.destination;
-  const target: ISuggestionContext = { owner, repo, pullNumber, reviewedCommit: input.reviewedCommit, headRef: input.headRef, ready: input.ready };
+  const reapplied = input.reappliedOnto === undefined ? {} : { reappliedOnto: input.reappliedOnto };
+  const target: ISuggestionContext = { owner, repo, pullNumber, reviewedCommit: input.reviewedCommit, headRef: input.headRef, ready: input.ready, ...reapplied };
   const suggestions = input.suggestions.companions.map((companion): IPlanSuggestion => {
     const id = crypto.randomUUID();
-    const marker = formatSuggestionMarker({ id, batch: publication, owner, repo, pullNumber, reviewedCommit: input.reviewedCommit });
+    const marker = formatSuggestionMarker({ id, batch: publication, owner, repo, pullNumber, reviewedCommit: input.reviewedCommit, ...reapplied });
     return {
       title: companion.title,
       commitMessage: companion.commitMessage,
@@ -507,7 +527,7 @@ export async function startCompanionPublication(input: IStartCompanionInput, int
   });
   const unsigned = {
     format: PLAN_FORMAT,
-    version: RECORD_VERSION,
+    version: input.reappliedOnto === undefined ? RECORD_VERSION : REAPPLIED_PLAN_VERSION,
     publication,
     destination: { owner, repo, pullNumber },
     reviewedCommit: input.reviewedCommit,
@@ -517,6 +537,7 @@ export async function startCompanionPublication(input: IStartCompanionInput, int
     headRef: input.headRef,
     labels: [...input.labels],
     ready: input.ready,
+    ...reapplied,
     suggestions,
     review: { sections: input.suggestions.sections, comments: input.comments },
   } as const;
@@ -667,7 +688,7 @@ class Publication {
     if (record === undefined) {
       await this.requireAuthor();
       const { commit } = await this.transport.createProposalCommit({
-        ...this.where, parent: this.plan.reviewedCommit, message: s.commitMessage, changes: s.changes,
+        ...this.where, parent: this.plan.reappliedOnto ?? this.plan.reviewedCommit, message: s.commitMessage, changes: s.changes,
       });
       const intent: IBranchStep = { ...this.base(index), step: 'branch', commit, phase: 'sending' };
       if (this.claim(index, intent)) {
@@ -754,7 +775,10 @@ class Publication {
     } catch (err) {
       return this.lookupFailed('pull', index, `the pull requests from \`${s.branch}\``, err);
     }
-    const marker = formatSuggestionMarker({ ...this.where, pullNumber: this.plan.destination.pullNumber, id: s.id, batch: this.plan.publication, reviewedCommit: this.plan.reviewedCommit });
+    const marker = formatSuggestionMarker({
+      ...this.where, pullNumber: this.plan.destination.pullNumber, id: s.id, batch: this.plan.publication, reviewedCommit: this.plan.reviewedCommit,
+      ...(this.plan.reappliedOnto === undefined ? {} : { reappliedOnto: this.plan.reappliedOnto }),
+    });
     const byNumber = new Map<number, IBranchPullRequest>();
     for (const pr of listed) {
       if (typeof pr.body === 'string' && pr.body.split(/\r?\n/).includes(marker)) byNumber.set(pr.number, pr);
@@ -857,7 +881,10 @@ async function review(publication: Publication, pulls: readonly { readonly numbe
   };
   let result = await recoverPublication(identity);
   if (result.status === 'missing') {
-    const target: ISuggestionContext = { ...plan.destination, reviewedCommit: plan.reviewedCommit, headRef: plan.headRef, ready: plan.ready };
+    const target: ISuggestionContext = {
+      ...plan.destination, reviewedCommit: plan.reviewedCommit, headRef: plan.headRef, ready: plan.ready,
+      ...(plan.reappliedOnto === undefined ? {} : { reappliedOnto: plan.reappliedOnto }),
+    };
     const body = renderReviewBody({ companions: plan.suggestions, sections: plan.review.sections }, pulls.map((p) => p.number), target);
     result = await publishPreparedReview({ ...identity, preparedReview: { body, comments: plan.review.comments } });
   }
@@ -870,7 +897,7 @@ async function review(publication: Publication, pulls: readonly { readonly numbe
     case 'published':
       return {
         status: 'published', review: result.review, via: result.via, receiptPersisted: result.receiptPersisted, suggestions,
-        headRef: plan.headRef, labels: plan.labels, ready: plan.ready,
+        headRef: plan.headRef, labels: plan.labels, ready: plan.ready, ...(plan.reappliedOnto === undefined ? {} : { reappliedOnto: plan.reappliedOnto }),
       };
     case 'uncertain':
       return { status: 'uncertain', step: 'review', detail: result.detail, established: publication.established, ...(result.cause === undefined ? {} : { cause: result.cause }) };

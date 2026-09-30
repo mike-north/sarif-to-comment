@@ -619,10 +619,11 @@ function presentCompanion(outcome: CompanionOutcome, captured: ICapturedInput, p
       const suggestions = outcome.suggestions.map((s) => ({ number: s.number, url: s.htmlUrl, branch: s.branch }));
       const listed = suggestions.map((s) => `- [#${String(s.number)}](${s.url}) from ${code(s.branch)}`);
       const form = outcome.ready ? `ready for review, into ${code(outcome.headRef)}` : `drafts into ${code(outcome.headRef)}`;
+      const reapplied = outcome.reappliedOnto === undefined ? '' : `, re-applied onto commit ${code(outcome.reappliedOnto)}`;
       const markdown = [
         publishedMarkdown(outcome, captured, prepared),
         '',
-        `Suggestion pull requests (${form}, labeled ${labelList(outcome.labels)}):`,
+        `Suggestion pull requests (${form}, labeled ${labelList(outcome.labels)}${reapplied}):`,
         '',
         ...listed,
       ].join('\n');
@@ -708,6 +709,7 @@ async function run(captured: ICapturedInput, createGitHubClient: CreatePublishin
       headRef: prepared.suggestionPullRequests.headRef,
       labels: prepared.suggestionPullRequests.labels,
       ready: prepared.suggestionPullRequests.ready,
+      ...(prepared.suggestionPullRequests.reappliedOnto === undefined ? {} : { reappliedOnto: prepared.suggestionPullRequests.reappliedOnto }),
     });
     return presentCompanion(outcome, captured, prepared);
   }
