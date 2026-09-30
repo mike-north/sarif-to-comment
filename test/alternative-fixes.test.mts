@@ -453,7 +453,7 @@ describe('an alternative with several parts is listed as one alternative with la
     const outcome = await prepare(log([finding([PRIMARY, two])]));
     assertReady(outcome);
     assert.equal(outcome.review.comments[0]?.body, suggestionComment(item([[
-      '(1) Makes 2 replacements together:',
+      '(1) Makes 2 changes together:',
       '',
       '`src/app.js` — replace line 1 with:',
       '',
@@ -484,6 +484,32 @@ describe('an alternative\'s replacements are read as a fix with several changes 
       fix: 1,
       changes: [{ path: 'src/app.js', replacement: { startLine: 2, endLine: 2, originalText: 'const b = parseA(input);\n', replacementText: 'let b = parseB(input);\n' } }],
     }]);
+  });
+  test('the heading counts changes, not replacements: three replacements, two on one line, make two changes', async () => {
+    const three: Json = {
+      artifactChanges: [{ artifactLocation: { uri: 'src/app.js' }, replacements: [
+        { deletedRegion: { startLine: 2, startColumn: 1, endColumn: 6 }, insertedContent: { text: 'let' } },
+        { deletedRegion: { startLine: 2, startColumn: 11, endColumn: 17 }, insertedContent: { text: 'parseB' } },
+        { deletedRegion: { startLine: 3 }, insertedContent: { text: 'const c = 4;' } },
+      ] }],
+    };
+    const outcome = await prepare(log([finding([PRIMARY, three])]));
+    assertReady(outcome);
+    assert.equal(outcome.review.comments[0]?.body, suggestionComment(item([[
+      '(1) Makes 2 changes together:',
+      '',
+      '`src/app.js` — replace line 2 with:',
+      '',
+      '```',
+      'let b = parseB(input);',
+      '```',
+      '',
+      '`src/app.js` — replace line 3 with:',
+      '',
+      '```',
+      'const c = 4;',
+      '```',
+    ].join('\n')])));
   });
 });
 

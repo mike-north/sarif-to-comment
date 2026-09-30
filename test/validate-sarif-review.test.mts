@@ -136,7 +136,7 @@ const DOCUMENT_CASES: readonly IDocumentCase[] = [
   { name: 'schema-invalid SARIF', sarif: INVALID, expected: 'blocked', mentions: /schema/i },
   // Issue #30: the first fix is the suggestion and the others are listed as alternatives, so the review is not refused.
   { name: 'a finding offering alternative fixes', sarif: withFurtherFixes(lineFix(4, 'const MAX = 200;'), lineFix(6, 'module.exports = { LIMIT };')), expected: 'ready' },
-  // Issue #30: an alternative changing several places is listed with one labelled part per replacement.
+  // Issue #30: an alternative changing several places is listed with one labelled part per change.
   {
     name: 'an alternative fix making two replacements',
     sarif: withFurtherFixes({ artifactChanges: [{ artifactLocation: { uri: 'src/app.js' }, replacements: [

@@ -244,9 +244,9 @@
  *             | "Delete " lines [ " of " code span of path ] "."
  *               (one replacement; the path is named only when it differs from
  *               the first fix's file)
- *   parts     = ( "Changes " N " files together:" | "Makes " N " replacements together:" )
+ *   parts     = ( "Changes " N " files together:" | "Makes " N " changes together:" )
  *               { "\n\n" code span of path " — " ( "replace " lines " with" crlf ":\n\n" block
- *                 | "delete " lines "." ) }       (one per replacement, in order)
+ *                 | "delete " lines "." ) }       (one per change: a region of whole lines)
  *   crlf      = " (CRLF line endings)" when the replacement's lines end with CRLF, else ""
  *   block     = fence "\n" replacement lines, LF-separated, without the final terminator "\n" fence
  *   lines     = "line " N | "lines " N "-" M     (whole lines of the reviewed file)
@@ -2742,7 +2742,7 @@ function fileRegionEdits(
  * producer's order. An alternative is only listed, never applied: it needs
  * no inline placement or native payload and takes no part in conflict
  * checks, so a fix changing several files or making several replacements is
- * listed too, one labelled part per replacement. Each replacement must apply
+ * listed too, one labelled part per change. Each replacement must apply
  * exactly to the reviewed file, and its lines, its line-ending style and any
  * path the listing names must be showable exactly. Every alternative is
  * checked; its first problem is recorded at its own pointer, and the list is
@@ -3714,7 +3714,7 @@ function renderAlternative(alternative: IPreparedAlternative, number: number, pr
     return `${lead}${only.replacementText === '' ? `Delete ${where}.` : `Replace ${where} with${partBlock(only)}`}`;
   }
   const files = new Set(parts.map((p) => p.path)).size;
-  const heading = files > 1 ? `Changes ${String(files)} files together:` : `Makes ${String(parts.length)} replacements together:`;
+  const heading = files > 1 ? `Changes ${String(files)} files together:` : `Makes ${String(parts.length)} changes together:`;
   const labelled = parts.map((p) => `${codeSpan(p.path)} — ${p.replacementText === '' ? `delete ${partLines(p)}.` : `replace ${partLines(p)} with${partBlock(p)}`}`);
   return `${lead}${heading}${labelled.map((part) => `\n\n${part}`).join('')}`;
 }
