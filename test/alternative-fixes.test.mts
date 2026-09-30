@@ -367,12 +367,12 @@ describe('an alternative that cannot be listed faithfully refuses the whole revi
     });
   };
 
-  blocked('an alternative whose two replacements change the same line, which separate parts cannot show', {
+  blocked('an alternative whose two replacements overlap, so their combined effect is not defined', {
     artifactChanges: [{ artifactLocation: { uri: 'src/app.js' }, replacements: [
-      { deletedRegion: { startLine: 2, startColumn: 1, endColumn: 6 }, insertedContent: { text: 'let' } },
-      { deletedRegion: { startLine: 2, startColumn: 11, endColumn: 17 }, insertedContent: { text: 'parseB' } },
+      { deletedRegion: { startLine: 2, startColumn: 1, endColumn: 10 }, insertedContent: { text: 'let b =' } },
+      { deletedRegion: { startLine: 2, startColumn: 7, endColumn: 17 }, insertedContent: { text: 'b = parseB' } },
     ] }],
-  }, 'alternative-overlapping-replacements');
+  }, 'fix-replacements-overlap');
   blocked('a part of a multi-file alternative on a file the reviewed commit does not have', {
     artifactChanges: [
       { artifactLocation: { uri: 'src/app.js' }, replacements: [{ deletedRegion: { startLine: 2 }, insertedContent: { text: 'x' } }] },
@@ -463,6 +463,75 @@ describe('an alternative with several parts is listed as one alternative with la
       '',
       '`src/app.js` — delete line 3.',
     ].join('\n')])));
+  });
+});
+
+describe('an alternative\'s replacements are read as a fix with several changes is', () => {
+  test('two replacements on the same line are one whole-line change, shown as a one-part alternative', async () => {
+    // SARIF 3.57: both regions are in the unmodified line; applied together, line 2 becomes one line.
+    const sameLine: Json = {
+      artifactChanges: [{ artifactLocation: { uri: 'src/app.js' }, replacements: [
+        { deletedRegion: { startLine: 2, startColumn: 1, endColumn: 6 }, insertedContent: { text: 'let' } },
+        { deletedRegion: { startLine: 2, startColumn: 11, endColumn: 17 }, insertedContent: { text: 'parseB' } },
+      ] }],
+    };
+    const outcome = await prepare(log([finding([PRIMARY, sameLine])]));
+    assertReady(outcome);
+    assert.equal(outcome.review.comments[0]?.body, suggestionComment(item([
+      ['(1) Replace line 2 with:', '', '```', 'let b = parseB(input);', '```'].join('\n'),
+    ])));
+    assert.deepEqual(outcome.evidence[0]?.alternatives, [{
+      fix: 1,
+      changes: [{ path: 'src/app.js', replacement: { startLine: 2, endLine: 2, originalText: 'const b = parseA(input);\n', replacementText: 'let b = parseB(input);\n' } }],
+    }]);
+  });
+});
+
+describe('a first fix with several changes (issue #29) keeps its alternatives', () => {
+  // The first fix changes lines 2 and 3 together; the finding on line 2 lies within one of them.
+  const joint: Json = {
+    description: { text: 'Use parseB and its limit.' },
+    artifactChanges: [{ artifactLocation: { uri: 'src/app.js' }, replacements: [
+      { deletedRegion: { startLine: 2 }, insertedContent: { text: 'const b = parseB(input);' } },
+      { deletedRegion: { startLine: 3 }, insertedContent: { text: 'const c = 4;' } },
+    ] }],
+  };
+
+  test('without suggestion pull requests the first fix is refused as a single fix would be; its alternatives do not change that', async () => {
+    const outcome = await prepare(log([finding([joint, CACHED])]));
+    assertBlocked(outcome, [['fix-changes-require-suggestion-prs', POINTER]]);
+  });
+
+  test('with suggestion pull requests only the first fix is committed, and the alternatives are listed with the finding', async () => {
+    const outcome = await prepare(log([finding([joint, CACHED])]), { suggestionPullRequests: { headRef: 'feature', ready: false } });
+    assertReady(outcome);
+    assert.deepEqual(outcome.review.comments, []);
+    const [companion] = outcome.suggestions?.companions ?? [];
+    assert.ok(companion);
+    assert.deepEqual(companion.changes, [{ operation: 'edit', path: 'src/app.js', text: 'const a = 1;\nconst b = parseB(input);\nconst c = 4;\n' }]);
+    assert.equal(companion.items, [
+      `**Source:** [src/app.js line 2 at 2222222](https://github.com/acme/widgets/blob/${R}/src/app.js#L2)`,
+      '',
+      '```',
+      'const b = parseA(input);',
+      '```',
+      '',
+      // The first fix changes one file, so the alternative on it names no file.
+      item([CACHED_ALTERNATIVE(1)], 'Parsing with parseA is slow.', 'Use parseB and its limit.'),
+    ].join('\n'));
+  });
+
+  test('when the first fix changes several files, a one-part alternative names its file', async () => {
+    const twoFiles: Json = {
+      artifactChanges: [
+        { artifactLocation: { uri: 'src/app.js' }, replacements: [{ deletedRegion: { startLine: 2 }, insertedContent: { text: 'const b = parseB(input);' } }] },
+        { artifactLocation: { uri: 'src/other.js' }, replacements: [{ deletedRegion: { startLine: 1 }, insertedContent: { text: 'export const parse = parseB;' } }] },
+      ],
+    };
+    const outcome = await prepare(log([finding([twoFiles, CACHED])]), { suggestionPullRequests: { headRef: 'feature', ready: false } });
+    assertReady(outcome);
+    const items = present(outcome.suggestions?.companions[0]?.items);
+    assert.ok(items.includes(['(1) Cache the parse.', '', 'Replace line 2 of `src/app.js` with:'].join('\n')), items);
   });
 });
 

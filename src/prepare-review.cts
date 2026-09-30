@@ -174,12 +174,13 @@
  *   chosen: the first fix is presented exactly as a single fix would be, and
  *   an ineligible first fix blocks even when a later one would be eligible.
  *   An alternative is never applied, grouped or unioned, so it takes no part
- *   in overlap and conflict checks, and one changing several files or making
- *   several replacements is listed as one alternative with a labelled part
- *   per replacement. Each replacement must be text that applies exactly to
- *   the reviewed commit (like a fix, without the native-suggestion
- *   requirements); no two may change the same line; and its lines must be
- *   showable exactly in a code block (no invisible or bidirectional
+ *   in overlap and conflict checks. Its replacements are read as a first
+ *   fix's several changes are (fileRegionEdits): text that applies exactly
+ *   to the reviewed commit, located together in the unmodified file (no two
+ *   overlapping), with those on the same lines forming one whole-line change
+ *   of their region. One region is listed as a single change; several are
+ *   listed as one alternative with a labelled part per region. Each part's
+ *   lines must be showable exactly in a code block (no invisible or bidirectional
  *   characters, no carriage return inside a line, one line-ending style, no
  *   line that could open a suggestion block), as must any path the listing
  *   names. The block shows LF line breaks; CRLF is stated beside it.
@@ -1715,9 +1716,9 @@ async function prepareResult(
   const operations = owned.proposedFileChanges || [];
   const group = owned.suggestionGroup;
   // A single fix with several changes applies them together (SARIF 3.55):
-  // it is accepted whole, as a group of its own. With alternatives, the
-  // alternatives refusal comes first, as it always has.
-  const changeCount = fixes && fixes.length === 1 ? fixChangeCount(itemAt(fixes, 0)) : 0;
+  // it is accepted whole, as a group of its own. Only the first fix counts:
+  // any further fixes are alternatives, listed and never applied.
+  const changeCount = fixes ? fixChangeCount(itemAt(fixes, 0)) : 0;
   const jointFix = operations.length === 0 && group === undefined && changeCount > 1;
   if (operations.length > 0) {
     // A whole-file proposal decides how its finding's location is read: a
@@ -2463,6 +2464,7 @@ async function applyResultFix(
   // The schema requires at least one artifact change per fix and one
   // replacement per change. A first fix with several changes never reaches
   // here: it is accepted whole, as committed edits (prepareFixEdits).
+  if (fixChangeCount(fix) !== 1) throw new Error('Internal error: a fix with several changes was prepared as a native suggestion.');
   const change = itemAt(fix.artifactChanges, 0);
   const replacement = itemAt(change.replacements, 0);
   if (replacement.insertedContent && replacement.insertedContent.binary !== undefined) {
@@ -2752,11 +2754,13 @@ async function prepareAlternatives(
   runInfo: IRunInfo,
   state: IPreparationState,
 ): Promise<readonly IPreparedAlternative[]> {
-  // The first fix's file, resolved without reading, whether or not that fix
-  // could be prepared: a one-part alternative names its file only when it
-  // differs, so only then is its path shown and checked.
-  const firstPath = resolveArtifactPath(itemAt(itemAt(fixes, 0).artifactChanges, 0).artifactLocation, runInfo);
-  const primaryPath = firstPath.error ? undefined : firstPath.path;
+  // The one file the first fix changes, resolved without reading, whether or
+  // not that fix could be prepared (undefined when it changes several): a
+  // one-part alternative names its file only when it differs, so only then
+  // is its path shown and checked.
+  const firstPaths = itemAt(fixes, 0).artifactChanges.map((change) => resolveArtifactPath(change.artifactLocation, runInfo));
+  const resolvedPaths = new Set(firstPaths.flatMap((resolved) => (resolved.error ? [] : [resolved.path])));
+  const primaryPath = resolvedPaths.size === 1 && firstPaths.every((resolved) => !resolved.error) ? itemAt([...resolvedPaths], 0) : undefined;
   const alternatives: IPreparedAlternative[] = [];
   for (const [index, fix] of fixes.entries()) {
     if (index === 0) continue;
@@ -2788,38 +2792,43 @@ async function prepareAlternative(
   }
   const runProblem = fixRunProblem(runInfo, state.context);
   if (runProblem) return fail(runProblem[0], runProblem[1]);
-  const parts: IAlternativePart[] = [];
+  // Its replacements are read exactly as a first fix's several changes are
+  // (fileRegionEdits): per file, in order of first appearance, and those
+  // whose lines overlap form one whole-line change of their region.
+  const byFile = new Map<string, { readonly source: ILocatedSource; readonly replacements: ISarifReplacement[] }>();
   for (const change of fix.artifactChanges) {
     const source = await readLocatedSource(change.artifactLocation, at, runInfo, state);
     if (!source) return null;
-    for (const replacement of change.replacements) {
-      const applied = applyExactly(source.text, replacement, runInfo, state);
-      if (applied.problem) return fail(applied.problem[0], applied.problem[1]);
-      const { edit } = applied;
-      const clash = parts.find((p) => p.path === source.path && p.startLine <= edit.endLine && edit.startLine <= p.endLine);
-      if (clash) {
-        const lines = edit.startLine === edit.endLine ? `line ${String(edit.startLine)}` : `lines ${String(edit.startLine)}-${String(edit.endLine)}`;
-        return fail('alternative-overlapping-replacements',
-          `${subject} changes ${lines} of ${source.path} in more than one of its replacements, so its parts cannot be shown as separate whole-line changes.`);
-      }
-      // Coordinates never delete a byte-order mark, so a mark leading line
-      // 1's replacement is the file's own, unchanged: it is not shown.
-      const bom = edit.startLine === 1 && source.text.startsWith(BOM) && edit.replacementText.startsWith(BOM) ? BOM.length : 0;
-      const text = edit.replacementText.slice(bom);
-      const named = fix.artifactChanges.length > 1 || change.replacements.length > 1 || source.path !== primaryPath;
-      const pathProblem = named ? pathRepresentationProblem(source.path) : null;
-      const problem: Problem | null = pathProblem === null ? shownTextProblem(text) : ['alternative-path-unrepresentable', `the file path ${pathProblem}`];
-      if (problem) return fail(problem[0], `${subject} cannot be shown exactly: ${problem[1]}.`);
-      parts.push({
-        path: source.path,
-        startLine: edit.startLine,
-        endLine: edit.endLine,
-        originalText: edit.originalText,
-        replacementText: edit.replacementText,
-        shownText: text.replace(/\r?\n$/, '').replace(/\r\n/g, '\n'),
-        crlf: text.includes('\r\n'),
-      });
-    }
+    const entry = byFile.get(source.path) ?? { source, replacements: [] };
+    entry.replacements.push(...change.replacements);
+    byFile.set(source.path, entry);
+  }
+  const regions: { readonly source: ILocatedSource; readonly region: IRegionEdit }[] = [];
+  for (const { source, replacements: onFile } of byFile.values()) {
+    const fileRegions = fileRegionEdits(source, onFile, at, runInfo, state);
+    if (!fileRegions) return null;
+    regions.push(...fileRegions.map((region) => ({ source, region })));
+  }
+  const parts: IAlternativePart[] = [];
+  for (const { source, region } of regions) {
+    const lines: readonly string[] = source.text.match(/[^\n]*\n|[^\n]+$/g) || [];
+    // Coordinates never delete a byte-order mark, so a mark leading line
+    // 1's replacement is the file's own, unchanged: it is not shown.
+    const bom = region.startLine === 1 && source.text.startsWith(BOM) && region.replacementText.startsWith(BOM) ? BOM.length : 0;
+    const text = region.replacementText.slice(bom);
+    const named = regions.length > 1 || source.path !== primaryPath;
+    const pathProblem = named ? pathRepresentationProblem(source.path) : null;
+    const problem: Problem | null = pathProblem === null ? shownTextProblem(text) : ['alternative-path-unrepresentable', `the file path ${pathProblem}`];
+    if (problem) return fail(problem[0], `${subject} cannot be shown exactly: ${problem[1]}.`);
+    parts.push({
+      path: source.path,
+      startLine: region.startLine,
+      endLine: region.endLine,
+      originalText: lines.slice(region.startLine - 1, region.endLine).join(''),
+      replacementText: region.replacementText,
+      shownText: text.replace(/\r?\n$/, '').replace(/\r\n/g, '\n'),
+      crlf: text.includes('\r\n'),
+    });
   }
   const description = fix.description ? resolveMessage(fix.description, undefined, runInfo.driver, at, state).markdown : undefined;
   return { fix: index, parts, description };
