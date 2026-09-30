@@ -61,9 +61,9 @@ import * as path from 'node:path';
 
 import * as files from './artifact-files.cjs';
 import type { IArchivedOutput, IJsonFile, ReleaseOwnership } from './artifact-files.cjs';
-import { closeSuggestionPullRequestsWithInternals } from './close-suggestion-pull-requests.cjs';
+import { closeSuggestionPullRequestsReported } from './close-suggestion-pull-requests.cjs';
 import type { CloseSuggestionPullRequestsStatus, ICloseSuggestionPullRequestsInternals } from './close-suggestion-pull-requests.cjs';
-import { publishSarifReviewWithInternals } from './publish-sarif-review.cjs';
+import { publishSarifReviewReported } from './publish-sarif-review.cjs';
 import type { ISarifSourceBinding } from './public-types.cjs';
 import { parseFindingSelector } from './finding-selectors.cjs';
 import { createSarifDocument, addSarifCommentWithUntypedInput, removeSarifCommentWithUntypedInput } from './sarif-authoring.cjs';
@@ -75,7 +75,7 @@ import { LABEL_RULE, isLabelName } from './suggestion-pr-convention.cjs';
 import type { IInspectSarifOptions } from './sarif-inspection.cjs';
 import { addStagedChangesToSarifWithUntypedInput } from './staged-changes.cjs';
 import type { IStagedChangesReceipt } from './staged-changes.cjs';
-import { validateSarifReviewWithInternals } from './validate-sarif-review.cjs';
+import { validateSarifReviewReported } from './validate-sarif-review.cjs';
 import { createDiagnostic, orderDiagnostics } from './diagnostics.cjs';
 import type { IDiagnostic } from './diagnostics.cjs';
 import { PLAIN_STYLE, loadColorStyle, renderDiagnostics, shouldUseColor } from './diagnostic-rendering.cjs';
@@ -1685,17 +1685,19 @@ function reviewInputs(command: 'validate' | 'publish', sarifPath: string, env: C
 
 /**
  * Readiness assessment. Every library outcome (ready, blocked, incomplete)
- * is shown on stdout in human form, as publish shows its outcomes; the
- * library's rejection for invalid input is an operational error. Nothing is
- * written anywhere.
+ * is shown in human form as publish shows its outcomes: the report on
+ * stdout, its problems and warnings as diagnostics on stderr, once; the JSON
+ * `message` is the library's full Markdown. The library's rejection for
+ * invalid input is an operational error. Nothing is written anywhere.
  */
 async function validate(argv: readonly string[], { env }: IHandlerContext, internals: CliInternals | undefined): Promise<IOutcome> {
   const request = validateRequest(argv);
   const inputs = reviewInputs('validate', request.sarifPath, env);
   if ('error' in inputs) return inputs.error;
   let outcome;
+  let report: string;
   try {
-    outcome = await validateSarifReviewWithInternals({ ...request.input, sarif: inputs.sarif, token: inputs.token }, internals);
+    ({ outcome, report } = await validateSarifReviewReported({ ...request.input, sarif: inputs.sarif, token: inputs.token }, internals));
   } catch (err) {
     return errorOutcome('validate', operationFailure(describeError(err)));
   }
@@ -1708,15 +1710,16 @@ async function validate(argv: readonly string[], { env }: IHandlerContext, inter
   return {
     exit: VALIDATE_EXIT[outcome.status],
     doc,
-    out: outcome.markdown.endsWith('\n') ? outcome.markdown : `${outcome.markdown}\n`,
+    out: `${report}\n`,
     diagnostics: outcome.diagnostics,
   };
 }
 
 /**
- * Publication. Human output is exactly the flag-only publisher's: the
- * library's Markdown on stdout, errors on stderr. The SARIF path is used as
- * given, as it always has been.
+ * Publication, for this command and the flag-only publisher alike: the
+ * report on stdout, its problems and warnings as diagnostics on stderr,
+ * once; the JSON `message` is the library's full Markdown. The SARIF path is
+ * used as given, as it always has been.
  */
 async function publish(argv: readonly string[], { env }: IHandlerContext, internals: CliInternals | undefined): Promise<IOutcome> {
   const request = publishRequest(argv);
@@ -1724,8 +1727,9 @@ async function publish(argv: readonly string[], { env }: IHandlerContext, intern
   if ('error' in inputs) return inputs.error;
   const { sarif, token } = inputs;
   let outcome;
+  let report: string;
   try {
-    outcome = await publishSarifReviewWithInternals({ ...request.input, sarif, token }, internals);
+    ({ outcome, report } = await publishSarifReviewReported({ ...request.input, sarif, token }, internals));
   } catch (err) {
     return errorOutcome('publish', operationFailure(describeError(err)));
   }
@@ -1743,7 +1747,7 @@ async function publish(argv: readonly string[], { env }: IHandlerContext, intern
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- every publication status has an exit status; the operational-error fallback is kept as the durable guard it always was
     exit: PUBLISH_EXIT[outcome.status] ?? EXIT.error,
     doc,
-    out: outcome.markdown.endsWith('\n') ? outcome.markdown : `${outcome.markdown}\n`,
+    out: `${report}\n`,
     diagnostics: outcome.diagnostics,
   };
 }
@@ -1753,9 +1757,10 @@ async function publish(argv: readonly string[], { env }: IHandlerContext, intern
 // ---------------------------------------------------------------------------
 
 /**
- * Suggestion pull request cleanup. The outcome's Markdown is shown on stdout
- * for every status; a rejection (invalid input, or a failure before anything
- * was closed) is an operational error.
+ * Suggestion pull request cleanup. The report is shown on stdout for every
+ * status, with what could not be done as diagnostics on stderr, once; the
+ * JSON `message` is the library's full Markdown. A rejection (invalid input,
+ * or a failure before anything was closed) is an operational error.
  */
 async function closeSuggestionPrs(argv: readonly string[], { env }: IHandlerContext, internals: CliInternals | undefined): Promise<IOutcome> {
   const command = 'close-suggestion-prs';
@@ -1776,8 +1781,9 @@ async function closeSuggestionPrs(argv: readonly string[], { env }: IHandlerCont
     ...(flags.has('--dry-run') ? { dryRun: true } : {}),
   };
   let outcome;
+  let report: string;
   try {
-    outcome = await closeSuggestionPullRequestsWithInternals(input, internals);
+    ({ outcome, report } = await closeSuggestionPullRequestsReported(input, internals));
   } catch (err) {
     return errorOutcome(command, operationFailure(describeError(err)), {}, ['Nothing was closed.']);
   }
@@ -1789,7 +1795,7 @@ async function closeSuggestionPrs(argv: readonly string[], { env }: IHandlerCont
     suggestions: outcome.suggestions,
     message: outcome.markdown,
   };
-  return { exit: CLEANUP_EXIT[outcome.status], doc, out: `${outcome.markdown}\n`, diagnostics: outcome.diagnostics };
+  return { exit: CLEANUP_EXIT[outcome.status], doc, out: `${report}\n`, diagnostics: outcome.diagnostics };
 }
 
 // ---------------------------------------------------------------------------

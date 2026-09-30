@@ -110,6 +110,7 @@ import type { IReadyOutcome } from './prepare-review.cjs';
 import { publishPreparedReview, recoverPublication } from './publication.cjs';
 import {
   blockedReviewMarkdown,
+  blockedReviewReport,
   captureReviewInput,
   destinationLabel,
   labelList,
@@ -118,7 +119,7 @@ import {
   templateText,
   withoutCredential,
 } from './review-preflight.cjs';
-import type { ICapturedReview, IContextClient, IReviewInputSpec } from './review-preflight.cjs';
+import type { ICapturedReview, IContextClient, IReported, IReviewInputSpec } from './review-preflight.cjs';
 import type { IJsonObject, JsonValue } from './sarif-common.cjs';
 import { createDiagnostic, mapDiagnosticText, orderDiagnostics } from './diagnostics.cjs';
 import type { IDiagnostic } from './diagnostics.cjs';
@@ -516,7 +517,12 @@ const MODE_WORDING: Readonly<Record<'draft' | 'submitted', IModeWording>> = {
 /** What the published explanation needs from a verified delivery. */
 type DeliveredReview = Pick<PublishedResult, 'via' | 'receiptPersisted'> & { readonly review: { readonly id: number; readonly htmlUrl: string } };
 
-function publishedMarkdown(result: DeliveredReview, captured: ICapturedInput, prepared: IReadyOutcome | undefined): string {
+// Each report is rendered in full for the outcome's `markdown` and, with
+// `full` false, as the CLI's human report (IReported): the same text without
+// what the outcome's diagnostics already say (problems, warnings, the detail
+// of a failure), which the CLI renders once, on stderr.
+
+function publishedMarkdown(result: DeliveredReview, captured: ICapturedInput, prepared: IReadyOutcome | undefined, full = true): string {
   const link = `[review ${String(result.review.id)}](${result.review.htmlUrl})`;
   const where = `${destinationLabel(captured)} at commit ${code(captured.reviewedCommit)}`;
   // A record is only ever continued in the mode it was started with, so the
@@ -530,22 +536,21 @@ function publishedMarkdown(result: DeliveredReview, captured: ICapturedInput, pr
   } else {
     lines.push(wording.created(link, where));
   }
-  if (!result.receiptPersisted) {
+  if (full && !result.receiptPersisted) {
     lines.push(
       '',
       `Completion could not be recorded at ${code(captured.statePath)}. Keep that file: a later run with the same state path confirms the review without sending it again.`,
     );
   }
-  if (prepared && prepared.warnings.length > 0 && prepared.markdown) lines.push('', prepared.markdown.trim());
+  if (full && prepared && prepared.warnings.length > 0 && prepared.markdown) lines.push('', prepared.markdown.trim());
   return lines.join('\n');
 }
 
-function uncertainMarkdown(result: UncertainResult, captured: ICapturedInput): string {
+function uncertainMarkdown(result: UncertainResult, captured: ICapturedInput, full = true): string {
   return [
     '## Delivery could not be confirmed',
     '',
-    result.detail,
-    '',
+    ...(full ? [result.detail, ''] : []),
     `The publication state is preserved at ${code(captured.statePath)}.`,
     '',
     '- Retry later with the same state path: it only checks GitHub for this review and never sends it again.',
@@ -554,12 +559,11 @@ function uncertainMarkdown(result: UncertainResult, captured: ICapturedInput): s
   ].join('\n');
 }
 
-function rejectedMarkdown(result: RejectedResult, captured: ICapturedInput): string {
+function rejectedMarkdown(result: RejectedResult, captured: ICapturedInput, full = true): string {
   const lines = [
     '## GitHub refused the review',
     '',
-    result.detail,
-    '',
+    ...(full ? [result.detail, ''] : []),
     `The request is never resent. The refusal is tied to the state path ${code(captured.statePath)}.`,
   ];
   if (/one pending review/i.test(result.detail)) {
@@ -605,21 +609,30 @@ function rejectedDiagnostics(detail: string, step: 'review' | 'suggestion', capt
 }
 
 /** The public outcome for a publication-core result. */
-function present(result: PublicationResult, captured: ICapturedInput, prepared?: IReadyOutcome): PublishSarifReviewOutcome {
+function present(result: PublicationResult, captured: ICapturedInput, prepared?: IReadyOutcome): IReported<PublishSarifReviewOutcome> {
   const { statePath } = captured;
   switch (result.status) {
     case 'published':
       return {
-        status: 'published',
-        review: { id: result.review.id, url: result.review.htmlUrl },
-        statePath,
-        markdown: publishedMarkdown(result, captured, prepared),
-        diagnostics: publishedDiagnostics(result, captured, prepared),
+        outcome: {
+          status: 'published',
+          review: { id: result.review.id, url: result.review.htmlUrl },
+          statePath,
+          markdown: publishedMarkdown(result, captured, prepared),
+          diagnostics: publishedDiagnostics(result, captured, prepared),
+        },
+        report: publishedMarkdown(result, captured, prepared, false),
       };
     case 'uncertain':
-      return { status: 'uncertain', statePath, markdown: uncertainMarkdown(result, captured), diagnostics: uncertainDiagnostics(result.detail, captured) };
+      return {
+        outcome: { status: 'uncertain', statePath, markdown: uncertainMarkdown(result, captured), diagnostics: uncertainDiagnostics(result.detail, captured) },
+        report: uncertainMarkdown(result, captured, false),
+      };
     case 'rejected':
-      return { status: 'rejected', statePath, markdown: rejectedMarkdown(result, captured), diagnostics: rejectedDiagnostics(result.detail, 'review', captured) };
+      return {
+        outcome: { status: 'rejected', statePath, markdown: rejectedMarkdown(result, captured), diagnostics: rejectedDiagnostics(result.detail, 'review', captured) },
+        report: rejectedMarkdown(result, captured, false),
+      };
     default: {
       // Unreachable for the typed publication core; kept as the durable
       // refusal to present a status this module does not know.
@@ -692,7 +705,7 @@ function baseCheckDiagnostics(check: BaseCheck | undefined, captured: ICapturedI
   return [createDiagnostic(check.kind === 'changed' ? 'suggestion-branch-moved' : 'suggestion-branch-unreadable', message, { subject })];
 }
 
-function presentCompanion(outcome: CompanionOutcome, captured: ICapturedInput, prepared?: IReadyOutcome): PublishSarifReviewOutcome {
+function presentCompanion(outcome: CompanionOutcome, captured: ICapturedInput, prepared?: IReadyOutcome): IReported<PublishSarifReviewOutcome> {
   const { statePath } = captured;
   switch (outcome.status) {
     case 'published': {
@@ -700,61 +713,65 @@ function presentCompanion(outcome: CompanionOutcome, captured: ICapturedInput, p
       const listed = suggestions.map((s) => `- [#${String(s.number)}](${s.url}) from ${code(s.branch)}`);
       const form = outcome.ready ? `ready for review, into ${code(outcome.headRef)}` : `drafts into ${code(outcome.headRef)}`;
       const reapplied = outcome.reappliedOnto === undefined ? '' : `, re-applied onto commit ${code(outcome.reappliedOnto)}`;
-      const markdown = [
-        publishedMarkdown(outcome, captured, prepared),
+      const text = (full: boolean): string => [
+        publishedMarkdown(outcome, captured, prepared, full),
         '',
-        ...baseCheckMarkdown(outcome.baseCheck, captured),
+        ...(full ? baseCheckMarkdown(outcome.baseCheck, captured) : []),
         `Suggestion pull requests (${form}, labeled ${labelList(outcome.labels)}${reapplied}):`,
         '',
         ...listed,
       ].join('\n');
       return {
+        outcome: {
         status: 'published',
         review: { id: outcome.review.id, url: outcome.review.htmlUrl },
         suggestions,
         statePath,
-        markdown,
+        markdown: text(true),
         diagnostics: publishedDiagnostics(outcome, captured, prepared, outcome.baseCheck),
+        },
+        report: text(false),
       };
     }
-    case 'uncertain':
+    case 'uncertain': {
+      const text = (full: boolean): string => [
+        '## Delivery could not be confirmed',
+        '',
+        ...(full ? [outcome.detail, '', ...baseCheckMarkdown(outcome.baseCheck, captured)] : []),
+        ...establishedMarkdown(outcome.established),
+        `The publication state is preserved at ${code(statePath)} and in the files beside it that share its name.`,
+        '',
+        '- Retry later with the same state path: it only checks GitHub for work that may already have been sent, never sends it again, and continues with work that was never sent.',
+        '- Do not delete those files: they are the only record of what may already exist.',
+        '- A new state path starts a new, separate publication; use one only if you intend a separate review.',
+      ].join('\n');
       return {
-        status: 'uncertain',
-        statePath,
-        markdown: [
-          '## Delivery could not be confirmed',
-          '',
-          outcome.detail,
-          '',
-          ...baseCheckMarkdown(outcome.baseCheck, captured),
-          ...establishedMarkdown(outcome.established),
-          `The publication state is preserved at ${code(statePath)} and in the files beside it that share its name.`,
-          '',
-          '- Retry later with the same state path: it only checks GitHub for work that may already have been sent, never sends it again, and continues with work that was never sent.',
-          '- Do not delete those files: they are the only record of what may already exist.',
-          '- A new state path starts a new, separate publication; use one only if you intend a separate review.',
-        ].join('\n'),
-        diagnostics: uncertainDiagnostics(outcome.detail, captured, outcome.baseCheck),
+        outcome: { status: 'uncertain', statePath, markdown: text(true), diagnostics: uncertainDiagnostics(outcome.detail, captured, outcome.baseCheck) },
+        report: text(false),
       };
+    }
     case 'rejected': {
       const review = outcome.step === 'review';
+      const text = (full: boolean): string => [
+        review ? '## GitHub refused the review' : '## GitHub refused a suggestion pull request step',
+        '',
+        ...(full ? [outcome.detail, ''] : []),
+        review
+          ? `The request is never resent. The refusal is tied to the state path ${code(statePath)}.`
+          : `It is never resent, and the review was not published: it would link a suggestion that does not exist. The refusal is tied to the state path ${code(statePath)}.`,
+        '',
+        ...(full ? baseCheckMarkdown(outcome.baseCheck, captured) : []),
+        ...establishedMarkdown(outcome.established),
+        'After resolving the cause, publish again with a new state path. Anything already created is left as it is.',
+      ].join('\n');
       return {
-        status: 'rejected',
-        statePath,
-        markdown: [
-          review ? '## GitHub refused the review' : '## GitHub refused a suggestion pull request step',
-          '',
-          outcome.detail,
-          '',
-          review
-            ? `The request is never resent. The refusal is tied to the state path ${code(statePath)}.`
-            : `It is never resent, and the review was not published: it would link a suggestion that does not exist. The refusal is tied to the state path ${code(statePath)}.`,
-          '',
-          ...baseCheckMarkdown(outcome.baseCheck, captured),
-          ...establishedMarkdown(outcome.established),
-          'After resolving the cause, publish again with a new state path. Anything already created is left as it is.',
-        ].join('\n'),
-        diagnostics: rejectedDiagnostics(outcome.detail, review ? 'review' : 'suggestion', captured, outcome.baseCheck),
+        outcome: {
+          status: 'rejected',
+          statePath,
+          markdown: text(true),
+          diagnostics: rejectedDiagnostics(outcome.detail, review ? 'review' : 'suggestion', captured, outcome.baseCheck),
+        },
+        report: text(false),
       };
     }
     default: {
@@ -770,7 +787,7 @@ function presentCompanion(outcome: CompanionOutcome, captured: ICapturedInput, p
 // Entry point
 // ---------------------------------------------------------------------------
 
-async function run(captured: ICapturedInput, createGitHubClient: CreatePublishingClient): Promise<PublishSarifReviewOutcome> {
+async function run(captured: ICapturedInput, createGitHubClient: CreatePublishingClient): Promise<IReported<PublishSarifReviewOutcome>> {
   const client = createGitHubClient({ token: captured.token, fetch: globalThis.fetch });
   const identity = {
     destination: captured.destination,
@@ -791,7 +808,10 @@ async function run(captured: ICapturedInput, createGitHubClient: CreatePublishin
 
   const prepared = await prepareForDestination(captured, client);
   if (prepared.status === 'blocked') {
-    return { status: 'blocked', markdown: blockedReviewMarkdown(prepared), diagnostics: orderDiagnostics([...prepared.diagnostics, ...prepared.warnings]) };
+    return {
+      outcome: { status: 'blocked', markdown: blockedReviewMarkdown(prepared), diagnostics: orderDiagnostics([...prepared.diagnostics, ...prepared.warnings]) },
+      report: blockedReviewReport(prepared),
+    };
   }
 
   if (prepared.suggestions !== undefined && prepared.suggestionPullRequests !== undefined) {
@@ -873,14 +893,29 @@ export async function publishSarifReviewWithInternals(
   input: unknown,
   internals: IPublishSarifReviewInternals = {},
 ): Promise<PublishSarifReviewOutcome> {
+  return (await publishSarifReviewReported(input, internals)).outcome;
+}
+
+/**
+ * {@link publishSarifReview} with the CLI's human report of the outcome
+ * (see IReported). Internal: the CLI prints the report in human form.
+ */
+export async function publishSarifReviewReported(
+  input: unknown,
+  internals: IPublishSarifReviewInternals = {},
+): Promise<IReported<PublishSarifReviewOutcome>> {
   const captured = captureReviewInput(input, PUBLISH_INPUT);
   const createGitHubClient = internals.createGitHubClient || defaultCreateGitHubClient;
-  let outcome: PublishSarifReviewOutcome;
+  let reported: IReported<PublishSarifReviewOutcome>;
   try {
-    outcome = await run(captured, createGitHubClient);
+    reported = await run(captured, createGitHubClient);
   } catch (err) {
     throw withoutCredential(err, captured.token);
   }
   const clean = (text: string): string => redact(text, captured.token);
-  return { ...outcome, markdown: clean(outcome.markdown), diagnostics: outcome.diagnostics.map((d) => mapDiagnosticText(d, clean)) };
+  const { outcome, report } = reported;
+  return {
+    outcome: { ...outcome, markdown: clean(outcome.markdown), diagnostics: outcome.diagnostics.map((d) => mapDiagnosticText(d, clean)) },
+    report: clean(report),
+  };
 }

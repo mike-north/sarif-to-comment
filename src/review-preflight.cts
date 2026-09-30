@@ -669,6 +669,28 @@ export function labelList(labels: readonly string[]): string {
   return spans.length <= 1 ? last : `${spans.slice(0, -1).join(', ')} and ${last}`;
 }
 
+/**
+ * An outcome with the CLI's human report of it: the outcome text for stdout
+ * without the problem and warning lists, which the CLI renders once, as
+ * diagnostics on stderr (docs/diagnostics.md, "Streams"). The outcome's own
+ * `markdown` remains the full report.
+ */
+export interface IReported<T> {
+  readonly outcome: T;
+  readonly report: string;
+}
+
+/**
+ * The CLI's human report of a blocked review, shown identically by
+ * publication and assessment: the outcome without the problem and warning
+ * lists, which are diagnostics on stderr (docs/diagnostics.md, "Streams").
+ */
+export function blockedReviewReport(prepared: { readonly diagnostics: readonly unknown[] }): string {
+  const count = prepared.diagnostics.length;
+  const problems = `${String(count)} problem${count === 1 ? '' : 's'} must be resolved before publication.`;
+  return ['## Review blocked', '', `Nothing was published and no publication state was written. ${problems}`].join('\n');
+}
+
 /** The explanation of a blocked review, shown identically by publication and assessment. */
 export function blockedReviewMarkdown(prepared: { readonly markdown: string }): string {
   return ['## Review blocked', '', 'Nothing was published and no publication state was written.', '', prepared.markdown.trim()].join(

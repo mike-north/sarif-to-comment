@@ -67,7 +67,7 @@
 
 import { createGitHubClient as defaultCreateGitHubClient } from './github.cjs';
 import type { ICreateGitHubClientOptions, IListReviewsRequest } from './github.cjs';
-import { blockedBy } from './prepare-review.cjs';
+import { blockedBy, withoutWarnings } from './prepare-review.cjs';
 import { createDiagnostic, mapDiagnosticText, orderDiagnostics, problemOfDiagnostic } from './diagnostics.cjs';
 import type { IDiagnostic } from './diagnostics.cjs';
 import { authenticatedUserId, readAllPages, validatePreparedReview } from './publication.cjs';
@@ -77,6 +77,7 @@ import { isPlainObject } from './sarif-common.cjs';
 import {
   ReviewContextMismatchError,
   blockedReviewMarkdown,
+  blockedReviewReport,
   captureReviewInput,
   destinationLabel,
   labelList,
@@ -85,7 +86,7 @@ import {
   redact,
   withoutCredential,
 } from './review-preflight.cjs';
-import type { ICapturedReview, IContextClient, IDestinationReady, IReadySuggestionPullRequests, IReviewInputSpec } from './review-preflight.cjs';
+import type { ICapturedReview, IContextClient, IDestinationReady, IReadySuggestionPullRequests, IReported, IReviewInputSpec } from './review-preflight.cjs';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -222,7 +223,11 @@ function code(text: string): string {
   return `\`${text.replace(/`/g, "'")}\``;
 }
 
-function readyMarkdown(prepared: IDestinationReady, captured: ICapturedReview): string {
+/**
+ * The ready report. `summary` is the preparation's Markdown: complete (with
+ * its warnings) for the outcome, without its warnings for the CLI's report.
+ */
+function readyMarkdown(prepared: IDestinationReady, captured: ICapturedReview, summary: string = prepared.markdown): string {
   // The mode changes no check (docs/submitted-review-contract.md §2.6); a
   // submitted assessment only says what publication would create.
   const as = captured.submit === true ? ' as a submitted comment review' : '';
@@ -242,7 +247,7 @@ function readyMarkdown(prepared: IDestinationReady, captured: ICapturedReview): 
     `The complete document can be published faithfully to ${destinationLabel(captured)} at commit ${code(captured.reviewedCommit)}${as}.`,
     '',
     ...suggestions,
-    prepared.markdown.trim(),
+    summary.trim(),
     '',
     NOTHING_WRITTEN,
     '',
@@ -261,20 +266,25 @@ function reappliedSentence(target: IReadySuggestionPullRequests, captured: ICapt
   return ` The history of #${String(captured.destination.pullNumber)} was rewritten after the reviewed commit, so ${they} re-applied onto commit ${code(target.reappliedOnto)}, where everything ${change} is still exactly as reviewed.`;
 }
 
-function incompleteMarkdown(err: unknown): string {
+/** The incomplete report; the CLI's report leaves out the cause, which is its diagnostic. */
+function incompleteMarkdown(err: unknown, withCause = true): string {
   return [
     '## Readiness could not be assessed',
     '',
-    messageChain(err),
-    '',
+    ...(withCause ? [messageChain(err), ''] : []),
     `This is not a verdict on the document. ${NOTHING_WRITTEN}`,
     '',
     'Resolve the cause (for example the credential, network access, or access to the pull request and its source) and validate again.',
   ].join('\n');
 }
 
+/** `reported` with the credential removed from everything a caller can read. */
+function redacted({ outcome, report }: IReported<ValidateSarifReviewOutcome>, token: string): IReported<ValidateSarifReviewOutcome> {
+  return { outcome: redactedOutcome(outcome, token), report: redact(report, token) };
+}
+
 /** `outcome` with the credential removed from everything a caller can read. */
-function redacted(outcome: ValidateSarifReviewOutcome, token: string): ValidateSarifReviewOutcome {
+function redactedOutcome(outcome: ValidateSarifReviewOutcome, token: string): ValidateSarifReviewOutcome {
   const clean = (text: string): string => redact(text, token);
   const diagnostics = outcome.diagnostics.map((d) => mapDiagnosticText(d, clean));
   if (outcome.status !== 'blocked') return { ...outcome, markdown: clean(outcome.markdown), diagnostics };
@@ -287,12 +297,15 @@ function redacted(outcome: ValidateSarifReviewOutcome, token: string): ValidateS
 }
 
 /** A blocked assessment: its errors as problems, then every diagnostic, errors first. */
-function blockedAssessment(prepared: { readonly diagnostics: readonly IDiagnostic[]; readonly warnings: readonly IDiagnostic[]; readonly markdown: string }): IBlockedAssessment {
+function blockedAssessment(prepared: { readonly diagnostics: readonly IDiagnostic[]; readonly warnings: readonly IDiagnostic[]; readonly markdown: string }): IReported<IBlockedAssessment> {
   return {
-    status: 'blocked',
-    problems: prepared.diagnostics.map(problemOfDiagnostic),
-    markdown: blockedReviewMarkdown(prepared),
-    diagnostics: orderDiagnostics([...prepared.diagnostics, ...prepared.warnings]),
+    outcome: {
+      status: 'blocked',
+      problems: prepared.diagnostics.map(problemOfDiagnostic),
+      markdown: blockedReviewMarkdown(prepared),
+      diagnostics: orderDiagnostics([...prepared.diagnostics, ...prepared.warnings]),
+    },
+    report: blockedReviewReport(prepared),
   };
 }
 
@@ -496,7 +509,10 @@ async function pendingReviews(
 // ---------------------------------------------------------------------------
 // Entry point
 
-async function assess(captured: ICapturedReview, createGitHubClient: (options: ICreateGitHubClientOptions) => IAssessingClient): Promise<ValidateSarifReviewOutcome> {
+async function assess(
+  captured: ICapturedReview,
+  createGitHubClient: (options: ICreateGitHubClientOptions) => IAssessingClient,
+): Promise<IReported<ValidateSarifReviewOutcome>> {
   const operational = new OperationalFailures();
   let ready: IDestinationReady;
   try {
@@ -525,12 +541,18 @@ async function assess(captured: ICapturedReview, createGitHubClient: (options: I
     if (!operational.has(err) && !(err instanceof ReviewContextMismatchError)) throw withoutCredential(err, captured.token);
     const cause = withoutCredential(err, captured.token);
     return {
-      status: 'incomplete',
-      markdown: incompleteMarkdown(cause),
-      diagnostics: [createDiagnostic('assessment-incomplete', messageChain(cause), { subject: destinationLabel(captured) })],
+      outcome: {
+        status: 'incomplete',
+        markdown: incompleteMarkdown(cause),
+        diagnostics: [createDiagnostic('assessment-incomplete', messageChain(cause), { subject: destinationLabel(captured) })],
+      },
+      report: incompleteMarkdown(cause, false),
     };
   }
-  return { status: 'ready', markdown: readyMarkdown(ready, captured), diagnostics: ready.warnings };
+  return {
+    outcome: { status: 'ready', markdown: readyMarkdown(ready, captured), diagnostics: ready.warnings },
+    report: readyMarkdown(ready, captured, withoutWarnings(ready)),
+  };
 }
 
 /**
@@ -596,6 +618,17 @@ export async function validateSarifReviewWithInternals(
   input: unknown,
   internals: IValidateSarifReviewInternals = {},
 ): Promise<ValidateSarifReviewOutcome> {
+  return (await validateSarifReviewReported(input, internals)).outcome;
+}
+
+/**
+ * {@link validateSarifReview} with the CLI's human report of the outcome
+ * (see IReported). Internal: the CLI prints the report in human form.
+ */
+export async function validateSarifReviewReported(
+  input: unknown,
+  internals: IValidateSarifReviewInternals = {},
+): Promise<IReported<ValidateSarifReviewOutcome>> {
   const captured = captureReviewInput(input, VALIDATE_INPUT);
   const createGitHubClient = internals.createGitHubClient || defaultCreateGitHubClient;
   return redacted(await assess(captured, createGitHubClient), captured.token);

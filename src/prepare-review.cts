@@ -1445,8 +1445,24 @@ function diagnosticLine(d: IDiagnostic): string {
   return `- ${codeSpan(d.code)}${pointer === undefined ? '' : ` at ${codeSpan(pointer)}`}: ${d.message}`;
 }
 
+/** The warnings section a prepared review's Markdown ends with; empty without warnings. */
+function warningsSection(warnings: readonly IDiagnostic[]): string {
+  return warnings.length === 0 ? '' : `\n\n**Warnings:**\n\n${warnings.map(diagnosticLine).join('\n')}`;
+}
+
 function warningsMarkdown(report: Report): string {
-  return report.warnings.length === 0 ? '' : `\n\n**Warnings:**\n\n${report.warnings.map(diagnosticLine).join('\n')}`;
+  return warningsSection(report.warnings);
+}
+
+/**
+ * A ready preparation's Markdown without its warnings section: the summary
+ * the CLI shows on stdout, where the warnings are diagnostics on stderr
+ * instead (docs/diagnostics.md, "Streams").
+ */
+export function withoutWarnings(prepared: { readonly markdown: string; readonly warnings: readonly IDiagnostic[] }): string {
+  const section = warningsSection(prepared.warnings);
+  if (!prepared.markdown.endsWith(section)) throw new Error('Internal error: a prepared review\'s Markdown does not end with its warnings.');
+  return prepared.markdown.slice(0, prepared.markdown.length - section.length);
 }
 
 function blockedMarkdown(report: Report): string {
