@@ -716,6 +716,40 @@ describe('recovery and retry after a re-application (§2.9, §2.10)', () => {
     assert.ok(markdown(retried).includes(changedSincePlanned(AMENDED, DROPPED)), markdown(retried));
   });
 
+  test('a retry whose branch check cannot be read says so, and still publishes as planned', async () => {
+    const world = makeWorld(AMENDED, { companion: { loseResponse: ['pull'] } });
+    world.host.hide({ pulls: 1 });
+    assert.equal(status(await publish(world)), 'uncertain');
+    world.host.replaceRepository(repositoryAt(DROPPED));
+    world.host.setConfig({ companion: {}, failAncestryCompare: 404 });
+    const retried = await publish(world);
+    assert.equal(status(retried), 'published', markdown(retried));
+    const text = markdown(retried);
+    const start = `**Whether the branch of #7 changed since these suggestions were planned is not known:** they are based on commit \`${AMENDED}\`, and the branch could not be read (`;
+    const at = text.indexOf(start);
+    assert.ok(at >= 0, text);
+    const paragraph = text.slice(at).split('\n')[0] ?? '';
+    assert.match(paragraph, /404/);
+    assert.ok(paragraph.endsWith('). Nothing is re-decided.'), paragraph);
+    assert.ok(text.indexOf(paragraph) < text.indexOf('Suggestion pull requests ('), 'before the list');
+    assert.doesNotMatch(text, /changed since these suggestions were planned:\*\* they are based/);
+    for (const pull of threePulls(world)) assert.deepEqual(proposalCommit(world, pull.head).parents, [AMENDED]);
+  });
+
+  test('a retry refused by GitHub carries the warning with its refusal', async () => {
+    const world = makeWorld(AMENDED, { companion: { loseResponse: ['pull'] } });
+    world.host.hide({ pulls: 1 });
+    assert.equal(status(await publish(world)), 'uncertain');
+    world.host.replaceRepository(repositoryAt(DROPPED));
+    world.host.setConfig({ companion: { refuse: { ref: 422 } } });
+    const retried = await publish(world);
+    assert.equal(status(retried), 'rejected', markdown(retried));
+    const text = markdown(retried);
+    assert.ok(text.includes(changedSincePlanned(AMENDED, DROPPED)), text);
+    assert.ok(text.indexOf('It is never resent') < text.indexOf(changedSincePlanned(AMENDED, DROPPED)), 'after the refusal');
+    assert.deepEqual(world.host.reviews(), [], 'the review is not published');
+  });
+
   test('a completed publication is reported from its receipts, with no request that writes and no ancestry read', async () => {
     const world = makeWorld(AMENDED);
     assert.equal(status(await publish(world)), 'published');
