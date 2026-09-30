@@ -42,10 +42,10 @@
  *               markSuggestionPullRequestsReady?: boolean } // companion-
  *                                              // suggestion-pr-contract.md §2.2)
  *
- * Outcome — the consumer contract is `status` plus human-readable `markdown`
- * (and the listed identifiers). Internal reason codes, evidence and diagnostics
- * are deliberately not part of it (D13).
- *   { status: 'published', review: { id, url }, suggestions?, statePath, markdown }
+ * Outcome — the consumer contract is `status`, human-readable `markdown`, the
+ * listed identifiers and `diagnostics` (D45): every outcome lists its errors,
+ * warnings and notes in that order. Evidence is not part of it.
+ *   { status: 'published', review: { id, url }, suggestions?, statePath, markdown, diagnostics }
  *       // suggestions: [{ number, url, branch }], only when suggestion pull
  *       // requests were created
  *   { status: 'blocked', markdown }        // nothing was written anywhere
@@ -120,6 +120,8 @@ import {
 } from './review-preflight.cjs';
 import type { ICapturedReview, IContextClient, IReviewInputSpec } from './review-preflight.cjs';
 import type { IJsonObject, JsonValue } from './sarif-common.cjs';
+import { createDiagnostic, mapDiagnosticText, orderDiagnostics } from './diagnostics.cjs';
+import type { IDiagnostic } from './diagnostics.cjs';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -301,6 +303,13 @@ export interface IPublishedOutcome {
   readonly statePath: string;
   /** Human-readable explanation, including the review link. */
   readonly markdown: string;
+  /**
+   * Warnings and notes about this publication: preparation's warnings (for
+   * example a finding published in the review body, or a suggestion pull
+   * request not created after a rewritten history), a completion that could
+   * not be recorded, and a branch that moved while suggestions were created.
+   */
+  readonly diagnostics: readonly IDiagnostic[];
 }
 
 /**
@@ -314,6 +323,8 @@ export interface IBlockedOutcome {
   readonly status: 'blocked';
   /** Every problem, with a pointer into the SARIF document. */
   readonly markdown: string;
+  /** Every blocking problem, then preparation's warnings. */
+  readonly diagnostics: readonly IDiagnostic[];
 }
 
 /**
@@ -330,6 +341,8 @@ export interface IUncertainOutcome {
   readonly statePath: string;
   /** What is known and what to do next. */
   readonly markdown: string;
+  /** A `delivery-unconfirmed` warning, and any note about the branch. */
+  readonly diagnostics: readonly IDiagnostic[];
 }
 
 /**
@@ -346,6 +359,8 @@ export interface IRejectedOutcome {
   readonly statePath: string;
   /** GitHub's reason and what to do next. */
   readonly markdown: string;
+  /** A `review-refused` or `suggestion-pr-step-refused` error, and any note about the branch. */
+  readonly diagnostics: readonly IDiagnostic[];
 }
 
 /**
@@ -557,6 +572,38 @@ function rejectedMarkdown(result: RejectedResult, captured: ICapturedInput): str
   return lines.join('\n');
 }
 
+// ---------------------------------------------------------------------------
+// Diagnostics
+// ---------------------------------------------------------------------------
+
+/**
+ * A published outcome's diagnostics: preparation's warnings (absent when the
+ * publication was completed by an earlier call), a completion that could not
+ * be recorded, and what a retry found about the branch.
+ */
+function publishedDiagnostics(
+  result: Pick<PublishedResult, 'receiptPersisted'>,
+  captured: ICapturedInput,
+  prepared: IReadyOutcome | undefined,
+  baseCheck?: BaseCheck,
+): IDiagnostic[] {
+  const unrecorded = result.receiptPersisted
+    ? []
+    : [createDiagnostic('publication-receipt-not-recorded', `Completion could not be recorded at ${code(captured.statePath)}.`, { subject: captured.statePath })];
+  return orderDiagnostics([...(prepared?.warnings ?? []), ...unrecorded, ...baseCheckDiagnostics(baseCheck, captured)]);
+}
+
+/** The delivery that could not be confirmed, as a warning about the pull request. */
+function uncertainDiagnostics(detail: string, captured: ICapturedInput, baseCheck?: BaseCheck): IDiagnostic[] {
+  return orderDiagnostics([createDiagnostic('delivery-unconfirmed', detail, { subject: destinationLabel(captured) }), ...baseCheckDiagnostics(baseCheck, captured)]);
+}
+
+/** GitHub's definitive refusal of the review or of a suggestion pull request step, as an error about the pull request. */
+function rejectedDiagnostics(detail: string, step: 'review' | 'suggestion', captured: ICapturedInput, baseCheck?: BaseCheck): IDiagnostic[] {
+  const refused = createDiagnostic(step === 'review' ? 'review-refused' : 'suggestion-pr-step-refused', detail, { subject: destinationLabel(captured) });
+  return orderDiagnostics([refused, ...baseCheckDiagnostics(baseCheck, captured)]);
+}
+
 /** The public outcome for a publication-core result. */
 function present(result: PublicationResult, captured: ICapturedInput, prepared?: IReadyOutcome): PublishSarifReviewOutcome {
   const { statePath } = captured;
@@ -567,11 +614,12 @@ function present(result: PublicationResult, captured: ICapturedInput, prepared?:
         review: { id: result.review.id, url: result.review.htmlUrl },
         statePath,
         markdown: publishedMarkdown(result, captured, prepared),
+        diagnostics: publishedDiagnostics(result, captured, prepared),
       };
     case 'uncertain':
-      return { status: 'uncertain', statePath, markdown: uncertainMarkdown(result, captured) };
+      return { status: 'uncertain', statePath, markdown: uncertainMarkdown(result, captured), diagnostics: uncertainDiagnostics(result.detail, captured) };
     case 'rejected':
-      return { status: 'rejected', statePath, markdown: rejectedMarkdown(result, captured) };
+      return { status: 'rejected', statePath, markdown: rejectedMarkdown(result, captured), diagnostics: rejectedDiagnostics(result.detail, 'review', captured) };
     default: {
       // Unreachable for the typed publication core; kept as the durable
       // refusal to present a status this module does not know.
@@ -621,13 +669,27 @@ function establishedMarkdown(established: readonly IEstablished[]): string[] {
  */
 function baseCheckMarkdown(check: BaseCheck | undefined, captured: ICapturedInput): string[] {
   if (check === undefined) return [];
+  const [lead, rest] = baseCheckText(check, captured);
+  return [`**${lead}:** ${rest}`, ''];
+}
+
+/** The lead and the rest of the base-check paragraph (contract §2.10). */
+function baseCheckText(check: BaseCheck, captured: ICapturedInput): readonly [lead: string, rest: string] {
   const pull = `#${String(captured.destination.pullNumber)}`;
-  const text = check.kind === 'changed'
-    ? `**The branch of ${pull} changed since these suggestions were planned:** they are based on commit ${code(check.base)}, which is no longer part of it `
-      + `(its head is now ${code(check.head)}). The suggestion pull requests still to be created are created on that commit, as planned; nothing is re-decided.`
-    : `**Whether the branch of ${pull} changed since these suggestions were planned is not known:** they are based on commit ${code(check.base)}, `
-      + `and the branch could not be read (${check.detail}). Nothing is re-decided.`;
-  return [text, ''];
+  return check.kind === 'changed'
+    ? [`The branch of ${pull} changed since these suggestions were planned`, `they are based on commit ${code(check.base)}, which is no longer part of it `
+      + `(its head is now ${code(check.head)}). The suggestion pull requests still to be created are created on that commit, as planned; nothing is re-decided.`]
+    : [`Whether the branch of ${pull} changed since these suggestions were planned is not known`, `they are based on commit ${code(check.base)}, `
+      + `and the branch could not be read (${check.detail}). Nothing is re-decided.`];
+}
+
+/** The base-check paragraph as a diagnostic: a note that the branch moved, or a warning that it could not be read. */
+function baseCheckDiagnostics(check: BaseCheck | undefined, captured: ICapturedInput): IDiagnostic[] {
+  if (check === undefined) return [];
+  const [lead, rest] = baseCheckText(check, captured);
+  const message = `${lead}: ${rest}`;
+  const subject = destinationLabel(captured);
+  return [createDiagnostic(check.kind === 'changed' ? 'suggestion-branch-moved' : 'suggestion-branch-unreadable', message, { subject })];
 }
 
 function presentCompanion(outcome: CompanionOutcome, captured: ICapturedInput, prepared?: IReadyOutcome): PublishSarifReviewOutcome {
@@ -646,7 +708,14 @@ function presentCompanion(outcome: CompanionOutcome, captured: ICapturedInput, p
         '',
         ...listed,
       ].join('\n');
-      return { status: 'published', review: { id: outcome.review.id, url: outcome.review.htmlUrl }, suggestions, statePath, markdown };
+      return {
+        status: 'published',
+        review: { id: outcome.review.id, url: outcome.review.htmlUrl },
+        suggestions,
+        statePath,
+        markdown,
+        diagnostics: publishedDiagnostics(outcome, captured, prepared, outcome.baseCheck),
+      };
     }
     case 'uncertain':
       return {
@@ -665,6 +734,7 @@ function presentCompanion(outcome: CompanionOutcome, captured: ICapturedInput, p
           '- Do not delete those files: they are the only record of what may already exist.',
           '- A new state path starts a new, separate publication; use one only if you intend a separate review.',
         ].join('\n'),
+        diagnostics: uncertainDiagnostics(outcome.detail, captured, outcome.baseCheck),
       };
     case 'rejected': {
       const review = outcome.step === 'review';
@@ -684,6 +754,7 @@ function presentCompanion(outcome: CompanionOutcome, captured: ICapturedInput, p
           ...establishedMarkdown(outcome.established),
           'After resolving the cause, publish again with a new state path. Anything already created is left as it is.',
         ].join('\n'),
+        diagnostics: rejectedDiagnostics(outcome.detail, review ? 'review' : 'suggestion', captured, outcome.baseCheck),
       };
     }
     default: {
@@ -719,7 +790,9 @@ async function run(captured: ICapturedInput, createGitHubClient: CreatePublishin
   if (existing.status !== 'missing') return present(existing, captured);
 
   const prepared = await prepareForDestination(captured, client);
-  if (prepared.status === 'blocked') return { status: 'blocked', markdown: blockedReviewMarkdown(prepared) };
+  if (prepared.status === 'blocked') {
+    return { status: 'blocked', markdown: blockedReviewMarkdown(prepared), diagnostics: orderDiagnostics([...prepared.diagnostics, ...prepared.warnings]) };
+  }
 
   if (prepared.suggestions !== undefined && prepared.suggestionPullRequests !== undefined) {
     const outcome = await startCompanionPublication({
@@ -757,8 +830,9 @@ async function run(captured: ICapturedInput, createGitHubClient: CreatePublishin
  *
  * @param input - The document, destination, reviewed commit, state path and
  * credential.
- * @returns The outcome. `status` plus `markdown` is the stable contract;
- * internal diagnostic codes are not part of it.
+ * @returns The outcome. `status`, `markdown` and `diagnostics` are the stable
+ * contract; each diagnostic's `code` is listed in the package's
+ * `docs/diagnostics.md`.
  * @throws `TypeError` for invalid input (before any network request); an
  * `Error` for a corrupt state file, a state path reused for different input,
  * or an operational failure (for example the network). A rejection never
@@ -807,5 +881,6 @@ export async function publishSarifReviewWithInternals(
   } catch (err) {
     throw withoutCredential(err, captured.token);
   }
-  return { ...outcome, markdown: redact(outcome.markdown, captured.token) };
+  const clean = (text: string): string => redact(text, captured.token);
+  return { ...outcome, markdown: clean(outcome.markdown), diagnostics: outcome.diagnostics.map((d) => mapDiagnosticText(d, clean)) };
 }

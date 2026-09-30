@@ -31,16 +31,37 @@
  *     stamp on collision. The archive is an exclusive hard link followed by
  *     removal of the original name, so it never overwrites anything.
  *
- * Failures a user must act on are `ArtifactError`s with actionable messages
- * that name the paths involved.
+ * Failures a user must act on are `ArtifactError`s, each with its diagnostic
+ * code, the file it is about, and an actionable message that names the paths
+ * involved.
  */
 
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-/** A file problem the user must resolve; the message names the paths. */
-export class ArtifactError extends Error {}
+import type { DiagnosticCode } from './diagnostic-catalog.cjs';
+
+/** The diagnostic code of each kind of file problem (docs/diagnostics.md, "Command line and files"). */
+export type ArtifactErrorCode = Extract<
+  DiagnosticCode,
+  'file-unreadable' | 'file-not-utf8' | 'file-not-json' | 'output-exists' | 'file-not-writable' | 'file-in-use' | 'file-changed-during-edit' | 'output-archive-failed'
+>;
+
+/**
+ * A file problem the user must resolve: its diagnostic code, the file it is
+ * about, and a message that names the paths involved.
+ */
+export class ArtifactError extends Error {
+  readonly code: ArtifactErrorCode;
+  readonly file: string;
+
+  constructor(code: ArtifactErrorCode, file: string, message: string) {
+    super(message);
+    this.code = code;
+    this.file = file;
+  }
+}
 
 /** A UTF-8 text file as read: its decoded text and the exact bytes (for change detection). */
 export interface ITextFile {
@@ -125,12 +146,12 @@ export function readTextFile(file: string, label: string): ITextFile {
   try {
     bytes = fs.readFileSync(file);
   } catch (err) {
-    throw new ArtifactError(`cannot read ${label} ${file}: ${messageOf(err)}`);
+    throw new ArtifactError('file-unreadable', file, `cannot read ${label} ${file}: ${messageOf(err)}`);
   }
   try {
     return { text: UTF8.decode(bytes), bytes };
   } catch {
-    throw new ArtifactError(`${label} ${file} is not valid UTF-8; it must be UTF-8 encoded.`);
+    throw new ArtifactError('file-not-utf8', file, `${label} ${file} is not valid UTF-8; it must be UTF-8 encoded.`);
   }
 }
 
@@ -141,7 +162,7 @@ export function readJsonFile(file: string, label: string): IJsonFile {
     const value: unknown = JSON.parse(text);
     return { value, bytes };
   } catch (err) {
-    throw new ArtifactError(`${label} ${file} is not valid JSON: ${messageOf(err)}`);
+    throw new ArtifactError('file-not-json', file, `${label} ${file} is not valid JSON: ${messageOf(err)}`);
   }
 }
 
@@ -193,9 +214,9 @@ export function createExclusive(file: string, text: string, hooks: ICreateExclus
       fs.linkSync(temporary, file);
     } catch (err) {
       if (codeOf(err) === 'EEXIST') {
-        throw new ArtifactError(`${file} already exists (it may have been created by another program); it was left unchanged.`);
+        throw new ArtifactError('output-exists', file, `${file} already exists (it may have been created by another program); it was left unchanged.`);
       }
-      throw new ArtifactError(`cannot create ${file}: ${messageOf(err)}`);
+      throw new ArtifactError('file-not-writable', file, `cannot create ${file}: ${messageOf(err)}`);
     }
   } finally {
     discard(temporary);
@@ -221,11 +242,13 @@ export function acquireOwnership(file: string): ReleaseOwnership {
   } catch (err) {
     if (codeOf(err) === 'EEXIST') {
       throw new ArtifactError(
+        'file-in-use',
+        file,
         `${file} is being written by another sarif-to-comment command (ownership marker ${marker}). ` +
           `Wait for it to finish. If no such command is running, the marker is stale: delete ${marker} and run again.`,
       );
     }
-    throw new ArtifactError(`cannot take ownership of ${file} (marker ${marker}): ${messageOf(err)}`);
+    throw new ArtifactError('file-not-writable', file, `cannot take ownership of ${file} (marker ${marker}): ${messageOf(err)}`);
   }
   return function release(): void {
     // Remove only our own marker: never delete one another process created.
@@ -251,10 +274,10 @@ export function replaceIfUnchanged(file: string, expectedBytes: Uint8Array, text
     try {
       current = fs.readFileSync(file);
     } catch (err) {
-      throw new ArtifactError(`${file} could not be re-read before replacement (${messageOf(err)}); it was not changed.`);
+      throw new ArtifactError('file-unreadable', file, `${file} could not be re-read before replacement (${messageOf(err)}); it was not changed.`);
     }
     if (!current.equals(expectedBytes)) {
-      throw new ArtifactError(`${file} changed while this command was running; it was not overwritten. Run the command again.`);
+      throw new ArtifactError('file-changed-during-edit', file, `${file} changed while this command was running; it was not overwritten. Run the command again.`);
     }
     fs.renameSync(temporary, file);
   } finally {
@@ -279,7 +302,7 @@ export function archiveExisting(file: string, { stat = fs.statSync }: IArchiveOp
     info = stat(file);
   } catch (err) {
     if (codeOf(err) === 'ENOENT') return null;
-    throw new ArtifactError(`cannot examine existing output ${file}: ${messageOf(err)}`);
+    throw new ArtifactError('output-archive-failed', file, `cannot examine existing output ${file}: ${messageOf(err)}`);
   }
   const birth = Number.isFinite(info.birthtimeMs) && info.birthtimeMs > 0;
   const stamp = archiveStamp(birth ? info.birthtimeMs : info.mtimeMs);
@@ -291,7 +314,7 @@ export function archiveExisting(file: string, { stat = fs.statSync }: IArchiveOp
       fs.linkSync(file, archive);
     } catch (err) {
       if (codeOf(err) === 'EEXIST') continue;
-      throw new ArtifactError(`cannot archive existing output ${file} as ${archive}: ${messageOf(err)}`);
+      throw new ArtifactError('output-archive-failed', file, `cannot archive existing output ${file} as ${archive}: ${messageOf(err)}`);
     }
     fs.unlinkSync(file);
     syncDirectory(dir);

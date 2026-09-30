@@ -63,7 +63,9 @@ import * as util from 'node:util';
 
 import type { CommitComparison, IDefaultBranchFile, IFetchContextRequest, IPullRequestDestination, ISuggestionTarget } from './github.cjs';
 import { blockedBy, codeSpan, prepareReview } from './prepare-review.cjs';
-import type { IBlockedOutcome, IDiagnostic, IReadyOutcome } from './prepare-review.cjs';
+import type { IBlockedOutcome, IReadyOutcome } from './prepare-review.cjs';
+import { createDiagnostic } from './diagnostics.cjs';
+import type { DiagnosticCode, IDiagnostic } from './diagnostics.cjs';
 import type { IJsonObject, IPlainObject, JsonValue } from './sarif-common.cjs';
 import {
   LABEL_RULE,
@@ -605,8 +607,10 @@ async function checkSuggestionTarget(
   const configuration = await client.readDefaultBranchFile({ owner, repo, path: SUGGESTION_PR_CONFIGURATION_PATH, branch: target.defaultBranch });
   const canonical = resolveCanonicalLabel(configuration);
   const problems: IDiagnostic[] = [];
-  const problem = (code: string, message: string): void => {
-    problems.push({ code, message });
+  // These problems are facts of the repository, not of the document: they
+  // have no pointer, and name the repository as their subject.
+  const problem = (code: DiagnosticCode, message: string): void => {
+    problems.push(createDiagnostic(code, message, { subject: repository }));
   };
   // GitHub's own name for the pull request's repository decides sameness, whatever the caller's letter case.
   if (target.headRepository === null) {

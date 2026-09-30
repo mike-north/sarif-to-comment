@@ -25,6 +25,9 @@ import type AjvDraft04Module = require('ajv-draft-04');
 import type AjvFormatsModule = require('ajv-formats');
 import type { ErrorObject, SchemaObject, ValidateFunction } from 'ajv';
 
+import { createProblem, diagnosticOf } from './diagnostics.cjs';
+import type { IDiagnostic, IProblem } from './diagnostics.cjs';
+
 /**
  * The vendored SARIF 2.1.0 schema. JSON data, so it is `unknown` until
  * {@link isSchemaObject} confirms it is the object ajv compiles.
@@ -67,8 +70,8 @@ export interface IRepositoryIdentity {
   readonly repo: string;
 }
 
-/** One schema violation found by {@link validateSarif}. */
-export interface ISchemaProblem {
+/** One schema violation found by {@link validateSarif}: a `sarif-schema-invalid` problem. */
+export interface ISchemaProblem extends IProblem {
   /** What is wrong, as Markdown. */
   readonly message: string;
   /** JSON Pointer of the offending value; '' is the document root. */
@@ -86,6 +89,8 @@ export interface ISarifSchemaRefusal {
   readonly problems: readonly ISchemaProblem[];
   /** The same problems as a Markdown explanation. */
   readonly markdown: string;
+  /** The same problems as diagnostics. */
+  readonly diagnostics: readonly IDiagnostic[];
 }
 
 // The SARIF types below describe only the parts of a schema-valid SARIF
@@ -481,11 +486,11 @@ export function validateSarif(captured: unknown): ISarifSchemaRefusal | null {
     const message = `${pointer === '' ? 'The document' : codeSpan(pointer)} ${String(detail)}.`;
     if (seen.has(message)) continue;
     seen.add(message);
-    problems.push({ message, pointer });
+    problems.push({ ...createProblem('sarif-schema-invalid', { message, pointer }), pointer });
   }
   const markdown = `**Invalid SARIF:** the document does not conform to the SARIF 2.1.0 schema, so it was not interpreted.\n\n${
     problems.map((p) => `- ${p.message}`).join('\n')}`;
-  return { status: 'invalid', problems, markdown };
+  return { status: 'invalid', problems, markdown, diagnostics: problems.map(diagnosticOf) };
 }
 
 // ---------------------------------------------------------------------------

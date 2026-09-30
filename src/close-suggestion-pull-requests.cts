@@ -43,7 +43,7 @@
  *   4. Unless dryRun, one close per eligible suggestion, ascending. A 403 or
  *      404 refusal is permission-limited; any other failure is failed.
  *
- * Outcome: { status, dryRun, originals, suggestions, markdown } (see the
+ * Outcome: { status, dryRun, originals, suggestions, markdown, diagnostics } (see the
  * public types below). Rejects for invalid input, for an invalid or
  * unreadable repository configuration (step 0), for an operational failure
  * during discovery (step 1), and for a defect in this package during steps
@@ -60,6 +60,8 @@
 import { GitHubError, createGitHubClient as defaultCreateGitHubClient } from './github.cjs';
 import type { ICreateGitHubClientOptions, IGitHubClient, IPullRequestSnapshot } from './github.cjs';
 import type { IGitHubRepository } from './public-types.cjs';
+import { createDiagnostic, mapDiagnosticText, orderDiagnostics } from './diagnostics.cjs';
+import type { IDiagnostic } from './diagnostics.cjs';
 import { messageChain, redact, withoutCredential } from './review-preflight.cjs';
 import { OWNER_PATTERN, REPO_PATTERN, isPlainObject } from './sarif-common.cjs';
 import { findSuggestionMarker } from './suggestion-marker.cjs';
@@ -208,6 +210,12 @@ export interface ICloseSuggestionPullRequestsOutcome {
   readonly suggestions: readonly ICheckedSuggestionPullRequest[];
   /** What was checked and done, as Markdown, including that no branch is ever deleted. */
   readonly markdown: string;
+  /**
+   * What was left undone or untouched: a failed read or close (error), an
+   * original that could not be verified or a close this account may not make
+   * (warning), and a pull request that does not follow the convention (note).
+   */
+  readonly diagnostics: readonly IDiagnostic[];
 }
 
 // ---------------------------------------------------------------------------
@@ -569,8 +577,43 @@ class Cleanup {
       originals,
       suggestions,
       markdown: this.safe(renderMarkdown(this.captured, this.label, status, originals, checked)),
+      diagnostics: cleanupDiagnostics(this.captured, originals, suggestions).map((d) => mapDiagnosticText(d, (text) => this.safe(text))),
     };
   }
+}
+
+/**
+ * The diagnostics of a cleanup, each about one pull request: every original
+ * that could not be verified, and every suggestion pull request that failed,
+ * could not be closed with this account, or does not follow the convention.
+ * Suggestions left open because their original could not be verified are
+ * covered by that original's warning.
+ */
+function cleanupDiagnostics(
+  captured: ICaptured,
+  originals: readonly IOriginalPullRequest[],
+  suggestions: readonly ICheckedSuggestionPullRequest[],
+): IDiagnostic[] {
+  const subject = (n: number): string => `${captured.owner}/${captured.repo}#${String(n)}`;
+  const because = (reason: string | undefined): string => (reason === undefined ? '' : ` (${reason})`);
+  const forOriginal = (original: number | null): string => (original === null ? '' : ` (for #${String(original)})`);
+  const found: IDiagnostic[] = [];
+  for (const o of originals) {
+    if (o.state !== 'unverified') continue;
+    found.push(createDiagnostic('original-pull-request-unverified',
+      `Pull request #${String(o.number)} could not be verified${because(o.reason)}, so its suggestion pull requests were left open.`, { subject: subject(o.number) }));
+  }
+  for (const s of suggestions) {
+    const which = `#${String(s.number)}${forOriginal(s.original)}`;
+    if (s.result === 'failed') {
+      found.push(createDiagnostic('suggestion-pr-cleanup-failed', `Cleanup of ${which} did not finish${because(s.reason)}.`, { subject: subject(s.number) }));
+    } else if (s.result === 'permission-limited') {
+      found.push(createDiagnostic('suggestion-pr-close-not-permitted', `${which} was left open, not permitted to close it${because(s.reason)}.`, { subject: subject(s.number) }));
+    } else if (s.result === 'not-ours') {
+      found.push(createDiagnostic('suggestion-pr-not-conforming', `#${String(s.number)} does not follow the suggestion pull request convention${because(s.reason)}, so it was not touched.`, { subject: subject(s.number) }));
+    }
+  }
+  return orderDiagnostics(found);
 }
 
 /** Candidates in ascending number order, each pull request once (a listing can repeat one). */

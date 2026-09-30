@@ -41,7 +41,8 @@ import {
   COMMIT_PATTERN, OWNER_PATTERN, REPO_PATTERN, captureJson, validateSarif, isPlainObject,
   isNormalizedRepositoryPath, encodeRepositoryPath, packageVersion,
 } from './sarif-common.cjs';
-import type { IInvalidSarifOutcome, IProblem, ISarifLog, ISarifSourceBinding } from './public-types.cjs';
+import { createProblem, diagnosticOf } from './diagnostics.cjs';
+import type { IDiagnostic, IInvalidSarifOutcome, IProblem, ISarifLog, ISarifSourceBinding } from './public-types.cjs';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -164,6 +165,8 @@ export interface IAddedSarifCommentOutcome {
   readonly sarif: ISarifLog;
   /** Where the finding is in `sarif`. */
   readonly finding: IAddedFinding;
+  /** Always empty: adding a finding raises no warnings or notes. */
+  readonly diagnostics: readonly IDiagnostic[];
 }
 
 /**
@@ -206,6 +209,8 @@ export interface IRemovedSarifCommentOutcome {
   readonly sarif: ISarifLog;
   /** What was removed. */
   readonly finding: IRemovedFinding;
+  /** Always empty: removing a finding raises no warnings or notes. */
+  readonly diagnostics: readonly IDiagnostic[];
 }
 
 /**
@@ -226,6 +231,8 @@ export interface IStaleSarifSelectorOutcome {
   readonly problems: readonly IProblem[];
   /** The same explanation as Markdown. */
   readonly markdown: string;
+  /** The same problem as a `finding-selector-stale` diagnostic. */
+  readonly diagnostics: readonly IDiagnostic[];
 }
 
 /**
@@ -548,8 +555,8 @@ export function addSarifComment(sarif: object, comment: ISarifComment): AddSarif
  * documented parameter types; the CLI calls it directly, because it
  * passes parsed file content that only this validation judges.
  *
- * @returns `{ status: 'added', sarif, finding: { ref, runIndex, resultIndex, tool } }`
- *   or `{ status: 'invalid', problems, markdown }`
+ * @returns `{ status: 'added', sarif, finding: { ref, runIndex, resultIndex, tool }, diagnostics: [] }`
+ *   or `{ status: 'invalid', problems, markdown, diagnostics }`
  * @throws TypeError on caller misuse
  */
 function addSarifCommentWithUntypedInput(sarif: unknown, comment: unknown): AddSarifCommentOutcome {
@@ -574,7 +581,8 @@ function addSarifCommentWithUntypedInput(sarif: unknown, comment: unknown): AddS
     runIndex = checked.run;
   } else if (runs.length === 0) {
     const message = 'The document has no run to add the comment to. Pass `run: { toolName }` to add one under your own attribution.';
-    return { status: 'invalid', problems: [{ message, pointer: '/runs' }], markdown: `**Cannot add the comment:** ${message}` };
+    const problem = createProblem('sarif-no-runs', { message, pointer: '/runs' });
+    return { status: 'invalid', problems: [problem], markdown: `**Cannot add the comment:** ${message}`, diagnostics: [diagnosticOf(problem)] };
   } else if (runs.length > 1) {
     throw misuse(operation, `the document has ${String(runs.length)} runs; choose one with comment.run (an index or { toolName } for a new run)`);
   } else {
@@ -594,6 +602,7 @@ function addSarifCommentWithUntypedInput(sarif: unknown, comment: unknown): AddS
     status: 'added',
     sarif: captured,
     finding: { ref: `/runs/${String(runIndex)}/results/${String(resultIndex)}`, runIndex, resultIndex, tool: run.tool.driver.name },
+    diagnostics: [],
   };
 }
 
@@ -645,7 +654,8 @@ export function removeSarifComment(sarif: object, selector: string): RemoveSarif
 
 /** A `stale` outcome for `selector`, pointing at the position it names. */
 function staleSelector(selector: string, ref: string, message: string): IStaleSarifSelectorOutcome {
-  return { status: 'stale', selector, problems: [{ message, pointer: ref }], markdown: `**Cannot remove the finding:** ${message}` };
+  const problem = createProblem('finding-selector-stale', { message, pointer: ref });
+  return { status: 'stale', selector, problems: [problem], markdown: `**Cannot remove the finding:** ${message}`, diagnostics: [diagnosticOf(problem)] };
 }
 
 /** How many entries a property of a removed result holds, when it is an array. */
@@ -674,8 +684,8 @@ function fileProposalsOf(result: object): number {
  * Both arguments are validated at run time, since JavaScript callers can pass
  * anything; the CLI calls this directly with parsed file content.
  *
- * @returns `{ status: 'removed', sarif, finding }`, `{ status: 'stale', selector, problems, markdown }`
- *   or `{ status: 'invalid', problems, markdown }`
+ * @returns `{ status: 'removed', sarif, finding, diagnostics: [] }`, `{ status: 'stale', selector, problems, markdown, diagnostics }`
+ *   or `{ status: 'invalid', problems, markdown, diagnostics }`
  * @throws TypeError on caller misuse
  */
 function removeSarifCommentWithUntypedInput(sarif: unknown, selector: unknown): RemoveSarifCommentOutcome {
@@ -719,6 +729,7 @@ function removeSarifCommentWithUntypedInput(sarif: unknown, selector: unknown): 
       fixes: isPlainObject(result) ? entriesOf(result['fixes']) : 0,
       fileProposals: fileProposalsOf(result),
     },
+    diagnostics: [],
   };
 }
 

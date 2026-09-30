@@ -102,9 +102,11 @@
  *       // at its largest possible size, for the limits
  *   { status: 'blocked', diagnostics: Diagnostic[], warnings: Diagnostic[], markdown: string }
  *
- *   Diagnostic: { code, pointer?, message }  pointer is a JSON Pointer into the
- *     SARIF log (e.g. "/runs/0/results/3"); codes are private, not a frozen
- *     public schema (D13). `markdown` lists every diagnostic with its pointer.
+ *   Diagnostic: the public IDiagnostic (docs/diagnostics.md, D45), with the
+ *     code's catalog severity, title and remedies and, when the problem is in
+ *     the document, location.pointer, a JSON Pointer into the SARIF log (e.g.
+ *     "/runs/0/results/3"). `markdown` lists every diagnostic with its code and
+ *     pointer.
  *   Evidence: { pointer, treatment: 'inline'|'suggestion'|'general',
  *     commentIndex? | bodySectionIndex?, source?: { commit, path, startLine?,
  *     endLine?, text? } (always the result's own location), anchor?,
@@ -278,6 +280,8 @@ import type { IPlacementSourceRange, PlacementAnchorSide } from './placement.cjs
 import { applyReplacement as productionApplyReplacement } from './replacements.cjs';
 import { formatSuggestionMarker } from './suggestion-marker.cjs';
 import { isSuggestionGroupName } from './sarif-common.cjs';
+import { createDiagnostic } from './diagnostics.cjs';
+import type { DiagnosticCode, IDiagnostic } from './diagnostics.cjs';
 import type {
   ColumnKind, IAppliedReplacement, IReplacementRegion, IReplacementRequest, ReplacementDiagnostic, ReplacementOutcome,
 } from './replacements.cjs';
@@ -579,19 +583,8 @@ interface IEffectiveOptions {
   readonly suggestionPullRequests?: ISuggestionPullRequestsOption | undefined;
 }
 
-/**
- * One problem or warning. `pointer` is a JSON Pointer into the SARIF log and
- * is omitted (never undefined) for whole-review problems. Codes are private,
- * not a frozen public schema (D13).
- */
-export interface IDiagnostic {
-  readonly code: string;
-  readonly pointer?: string;
-  readonly message: string;
-}
-
 /** A diagnostic before it is recorded: `[code, message]`. */
-type Problem = readonly [code: string, message: string];
+type Problem = readonly [code: DiagnosticCode, message: string];
 
 /** GitHub review-comment coordinates of one inline comment, before its body. */
 interface ISingleLineCoordinates {
@@ -1117,7 +1110,7 @@ const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[
 const COLUMN_KINDS: readonly ColumnKind[] = ['utf16CodeUnits', 'unicodeCodePoints'];
 
 /** Result features with meaning this profile cannot present faithfully. */
-const UNSUPPORTED_RESULT_FEATURES: readonly (readonly [key: UnsupportedResultFeature, code: string, label: string])[] = [
+const UNSUPPORTED_RESULT_FEATURES: readonly (readonly [key: UnsupportedResultFeature, code: DiagnosticCode, label: string])[] = [
   ['codeFlows', 'code-flows-unsupported', 'Code flows'],
   ['relatedLocations', 'related-locations-unsupported', 'Related locations'],
   ['graphs', 'graphs-unsupported', 'Graphs'],
@@ -1417,17 +1410,18 @@ class Report {
     this.warnings = [];
   }
 
-  error(code: string, pointer: string | undefined, message: string): void {
-    this.errors.push(diagnostic(code, pointer, message));
+  error(code: DiagnosticCode, pointer: string | undefined, message: string): void {
+    this.errors.push(createDiagnostic(code, message, { location: { pointer } }));
   }
 
-  warn(code: string, pointer: string | undefined, message: string): void {
-    this.warnings.push(diagnostic(code, pointer, message));
+  warn(code: DiagnosticCode, pointer: string | undefined, message: string): void {
+    this.warnings.push(createDiagnostic(code, message, { location: { pointer } }));
   }
-}
 
-function diagnostic(code: string, pointer: string | undefined, message: string): IDiagnostic {
-  return pointer === undefined ? { code, message } : { code, pointer, message };
+  /** Records a diagnostic made elsewhere, such as a repository-level block (see {@link blockedBy}). */
+  add(diagnostic: IDiagnostic): void {
+    (diagnostic.severity === 'error' ? this.errors : this.warnings).push(diagnostic);
+  }
 }
 
 function blocked(report: Report): IBlockedOutcome {
@@ -1441,13 +1435,14 @@ function blocked(report: Report): IBlockedOutcome {
  */
 function blockedBy(diagnostics: readonly IDiagnostic[], warnings: readonly IDiagnostic[]): IBlockedOutcome {
   const report = new Report();
-  for (const d of diagnostics) report.error(d.code, d.pointer, d.message);
-  for (const w of warnings) report.warn(w.code, w.pointer, w.message);
+  for (const d of diagnostics) report.add(d);
+  for (const w of warnings) report.add(w);
   return blocked(report);
 }
 
 function diagnosticLine(d: IDiagnostic): string {
-  return `- ${codeSpan(d.code)}${d.pointer === undefined ? '' : ` at ${codeSpan(d.pointer)}`}: ${d.message}`;
+  const pointer = d.location?.pointer;
+  return `- ${codeSpan(d.code)}${pointer === undefined ? '' : ` at ${codeSpan(pointer)}`}: ${d.message}`;
 }
 
 function warningsMarkdown(report: Report): string {
@@ -1509,10 +1504,10 @@ function analyzeRun(run: ISarifRunView, runIndex: number, state: IPreparationSta
     // has already been validated against it, so it is always a boolean here
     // and this is equivalent to the literal `=== false` comparison.
     if (!invocation.executionSuccessful) {
-      state.report.error('invocation-failed', `${pointer}/invocations/${String(index)}`,
+      state.report.error('tool-invocation-failed', `${pointer}/invocations/${String(index)}`,
         `The tool reports that this analysis did not complete successfully, so its results may be partial.${quoted}`);
     } else if (notes.length > 0) {
-      state.report.warn('tool-notification-error', `${pointer}/invocations/${String(index)}`,
+      state.report.warn('tool-reported-errors', `${pointer}/invocations/${String(index)}`,
         `The tool reported errors during a successful invocation.${quoted}`);
     }
   }
@@ -1525,7 +1520,7 @@ function analyzeRun(run: ISarifRunView, runIndex: number, state: IPreparationSta
   const provenance = run.versionControlProvenance || [];
   const ours = provenance.filter((p) => namesRepository(p.repositoryUri, state.context));
   if (provenance.length > 0 && ours.length === 0) {
-    info.provenanceError = ['repository-mismatch',
+    info.provenanceError = ['provenance-repository-mismatch',
       'The run\'s version control provenance names only other repositories, so its locations cannot be read from this pull request.'];
   }
   const revisions = [...new Set(ours.map((p) => p.revisionId).filter((r) => r !== undefined))];
@@ -1534,7 +1529,7 @@ function analyzeRun(run: ISarifRunView, runIndex: number, state: IPreparationSta
     info.provenanceError = ['provenance-revision-invalid',
       `Provenance revision ${String(revisions.find((r): boolean => !isFullCommit(r)))} is not a full 40-character commit; abbreviations are never matched.`];
   } else if (revisions.length > 1) {
-    info.provenanceError = ['provenance-conflict', `The run names several revisions of this repository: ${revisions.join(', ')}.`];
+    info.provenanceError = ['provenance-revision-conflict', `The run names several revisions of this repository: ${revisions.join(', ')}.`];
   } else if (revisions.length === 1 && onlyRevision !== undefined) {
     info.sourceCommit = onlyRevision;
   }
@@ -2148,7 +2143,7 @@ function classify(
     };
   }
   if (outcome.kind === 'unsupported') {
-    state.report.warn('inline-unavailable', pointer,
+    state.report.warn('inline-placement-unavailable', pointer,
       `Inline placement is unavailable (${outcome.reason}); the finding is published as general feedback with an exact link.`);
   }
   return { treatment: 'general', source: outcome.source };
@@ -2241,7 +2236,7 @@ async function prepareFileOperation(
   state: IPreparationState,
 ): Promise<IFileOperationPlacement | null> {
   const { report, context } = state;
-  const fail = (code: string, message: string): null => {
+  const fail = (code: DiagnosticCode, message: string): null => {
     report.error(code, pointer, message);
     return null;
   };
@@ -2341,7 +2336,7 @@ async function locateFileOperationFinding(
 ): Promise<Pick<IFileOperationPlacement, 'placement' | 'proposedLines'> | null> {
   const none = { placement: null, proposedLines: null };
   if (location === undefined) return none;
-  const fail = (code: string, message: string): null => {
+  const fail = (code: DiagnosticCode, message: string): null => {
     state.report.error(code, pointer, message);
     return null;
   };
@@ -2457,7 +2452,7 @@ async function applyResultFix(
   native: boolean,
 ): Promise<IAppliedFix | null> {
   const { report, context } = state;
-  const fail = (code: string, message: string): null => {
+  const fail = (code: DiagnosticCode, message: string): null => {
     report.error(code, pointer, message);
     return null;
   };
@@ -2473,7 +2468,7 @@ async function applyResultFix(
   const runProblem = fixRunProblem(runInfo, context);
   if (runProblem) return fail(runProblem[0], runProblem[1]);
   if (native && context.reviewedCommit !== context.diff.headCommit) {
-    return fail('suggestion-historical-unsupported',
+    return fail('suggestion-reviewed-commit-not-head',
       'The reviewed commit is not the pull request head, so a native suggestion could not be applied to the reviewed text.');
   }
   const source = await readLocatedSource(change.artifactLocation, pointer, runInfo, state);
@@ -2535,7 +2530,7 @@ async function prepareFix(
   state: IPreparationState,
 ): Promise<IPreparedSuggestion | null> {
   const { report, context } = state;
-  const fail = (code: string, message: string): null => {
+  const fail = (code: DiagnosticCode, message: string): null => {
     report.error(code, pointer, message);
     return null;
   };
@@ -2609,7 +2604,7 @@ async function prepareFixEdits(
   state: IPreparationState,
 ): Promise<IPreparedEdit[] | null> {
   const { report, context } = state;
-  const fail = (code: string, message: string): null => {
+  const fail = (code: DiagnosticCode, message: string): null => {
     report.error(code, pointer, message);
     return null;
   };
@@ -2673,7 +2668,7 @@ function fileRegionEdits(
   runInfo: IRunInfo,
   state: IPreparationState,
 ): IRegionEdit[] | null {
-  const fail = (code: string, message: string): null => {
+  const fail = (code: DiagnosticCode, message: string): null => {
     state.report.error(code, pointer, message);
     return null;
   };
@@ -2782,7 +2777,7 @@ async function prepareAlternative(
   runInfo: IRunInfo,
   state: IPreparationState,
 ): Promise<IPreparedAlternative | null> {
-  const fail = (code: string, message: string): null => {
+  const fail = (code: DiagnosticCode, message: string): null => {
     state.report.error(code, at, message);
     return null;
   };
@@ -2883,7 +2878,7 @@ function suggestionPayload(
   replacementText: string,
   editedText: string,
 ): SuggestionPayload {
-  const block = (code: string, message: string): SuggestionPayload => ({ error: [code, message] });
+  const block = (code: DiagnosticCode, message: string): SuggestionPayload => ({ error: [code, message] });
   if (replacementText.includes('```')) {
     return block('suggestion-fence-unverified',
       'GitHub applied a nested ``` suggestion as a deletion; this replacement cannot be a native suggestion.');

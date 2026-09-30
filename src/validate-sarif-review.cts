@@ -41,12 +41,14 @@
  * ready assessment says how many draft suggestion pull requests publication
  * would create, into which branch and with which label.
  *
- * Outcome (status plus Markdown is the contract; internal codes are not, D13):
- *   { status: 'ready', markdown }
- *   { status: 'blocked', problems: [{ message, pointer? }], markdown }
+ * Outcome (status, Markdown and the diagnostics are the contract, D45):
+ *   { status: 'ready', markdown, diagnostics }      // preparation's warnings
+ *   { status: 'blocked', problems, markdown, diagnostics }
+ *       // problems: [{ message, pointer?, ...diagnostic fields }], the
+ *       // blocking errors; diagnostics: those errors, then the warnings.
  *       // markdown is publication's own blocked explanation; for a pending
  *       // review of the account, the same presentation naming that review
- *   { status: 'incomplete', markdown }
+ *   { status: 'incomplete', markdown, diagnostics }  // assessment-incomplete
  *       // an operational failure: anything the GitHub client reports (HTTP,
  *       // network, authentication, source reads, the review list), its
  *       // answer that the account has no numeric id, context for another
@@ -66,7 +68,8 @@
 import { createGitHubClient as defaultCreateGitHubClient } from './github.cjs';
 import type { ICreateGitHubClientOptions, IListReviewsRequest } from './github.cjs';
 import { blockedBy } from './prepare-review.cjs';
-import type { IDiagnostic } from './prepare-review.cjs';
+import { createDiagnostic, mapDiagnosticText, orderDiagnostics, problemOfDiagnostic } from './diagnostics.cjs';
+import type { IDiagnostic } from './diagnostics.cjs';
 import { authenticatedUserId, readAllPages, validatePreparedReview } from './publication.cjs';
 import type { IPublishSarifReviewOptions, IPullRequestDestination } from './publish-sarif-review.cjs';
 import type { IProblem } from './public-types.cjs';
@@ -136,6 +139,8 @@ export interface IReadyAssessment {
   readonly status: 'ready';
   /** What publication would create, and what this result does not promise. */
   readonly markdown: string;
+  /** Preparation's warnings, if any; a ready assessment has no errors. */
+  readonly diagnostics: readonly IDiagnostic[];
 }
 
 /**
@@ -152,6 +157,8 @@ export interface IBlockedAssessment {
   readonly problems: readonly IProblem[];
   /** The explanation publication itself gives for this document, or the pending review that stands in the way. */
   readonly markdown: string;
+  /** The blocking problems, then preparation's warnings. */
+  readonly diagnostics: readonly IDiagnostic[];
 }
 
 /**
@@ -167,6 +174,8 @@ export interface IIncompleteAssessment {
   readonly status: 'incomplete';
   /** What failed (with the token redacted) and what to do next. */
   readonly markdown: string;
+  /** One `assessment-incomplete` error naming the cause. */
+  readonly diagnostics: readonly IDiagnostic[];
 }
 
 /**
@@ -264,18 +273,26 @@ function incompleteMarkdown(err: unknown): string {
   ].join('\n');
 }
 
-/** A preparation diagnostic as a public problem: its message and pointer, never its internal code. */
-function problemOf(diagnostic: IDiagnostic): IProblem {
-  return diagnostic.pointer === undefined ? { message: diagnostic.message } : { message: diagnostic.message, pointer: diagnostic.pointer };
-}
-
 /** `outcome` with the credential removed from everything a caller can read. */
 function redacted(outcome: ValidateSarifReviewOutcome, token: string): ValidateSarifReviewOutcome {
-  if (outcome.status !== 'blocked') return { ...outcome, markdown: redact(outcome.markdown, token) };
+  const clean = (text: string): string => redact(text, token);
+  const diagnostics = outcome.diagnostics.map((d) => mapDiagnosticText(d, clean));
+  if (outcome.status !== 'blocked') return { ...outcome, markdown: clean(outcome.markdown), diagnostics };
   return {
     status: 'blocked',
-    problems: outcome.problems.map((p) => ({ ...p, message: redact(p.message, token) })),
-    markdown: redact(outcome.markdown, token),
+    problems: outcome.problems.map((p) => mapDiagnosticText(p, clean)),
+    markdown: clean(outcome.markdown),
+    diagnostics,
+  };
+}
+
+/** A blocked assessment: its errors as problems, then every diagnostic, errors first. */
+function blockedAssessment(prepared: { readonly diagnostics: readonly IDiagnostic[]; readonly warnings: readonly IDiagnostic[]; readonly markdown: string }): IBlockedAssessment {
+  return {
+    status: 'blocked',
+    problems: prepared.diagnostics.map(problemOfDiagnostic),
+    markdown: blockedReviewMarkdown(prepared),
+    diagnostics: orderDiagnostics([...prepared.diagnostics, ...prepared.warnings]),
   };
 }
 
@@ -442,14 +459,14 @@ function pendingReviewsOf(reviews: readonly unknown[], userId: number, where: st
 /** The blocker for one pending review of the account: which review, why GitHub would refuse, and what to do. */
 function pendingReviewProblem(review: IPendingReview, where: string): IDiagnostic {
   const named = review.htmlUrl === undefined ? `review ${String(review.id)}` : `review ${String(review.id)} (${review.htmlUrl})`;
-  return {
-    code: 'pending-review-exists',
-    message:
-      `This account already has a pending review on ${where}: ${named}. ` +
+  return createDiagnostic(
+    'pending-review-exists',
+    `This account already has a pending review on ${where}: ${named}. ` +
       'GitHub allows one pending review per account on a pull request, so it would refuse this review, as a draft or as a submitted comment review. ' +
       'Submit or delete that pending review on GitHub, then validate again; this tool never submits, edits or deletes an existing review. ' +
       "If it is this tool's own earlier publication, retry publish with that publication's state path rather than a new one.",
-  };
+    { subject: where },
+  );
 }
 
 /**
@@ -486,7 +503,7 @@ async function assess(captured: ICapturedReview, createGitHubClient: (options: I
     const client = operational.observe(createGitHubClient({ token: captured.token, fetch: globalThis.fetch }));
     const prepared = await prepareForDestination(captured, client);
     if (prepared.status === 'blocked') {
-      return { status: 'blocked', problems: prepared.diagnostics.map(problemOf), markdown: blockedReviewMarkdown(prepared) };
+      return blockedAssessment(prepared);
     }
     validatePreparedReview({ body: prepared.review.body, comments: prepared.review.comments });
     let userId: number;
@@ -501,14 +518,19 @@ async function assess(captured: ICapturedReview, createGitHubClient: (options: I
     if (pending.length > 0) {
       const where = destinationLabel(captured);
       const blocked = blockedBy(pending.map((review) => pendingReviewProblem(review, where)), prepared.warnings);
-      return { status: 'blocked', problems: blocked.diagnostics.map(problemOf), markdown: blockedReviewMarkdown(blocked) };
+      return blockedAssessment(blocked);
     }
     ready = prepared;
   } catch (err) {
     if (!operational.has(err) && !(err instanceof ReviewContextMismatchError)) throw withoutCredential(err, captured.token);
-    return { status: 'incomplete', markdown: incompleteMarkdown(withoutCredential(err, captured.token)) };
+    const cause = withoutCredential(err, captured.token);
+    return {
+      status: 'incomplete',
+      markdown: incompleteMarkdown(cause),
+      diagnostics: [createDiagnostic('assessment-incomplete', messageChain(cause), { subject: destinationLabel(captured) })],
+    };
   }
-  return { status: 'ready', markdown: readyMarkdown(ready, captured) };
+  return { status: 'ready', markdown: readyMarkdown(ready, captured), diagnostics: ready.warnings };
 }
 
 /**
@@ -531,8 +553,8 @@ async function assess(captured: ICapturedReview, createGitHubClient: (options: I
  * @param input - The document, intended pull request, reviewed commit and
  * credential (no state path).
  * @returns `ready`, `blocked` with its problems, or `incomplete` when the
- * assessment itself could not be completed. `status` plus `markdown` (and
- * `problems`) is the stable contract.
+ * assessment itself could not be completed. `status`, `markdown`,
+ * `diagnostics` (and `problems`) are the stable contract.
  * @throws `TypeError` for invalid input, before any network request; an
  * `Error` for a defect in this package (an internal invariant failure), as
  * `publishSarifReview` does. Operational failures (GitHub, network,
