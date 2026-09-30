@@ -385,19 +385,19 @@ describe('closeSuggestionPullRequests', () => {
     number: n, title: 'Suggestion', body: `Suggested.\n\n${marker(n, originalNumber)}`, head: `suggestion-pr/${String(originalNumber)}/${idOf(n)}`,
     base: `feature-${String(originalNumber)}`, draft: true, state: 'open', merged: false, labels: ['suggestion-pr'], authorId: 4242, ...change,
   });
-  function cleanup(pulls: readonly IStoredPull[], companion: ICompanionConfig = {}): Promise<Json> {
+  function cleanup(pulls: readonly IStoredPull[], companion: ICompanionConfig = {}, extra: Json = {}): Promise<Json> {
     const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'diagnostics-cleanup-')));
     FakeHttpGitHub.create(path.join(root, 'host'), { companion }, repository());
     const host = new FakeHttpGitHub(path.join(root, 'host'), TOKEN);
     host.seedPulls(pulls);
     const internals = { createGitHubClient: (options: ICreateGitHubClientOptions): IGitHubClient => createGitHubClient({ ...options, fetch: host.fetch }) };
-    return call('closeSuggestionPullRequests', { repository: { owner: OWNER, repo: REPO }, token: TOKEN }, internals);
+    return call('closeSuggestionPullRequests', { repository: { owner: OWNER, repo: REPO }, token: TOKEN, ...extra }, internals);
   }
 
   test('complete: no diagnostics, appended after the 0.2.x keys', async () => {
     const outcome = await cleanup([original(37), suggestion(40, 37)]);
     assert.equal(outcome['status'], 'complete');
-    assert.deepEqual(Object.keys(outcome), ['status', 'dryRun', 'originals', 'suggestions', 'markdown', 'diagnostics']);
+    assert.deepEqual(Object.keys(outcome), ['status', 'dryRun', 'owner', 'originals', 'suggestions', 'counts', 'markdown', 'diagnostics']);
     assertDiagnostics(outcome['diagnostics'], []);
   });
 
@@ -418,5 +418,24 @@ describe('closeSuggestionPullRequests', () => {
     const outcome = await cleanup([original(37), suggestion(40, 37)], { pullReads: { '37': 'server-error' } });
     assert.equal(outcome['status'], 'incomplete');
     assertDiagnostics(outcome['diagnostics'], [{ code: 'original-pull-request-unverified', subject: 'octo/widgets#37', message: /HTTP 502/ }]);
+  });
+
+  test('a suggestion someone else opened is not a diagnostic: it is the owner scope, not a problem', async () => {
+    const outcome = await cleanup([original(37), suggestion(40, 37, { authorId: 99 })]);
+    assert.equal(outcome['status'], 'complete');
+    assertDiagnostics(outcome['diagnostics'], []);
+  });
+
+  test('more candidates than the limit is an error about the repository', async () => {
+    const outcome = await cleanup([original(37), suggestion(40, 37), suggestion(41, 37)], {}, { maxCandidates: 1 });
+    assert.equal(outcome['status'], 'too-many-candidates');
+    assertDiagnostics(outcome['diagnostics'], [{ code: 'suggestion-pr-candidates-over-limit', subject: 'octo/widgets', message: /2 branches under `suggestion-pr\/` in octo\/widgets, more than the limit of 1/ }]);
+  });
+
+  test('a label whose first page shows no suggestion pull request is a warning about the repository', async () => {
+    const plain: IStoredPull = { ...original(50), state: 'open', merged: false, labels: ['bug'] };
+    const outcome = await cleanup([plain], {}, { label: 'bug' });
+    assert.equal(outcome['status'], 'label-not-suggestion-prs');
+    assertDiagnostics(outcome['diagnostics'], [{ code: 'label-not-suggestion-prs', subject: 'octo/widgets', message: /The only open pull request labeled `bug` in octo\/widgets has no suggestion marker and no `suggestion-pr\/` branch/ }]);
   });
 });

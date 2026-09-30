@@ -108,14 +108,10 @@ export interface ICompanionConfig {
   readonly pullReads?: Readonly<Record<string, PullReadFailure>> | undefined;
   /** Pull request number -> how its close (PATCH) fails. A lost response closes it first. */
   readonly closes?: Readonly<Record<string, CloseFailure>> | undefined;
-  /** The labeled issues listing answers 502. */
-  readonly failIssueListing?: boolean | undefined;
-  /**
-   * The labeled issues listing shifts by one between pages, as when a pull
-   * request is opened while it is read: each later page repeats the previous
-   * page's last entry first.
-   */
-  readonly shiftIssueListing?: boolean | undefined;
+  /** The sweep queries (branch prefix and label) answer with a GraphQL `errors` array. */
+  readonly failSweep?: boolean | undefined;
+  /** Items per sweep page at most, whatever the query asks for (default: what it asks for). */
+  readonly sweepPageSize?: number | undefined;
   /** Cross-reference events per GraphQL timeline page (default 100, the page size the client asks for). */
   readonly timelinePageSize?: number | undefined;
   /** The GraphQL timeline query answers with an `errors` array. */
@@ -216,8 +212,8 @@ export const isCompanionConfig: Guard<ICompanionConfig> = isShape({
   defaultBranchRead: isOptional(isOneOf('server-error', 'forbidden', 'network')),
   pullReads: isOptional(isRecordOf(isOneOf('forbidden', 'not-found', 'server-error', 'malformed'))),
   closes: isOptional(isRecordOf(isOneOf('forbidden', 'not-found', 'rate-limited', 'secondary-rate-limit', 'too-many-requests', 'server-error', 'lose-response'))),
-  failIssueListing: isOptional(isBoolean),
-  shiftIssueListing: isOptional(isBoolean),
+  failSweep: isOptional(isBoolean),
+  sweepPageSize: isOptional(isNumber),
   timelinePageSize: isOptional(isNumber),
   failTimeline: isOptional(isBoolean),
 });

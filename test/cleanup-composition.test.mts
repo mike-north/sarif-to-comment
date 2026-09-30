@@ -9,7 +9,9 @@
  * which are left alone, each result and original state, the status, the
  * Markdown of the worked example (§3), the requests sent (reads before any
  * write; exactly one PATCH per closed suggestion; nothing else written), and
- * the CLI's output and exit statuses. Suggestion markers and branches are
+ * the CLI's output and exit statuses. The default sweep discovers suggestions
+ * by their `suggestion-pr/` branches (§2.4); owner scope and bounded
+ * discovery are tested in test/cleanup-scope.test.mts. Suggestion markers and branches are
  * written out by hand from the suggestion pull request convention's templates
  * (docs/suggestion-pr-convention.md §5, §7), never produced by the code under
  * test. The repository has no configuration file, so the canonical label is
@@ -19,166 +21,48 @@
  * The host models documented GitHub behavior; it is not evidence of live
  * GitHub behavior (see docs/suggestion-cleanup-e2e-evidence.md).
  *
- * @see https://docs.github.com/en/rest/issues/issues#list-repository-issues
+ * @see https://docs.github.com/en/graphql/reference/objects#ref
+ * @see https://docs.github.com/en/graphql/reference/objects#pullrequestconnection
  * @see https://docs.github.com/en/rest/pulls/pulls#get-a-pull-request
  * @see https://docs.github.com/en/rest/pulls/pulls#update-a-pull-request
  * @see https://docs.github.com/en/graphql/reference/objects#crossreferencedevent
  */
 
 import * as assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import * as fs from 'node:fs';
-import * as os from 'node:os';
-import * as path from 'node:path';
 import { describe, test } from 'node:test';
 
 import { createGitHubClient } from '../dist/github.cjs';
-import library from '../dist/index.cjs';
-import type { ICreateGitHubClientOptions, IGitHubClient } from '../dist/github.cjs';
-import { FakeHttpGitHub } from './fixtures/composition/fake-http-github.mts';
-import type { IHttpHostConfig, IHttpRepository } from './fixtures/composition/fake-http-github.mts';
+import type { ICreateGitHubClientOptions } from '../dist/github.cjs';
+import {
+  BASE,
+  BATCH,
+  HEAD,
+  OWNER,
+  REPO,
+  TOKEN,
+  cleanup,
+  cli,
+  closeOperation,
+  closes,
+  entry,
+  idOf,
+  makeWorld,
+  markdown,
+  markerLine,
+  original,
+  originals,
+  pullReads,
+  pullUrl,
+  results,
+  stateOf,
+  suggestion,
+  suggestionBody,
+  writes,
+} from './fixtures/composition/cleanup-world.mts';
+import type { IWorld, Json } from './fixtures/composition/cleanup-world.mts';
 import type { ICompanionConfig, IStoredPull } from './fixtures/composition/fake-http-companion.mts';
 import { assertDiagnostics } from './support/diagnostics.mts';
 import { asArray, asRecord, asString, parseJson } from './support/runtime-types.mts';
-
-const CLI = path.join(import.meta.dirname, 'fixtures', 'composition', 'cli-with-fake-http.mts');
-const OWNER = 'octo';
-const REPO = 'widgets';
-const TOKEN = 'ghp_CLEANUP_COMPOSITION_0123456789';
-const BASE = 'ba5eba5eba5eba5eba5eba5eba5eba5eba5eba5e';
-const HEAD = 'feedfeedfeedfeedfeedfeedfeedfeedfeedfeed';
-const BATCH = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
-
-function repository(): IHttpRepository {
-  return {
-    destination: { owner: OWNER, repo: REPO, pullNumber: 7 },
-    commits: { base: BASE, head: HEAD },
-    snapshots: { [BASE]: { 'README.md': ['# Widgets\n'] }, [HEAD]: { 'README.md': ['# Widgets\n'] } },
-    pullFiles: [],
-    labels: ['suggestion-pr'],
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Seeded pull requests
-
-/** The suggestion id a test gives suggestion pull request `n` (a v4 UUID). */
-const idOf = (n: number): string => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
-
-/** The marker line of convention §7, written out from its template. */
-function markerLine(n: number, original: number, where = `"owner":"${OWNER}","repo":"${REPO}","pullNumber":${String(original)}`): string {
-  return `<!-- suggestion-pr {"version":1,"original":{${where}},"reviewedCommit":"${HEAD}","id":"${idOf(n)}","batch":"${BATCH}"} -->`;
-}
-
-/** A suggestion body as the publisher writes it: the reference first, the marker last. */
-function suggestionBody(n: number, original: number): string {
-  return `Suggested in a review of #${String(original)} at commit ${HEAD}.\n\nMerging this pull request into \`feature-${String(original)}\` applies this change:\n\n- New file \`docs/${String(n)}.md\`\n\n---\n\nAdd the page.\n\n${markerLine(n, original)}`;
-}
-
-function original(number: number, state: 'open' | 'merged' | 'closed'): IStoredPull {
-  return {
-    number, title: `Original ${String(number)}`, body: 'The original work.', head: `feature-${String(number)}`, base: 'main',
-    draft: false, state: state === 'open' ? 'open' : 'closed', merged: state === 'merged', labels: [], authorId: 1,
-  };
-}
-
-function suggestion(n: number, originalNumber: number, change: Partial<IStoredPull> = {}): IStoredPull {
-  return {
-    number: n,
-    title: `Suggestion for #${String(originalNumber)}: create docs/${String(n)}.md`,
-    body: suggestionBody(n, originalNumber),
-    head: `suggestion-pr/${String(originalNumber)}/${idOf(n)}`,
-    base: `feature-${String(originalNumber)}`,
-    draft: true,
-    state: 'open',
-    merged: false,
-    labels: ['suggestion-pr'],
-    authorId: 4242,
-    ...change,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Harness
-
-interface IWorld {
-  readonly root: string;
-  readonly host: FakeHttpGitHub;
-}
-
-function makeWorld(pulls: readonly IStoredPull[], companion: ICompanionConfig = {}): IWorld {
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'cleanup-composition-')));
-  const config: Partial<IHttpHostConfig> = { companion };
-  FakeHttpGitHub.create(path.join(root, 'host'), config, repository());
-  const host = new FakeHttpGitHub(path.join(root, 'host'), TOKEN);
-  host.seedPulls(pulls);
-  return { root, host };
-}
-
-function internalsFor(world: IWorld): { readonly createGitHubClient: (options: ICreateGitHubClientOptions) => IGitHubClient } {
-  return { createGitHubClient: (options) => createGitHubClient({ ...options, fetch: world.host.fetch }) };
-}
-
-type Json = Record<string, unknown>;
-
-function closeOperation(): (input: unknown, internals: unknown) => Promise<unknown> {
-  const operation: unknown = Reflect.get(library, 'closeSuggestionPullRequests');
-  if (typeof operation !== 'function') throw new assert.AssertionError({ message: 'the package exports closeSuggestionPullRequests' });
-  return async (input, internals) => {
-    const outcome: unknown = await Reflect.apply(operation, undefined, [input, internals]);
-    return outcome;
-  };
-}
-
-async function cleanup(world: IWorld, extra: Json = {}): Promise<Json> {
-  const outcome = await closeOperation()({ repository: { owner: OWNER, repo: REPO }, token: TOKEN, ...extra }, internalsFor(world));
-  return asRecord(outcome, 'the cleanup outcome');
-}
-
-/** Each reported suggestion as [number, original, result]. */
-function results(outcome: Json): (readonly [unknown, unknown, unknown])[] {
-  return asArray(outcome['suggestions']).map((s) => {
-    const entry = asRecord(s);
-    return [entry['number'], entry['original'], entry['result']] as const;
-  });
-}
-
-/** The reported entry for suggestion `n`. */
-function entry(outcome: Json, n: number): Json {
-  const found = asArray(outcome['suggestions']).map((s) => asRecord(s)).find((s) => s['number'] === n);
-  assert.ok(found, `suggestion #${String(n)} is reported`);
-  return found;
-}
-
-/** Each resolved original as [number, state]. */
-function originals(outcome: Json): (readonly [unknown, unknown])[] {
-  return asArray(outcome['originals']).map((o) => [asRecord(o)['number'], asRecord(o)['state']] as const);
-}
-
-function markdown(outcome: Json): string {
-  return asString(outcome['markdown'], 'the cleanup Markdown');
-}
-
-const pullUrl = (n: number): string => `https://github.com/${OWNER}/${REPO}/pull/${String(n)}`;
-const PULL_PATH = new RegExp(`^/repos/${OWNER}/${REPO}/pulls/(\\d+)$`);
-
-/** Every request that is not a read: a PATCH (close) or any other write; GraphQL queries are reads. */
-function writes(world: IWorld): readonly string[] {
-  return world.host.log().filter((r) => r.method !== 'GET' && !(r.method === 'POST' && r.path === '/graphql')).map((r) => `${r.method} ${r.path}`);
-}
-
-/** Pull request numbers read with GET pulls/{n}, in order. */
-function pullReads(world: IWorld): number[] {
-  return world.host.log().filter((r) => r.method === 'GET').map((r) => PULL_PATH.exec(r.path)?.[1]).filter((n) => n !== undefined).map(Number);
-}
-
-const closes = (...numbers: readonly number[]): string[] => numbers.map((n) => `PATCH /repos/${OWNER}/${REPO}/pulls/${String(n)}`);
-
-function stateOf(world: IWorld, n: number): { state: string; merged: boolean; head: string } {
-  const pull = world.host.pulls().find((p) => p.number === n);
-  assert.ok(pull, `pull request #${String(n)} exists`);
-  return { state: pull.state, merged: pull.merged, head: pull.head };
-}
 
 // ---------------------------------------------------------------------------
 
@@ -191,10 +75,19 @@ describe('harness controls', () => {
     assert.equal(suggestion(40, 37).head, 'suggestion-pr/37/00000000-0000-4000-8000-000000000040');
   });
 
-  test('the host closes only with the documented body, and lists only open labeled pull requests', async () => {
+  test('the host closes only with the documented body, and lists the open pull requests of suggestion branches', async () => {
     const world = makeWorld([original(37, 'closed'), suggestion(40, 37), suggestion(41, 37, { state: 'closed' }), suggestion(42, 37, { labels: [] })]);
-    const listing = await world.host.fetch(`https://api.github.com/repos/${OWNER}/${REPO}/issues?labels=suggestion-pr&state=open&per_page=100&page=1`, { headers: { authorization: `Bearer ${TOKEN}` } });
-    assert.deepEqual(asArray(await listing.json()).map((i) => asRecord(i)['number']), [40]);
+    const query = 'query ($owner: String!, $repo: String!, $prefix: String!, $first: Int!, $after: String) { repository(owner: $owner, name: $repo) { refs(refPrefix: $prefix, first: $first, after: $after) { totalCount nodes { name associatedPullRequests(states: OPEN, first: 10) { nodes { number } } } } } }';
+    const listing = await world.host.fetch('https://api.github.com/graphql', {
+      method: 'POST', headers: { authorization: `Bearer ${TOKEN}` },
+      body: JSON.stringify({ query, variables: { owner: OWNER, repo: REPO, prefix: 'refs/heads/suggestion-pr/', first: 100, after: null } }),
+    });
+    const refs = asRecord(asRecord(asRecord(asRecord(await listing.json())['data'])['repository'])['refs']);
+    assert.equal(refs['totalCount'], 3, 'a closed pull request\'s branch is still a branch');
+    assert.deepEqual(
+      asArray(refs['nodes']).map((n) => asArray(asRecord(asRecord(n)['associatedPullRequests'])['nodes']).map((pr) => asRecord(pr)['number'])),
+      [[40], [], [42]],
+    );
     const wrong = await world.host.fetch(`https://api.github.com/repos/${OWNER}/${REPO}/pulls/40`, {
       method: 'PATCH', headers: { authorization: `Bearer ${TOKEN}` }, body: JSON.stringify({ state: 'closed', title: 'x' }),
     });
@@ -210,11 +103,13 @@ describe('the worked example (§3)', () => {
     suggestion(38, 36),
     suggestion(39, 36),
     suggestion(40, 37),
-    { ...suggestion(41, 37), title: 'Labeled by hand', body: 'A pull request someone labeled without a marker.', head: 'someone/idea' },
+    { ...suggestion(41, 37), title: 'Opened by hand', body: 'A pull request someone opened by hand on a suggestion branch, without a marker.', head: 'suggestion-pr/37/by-hand' },
   ];
 
   const header = [
-    'Checked the open pull requests labeled `suggestion-pr` in octo/widgets (the default suggestion label).',
+    'Checked the open pull requests on `suggestion-pr/` branches in octo/widgets; the suggestion label is `suggestion-pr` (the default suggestion label). Only suggestion pull requests opened by this account are closed.',
+    '',
+    'Pull requests checked: 4 (4 labeled, 3 conforming).',
     '',
     'Original pull requests:',
     '',
@@ -226,7 +121,7 @@ describe('the worked example (§3)', () => {
     '- #38 (for #36): left open, because the original is still open',
     '- #39 (for #36): left open, because the original is still open',
   ];
-  const notOurs = '- #41: skipped, not a conforming suggestion pull request: it has the label but no suggestion marker';
+  const notConforming = '- #41: skipped, not a conforming suggestion pull request: its branch is under `suggestion-pr/`, but it has no suggestion marker';
   const branches = 'Closing never deletes a branch: each proposal branch is left in place.';
 
   test('a dry run reads everything, reports what would be closed and writes nothing', async () => {
@@ -235,10 +130,12 @@ describe('the worked example (§3)', () => {
     assert.equal(outcome['status'], 'complete');
     assert.equal(outcome['dryRun'], true);
     assert.deepEqual(originals(outcome), [[36, 'open'], [37, 'closed']]);
-    assert.deepEqual(results(outcome), [[38, 36, 'left-open'], [39, 36, 'left-open'], [40, 37, 'would-close'], [41, null, 'not-ours']]);
+    assert.deepEqual(results(outcome), [[38, 36, 'left-open'], [39, 36, 'left-open'], [40, 37, 'would-close'], [41, null, 'not-conforming']]);
+    assert.equal(outcome['owner'], 'me');
+    assert.deepEqual(outcome['counts'], { candidates: 4, checked: 4, labeled: 4, conforming: 3 });
     assert.equal(
       markdown(outcome),
-      ['## Suggestion pull request cleanup: dry run', '', ...header, '- #40 (for #37): would be closed', notOurs, '', 'This was a dry run: nothing was closed.', '', branches].join('\n'),
+      ['## Suggestion pull request cleanup: dry run', '', ...header, '- #40 (for #37): would be closed', notConforming, '', 'This was a dry run: nothing was closed.', '', branches].join('\n'),
     );
     assert.deepEqual(writes(world), []);
     assert.equal(stateOf(world, 40).state, 'open');
@@ -250,11 +147,11 @@ describe('the worked example (§3)', () => {
     const outcome = await cleanup(world);
     assert.equal(outcome['status'], 'complete');
     assert.equal(outcome['dryRun'], false);
-    assert.deepEqual(results(outcome), [[38, 36, 'left-open'], [39, 36, 'left-open'], [40, 37, 'closed'], [41, null, 'not-ours']]);
+    assert.deepEqual(results(outcome), [[38, 36, 'left-open'], [39, 36, 'left-open'], [40, 37, 'closed'], [41, null, 'not-conforming']]);
     assert.deepEqual(entry(outcome, 40), { number: 40, url: pullUrl(40), original: 37, result: 'closed' });
     assert.equal(
       markdown(outcome),
-      ['## Suggestion pull request cleanup complete', '', ...header, '- #40 (for #37): closed', notOurs, '', branches].join('\n'),
+      ['## Suggestion pull request cleanup complete', '', ...header, '- #40 (for #37): closed', notConforming, '', branches].join('\n'),
     );
     assert.deepEqual(writes(world), closes(40));
     // Only #40's state changed: its branch, body, title, labels and every other pull request are as they were.
@@ -279,7 +176,7 @@ describe('the worked example (§3)', () => {
     const before = world.host.log().length;
     const again = await cleanup(world);
     assert.equal(again['status'], 'complete');
-    assert.deepEqual(results(again), [[38, 36, 'left-open'], [39, 36, 'left-open'], [41, null, 'not-ours']]);
+    assert.deepEqual(results(again), [[38, 36, 'left-open'], [39, 36, 'left-open'], [41, null, 'not-conforming']]);
     assert.deepEqual(world.host.log().slice(before).filter((r) => r.method === 'PATCH'), []);
   });
 });
@@ -356,7 +253,7 @@ describe('original states (A36)', () => {
 });
 
 describe('pagination and duplicate references (A31)', () => {
-  test('every page of more than 200 labeled pull requests is read; nothing is skipped', async () => {
+  test('every page of more than 200 suggestion branches is read; nothing is skipped', async () => {
     const pulls = [original(36, 'open'), original(37, 'merged')];
     for (let n = 100; n < 305; n += 1) pulls.push(suggestion(n, 36));
     pulls.push(suggestion(305, 37));
@@ -365,21 +262,16 @@ describe('pagination and duplicate references (A31)', () => {
     assert.equal(outcome['status'], 'complete');
     assert.equal(results(outcome).length, 206);
     assert.deepEqual(results(outcome).filter(([, , r]) => r !== 'left-open'), [[305, 37, 'closed']]);
-    const listings = world.host.log().filter((r) => r.path === `/repos/${OWNER}/${REPO}/issues`);
-    assert.equal(listings.length, 3, 'three pages of 100');
+    const listings = world.host.log().filter((r) => r.path === '/graphql');
+    assert.equal(listings.length, 3, 'three pages of 100 branches');
     assert.deepEqual(pullReads(world).sort((a, b) => a - b), [36, 37, 305], 'one read per original, and only the ended one\'s suggestion');
   });
 
-  test('a pull request listed on two pages (the listing shifted while being read) counts once', async () => {
-    const pulls = [original(36, 'open'), original(37, 'closed')];
-    for (let n = 100; n < 201; n += 1) pulls.push(suggestion(n, 36));
-    pulls.push(suggestion(201, 37));
-    const world = makeWorld(pulls, { shiftIssueListing: true });
+  test('a pull request into another repository from a suggestion branch here (a fork\'s pull request into its upstream) is left out', async () => {
+    const world = makeWorld([original(37, 'closed'), suggestion(40, 37), { ...suggestion(41, 37), repository: 'upstream/widgets', headRepo: `${OWNER}/${REPO}` }]);
     const outcome = await cleanup(world);
-    const numbers = results(outcome).map(([n]) => n);
-    assert.equal(numbers.length, 102);
-    assert.equal(new Set(numbers).size, 102, 'no pull request is reported twice');
-    assert.deepEqual(writes(world), closes(201), 'and none is closed twice');
+    assert.deepEqual(results(outcome), [[40, 37, 'closed']]);
+    assert.deepEqual(writes(world), closes(40));
   });
 
   test('several suggestions of one original resolve it once', async () => {
@@ -394,7 +286,7 @@ describe('pagination and duplicate references (A31)', () => {
     const world = makeWorld([original(37, 'closed'), suggestion(40, 37), copy]);
     const outcome = await cleanup(world);
     assert.equal(outcome['status'], 'complete');
-    assert.deepEqual(results(outcome), [[40, 37, 'not-ours'], [41, 37, 'not-ours']]);
+    assert.deepEqual(results(outcome), [[40, 37, 'not-conforming'], [41, 37, 'not-conforming']]);
     assert.match(asString(entry(outcome, 40)['reason']), /#41.*same suggestion/);
     assert.match(asString(entry(outcome, 41)['reason']), /#40.*same suggestion/);
     assert.deepEqual(writes(world), []);
@@ -417,21 +309,24 @@ describe('pagination and duplicate references (A31)', () => {
 describe('recognition and verification (§2.5–§2.8)', () => {
   const ended = (...pulls: readonly IStoredPull[]): IStoredPull[] => [original(37, 'closed'), ...pulls];
 
-  const skipped: readonly (readonly [string, IStoredPull, RegExp, number | null])[] = [
-    ['the marker was removed', suggestion(40, 37, { body: 'Suggested in a review of #37.' }), /no suggestion marker/, null],
-    ['the marker was changed', suggestion(40, 37, { body: suggestionBody(40, 37).replace('"version":1', '"version": 1') }), /canonical/, null],
-    ['the marker is quoted twice', suggestion(40, 37, { body: `${suggestionBody(40, 37)}\n\n> ${markerLine(40, 37)}\n${markerLine(40, 37)}` }), /more than one/, null],
-    ['the marker names another repository', suggestion(40, 37, { body: `Moved.\n\n${markerLine(40, 37, '"owner":"elsewhere","repo":"widgets","pullNumber":37')}` }), /another repository \(elsewhere\/widgets\)/, null],
-    ['its head is in a fork', suggestion(40, 37, { headRepo: 'someone/widgets' }), /someone\/widgets/, 37],
-    ['its head branch is not the marker\'s branch', suggestion(40, 37, { head: 'suggestion-pr/37/other' }), /suggestion-pr\/37\/other/, 37],
-    ['its head branch is the unreleased tool-branded form', suggestion(40, 37, { head: `sarif-to-comment/suggestions/37/${idOf(40)}` }), /sarif-to-comment\/suggestions\/37/, 37],
+  // A fork's branch, or a branch outside suggestion-pr/, is never among this
+  // repository's suggestion branches, so those cases are found by a label sweep.
+  const bySuggestionLabel: Json = { label: 'suggestion-pr' };
+  const skipped: readonly (readonly [string, IStoredPull, RegExp, number | null, Json])[] = [
+    ['the marker was removed', suggestion(40, 37, { body: 'Suggested in a review of #37.' }), /no suggestion marker/, null, {}],
+    ['the marker was changed', suggestion(40, 37, { body: suggestionBody(40, 37).replace('"version":1', '"version": 1') }), /canonical/, null, {}],
+    ['the marker is quoted twice', suggestion(40, 37, { body: `${suggestionBody(40, 37)}\n\n> ${markerLine(40, 37)}\n${markerLine(40, 37)}` }), /more than one/, null, {}],
+    ['the marker names another repository', suggestion(40, 37, { body: `Moved.\n\n${markerLine(40, 37, '"owner":"elsewhere","repo":"widgets","pullNumber":37')}` }), /another repository \(elsewhere\/widgets\)/, null, {}],
+    ['its head is in a fork', suggestion(40, 37, { headRepo: 'someone/widgets' }), /someone\/widgets/, 37, bySuggestionLabel],
+    ['its head branch is not the marker\'s branch', suggestion(40, 37, { head: 'suggestion-pr/37/other' }), /suggestion-pr\/37\/other/, 37, {}],
+    ['its head branch is the unreleased tool-branded form', suggestion(40, 37, { head: `sarif-to-comment/suggestions/37/${idOf(40)}` }), /sarif-to-comment\/suggestions\/37/, 37, bySuggestionLabel],
   ];
-  for (const [what, pull, reason, originalNumber] of skipped) {
+  for (const [what, pull, reason, originalNumber, mode] of skipped) {
     test(`not a conforming suggestion, never closed: ${what}`, async () => {
       const world = makeWorld(ended(pull));
-      const outcome = await cleanup(world);
+      const outcome = await cleanup(world, mode);
       assert.equal(outcome['status'], 'complete');
-      assert.deepEqual(results(outcome), [[40, originalNumber, 'not-ours']]);
+      assert.deepEqual(results(outcome), [[40, originalNumber, 'not-conforming']]);
       assert.match(asString(entry(outcome, 40)['reason']), reason);
       assert.deepEqual(writes(world), []);
     });
@@ -455,7 +350,7 @@ describe('recognition and verification (§2.5–§2.8)', () => {
     const broken = markerLine(40, 37).replace('"version":1', '"version":2');
     const world = makeWorld(ended(suggestion(40, 37, { body: `Text.\n\n${broken}` })));
     const outcome = await cleanup(world);
-    assert.deepEqual(results(outcome), [[40, null, 'not-ours']]);
+    assert.deepEqual(results(outcome), [[40, null, 'not-conforming']]);
     assert.deepEqual(writes(world), []);
   });
 
@@ -471,13 +366,13 @@ describe('recognition and verification (§2.5–§2.8)', () => {
     assert.deepEqual(results(outcome), [[40, 37, 'closed']]);
   });
 
-  /** Cleanup where a person acts right after the labeled listing is answered; the fresh read sees it. */
+  /** Cleanup where a person acts right after the sweep is answered; the fresh read sees it. */
   async function cleanupWithChangeAfterListing(world: IWorld, change: () => void): Promise<Json> {
     const host = world.host.fetch.bind(world.host);
     const people: typeof world.host.fetch = async (input, init) => {
       const response = await host(input, init);
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-      if (url.includes('/issues?')) change();
+      if (url.endsWith('/graphql')) change();
       return response;
     };
     const outcome: unknown = await closeOperation()(
@@ -514,7 +409,7 @@ describe('recognition and verification (§2.5–§2.8)', () => {
       const outcome = await cleanupWithChangeAfterListing(world, () => {
         world.host.editPull(40, { body });
       });
-      assert.deepEqual(results(outcome), [[40, 37, 'not-ours']]);
+      assert.deepEqual(results(outcome), [[40, 37, 'not-conforming']]);
       assert.match(asString(entry(outcome, 40)['reason']), /changed while it was being checked/);
       assert.deepEqual(writes(world), []);
     });
@@ -536,13 +431,13 @@ describe('recognition and verification (§2.5–§2.8)', () => {
     assert.ok(markdown(outcome).includes('Checked the open pull requests labeled `proposal` in octo/widgets (a label given in place of the repository\'s suggestion label).'), markdown(outcome));
   });
 
-  test('an issue carrying the label is not a pull request and is ignored', async () => {
+  test('an issue carrying the label is not a pull request and is ignored by a label sweep', async () => {
     const world = makeWorld(ended(suggestion(40, 37), { ...suggestion(41, 37), isIssue: true }));
-    const outcome = await cleanup(world);
+    const outcome = await cleanup(world, bySuggestionLabel);
     assert.deepEqual(results(outcome), [[40, 37, 'closed']]);
   });
 
-  test('nothing labeled: complete, with nothing to report', async () => {
+  test('no suggestion branches: complete, with nothing to report', async () => {
     const world = makeWorld([original(37, 'closed')]);
     const outcome = await cleanup(world);
     assert.equal(outcome['status'], 'complete');
@@ -550,8 +445,14 @@ describe('recognition and verification (§2.5–§2.8)', () => {
     assert.deepEqual(outcome['suggestions'], []);
     assert.equal(
       markdown(outcome),
-      ['## Suggestion pull request cleanup complete', '', 'Checked the open pull requests labeled `suggestion-pr` in octo/widgets (the default suggestion label).', '', 'No suggestion pull requests were found.', '', 'Closing never deletes a branch: each proposal branch is left in place.'].join('\n'),
+      [
+        '## Suggestion pull request cleanup complete', '',
+        'Checked the open pull requests on `suggestion-pr/` branches in octo/widgets; the suggestion label is `suggestion-pr` (the default suggestion label). Only suggestion pull requests opened by this account are closed.', '',
+        'No suggestion pull requests were found.', '',
+        'Closing never deletes a branch: each proposal branch is left in place.',
+      ].join('\n'),
     );
+    assert.deepEqual(outcome['counts'], { candidates: 0, checked: 0, labeled: 0, conforming: 0 });
   });
 });
 
@@ -620,11 +521,11 @@ describe('targeted discovery from one original (§2.4, D21)', () => {
     const outcome = await cleanup(world, { originalPullNumber: 37 });
     assert.equal(outcome['status'], 'complete');
     assert.deepEqual(originals(outcome), [[37, 'closed']]);
-    assert.deepEqual(results(outcome), [[40, 37, 'closed'], [46, 36, 'not-ours'], [47, 37, 'already-closed']]);
+    assert.deepEqual(results(outcome), [[40, 37, 'closed'], [46, 36, 'not-conforming'], [47, 37, 'already-closed']]);
     assert.match(asString(entry(outcome, 46)['reason']), /names #36, not #37/);
     assert.deepEqual(writes(world), closes(40));
     assert.ok(markdown(outcome).includes('Checked the pull requests that reference #37 in octo/widgets; the suggestion label is `suggestion-pr` (the default suggestion label).'), markdown(outcome));
-    assert.equal(world.host.log().filter((r) => r.path.endsWith('/issues')).length, 0, 'the labeled listing is not used');
+    assert.equal(world.host.log().filter((r) => r.path === '/graphql').length, 1, 'one backlink query and no sweep');
   });
 
   test('regression: a foreign pull request with more than 100 labels in an inaccessible repository does not stop targeted discovery', async () => {
@@ -773,9 +674,9 @@ describe('targeted discovery from one original (§2.4, D21)', () => {
 });
 
 describe('operational failures and input (§2.2, §2.4)', () => {
-  test('a failing listing rejects before any write; the token never appears', async () => {
-    const world = makeWorld([original(37, 'closed'), suggestion(40, 37)], { failIssueListing: true });
-    await assert.rejects(cleanup(world), (err: unknown) => err instanceof Error && /HTTP 502/.test(err.message) && !err.message.includes(TOKEN));
+  test('a failing sweep rejects before any write; the token never appears', async () => {
+    const world = makeWorld([original(37, 'closed'), suggestion(40, 37)], { failSweep: true });
+    await assert.rejects(cleanup(world), (err: unknown) => err instanceof Error && /SERVICE_UNAVAILABLE/.test(err.message) && !err.message.includes(TOKEN));
     assert.deepEqual(writes(world), []);
   });
 
@@ -791,6 +692,7 @@ describe('operational failures and input (§2.2, §2.4)', () => {
     ['an empty label', { label: '' }, /label/],
     ['an original that is not a positive integer', { originalPullNumber: 0 }, /originalPullNumber/],
     ['a dry-run flag that is not a boolean', { dryRun: 'yes' }, /dryRun/],
+    ['an owner scope that is not me or all', { owner: 'octo' }, /owner must be 'me' or 'all'/],
     ['an unknown field', { statePath: '/tmp/x' }, /unknown field statePath/],
     ['a repository without a name', { repository: { owner: OWNER } }, /repository/],
     ['a repository with an extra key', { repository: { owner: OWNER, repo: REPO, pullNumber: 1 } }, /repository/],
@@ -806,13 +708,6 @@ describe('operational failures and input (§2.2, §2.4)', () => {
 });
 
 describe('CLI + real GitHub client over HTTP', () => {
-  function cli(world: IWorld, args: readonly string[], env: Record<string, string> = { GH_TOKEN: TOKEN }): { status: number | null; stdout: string; stderr: string } {
-    const result = spawnSync(process.execPath, [CLI, ...args], {
-      cwd: world.root, encoding: 'utf8', timeout: 60_000, env: { PATH: process.env['PATH'], FAKE_HTTP_GITHUB_DIR: world.host.dir, ...env },
-    });
-    for (const text of [result.stdout, result.stderr]) assert.equal(text.includes(TOKEN), false, 'the token never appears');
-    return { status: result.status, stdout: result.stdout, stderr: result.stderr };
-  }
   const worked = (): IStoredPull[] => [original(36, 'open'), original(37, 'closed'), suggestion(38, 36), suggestion(40, 37)];
 
   test('human output is the Markdown; a dry run and then a real run exit 0', () => {
@@ -836,10 +731,12 @@ describe('CLI + real GitHub client over HTTP', () => {
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.equal(result.stderr, '');
     const doc = asRecord(parseJson(result.stdout));
-    assert.deepEqual(Object.keys(doc), ['command', 'status', 'dryRun', 'originals', 'suggestions', 'message', 'diagnostics']);
+    assert.deepEqual(Object.keys(doc), ['command', 'status', 'dryRun', 'owner', 'originals', 'suggestions', 'counts', 'message', 'diagnostics']);
     assert.equal(doc['command'], 'close-suggestion-prs');
     assert.equal(doc['status'], 'complete');
     assert.equal(doc['dryRun'], false);
+    assert.equal(doc['owner'], 'me');
+    assert.deepEqual(doc['counts'], { candidates: 1, checked: 1, labeled: 1, conforming: 1 });
     assert.deepEqual(doc['originals'], [{ number: 37, state: 'closed' }]);
     assert.deepEqual(doc['suggestions'], [{ number: 40, url: pullUrl(40), original: 37, result: 'closed' }]);
     assert.ok(asString(doc['message']).startsWith('## Suggestion pull request cleanup complete'));
@@ -868,6 +765,9 @@ describe('CLI + real GitHub client over HTTP', () => {
     ['a non-numeric --original', ['close-suggestion-prs', '--repo', `${OWNER}/${REPO}`, '--original', 'x'], /--original must be a positive/],
     ['a value for --dry-run', ['close-suggestion-prs', '--repo', `${OWNER}/${REPO}`, '--dry-run=yes'], /--dry-run takes no value/],
     ['an unknown option', ['close-suggestion-prs', '--repo', `${OWNER}/${REPO}`, '--delete-branches'], /unknown option --delete-branches/],
+    ['an owner scope that is not me or all', ['close-suggestion-prs', '--repo', `${OWNER}/${REPO}`, '--owner', 'octo'], /--owner must be me or all/],
+    ['a candidate limit that is not a positive whole number', ['close-suggestion-prs', '--repo', `${OWNER}/${REPO}`, '--max-candidates', '0'], /--max-candidates must be a positive/],
+    ['a value for --force', ['close-suggestion-prs', '--repo', `${OWNER}/${REPO}`, '--force=yes'], /--force takes no value/],
   ];
   for (const [what, args, pattern] of usage) {
     test(`${what} is a usage error (exit 1) and nothing is requested`, () => {
@@ -892,10 +792,10 @@ describe('CLI + real GitHub client over HTTP', () => {
   });
 
   test('an operational failure is an error (exit 1) and nothing is closed', () => {
-    const world = makeWorld(worked(), { failIssueListing: true });
+    const world = makeWorld(worked(), { failSweep: true });
     const result = cli(world, ['close-suggestion-prs', '--repo', `${OWNER}/${REPO}`]);
     assert.equal(result.status, 1);
-    assert.match(result.stderr, /HTTP 502/);
+    assert.match(result.stderr, /SERVICE_UNAVAILABLE/);
     assert.match(result.stdout, /Nothing was closed/);
     assert.match(result.stderr, /\[operation-failed\]/);
     assert.deepEqual(writes(world), []);
@@ -952,7 +852,7 @@ describe('CLI + real GitHub client over HTTP', () => {
     const world = makeWorld([]);
     const result = cli(world, ['close-suggestion-prs', '--help'], {});
     assert.equal(result.status, 0);
-    for (const flag of ['--repo', '--label', '--original', '--dry-run', '--format', 'GH_TOKEN']) assert.ok(result.stdout.includes(flag), `help omits ${flag}`);
+    for (const flag of ['--repo', '--label', '--original', '--owner', '--max-candidates', '--force', '--dry-run', '--format', 'GH_TOKEN']) assert.ok(result.stdout.includes(flag), `help omits ${flag}`);
     assert.match(result.stdout, /never deletes/);
     assert.deepEqual(world.host.log(), []);
   });

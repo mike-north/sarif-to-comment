@@ -4,35 +4,48 @@
  * (fake-http-github.mts) over the same stored pull requests as the companion
  * routes (fake-http-companion.mts):
  *
- *   GET   /repos/{o}/{r}/issues?labels=L&state=open&per_page=P&page=N
- *         open issues and pull requests of this repository carrying label L
- *         (case-insensitively), newest first, P per page, with a
- *         `Link` header naming the next and last pages in GitHub's
- *         /repositories/{id}/issues form. A pull request carries a
- *         `pull_request` object; an issue does not.
  *   GET   /repos/{o}/{r}/pulls/{n}   one pull request with state, merged,
  *         body, head and base repositories and labels (404 for an issue or a
  *         number no pull request has)
  *   PATCH /repos/{o}/{r}/pulls/{n}   exactly { "state": "closed" }: closes it
- *   POST  /graphql                   (a query selecting timelineItems) the
- *         original's CROSS_REFERENCED_EVENT items: one per pull request or
- *         issue, in any repository, whose body mentions `#n` (this repository)
- *         or `owner/repo#n`, repeated `referenceEvents` times, in number order,
- *         paginated by `timelinePageSize` with opaque cursors. Each source
- *         carries at most 100 labels, with `hasNextPage` beyond that.
+ *   POST  /graphql                   three read-only queries:
+ *     - a `refs(refPrefix: …)` query (the default sweep): this repository's
+ *       branches under the prefix, in name order, each with its open
+ *       associated pull requests (`associatedPullRequests(states: OPEN)`):
+ *       every open pull request, in any repository, whose head is that
+ *       branch of this repository. A branch exists while a stored pull
+ *       request of this repository has it as its head (whatever that pull
+ *       request's state: closing never deletes a branch) or the companion
+ *       state records it (created or seeded with seedBranches).
+ *       `totalCount` counts the branches.
+ *     - a `pullRequests(labels: […], states: OPEN)` query (a `--label`
+ *       sweep): this repository's open pull requests carrying the label
+ *       (case-insensitively), in creation (number) order; issues never.
+ *       `totalCount` counts them.
+ *     - a `timelineItems` query (targeted discovery): the original's
+ *       CROSS_REFERENCED_EVENT items: one per pull request or issue, in any
+ *       repository, whose body mentions `#n` (this repository) or
+ *       `owner/repo#n`, repeated `referenceEvents` times, in number order,
+ *       paginated by `timelinePageSize` with opaque cursors.
+ *     Every pull request answered carries its head branch and repository,
+ *     its author's login (the authenticated user's for `authorId` equal to
+ *     its id, otherwise `someone-else`) and at most 100 labels, with
+ *     `hasNextPage` beyond that. Sweeps page by the query's `first`, capped
+ *     by `sweepPageSize`, with opaque cursors.
  *
  * Behavior (config.json `companion`, see ICompanionConfig): per pull request
- * read and close failures, a failing or shifting issues listing, the timeline
- * page size and a failing timeline query. A lost close response closes the
- * pull request and then fails as a network error, as a lost response would.
- * Request bodies and query strings must be exactly as documented: anything
- * else answers 400, so a wire-format regression fails loudly.
+ * read and close failures, failing sweeps, the sweep and timeline page sizes
+ * and a failing timeline query. A lost close response closes the pull
+ * request and then fails as a network error, as a lost response would.
+ * Request bodies, query shapes and variables must be exactly as documented:
+ * anything else answers 400, so a wire-format regression fails loudly.
  *
  * This models documented GitHub behavior; it is not evidence of live GitHub
  * behavior (see docs/suggestion-cleanup-e2e-evidence.md).
  *
- * @see https://docs.github.com/en/rest/issues/issues#list-repository-issues
- * @see https://docs.github.com/en/rest/using-the-rest-api/using-pagination-in-the-rest-api
+ * @see https://docs.github.com/en/graphql/reference/objects#repository
+ * @see https://docs.github.com/en/graphql/reference/objects#ref
+ * @see https://docs.github.com/en/graphql/reference/objects#pullrequestconnection
  * @see https://docs.github.com/en/rest/pulls/pulls#get-a-pull-request
  * @see https://docs.github.com/en/rest/pulls/pulls#update-a-pull-request
  * @see https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api
@@ -46,9 +59,6 @@ import { pullJson } from './fake-http-companion.mts';
 import type { ICompanionHost, IStoredPull } from './fake-http-companion.mts';
 
 type Json = (body: unknown, status?: number, headers?: Readonly<Record<string, string>>) => Response;
-
-/** The numeric repository id GitHub's pagination links use (any fixed value). */
-const REPOSITORY_ID = 424242;
 
 /** The page size the timeline serves when the test does not choose one (the size the client asks for). */
 const TIMELINE_PAGE = 100;
@@ -88,33 +98,6 @@ export function cleanupRoute(host: ICompanionHost, method: string, u: URL, bodyT
   const repoPath = `/repos/${owner}/${repo}`;
   const config = host.config();
   const p = u.pathname;
-
-  if (method === 'GET' && p === `${repoPath}/issues`) {
-    const params = [...u.searchParams.keys()].sort().join(',');
-    const label = u.searchParams.get('labels');
-    const perPage = Number(u.searchParams.get('per_page'));
-    const page = Number(u.searchParams.get('page'));
-    if (params !== 'labels,page,per_page,state' || u.searchParams.get('state') !== 'open' || label === null || label === '' || !(perPage >= 1) || !(page >= 1)) {
-      return json({ message: `fake host: unexpected issue listing ${u.search}` }, 400);
-    }
-    if (config.failIssueListing === true) return json({ message: 'Server Error' }, 502);
-    // GitHub's `labels` is a comma-separated list, every one required.
-    const wanted = label.split(',').map((l) => l.toLowerCase());
-    const listed = host.state().pulls
-      .filter((pr) => repositoryOf(host, pr) === `${owner}/${repo}` && pr.state === 'open')
-      .filter((pr) => wanted.every((w) => pr.labels.some((l) => l.toLowerCase() === w)))
-      .sort((a, b) => b.number - a.number);
-    // A pull request opened after the first page was read sits in front of
-    // every later page, so each of them starts one entry earlier.
-    const shift = config.shiftIssueListing === true ? 1 : 0;
-    const offset = page > 1 ? shift : 0;
-    const items = listed.slice((page - 1) * perPage - offset, page * perPage - offset);
-    const last = Math.max(1, Math.ceil((listed.length + shift) / perPage));
-    const link = (n: number): string =>
-      `<https://api.github.com/repositories/${String(REPOSITORY_ID)}/issues?labels=${encodeURIComponent(label)}&state=open&per_page=${String(perPage)}&page=${String(n)}>`;
-    const headers: Record<string, string> = page < last ? { link: `${link(page + 1)}; rel="next", ${link(last)}; rel="last"` } : {};
-    return json(items.map((pr) => issueJson(host, pr)), 200, headers);
-  }
 
   const single = new RegExp(`^${repoPath}/pulls/(\\d+)$`).exec(p);
   if (single && (method === 'GET' || method === 'PATCH')) {
@@ -156,26 +139,6 @@ export function cleanupRoute(host: ICompanionHost, method: string, u: URL, bodyT
     return json(pullJson(host.repository(), host.user, closed));
   }
   return null;
-}
-
-/** An issues-listing entry for a stored pull request or issue. */
-function issueJson(host: ICompanionHost, pr: IStoredPull): UnknownRecord {
-  const full = repositoryOf(host, pr);
-  const kind = pr.isIssue === true ? 'issues' : 'pull';
-  return {
-    number: pr.number,
-    html_url: `https://github.com/${full}/${kind}/${String(pr.number)}`,
-    title: pr.title,
-    body: pr.body === '' ? null : pr.body,
-    state: pr.state,
-    labels: pr.labels.map((name) => ({ name })),
-    ...(pr.isIssue === true ? {} : {
-      pull_request: {
-        url: `https://api.github.com/repos/${full}/pulls/${String(pr.number)}`,
-        html_url: `https://github.com/${full}/pull/${String(pr.number)}`,
-      },
-    }),
-  };
 }
 
 /**
@@ -220,18 +183,117 @@ export function timelineQuery(host: ICompanionHost, request: unknown, json: Json
 
 /** A cross-reference event's source: a PullRequest with the fields the client selects, or an Issue. */
 function sourceJson(host: ICompanionHost, pr: IStoredPull): UnknownRecord {
-  const full = repositoryOf(host, pr);
   if (pr.isIssue === true) return { __typename: 'Issue', number: pr.number };
+  return { __typename: 'PullRequest', ...pullNode(host, pr), state: pr.merged ? 'MERGED' : pr.state.toUpperCase() };
+}
+
+/** The head branch's repository of a stored pull request: its own repository unless it names another; null when deleted. */
+function headRepositoryOf(host: ICompanionHost, pr: IStoredPull): string | null {
+  return pr.headRepo === undefined ? repositoryOf(host, pr) : pr.headRepo;
+}
+
+/** A pull request with the fields every discovery query selects. */
+function pullNode(host: ICompanionHost, pr: IStoredPull): UnknownRecord {
+  const full = repositoryOf(host, pr);
+  const head = headRepositoryOf(host, pr);
   return {
-    __typename: 'PullRequest',
     number: pr.number,
     url: `https://github.com/${full}/pull/${String(pr.number)}`,
     body: pr.body,
-    state: pr.merged ? 'MERGED' : pr.state.toUpperCase(),
+    headRefName: pr.head,
+    headRepository: head === null ? null : { nameWithOwner: head },
     repository: { nameWithOwner: full },
+    author: { login: pr.authorId === host.user.id ? host.user.login : 'someone-else' },
     labels: {
       pageInfo: { hasNextPage: pr.labels.length > LABELS_PER_SOURCE },
       nodes: pr.labels.slice(0, LABELS_PER_SOURCE).map((name) => ({ name })),
     },
   };
+}
+
+/** The greatest `first` GitHub accepts on a connection. */
+const MAX_FIRST = 100;
+
+/** One page of `items` from an offset cursor, with GitHub's pageInfo. */
+function page<T>(items: readonly T[], first: number, after: unknown, size: number | undefined, tag: string): { readonly nodes: T[]; readonly pageInfo: UnknownRecord } {
+  const start = typeof after === 'string' ? Number(after.slice(tag.length + 1)) : 0;
+  const nodes = items.slice(start, start + Math.min(first, size ?? first));
+  const end = start + nodes.length;
+  return { nodes, pageInfo: { hasNextPage: end < items.length, endCursor: nodes.length === 0 ? null : `${tag}:${String(end)}` } };
+}
+
+/** This repository's branches: every stored pull request's head branch here, and every branch the companion state records. */
+function branchesOf(host: ICompanionHost): string[] {
+  const { owner, repo } = host.repository();
+  const local = `${owner}/${repo}`;
+  const heads = host.state().pulls.filter((pr) => pr.isIssue !== true && headRepositoryOf(host, pr) === local).map((pr) => pr.head);
+  return [...new Set([...Object.keys(host.state().refs), ...heads])].sort();
+}
+
+/**
+ * The answer to a sweep query (a `refs(refPrefix: …)` query or a
+ * `pullRequests(labels: …)` query), or null when the query is neither.
+ * Variables must be exactly { owner, repo, prefix, first, after } or
+ * { owner, repo, label, first, after }.
+ */
+export function sweepQuery(host: ICompanionHost, request: unknown, json: Json): Response | null {
+  if (!isRecord(request) || typeof request['query'] !== 'string') return null;
+  const query = request['query'];
+  const byBranch = query.includes('refs(refPrefix: $prefix');
+  const byLabel = query.includes('pullRequests(labels: [$label]');
+  if (!byBranch && !byLabel) return null;
+  const vars = request['variables'];
+  const { owner, repo } = host.repository();
+  const keys = byBranch ? 'after,first,owner,prefix,repo' : 'after,first,label,owner,repo';
+  const shapeOk = byBranch
+    ? query.includes('associatedPullRequests(states: OPEN')
+    : query.includes('states: OPEN') && query.includes('orderBy: {field: CREATED_AT, direction: ASC}');
+  if (!query.startsWith('query') || !shapeOk || !isRecord(vars) || Object.keys(vars).sort().join(',') !== keys) {
+    return json({ message: 'fake host: unexpected sweep query' }, 400);
+  }
+  const first = vars['first'];
+  const after = vars['after'];
+  if (typeof first !== 'number' || !Number.isInteger(first) || first < 1 || first > MAX_FIRST || !(after === null || typeof after === 'string')) {
+    return json({ errors: [{ type: 'INVALID_ARGUMENTS', message: 'fake host: first must be 1-100 and after a cursor or null' }] });
+  }
+  const config = host.config();
+  if (config.failSweep === true) return json({ data: null, errors: [{ type: 'SERVICE_UNAVAILABLE', message: 'Something went wrong' }] });
+  if (vars['owner'] !== owner || vars['repo'] !== repo) {
+    return json({ data: { repository: null }, errors: [{ type: 'NOT_FOUND', path: ['repository'], message: 'Could not resolve to a Repository.' }] });
+  }
+  const local = `${owner}/${repo}`;
+  const pulls = host.state().pulls;
+  if (byBranch) {
+    const prefix = vars['prefix'];
+    if (typeof prefix !== 'string' || !prefix.startsWith('refs/heads/')) return json({ message: 'fake host: unexpected ref prefix' }, 400);
+    const under = prefix.slice('refs/heads/'.length);
+    const refs = branchesOf(host).filter((branch) => branch.startsWith(under));
+    const { nodes, pageInfo } = page(refs, first, after, config.sweepPageSize, 'refs');
+    return json({
+      data: {
+        repository: {
+          refs: {
+            totalCount: refs.length,
+            pageInfo,
+            nodes: nodes.map((branch) => ({
+              name: branch.slice(under.length),
+              associatedPullRequests: {
+                pageInfo: { hasNextPage: false },
+                nodes: pulls
+                  .filter((pr) => pr.isIssue !== true && pr.state === 'open' && pr.head === branch && headRepositoryOf(host, pr) === local)
+                  .map((pr) => pullNode(host, pr)),
+              },
+            })),
+          },
+        },
+      },
+    });
+  }
+  const label = vars['label'];
+  if (typeof label !== 'string' || label === '') return json({ message: 'fake host: unexpected label' }, 400);
+  const labeled = pulls
+    .filter((pr) => isLocalPull(host, pr) && pr.state === 'open' && pr.labels.some((l) => l.toLowerCase() === label.toLowerCase()))
+    .sort((a, b) => a.number - b.number);
+  const { nodes, pageInfo } = page(labeled, first, after, config.sweepPageSize, 'pulls');
+  return json({ data: { repository: { pullRequests: { totalCount: labeled.length, pageInfo, nodes: nodes.map((pr) => pullNode(host, pr)) } } } });
 }

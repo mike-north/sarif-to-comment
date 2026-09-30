@@ -220,7 +220,7 @@ describe('command dispatch and help', () => {
     ['add-staged-changes', ['--sarif', '--output', '--worktree', '--repo', '--commit', '--source-root', '--format']],
     ['validate', ['--sarif', '--repo', '--pull', '--commit', '--source-root', '--old-source-commit', '--ignore-approval-hold', '--submit', '--allow-suggestion-prs', '--pr-labels', '--mark-suggestion-prs-ready', '--format']],
     ['publish', ['--sarif', '--repo', '--pull', '--commit', '--state', '--source-root', '--old-source-commit', '--ignore-approval-hold', '--submit', '--allow-suggestion-prs', '--pr-labels', '--mark-suggestion-prs-ready', '--format']],
-    ['close-suggestion-prs', ['--repo', '--label', '--original', '--dry-run', '--format']],
+    ['close-suggestion-prs', ['--repo', '--label', '--original', '--owner', '--max-candidates', '--force', '--dry-run', '--format']],
   ];
   for (const [command, flags] of commands) {
     test(`${command} --help documents its options and needs no token`, () => {

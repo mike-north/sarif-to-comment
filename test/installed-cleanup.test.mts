@@ -9,9 +9,10 @@
  * The repository holds the worked example of
  * docs/suggestion-cleanup-contract.md §3: an open original with two
  * suggestions and a closed original with one. Expected results are written by
- * hand from that contract.
+ * hand from that contract, including the owner scope and the early exit of a
+ * label sweep (§2.2, §2.4.2).
  *
- * @see https://docs.github.com/en/rest/issues/issues#list-repository-issues
+ * @see https://docs.github.com/en/graphql/reference/objects#ref
  * @see https://docs.github.com/en/rest/pulls/pulls#update-a-pull-request
  */
 
@@ -27,7 +28,7 @@ import { FakeHttpGitHub } from './fixtures/composition/fake-http-github.mts';
 import type { IHttpRepository } from './fixtures/composition/fake-http-github.mts';
 import type { IStoredPull } from './fixtures/composition/fake-http-companion.mts';
 import { ROOT, installIntoConsumer, packProject } from './fixtures/package/installed-package.mts';
-import { asRecord, parseJson } from './support/runtime-types.mts';
+import { asArray, asRecord, parseJson } from './support/runtime-types.mts';
 
 const PRELOAD = path.join(ROOT, 'test', 'fixtures', 'docs', 'fake-fetch-preload.mts');
 const TOKEN = 'ghp_CLEANUP_installed_0123456789';
@@ -40,13 +41,18 @@ const LABEL = 'uat-suggestion';
 
 const idOf = (n: number): string => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 
-function suggestion(n: number, original: number): IStoredPull {
+function suggestion(n: number, original: number, authorId = 4242): IStoredPull {
   const marker = `<!-- suggestion-pr {"version":1,"original":{"owner":"${OWNER}","repo":"${REPO}","pullNumber":${String(original)}},"reviewedCommit":"${HEAD}","id":"${idOf(n)}","batch":"${BATCH}"} -->`;
   return {
     number: n, title: `Suggestion for #${String(original)}`, body: `Suggested in a review of #${String(original)} at commit ${HEAD}.\n\n${marker}`,
     head: `suggestion-pr/${String(original)}/${idOf(n)}`, base: `feature-${String(original)}`,
-    draft: true, state: 'open', merged: false, labels: [LABEL], authorId: 4242,
+    draft: true, state: 'open', merged: false, labels: [LABEL], authorId,
   };
+}
+
+/** An ordinary pull request labeled `bug`: no marker, not on a suggestion branch. */
+function ordinary(number: number): IStoredPull {
+  return { number, title: `Fix ${String(number)}`, body: 'Fixes a bug.', head: `fix/${String(number)}`, base: 'main', draft: false, state: 'open', merged: false, labels: ['bug'], authorId: 99 };
 }
 
 function original(number: number, state: 'open' | 'closed'): IStoredPull {
@@ -58,7 +64,7 @@ interface IWorld {
   readonly env: NodeJS.ProcessEnv;
 }
 
-function world(label: string): IWorld {
+function world(label: string, extra: readonly IStoredPull[] = []): IWorld {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), `${label}-`));
   const repository: IHttpRepository = {
     destination: { owner: OWNER, repo: REPO, pullNumber: 1 },
@@ -70,7 +76,7 @@ function world(label: string): IWorld {
   const hostDir = path.join(root, 'host');
   FakeHttpGitHub.create(hostDir, {}, repository);
   const host = new FakeHttpGitHub(hostDir, TOKEN);
-  host.seedPulls([original(36, 'open'), original(37, 'closed'), suggestion(38, 36), suggestion(39, 36), suggestion(40, 37)]);
+  host.seedPulls([original(36, 'open'), original(37, 'closed'), suggestion(38, 36), suggestion(39, 36), suggestion(40, 37), ...extra]);
   return { host, env: { PATH: process.env['PATH'], GH_TOKEN: TOKEN, FAKE_HTTP_GITHUB_DIR: hostDir, NODE_OPTIONS: `--require=${PRELOAD}` } };
 }
 
@@ -124,6 +130,38 @@ describe('the installed package closes suggestion pull requests whose original e
     assert.ok(w.host.log().every((r) => r.authorized));
   });
 
+  test('CLI: only this account\'s suggestions by default, all with --owner all; a wrong label stopped after one request', { skip, timeout: 300_000 }, () => {
+    const { consumer, bin } = installIntoConsumer();
+    const ordinaries = Array.from({ length: 25 }, (_, i) => ordinary(100 + i));
+    const w = world('installed-cleanup-scope', [suggestion(41, 37, 99), ...ordinaries]);
+    const cli = (args: readonly string[], expectedExit: number): Record<string, unknown> => {
+      const result: SpawnSyncReturns<string> = spawnSync(bin, ['close-suggestion-prs', '--repo', `${OWNER}/${REPO}`, ...args, '--format', 'json'], {
+        cwd: consumer, env: w.env, encoding: 'utf8', timeout: 120_000,
+      });
+      for (const text of [result.stdout, result.stderr]) assert.ok(!text.includes(TOKEN), 'the token never appears');
+      assert.equal(result.status, expectedExit, result.stdout + result.stderr);
+      return asRecord(parseJson(result.stdout));
+    };
+    const resultsOf = (doc: Record<string, unknown>): unknown[] => asArray(doc['suggestions']).map((s) => [asRecord(s)['number'], asRecord(s)['result']]);
+
+    const mine = cli(['--dry-run'], 0);
+    assert.equal(mine['owner'], 'me');
+    assert.deepEqual(resultsOf(mine), [[38, 'left-open'], [39, 'left-open'], [40, 'would-close'], [41, 'other-owner']]);
+    assert.deepEqual(mine['counts'], { candidates: 4, checked: 4, labeled: 4, conforming: 4 });
+    const all = cli(['--dry-run', '--owner', 'all'], 0);
+    assert.deepEqual(resultsOf(all), [[38, 'left-open'], [39, 'left-open'], [40, 'would-close'], [41, 'would-close']]);
+
+    const before = w.host.log().length;
+    const wrong = cli(['--label', 'bug'], 2);
+    assert.equal(wrong['status'], 'label-not-suggestion-prs');
+    assert.deepEqual(asArray(wrong['diagnostics']).map((d) => asRecord(d)['code']), ['label-not-suggestion-prs']);
+    assert.equal(w.host.log().length - before, 1, 'one request before the refusal');
+    const capped = cli(['--label', 'bug', '--max-candidates', '10'], 1);
+    assert.equal(capped['status'], 'too-many-candidates');
+    assert.deepEqual(capped['counts'], { candidates: 25, checked: 0, labeled: 0, conforming: 0 });
+    assert.deepEqual(states(w), { ...OPEN_ALL, '41': 'open', ...Object.fromEntries(ordinaries.map((p) => [String(p.number), 'open'])) }, 'nothing was closed');
+  });
+
   test('library: the same cleanup in memory through the installed function', { skip, timeout: 300_000 }, () => {
     const { consumer } = installIntoConsumer();
     const w = world('installed-cleanup-library');
@@ -139,7 +177,9 @@ describe('the installed package closes suggestion pull requests whose original e
       assert.equal(outcome.status, 'complete', outcome.markdown);
       assert.deepEqual(outcome.suggestions.map((s) => [s.number, s.result]), [[38, 'left-open'], [39, 'left-open'], [40, 'closed']]);
       assert.match(outcome.markdown, /Closing never deletes a branch/);
-      assert.match(outcome.markdown, /labeled \x60uat-suggestion\x60 in octo\/cleanup-uat \(the suggestion label set in \x60\.github\/suggestion-prs\.json\x60 on \x60main\x60\)/);
+      assert.match(outcome.markdown, /the suggestion label is \x60uat-suggestion\x60 \(the suggestion label set in \x60\.github\/suggestion-prs\.json\x60 on \x60main\x60\)/);
+      assert.equal(outcome.owner, 'me');
+      assert.deepEqual(outcome.counts, { candidates: 3, checked: 3, labeled: 3, conforming: 3 });
       await assert.rejects(closeSuggestionPullRequests({ ...input, label: 'a,b' }), TypeError);
       process.stdout.write(JSON.stringify({ status: outcome.status }));
     `;

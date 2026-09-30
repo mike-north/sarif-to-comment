@@ -9,8 +9,10 @@
  * Expected requests and answers are written by hand from the GitHub REST and
  * GraphQL documentation.
  *
- * @see https://docs.github.com/en/rest/issues/issues#list-repository-issues
- * @see https://docs.github.com/en/rest/using-the-rest-api/using-pagination-in-the-rest-api
+ * @see https://docs.github.com/en/graphql/reference/objects#repository
+ * @see https://docs.github.com/en/graphql/reference/objects#ref
+ * @see https://docs.github.com/en/graphql/reference/objects#pullrequestconnection
+ * @see https://docs.github.com/en/graphql/guides/using-pagination-in-the-graphql-api
  * @see https://docs.github.com/en/rest/pulls/pulls#get-a-pull-request
  * @see https://docs.github.com/en/rest/pulls/pulls#update-a-pull-request
  * @see https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api
@@ -86,63 +88,155 @@ async function refusesInput(script: Script, promise: Promise<unknown>, pattern: 
 }
 
 // ---------------------------------------------------------------------------
-// Listing open labeled pull requests (§2.4, sweep)
+// Sweeps: open pull requests by branch prefix and by label (§2.4)
 
-const issuesPage = (label: string, page: number): string => `${REPO}/issues?labels=${encodeURIComponent(label)}&state=open&per_page=100&page=${String(page)}`;
-const byIdLink = (label: string, page: number): string =>
-  `<${API}/repositories/1300192/issues?labels=${encodeURIComponent(label)}&state=open&per_page=100&page=${String(page)}>`;
-const issue = (number: number, extra: Record<string, unknown> = {}): Record<string, unknown> => ({
+const GRAPHQL = `${API}/graphql`;
+
+/** A pull request node as both sweep queries and the backlink query select it. */
+const listedNode = (number: number, extra: Record<string, unknown> = {}): Record<string, unknown> => ({
   number,
-  html_url: `https://github.com/octo/widgets/pull/${String(number)}`,
-  title: `Suggestion ${String(number)}`,
+  url: `https://github.com/octo/widgets/pull/${String(number)}`,
   body: `Body of ${String(number)}`,
-  state: 'open',
-  labels: [{ name: 'suggestion' }],
-  pull_request: { url: `${REPO}/pulls/${String(number)}`, html_url: `https://github.com/octo/widgets/pull/${String(number)}` },
+  headRefName: `suggestion-pr/37/s${String(number)}`,
+  headRepository: { nameWithOwner: 'octo/widgets' },
+  repository: { nameWithOwner: 'octo/widgets' },
+  author: { login: 'review-bot' },
+  labels: { pageInfo: { hasNextPage: false }, nodes: [{ name: 'suggestion' }] },
   ...extra,
 });
 
-describe('listOpenLabeledPullRequests', () => {
-  test('reads every page of the label-filtered issues listing and keeps only pull requests', async () => {
+/** A pull request as the client answers `listedNode(number)`. */
+const listed = (number: number, extra: Record<string, unknown> = {}): Record<string, unknown> => ({
+  number,
+  htmlUrl: `https://github.com/octo/widgets/pull/${String(number)}`,
+  body: `Body of ${String(number)}`,
+  headRef: `suggestion-pr/37/s${String(number)}`,
+  headRepository: 'octo/widgets',
+  author: 'review-bot',
+  labels: ['suggestion'],
+  ...extra,
+});
+
+const refsAnswer = (totalCount: number, refs: readonly unknown[], hasNextPage: boolean, endCursor: string | null): Answer =>
+  json({ data: { repository: { refs: { totalCount, pageInfo: { hasNextPage, endCursor }, nodes: refs } } } });
+const ref = (name: string, pulls: readonly unknown[], more = false): Record<string, unknown> => ({
+  name,
+  associatedPullRequests: { pageInfo: { hasNextPage: more }, nodes: pulls },
+});
+const labeledAnswer = (totalCount: number, pulls: readonly unknown[], hasNextPage: boolean, endCursor: string | null): Answer =>
+  json({ data: { repository: { pullRequests: { totalCount, pageInfo: { hasNextPage, endCursor }, nodes: pulls } } } });
+
+describe('listOpenPullRequestsByBranchPrefix', () => {
+  const request = { owner: 'octo', repo: 'widgets', branchPrefix: 'suggestion-pr/', first: 100, after: null };
+
+  test('one GraphQL page of the branches under the prefix, each with its open pull requests of this repository, and the branch count', async () => {
+    const script = new Script().on('POST', GRAPHQL, refsAnswer(3, [
+      ref('37/s40', [listedNode(40), listedNode(90, { repository: { nameWithOwner: 'upstream/widgets' } })]),
+      ref('37/stale', []),
+      ref('38/s41', [listedNode(41, { headRefName: 'suggestion-pr/38/s41', body: null, author: null, headRepository: null, labels: { pageInfo: { hasNextPage: false }, nodes: [{ name: 'Suggestion' }, { name: 'bug' }] } })]),
+    ], true, 'Y3Vyc29yOjM='));
+    const page = await script.client().listOpenPullRequestsByBranchPrefix(request);
+    assert.deepEqual(page, {
+      totalCount: 3,
+      itemCount: 3,
+      pullRequests: [listed(40), listed(41, { headRef: 'suggestion-pr/38/s41', body: '', author: null, headRepository: null, labels: ['Suggestion', 'bug'] })],
+      nextCursor: 'Y3Vyc29yOjM=',
+    });
+    assert.equal(script.sent.length, 1);
+    const [sent] = script.sent;
+    assert.ok(sent);
+    const body = asRecord(sent.body);
+    const query = asString(body['query']);
+    assert.match(query, /^query /, 'a query, never a mutation');
+    assert.match(query, /refs\(refPrefix: \$prefix, first: \$first, after: \$after, orderBy: \{field: ALPHABETICAL, direction: ASC\}\)/);
+    assert.match(query, /totalCount/);
+    assert.match(query, /associatedPullRequests\(states: OPEN, first: 10\)/);
+    assert.match(query, /author \{ login \}/);
+    assert.deepEqual(body['variables'], { owner: 'octo', repo: 'widgets', prefix: 'refs/heads/suggestion-pr/', first: 100, after: null });
+  });
+
+  test('the last page has no next cursor, and a later page is asked for by its cursor', async () => {
+    const script = new Script().on('POST', GRAPHQL, refsAnswer(1, [ref('37/s40', [listedNode(40)])], false, 'Y3Vyc29yOjE='));
+    const page = await script.client().listOpenPullRequestsByBranchPrefix({ ...request, first: 20, after: 'Y3Vyc29yOjA=' });
+    assert.equal(page.nextCursor, null);
+    assert.deepEqual(asRecord(script.sent[0]?.body)['variables'], { owner: 'octo', repo: 'widgets', prefix: 'refs/heads/suggestion-pr/', first: 20, after: 'Y3Vyc29yOjA=' });
+  });
+
+  test('a pull request with more than 100 labels has its labels read in full from the REST listing', async () => {
+    const many = Array.from({ length: 100 }, (_, i) => ({ name: `label-${String(i)}` }));
     const script = new Script()
-      .on('GET', issuesPage('suggestion', 1), json([issue(40), { ...issue(39), pull_request: undefined }], 200, {
-        link: `${byIdLink('suggestion', 2)}; rel="next", ${byIdLink('suggestion', 2)}; rel="last"`,
-      }))
-      .on('GET', issuesPage('suggestion', 2), json([issue(38, { body: null, labels: [{ name: 'Suggestion' }, { name: 'bug' }] })]));
-    const listed = await script.client().listOpenLabeledPullRequests({ owner: 'octo', repo: 'widgets', label: 'suggestion' });
-    assert.deepEqual(listed, [
-      { number: 40, htmlUrl: 'https://github.com/octo/widgets/pull/40', body: 'Body of 40', labels: ['suggestion'] },
-      { number: 38, htmlUrl: 'https://github.com/octo/widgets/pull/38', body: '', labels: ['Suggestion', 'bug'] },
-    ]);
-    assert.deepEqual(script.sent.map((s) => [s.method, s.url]), [['GET', issuesPage('suggestion', 1)], ['GET', issuesPage('suggestion', 2)]]);
+      .on('POST', GRAPHQL, refsAnswer(1, [ref('37/s40', [listedNode(40, { labels: { pageInfo: { hasNextPage: true }, nodes: many } })])], false, null))
+      .on('GET', `${REPO}/issues/40/labels?per_page=100&page=1`, json([...many, { name: 'suggestion' }]));
+    const page = await script.client().listOpenPullRequestsByBranchPrefix(request);
+    assert.equal(page.pullRequests[0]?.labels.length, 101);
   });
 
-  test('a label is percent-encoded in the filter', async () => {
-    const script = new Script().on('GET', `${REPO}/issues?labels=needs%20review%2Fbot&state=open&per_page=100&page=1`, json([]));
-    assert.deepEqual(await script.client().listOpenLabeledPullRequests({ owner: 'octo', repo: 'widgets', label: 'needs review/bot' }), []);
+  const malformed: readonly (readonly [string, Answer, string])[] = [
+    ['GraphQL errors', json({ data: null, errors: [{ type: 'SERVICE_UNAVAILABLE', message: 'Something went wrong' }] }), 'graphql-errors'],
+    ['no refs connection', json({ data: { repository: {} } }), 'malformed-response'],
+    ['no total count', json({ data: { repository: { refs: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] } } } }), 'malformed-response'],
+    ['a negative total count', refsAnswer(-1, [], false, null), 'malformed-response'],
+    ['a next page without a cursor', refsAnswer(2, [ref('37/s40', [])], true, null), 'pagination'],
+    ['more open pull requests on one branch than one page holds', refsAnswer(1, [ref('37/s40', [listedNode(40)], true)], false, null), 'pagination'],
+    ['a pull request without a number', refsAnswer(1, [ref('37/s40', [listedNode(40, { number: 'forty' })])], false, null), 'malformed-response'],
+    ['a pull request without a head branch', refsAnswer(1, [ref('37/s40', [listedNode(40, { headRefName: null })])], false, null), 'malformed-response'],
+    ['a pull request whose author has no login', refsAnswer(1, [ref('37/s40', [listedNode(40, { author: {} })])], false, null), 'malformed-response'],
+  ];
+  for (const [what, answer, code] of malformed) {
+    test(`an answer with ${what} is refused (${code})`, async () => {
+      const script = new Script().on('POST', GRAPHQL, answer);
+      await rejectsWith(script.client().listOpenPullRequestsByBranchPrefix(request), code);
+    });
+  }
+
+  test('a failed query is an http-status error', async () => {
+    const script = new Script().on('POST', GRAPHQL, json({ message: 'Server Error' }, 502));
+    await rejectsWith(script.client().listOpenPullRequestsByBranchPrefix(request), 'http-status', 502);
   });
 
-  test('a pagination link that changes the label filter is not followed', async () => {
-    const script = new Script().on('GET', issuesPage('suggestion', 1), json([issue(40)], 200, { link: `${byIdLink('bug', 2)}; rel="next"` }));
-    await rejectsWith(script.client().listOpenLabeledPullRequests({ owner: 'octo', repo: 'widgets', label: 'suggestion' }), 'unsafe-link');
-  });
-
-  test('an entry without a number, or a page that is not a list, is malformed', async () => {
-    const noNumber = new Script().on('GET', issuesPage('suggestion', 1), json([{ ...issue(40), number: 'forty' }]));
-    await rejectsWith(noNumber.client().listOpenLabeledPullRequests({ owner: 'octo', repo: 'widgets', label: 'suggestion' }), 'malformed-response');
-    const notList = new Script().on('GET', issuesPage('suggestion', 1), json({ message: 'nope' }));
-    await rejectsWith(notList.client().listOpenLabeledPullRequests({ owner: 'octo', repo: 'widgets', label: 'suggestion' }), 'malformed-response');
-  });
-
-  test('a failed page is an http-status error', async () => {
-    const script = new Script().on('GET', issuesPage('suggestion', 1), json({ message: 'Server Error' }, 502));
-    await rejectsWith(script.client().listOpenLabeledPullRequests({ owner: 'octo', repo: 'widgets', label: 'suggestion' }), 'http-status', 502);
-  });
-
-  test('a label with a comma, or an empty label, is refused before any request', async () => {
+  test('a prefix that is not a branch path ending in "/", or a page size outside 1-100, is refused before any request', async () => {
     const script = new Script();
-    await refusesInput(script, script.client().listOpenLabeledPullRequests({ owner: 'octo', repo: 'widgets', label: 'a,b' }), /comma/);
-    await refusesInput(script, script.client().listOpenLabeledPullRequests({ owner: 'octo', repo: 'widgets', label: '' }), /label/);
+    for (const branchPrefix of ['', 'suggestion-pr', '/suggestion-pr/', 'a//b/', 'refs/heads/../x/']) {
+      await refusesInput(script, script.client().listOpenPullRequestsByBranchPrefix({ ...request, branchPrefix }), /branchPrefix/);
+    }
+    for (const first of [0, 101, 1.5]) {
+      await refusesInput(script, script.client().listOpenPullRequestsByBranchPrefix({ ...request, first }), /first/);
+    }
+    await refusesInput(script, script.client().listOpenPullRequestsByBranchPrefix({ ...request, after: '' }), /after/);
+  });
+});
+
+describe('listOpenPullRequestsByLabel', () => {
+  const request = { owner: 'octo', repo: 'widgets', label: 'needs review, bot', first: 20, after: null };
+
+  test('one GraphQL page of the open pull requests with the label, oldest first, and their count', async () => {
+    const script = new Script().on('POST', GRAPHQL, labeledAnswer(250, [listedNode(40), listedNode(41, { headRefName: 'feature/x', author: { login: 'someone' } })], true, 'Y3Vyc29yOjI='));
+    const page = await script.client().listOpenPullRequestsByLabel(request);
+    assert.deepEqual(page, {
+      totalCount: 250,
+      itemCount: 2,
+      pullRequests: [listed(40), listed(41, { headRef: 'feature/x', author: 'someone' })],
+      nextCursor: 'Y3Vyc29yOjI=',
+    });
+    const body = asRecord(script.sent[0]?.body);
+    const query = asString(body['query']);
+    assert.match(query, /^query /, 'a query, never a mutation');
+    assert.match(query, /pullRequests\(labels: \[\$label\], states: OPEN, first: \$first, after: \$after, orderBy: \{field: CREATED_AT, direction: ASC\}\)/);
+    assert.match(query, /totalCount/);
+    // The label is a GraphQL list element, so a comma in it is never read as a list of labels.
+    assert.deepEqual(body['variables'], { owner: 'octo', repo: 'widgets', label: 'needs review, bot', first: 20, after: null });
+  });
+
+  test('GraphQL errors and a missing connection are refused', async () => {
+    const errors = new Script().on('POST', GRAPHQL, json({ data: null, errors: [{ type: 'NOT_FOUND', message: 'Could not resolve' }] }));
+    await rejectsWith(errors.client().listOpenPullRequestsByLabel(request), 'graphql-errors');
+    const missing = new Script().on('POST', GRAPHQL, json({ data: { repository: { pullRequests: null } } }));
+    await rejectsWith(missing.client().listOpenPullRequestsByLabel(request), 'malformed-response');
+  });
+
+  test('an empty label is refused before any request', async () => {
+    const script = new Script();
+    await refusesInput(script, script.client().listOpenPullRequestsByLabel({ ...request, label: '' }), /label/);
   });
 });
 
@@ -305,18 +399,20 @@ describe('closePullRequest', () => {
 // ---------------------------------------------------------------------------
 // Cross-referencing pull requests (§2.4, targeted; D21)
 
-const GRAPHQL = `${API}/graphql`;
 const source = (number: number, extra: Record<string, unknown> = {}): Record<string, unknown> => ({
   source: {
     __typename: 'PullRequest',
-    number,
-    url: `https://github.com/octo/widgets/pull/${String(number)}`,
-    body: `Suggested in a review of #37 (${String(number)}).`,
+    ...listedNode(number, { body: `Suggested in a review of #37 (${String(number)}).` }),
     state: 'OPEN',
-    repository: { nameWithOwner: 'octo/widgets' },
-    labels: { pageInfo: { hasNextPage: false }, nodes: [{ name: 'suggestion' }] },
     ...extra,
   },
+});
+/** A cross-referencing pull request as the client answers `source(number)`. */
+const crossReferencing = (number: number, extra: Record<string, unknown> = {}): Record<string, unknown> => ({
+  ...listed(number, { body: `Suggested in a review of #37 (${String(number)}).` }),
+  repository: 'octo/widgets',
+  state: 'open',
+  ...extra,
 });
 const timeline = (nodes: readonly unknown[], hasNextPage: boolean, endCursor: string | null): Answer =>
   json({ data: { repository: { pullRequest: { timelineItems: { pageInfo: { hasNextPage, endCursor }, nodes } } } } });
@@ -331,9 +427,9 @@ describe('listCrossReferencingPullRequests', () => {
     );
     const found = await script.client().listCrossReferencingPullRequests({ owner: 'octo', repo: 'widgets', pullNumber: 37 });
     assert.deepEqual(found, [
-      { number: 40, htmlUrl: 'https://github.com/octo/widgets/pull/40', repository: 'octo/widgets', state: 'open', body: 'Suggested in a review of #37 (40).', labels: ['suggestion'] },
-      { number: 41, htmlUrl: 'https://github.com/octo/widgets/pull/41', repository: 'Octo/Widgets', state: 'merged', body: '', labels: ['suggestion'] },
-      { number: 42, htmlUrl: 'https://github.com/octo/widgets/pull/42', repository: 'octo/widgets', state: 'closed', body: 'Suggested in a review of #37 (42).', labels: ['suggestion'] },
+      crossReferencing(40),
+      crossReferencing(41, { repository: 'Octo/Widgets', state: 'merged', body: '' }),
+      crossReferencing(42, { state: 'closed' }),
     ]);
     assert.equal(script.sent.length, 2);
     const [first, second] = script.sent.map((s) => asRecord(s.body));
@@ -343,6 +439,8 @@ describe('listCrossReferencingPullRequests', () => {
     assert.match(query, /timelineItems\(first: 100, after: \$after, itemTypes: \[CROSS_REFERENCED_EVENT\]\)/);
     assert.match(query, /\.\.\. on CrossReferencedEvent/);
     assert.match(query, /\.\.\. on PullRequest/);
+    assert.match(query, /headRefName/, 'the head branch and author are read with each source');
+    assert.match(query, /author \{ login \}/);
     assert.deepEqual(first['variables'], { owner: 'octo', repo: 'widgets', number: 37, after: null });
     assert.deepEqual(second['variables'], { owner: 'octo', repo: 'widgets', number: 37, after: 'Y3Vyc29yOjE=' });
   });

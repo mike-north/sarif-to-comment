@@ -30,9 +30,10 @@
  *   POST /graphql                                  reviewThreads with the
  *                                                  original anchors
  * and the branches, pull requests and labels of companion suggestion pull
- * requests (fake-http-companion.mts), and the labeled listing, pull request
- * reads and closes and GraphQL cross-references that suggestion cleanup uses
- * (fake-http-cleanup.mts; pull requests are seeded with seedPulls). The pull
+ * requests (fake-http-companion.mts), and the GraphQL sweeps and
+ * cross-references, pull request reads and closes that suggestion cleanup
+ * uses (fake-http-cleanup.mts; pull requests are seeded with seedPulls and
+ * branches without a pull request with seedBranches). The pull
  * request under review is open and unmerged. The pull request reports its head
  * branch (`pull.headRef`, default `feature`), base branch and repositories;
  * the repository reports its default branch (default `main`, pointing at the
@@ -108,7 +109,7 @@ import {
   readJson,
 } from '../../support/runtime-types.mts';
 import type { Guard, UnknownRecord } from '../../support/runtime-types.mts';
-import { cleanupRoute, timelineQuery } from './fake-http-cleanup.mts';
+import { cleanupRoute, sweepQuery, timelineQuery } from './fake-http-cleanup.mts';
 import {
   EMPTY_COMPANION_STATE,
   companionRoute,
@@ -571,7 +572,7 @@ export class FakeHttpGitHub {
     }
     if (method === 'POST' && p === '/graphql') {
       const query = parseJson(bodyText(init));
-      return timelineQuery(this.companionHost(), query, json) ?? this.reviewThreads(query, json);
+      return timelineQuery(this.companionHost(), query, json) ?? sweepQuery(this.companionHost(), query, json) ?? this.reviewThreads(query, json);
     }
     const cleanup = cleanupRoute(this.companionHost(), method, u, () => bodyText(init), json);
     if (cleanup) return cleanup;
@@ -670,6 +671,12 @@ export class FakeHttpGitHub {
   seedPulls(pulls: readonly IStoredPull[]): void {
     const state = this.companion();
     this.write('companion.json', { ...state, pulls: [...state.pulls, ...pulls] });
+  }
+
+  /** Adds branches, pointing at `commit`, as if people had pushed them (for example suggestion branches whose pull requests are gone). */
+  seedBranches(names: readonly string[], commit: string): void {
+    const state = this.companion();
+    this.write('companion.json', { ...state, refs: { ...state.refs, ...Object.fromEntries(names.map((name) => [name, commit])) } });
   }
 
   /** A person edits, closes or merges a suggestion pull request. */
