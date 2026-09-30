@@ -346,7 +346,7 @@ Each pull request checked gets one `result`: `closed`, `would-close` (dry run), 
 | `permission-limited` | 2 | Everything else is done; some eligible suggestions could not be closed with this token. |
 | `incomplete` | 3 | An original could not be verified or an action failed. Run it again later. |
 
-Invalid input rejects with a `TypeError`; an invalid or unreadable label configuration, and a failure while listing, reject with an `Error`; all before anything is closed (CLI exit 1). With `--format json`, the CLI prints `{ command, status, dryRun, originals, suggestions, message, diagnostics }`. Labels containing a comma are refused everywhere, because GitHub's label filter would read them as several labels. The full contract is in the source repository (`docs/suggestion-cleanup-contract.md`).
+Invalid input rejects with a `TypeError`; an invalid or unreadable label configuration, a repository that can't be read (for example a mistyped `--repo`, also with `--label`), and a failure while listing, reject with an `Error`; all before anything is closed (CLI exit 1). With `--format json`, the CLI prints `{ command, status, dryRun, originals, suggestions, message, diagnostics }`. Labels containing a comma are refused everywhere, because GitHub's label filter would read them as several labels. The full contract is in the source repository (`docs/suggestion-cleanup-contract.md`).
 
 ## Supported SARIF (first-milestone profile)
 

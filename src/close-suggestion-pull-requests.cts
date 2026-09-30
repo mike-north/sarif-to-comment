@@ -24,11 +24,13 @@
  *   dryRun?:             discover and verify, write nothing
  *
  * Sequence (every read completes before the first write):
- *   0. The label: the override, or else the repository's canonical label
- *      resolved exactly as publication resolves it (contract §2.2.1): the
+ *   0. The repository and the label: the override, after reading the
+ *      repository itself (a failed read rejects as operational, naming the
+ *      repository), or else the repository's canonical label resolved
+ *      exactly as publication resolves it (contract §2.2.1): the
  *      configuration on the default branch, otherwise 'suggestion-pr'. An
  *      invalid configuration rejects, naming the file and field; a failed
- *      read rejects as operational.
+ *      read rejects as operational. The repository is read once either way.
  *   1. Discovery. Sweep: every open pull request with the label (the
  *      client's labeled issues listing). Targeted: the original is resolved
  *      first; if it cannot be verified, or does not exist (404), nothing
@@ -229,12 +231,13 @@ export interface ICloseSuggestionPullRequestsOutcome {
 /** What cleanup needs from a GitHub client. */
 type CleanupClient = Pick<
   IGitHubClient,
-  'readDefaultBranchFile' | 'listOpenLabeledPullRequests' | 'getPullRequest' | 'listCrossReferencingPullRequests' | 'closePullRequest'
+  'readDefaultBranchFile' | 'readRepository' | 'listOpenLabeledPullRequests' | 'getPullRequest' | 'listCrossReferencingPullRequests' | 'closePullRequest'
 >;
 
 /** The client methods cleanup calls. */
 const CLEANUP_METHODS: readonly (keyof CleanupClient)[] = [
   'readDefaultBranchFile',
+  'readRepository',
   'listOpenLabeledPullRequests',
   'getPullRequest',
   'listCrossReferencingPullRequests',
@@ -332,9 +335,19 @@ function capture(input: unknown): ICaptured {
  * configuration; otherwise the canonical label, resolved exactly as
  * publication resolves it. An invalid configuration is refused, naming the
  * file and field; a failed read propagates as the operational error it is.
+ *
+ * Either way the repository is read exactly once here, before anything else:
+ * the configuration read begins with it, and with an override it is read on
+ * its own. That read is what makes an original's 404 mean "no such pull
+ * request" (`not-found`): GitHub answers 404 as well for a repository that
+ * does not exist or that the token cannot see, which must fail, never pass
+ * as a complete cleanup.
  */
 async function resolveLabel(captured: ICaptured, client: CleanupClient): Promise<ICleanupLabel> {
-  if (captured.label !== undefined) return { name: captured.label, source: 'override', branch: '' };
+  if (captured.label !== undefined) {
+    await confirmRepository(captured, client);
+    return { name: captured.label, source: 'override', branch: '' };
+  }
   const { owner, repo } = captured;
   const configuration = await client.readDefaultBranchFile({ owner, repo, path: SUGGESTION_PR_CONFIGURATION_PATH });
   const canonical = resolveCanonicalLabel(configuration);
@@ -344,6 +357,23 @@ async function resolveLabel(captured: ICaptured, client: CleanupClient): Promise
     );
   }
   return { name: canonical.label, source: canonical.source, branch: canonical.branch };
+}
+
+/**
+ * Reads the repository, rejecting with an operational Error that names it
+ * when the read fails for any reason (a mistyped name and a repository the
+ * token cannot see are both a 404).
+ */
+async function confirmRepository(captured: ICaptured, client: CleanupClient): Promise<void> {
+  const { owner, repo } = captured;
+  try {
+    await client.readRepository({ owner, repo });
+  } catch (err) {
+    if (!(err instanceof GitHubError)) throw err;
+    // The message carries GitHub's answer; like the configuration refusal in
+    // resolveLabel, no cause is attached, so it is not printed twice.
+    throw new Error(`The repository ${owner}/${repo} could not be read (${err.message}). Check the repository name, and that this token can read it.`);
+  }
 }
 
 // ---------------------------------------------------------------------------

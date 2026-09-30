@@ -274,6 +274,13 @@
  *     applied by the host; a label containing a comma, which GitHub reads as
  *     a list, is refused). Entries without a `pull_request` object are issues
  *     and are left out. A null body is ''. Host order; not deduplicated.
+ *   readRepository({ owner, repo }) -> { fullName, defaultBranch }
+ *     GET repository. The answer must name this repository (compared
+ *     case-insensitively) and a default branch ('malformed-response'
+ *     otherwise); a refusal keeps its status (404 for a repository that does
+ *     not exist or that the token cannot see). With a label override, the
+ *     read that proves the repository exists before an original's 404 is
+ *     taken to mean "no such pull request".
  *   getPullRequest({ owner, repo, pullNumber })
  *       -> { number, htmlUrl, state: 'open' | 'closed', merged, body, headRef,
  *            headRepository, baseRepository, labels }
@@ -674,6 +681,14 @@ export interface ILabeledPullRequest {
   readonly labels: readonly string[];
 }
 
+/** A repository as GitHub answers for it (readRepository). */
+export interface IRepositorySnapshot {
+  /** `owner/repo` as GitHub names it (its case may differ from the request's). */
+  readonly fullName: string;
+  /** The default branch's name. */
+  readonly defaultBranch: string;
+}
+
 /** A pull request's current state and the fields suggestion cleanup verifies. */
 export interface IPullRequestSnapshot {
   readonly number: number;
@@ -750,6 +765,7 @@ export interface IGitHubClient {
   readonly addLabels: (request: { readonly owner: string; readonly repo: string; readonly number: number; readonly labels: readonly string[] }) => Promise<void>;
   readonly listLabels: (request: { readonly owner: string; readonly repo: string; readonly number: number }) => Promise<readonly string[]>;
   readonly listOpenLabeledPullRequests: (request: { readonly owner: string; readonly repo: string; readonly label: string }) => Promise<readonly ILabeledPullRequest[]>;
+  readonly readRepository: (request: { readonly owner: string; readonly repo: string }) => Promise<IRepositorySnapshot>;
   readonly getPullRequest: (request: IPullRequestDestination) => Promise<IPullRequestSnapshot>;
   readonly listCrossReferencingPullRequests: (request: IPullRequestDestination) => Promise<readonly ICrossReferencingPullRequest[]>;
   readonly closePullRequest: (request: IPullRequestDestination) => Promise<void>;
@@ -2364,6 +2380,16 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
     return pulls;
   }
 
+  async function readRepository({ owner, repo }: Unchecked<'owner' | 'repo'> = {}): Promise<IRepositorySnapshot> {
+    requireInput(isRepoName(owner) && isRepoName(repo), 'owner and repo must be GitHub names');
+    const { body } = await restGet(`${API_ORIGIN}${repoPath(owner, repo)}`, 'repository');
+    const fullName = hostString(optionalMember(body, 'full_name'), 'repository name');
+    if (fullName.toLowerCase() !== `${owner}/${repo}`.toLowerCase()) {
+      throw new GitHubError('malformed-response', redact(`The repository answer names ${fullName}, not ${owner}/${repo}.`));
+    }
+    return { fullName, defaultBranch: hostString(optionalMember(body, 'default_branch'), 'repository default branch') };
+  }
+
   async function getPullRequest({
     owner: ownerInput,
     repo: repoInput,
@@ -2515,6 +2541,7 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
     addLabels,
     listLabels,
     listOpenLabeledPullRequests,
+    readRepository,
     getPullRequest,
     listCrossReferencingPullRequests,
     closePullRequest,

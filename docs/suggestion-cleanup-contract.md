@@ -53,7 +53,7 @@ Without `label`, cleanup resolves the repository's canonical label exactly as `p
 | Invalid (not UTF-8 JSON, not an object, `label` not a string, empty, with a comma or otherwise not a label name; a directory, symbolic link or submodule at the path, or a symbolic link or submodule on the way to it; over 1,000,000 bytes) | **Refuses**: rejects with an `Error` naming the file and the field (CLI: exit 1, "Nothing was closed."). Nothing else is read and nothing is closed. |
 | The read failed (network, HTTP 403, 5xx, a malformed answer) | Operational: rejects (CLI: exit 1) before any other read. Never a silent default. |
 
-With `label` (`--label`), the configuration is not read at all: the override names the label to use. The Markdown's scope line says which label was used and where it came from (§2.10).
+With `label` (`--label`), the configuration is not read at all: the override names the label to use. The repository itself is still read first (`GET /repos/{owner}/{repo}`), exactly once, as the configuration read would have read it: GitHub answers 404 alike for a pull request that does not exist and for a repository that does not exist or that the token cannot see, so an original's 404 means "no such pull request" (§2.7) only once the repository has been read. A failed repository read is operational: the call rejects with an `Error` naming the repository (CLI: exit 1) before anything else is read. The Markdown's scope line says which label was used and where it came from (§2.10).
 
 ### 2.3 Closing is the default; `--dry-run` writes nothing
 
@@ -113,7 +113,7 @@ Originals are resolved once each, however many suggestions reference them. The b
 | 404 | `not-found`: the repository has no pull request `n` that this account can read |
 | 403, 401, 5xx, a network failure, a redirect, a malformed or inconsistent answer | `unverified`, with the reason |
 
-An inaccessible original is not a closed original: neither `not-found` nor `unverified` ever leads to a close. They differ in what running cleanup again can change. A 404 is GitHub's definitive answer about the number (cleanup has already read this repository, or, with a label override, the account cannot read it at all), so it is the same on every run; every other failure may pass.
+An inaccessible original is not a closed original: neither `not-found` nor `unverified` ever leads to a close. They differ in what running cleanup again can change. A 404 is GitHub's definitive answer about the number, because cleanup has already read this repository (§2.2.1), so it is the same on every run; every other failure may pass.
 
 ### 2.8 Verifying a suggestion before it is closed
 

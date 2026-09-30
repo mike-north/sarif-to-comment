@@ -216,6 +216,43 @@ describe('getPullRequest', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Reading the repository (§2.2.1: with a label override, the only proof the
+// repository exists before an original's 404 is trusted)
+
+describe('readRepository', () => {
+  test('answers the repository as GitHub names it and its default branch', async () => {
+    const script = new Script().on('GET', REPO, json({ full_name: 'Octo/Widgets', default_branch: 'trunk', private: true }));
+    assert.deepEqual(await script.client().readRepository({ owner: 'octo', repo: 'widgets' }), { fullName: 'Octo/Widgets', defaultBranch: 'trunk' });
+    assert.deepEqual(script.sent.map((r) => `${r.method} ${r.url}`), [`GET ${REPO}`]);
+  });
+
+  const malformed: readonly (readonly [string, Record<string, unknown>])[] = [
+    ['another repository', { full_name: 'octo/gadgets', default_branch: 'main' }],
+    ['no name', { default_branch: 'main' }],
+    ['no default branch', { full_name: 'octo/widgets' }],
+  ];
+  for (const [what, answer] of malformed) {
+    test(`an answer with ${what} is malformed, never guessed`, async () => {
+      const script = new Script().on('GET', REPO, json(answer));
+      await rejectsWith(script.client().readRepository({ owner: 'octo', repo: 'widgets' }), 'malformed-response');
+    });
+  }
+
+  test('a refusal keeps its status (404 for a repository that does not exist or that the token cannot see)', async () => {
+    for (const status of [403, 404, 502]) {
+      const script = new Script().on('GET', REPO, json({ message: 'Not Found' }, status));
+      await rejectsWith(script.client().readRepository({ owner: 'octo', repo: 'widgets' }), 'http-status', status);
+    }
+  });
+
+  test('input that is not a repository is refused before any request', async () => {
+    const script = new Script();
+    // @ts-expect-error -- deliberately invalid: proves runtime validation of the repository name
+    await refusesInput(script, script.client().readRepository({ owner: 'octo' }), /owner and repo/);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Closing one pull request (§2.9)
 
 describe('closePullRequest', () => {

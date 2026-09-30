@@ -906,6 +906,7 @@ describe('client construction', () => {
       'listReviewComments',
       'listReviews',
       'readDefaultBranchFile',
+      'readRepository',
       'readSuggestionTarget',
     ]);
   });

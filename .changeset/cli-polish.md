@@ -5,7 +5,7 @@
 CLI polish: `--version`, a definitive answer for a mistyped `--original`, a readable refusal message, help reflowed to 80 columns, and usage-error remedies that name the command's own help.
 
 - **`sarif-to-comment --version`** prints the installed package's version, read from its `package.json` when the command runs (exit status 0). With `--format json` or `toon` it is one document, `{ command, status: "version", version, diagnostics }`. Like `--help`, it can follow a command, which is then not run.
-- **A pull request that does not exist is a definitive answer in cleanup.** When GitHub answers 404 for an original pull request, its state is the new `not-found` (`OriginalPullRequestState`), which running cleanup again does not change. With `--original N` (`originalPullNumber`) for a number that does not exist, for example a typo, nothing can reference it: cleanup is `complete` (exit status 0) with the new `original-pull-request-not-found` warning, instead of `incomplete` (exit status 3) asking to run it again. In a sweep, a suggestion pull request whose marker names a pull request that does not exist is `not-ours`, not `unverified`. Other failed lookups (403, 5xx, the network) are still `unverified`, and neither state ever leads to a close. TypeScript code that switches exhaustively over `OriginalPullRequestState` needs a `not-found` case.
+- **A pull request that does not exist is a definitive answer in cleanup.** When GitHub answers 404 for an original pull request, its state is the new `not-found` (`OriginalPullRequestState`), which running cleanup again does not change. With `--original N` (`originalPullNumber`) for a number that does not exist, for example a typo, nothing can reference it: cleanup is `complete` (exit status 0) with the new `original-pull-request-not-found` warning, instead of `incomplete` (exit status 3) asking to run it again. In a sweep, a suggestion pull request whose marker names a pull request that does not exist is `not-ours`, not `unverified`. A 404 counts as `not-found` only once the repository itself has been read: with `--label` (`label`), which skips the configuration read, cleanup now reads the repository first, so a mistyped `--repo` or a repository the token cannot see fails with `operation-failed` naming the repository (exit status 1), as it already did without `--label`. Other failed lookups (403, 5xx, the network) are still `unverified`, and neither state ever leads to a close. TypeScript code that switches exhaustively over `OriginalPullRequestState` needs a `not-found` case.
 - **The `review-refused` and `suggestion-pr-step-refused` messages state the refusal once.** GitHub's reason follows the status as its own sentence, for new refusals and for refusals recorded by earlier versions.
 - **Help text** fits in 80 columns: prose is filled, synopses wrap by option group, and every title is the command and a lowercase phrase. `remove-comment` and `add-staged-changes` help open with their help sentences.
 - **Usage errors in `--format` or `--color`** name the help of the command given (for example ``Run `sarif-to-comment inspect --help` for usage.``) and are about that command, wherever the option stands, as every other usage error already did.
@@ -55,6 +55,40 @@ stderr:
 ```
 
 Exit status 3 → 0.
+
+### `sarif-to-comment close-suggestion-prs --repo octo/widgts --label suggestion-pr --original 37` (a mistyped repository)
+
+stdout:
+
+```diff
+-## Suggestion pull request cleanup incomplete
+-
+-Checked the pull requests that reference #37 in octo/widgts; the suggestion label is `suggestion-pr` (a label given in place of the repository's suggestion label).
+-
+-No suggestion pull requests were found.
+-
+-Some results could not be established. Running the cleanup again is safe: it closes only suggestion pull requests that are still open and eligible.
+-
+-Closing never deletes a branch: each proposal branch is left in place.
++Nothing was closed.
+```
+
+stderr:
+
+```diff
+-▲ warning  An original pull request could not be verified  [original-pull-request-unverified]
+-  octo/widgts#37
+-  Pull request #37 could not be verified (GitHub answered the pull request read with HTTP 404: Not Found), so its suggestion pull requests were left open.
+-  → Run cleanup again later.
++✖ error  The operation could not be completed  [operation-failed]
++  The repository octo/widgts could not be read (GitHub answered the repository with HTTP 404: Not Found). Check the repository name, and that this token can read it.
++  → Resolve the cause the message names, then run the command again.
+
+-1 warning
++1 error
+```
+
+Exit status 3 → 1.
 
 ### `sarif-to-comment publish …` refused by GitHub (a pending review already exists): the `review-refused` message
 

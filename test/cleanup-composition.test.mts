@@ -658,6 +658,48 @@ describe('targeted discovery from one original (§2.4, D21)', () => {
     assert.deepEqual(writes(world), []);
   });
 
+  // With a label override the configuration is not read, so nothing else
+  // proves the repository exists: a 404 for the original would otherwise be
+  // taken as "no such pull request" in a repository that is itself mistyped
+  // or invisible to the token (GitHub answers 404 for both).
+  const unreadableRepository: readonly (readonly [string, string, ICompanionConfig, RegExp])[] = [
+    ['a mistyped repository', 'widgts', {}, /HTTP 404/],
+    ['a repository whose read fails', REPO, { failRepositoryRead: true }, /HTTP 502/],
+  ];
+  for (const [what, repo, config, reason] of unreadableRepository) {
+    test(`regression (#43): ${what} with a label override is an operational failure, never a not-found original`, async () => {
+      const world = makeWorld([original(37, 'closed'), suggestion(40, 37)], config);
+      const name = `${OWNER}/${repo}`;
+      const input = { repository: { owner: OWNER, repo }, label: 'suggestion-pr', originalPullNumber: 37 };
+      await assert.rejects(cleanup(world, input), (err: unknown) => {
+        assert.ok(err instanceof Error && !(err instanceof TypeError), String(err));
+        assert.ok(err.message.startsWith(`The repository ${name} could not be read (`), err.message);
+        assert.match(err.message, reason);
+        return true;
+      });
+      assert.equal(world.host.log().some((r) => r.path.includes('/pulls/')), false, 'no original is read before the repository is');
+      assert.deepEqual(writes(world), []);
+    });
+  }
+
+  test('the repository is read exactly once, whether the configuration read proves it or the label override needs it', async () => {
+    const repositoryReads = (world: IWorld): number => world.host.log().filter((r) => r.method === 'GET' && r.path === `/repos/${OWNER}/${REPO}`).length;
+    for (const extra of [{}, { label: 'suggestion-pr' }, { originalPullNumber: 37 }, { originalPullNumber: 37, label: 'suggestion-pr' }]) {
+      const world = makeWorld([original(37, 'closed'), suggestion(40, 37)]);
+      const outcome = await cleanup(world, extra);
+      assert.equal(outcome['status'], 'complete', JSON.stringify(extra));
+      assert.equal(repositoryReads(world), 1, JSON.stringify(extra));
+    }
+  });
+
+  test('with a label override, an original that does not exist in a repository that does is still not-found', async () => {
+    const world = makeWorld([original(37, 'closed'), suggestion(40, 37)]);
+    const outcome = await cleanup(world, { label: 'suggestion-pr', originalPullNumber: 99 });
+    assert.equal(outcome['status'], 'complete');
+    assert.deepEqual(outcome['originals'], [{ number: 99, state: 'not-found' }]);
+    assertDiagnostics(outcome['diagnostics'], [{ code: 'original-pull-request-not-found', subject: 'octo/widgets#99' }]);
+  });
+
   test('regression (#43): an original that does not exist (a typo in the number) is a definitive, complete outcome with a warning, never an endless retry', async () => {
     const world = makeWorld([original(37, 'closed'), suggestion(40, 37)]);
     const outcome = await cleanup(world, { originalPullNumber: 99 });
@@ -856,6 +898,22 @@ describe('CLI + real GitHub client over HTTP', () => {
     assert.match(result.stderr, /HTTP 502/);
     assert.match(result.stdout, /Nothing was closed/);
     assert.match(result.stderr, /\[operation-failed\]/);
+    assert.deepEqual(writes(world), []);
+  });
+
+  test('regression (#43): a mistyped --repo with --label and --original exits 1 naming the repository, never a not-found success', () => {
+    const world = makeWorld(worked());
+    const human = cli(world, ['close-suggestion-prs', '--repo', `${OWNER}/widgts`, '--label', 'suggestion-pr', '--original', '37']);
+    assert.equal(human.status, 1, human.stdout + human.stderr);
+    assert.equal(human.stdout, 'Nothing was closed.\n');
+    assert.match(human.stderr, /\[operation-failed\]/);
+    assert.ok(human.stderr.includes('The repository octo/widgts could not be read ('), human.stderr);
+    assert.equal(/not-found|has no pull request/.test(human.stderr), false, human.stderr);
+    const json = cli(world, ['close-suggestion-prs', '--repo', `${OWNER}/widgts`, '--label', 'suggestion-pr', '--original', '37', '--format', 'json']);
+    assert.equal(json.status, 1);
+    const doc = asRecord(parseJson(json.stdout));
+    assert.equal(doc['status'], 'error');
+    assertDiagnostics(doc['diagnostics'], [{ code: 'operation-failed', message: /^The repository octo\/widgts could not be read \(/ }]);
     assert.deepEqual(writes(world), []);
   });
 
