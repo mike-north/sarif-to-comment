@@ -1,8 +1,8 @@
 # Companion suggestion pull requests: contract
 
-Proposal awaiting owner acceptance · September 29, 2026. Publication of whole-file operations and explicitly grouped edits as companion suggestion pull requests is implemented under the conservative options below. The default-off setting (§2.1) is the owner's decision of September 29, 2026 ([issue #5](https://github.com/mike-north/sarif-to-comment/issues/5), recorded in D22 and R16). Every other decision in [Decisions awaiting acceptance](#4-decisions-awaiting-acceptance) is provisional until the owner accepts or replaces it.
+Partly owner-accepted · September 29, 2026. Publication of whole-file operations and explicitly grouped edits as companion suggestion pull requests is implemented under the options below. Suggestion pull requests follow the tool-neutral [suggestion pull request convention](suggestion-pr-convention.md). The default-off setting (§2.1) is the owner's decision on [issue #5](https://github.com/mike-north/sarif-to-comment/issues/5) (recorded in D22 and R16); the options, the convention, labels, draft and ready pull requests, the supported scope and the limits are the owner's decisions on [issue #27](https://github.com/mike-north/sarif-to-comment/issues/27). The decisions still listed in [Decisions awaiting acceptance](#4-decisions-awaiting-acceptance) are provisional until the owner accepts or replaces them.
 
-**Sources.** [Issue #5](https://github.com/mike-north/sarif-to-comment/issues/5); [specification](specification.md) R16 and open contract O11, with R1, R3, R8, R10, R12, R13 and R14; [decisions](design-decisions.md) D7, D12, D14, D21–D29; the [file-operation publication contract](file-operation-publication-contract.md), which remains the form used when suggestion pull requests are not enabled; the [grouped-suggestion](grouped-suggestion-experiment.md), [lifecycle](companion-pr-lifecycle-experiment.md) and [recovery](publication-recovery-experiment.md) experiments; [status](status.md). Cleanup of suggestion pull requests after their original pull request ends ([issue #6](https://github.com/mike-north/sarif-to-comment/issues/6)) is specified separately, in the [suggestion cleanup contract](suggestion-cleanup-contract.md); §5 states what it relies on.
+**Sources.** [Issue #5](https://github.com/mike-north/sarif-to-comment/issues/5); [issue #27](https://github.com/mike-north/sarif-to-comment/issues/27) and the [suggestion pull request convention](suggestion-pr-convention.md); [specification](specification.md) R16 and open contract O11, with R1, R3, R8, R10, R12, R13 and R14; [decisions](design-decisions.md) D7, D12, D14, D21–D29; the [file-operation publication contract](file-operation-publication-contract.md), which remains the form used when suggestion pull requests are not enabled; the [grouped-suggestion](grouped-suggestion-experiment.md), [lifecycle](companion-pr-lifecycle-experiment.md) and [recovery](publication-recovery-experiment.md) experiments; [status](status.md). Cleanup of suggestion pull requests after their original pull request ends ([issue #6](https://github.com/mike-north/sarif-to-comment/issues/6)) is specified separately, in the [suggestion cleanup contract](suggestion-cleanup-contract.md); §5 states what it relies on.
 
 ## 1. What is fixed by the sources
 
@@ -11,8 +11,9 @@ Proposal awaiting owner acceptance · September 29, 2026. Publication of whole-f
 - With suggestion pull requests enabled, a whole-file creation or deletion prefers a suggestion pull request, and an explicitly supplied group of distinct edits requiring acceptance as a unit uses one suggestion pull request containing the whole group (R16, D22; A28, A29, A32).
 - With suggestion pull requests disabled, creations and deletions keep their ordinary review presentation ([file-operation contract](file-operation-publication-contract.md)), and a required group is reported as needing suggestion pull requests; it is never split, approximated with independent suggestions or omitted, and the whole-review gate applies (R12, R16, D12, D22; A30, A32).
 - Groups are only ever supplied, never inferred, and alternative remedies are never merged into one patch (D7; §2 of the specification).
-- A suggestion pull request targets the original pull request's branch. It carries an ordinary reference to the original in its own body and the configured suggestion label. The original's description is never edited, and the reference is never a closing keyword (D21, D24; A31, A33).
-- Near-term support is the same repository only; forks are recorded, not required (D25; A34).
+- A suggestion pull request targets the original pull request's branch. It carries an ordinary reference to the original in its own body and the repository's canonical suggestion label. The original's description is never edited, and the reference is never a closing keyword (D21, D24; A31, A33).
+- Once feedback reaches GitHub, SARIF and this tool are implementation details: everything GitHub shows (label, branch, marker, title, body) follows the tool-neutral [convention](suggestion-pr-convention.md) (#27).
+- Near-term support is the same repository only, for originals whose base is the default branch; forks and other bases are not yet supported (D25; A34; #27).
 - R11 and R12 apply before any proposal-branch, pull-request or label write as well as the review write. Recovery covers every remote object, and a created suggestion pull request is not proof that the review was published (R16, R14, D28).
 - Each intended remote object has its own identity, persisted before its uncertain write. Rediscovery must survive a lost response; absence from a listing never establishes that nothing was created, and recovery never depends on a label applied after creation (R14, D28; A37).
 - A draft code review may be accompanied by visible draft suggestion pull requests; no extra privacy step is added (R13, D26; A35).
@@ -22,7 +23,7 @@ Proposal awaiting owner acceptance · September 29, 2026. Publication of whole-f
 
 ### 2.1 The setting, and why it is off by default
 
-**Owner decision (September 29, 2026): suggestion pull requests are explicit opt-in and disabled unless the caller enables them** (`options.suggestionPullRequests: true`, CLI `--suggestion-prs`). The owner recorded it on [issue #5](https://github.com/mike-north/sarif-to-comment/issues/5); [D22](design-decisions.md#d22-gate-suggestion-prs-with-one-caller-setting--settled-direction) and [R16](specification.md#r16-select-publication-forms-using-the-suggestion-pr-setting) now state it. The evaluation below is the evidence it rests on.
+**Owner decision (September 29, 2026): suggestion pull requests are explicit opt-in and disabled unless the caller enables them** (`options.allowSuggestionPullRequests: true`, CLI `--allow-suggestion-prs`; the names are the owner's decision on #27). The owner recorded it on [issue #5](https://github.com/mike-north/sarif-to-comment/issues/5); [D22](design-decisions.md#d22-gate-suggestion-prs-with-one-caller-setting--settled-direction) and [R16](specification.md#r16-select-publication-forms-using-the-suggestion-pr-setting) now state it. The evaluation below is the evidence it rests on.
 
 D22 earlier recorded "enabled when omitted" as a *low-conviction* default, to be validated against "PR clutter and repository automation triggered by PR creation". Issue #5 asks for that evaluation. It found the costs of an enabled default concrete and the benefit small:
 
@@ -34,18 +35,32 @@ D22 earlier recorded "enabled when omitted" as a *low-conviction* default, to be
 | Failure surface | New failure modes for everyone: missing push permission, a missing label, fork pull requests, a moved head. Each would block reviews that publish today. | Those checks apply only when requested. |
 | What is lost | Grouped edits and pull-request-based file operations work without a flag. | Grouped edits need one explicit setting; without it they are refused with the setting named (never split). Creations and deletions still publish, in the review body. |
 
-The asymmetry decides it: an enabled default imposes surprise costs on every repository to save one flag for the callers who want the feature, and turning it off after the fact does not remove pull requests already created. The explicit disable choice D22 requires remains available (`suggestionPullRequests: false` behaves exactly like omission). Nothing else in this contract depends on the omitted-option value.
+The asymmetry decides it: an enabled default imposes surprise costs on every repository to save one flag for the callers who want the feature, and turning it off after the fact does not remove pull requests already created. The explicit disable choice D22 requires remains available (`allowSuggestionPullRequests: false` behaves exactly like omission). Nothing else in this contract depends on the omitted-option value.
 
 ### 2.2 Options
 
+Owner decisions of September 29, 2026 ([#27](https://github.com/mike-north/sarif-to-comment/issues/27)). A flag's name says what kind of value it takes: a switch reads as a switch, a list as a list.
+
 | Library (`options`) | CLI | Meaning |
 | --- | --- | --- |
-| `suggestionPullRequests?: boolean` | `--suggestion-prs` | Allow suggestion pull requests. Omitted or `false`: disabled. |
-| `suggestionLabel?: string` | `--suggestion-label NAME` | The label every suggestion pull request carries. Default `suggestion`. Allowed only together with `suggestionPullRequests: true` (otherwise a `TypeError` / usage error, so a label is never silently ignored). 1–50 characters, no control or invisible formatting characters, no leading or trailing whitespace. |
+| `allowSuggestionPullRequests?: boolean` | `--allow-suggestion-prs` | Explicit opt-in. Omitted or `false`: disabled (§2.1). |
+| `pullRequestLabels?: string[]` | `--pr-labels a,b,c` | Extra labels every suggestion pull request carries **in addition to** the canonical label (§2.7), for example a team or campaign tag. |
+| `markSuggestionPullRequestsReady?: boolean` | `--mark-suggestion-prs-ready` | Create suggestion pull requests ready for review instead of as drafts. Drafts are the default. |
+
+- `pullRequestLabels` and `markSuggestionPullRequestsReady` require `allowSuggestionPullRequests: true`: given without it (with any value), they are a `TypeError` (CLI: a usage error), so a setting is never silently ignored.
+- Each extra label is a label name under the [convention](suggestion-pr-convention.md#3-the-canonical-label): 1–50 characters, no control or invisible formatting characters, no surrounding whitespace, **no comma**. The library refuses anything else with a `TypeError`. The CLI splits `--pr-labels` at commas and trims the spaces around each name, so `--pr-labels "docs, team-a"` names `docs` and `team-a`; an empty name (`a,,b`, a trailing comma, an empty value) is a usage error. A name cannot contain a comma in either form.
+- Extra labels are deduplicated case-insensitively, keeping the first spelling given: first among themselves, then against the canonical label, which always comes first. Listing the canonical label is therefore harmless. `pullRequestLabels: []` is the same as omitting it.
+- **Removed:** `suggestionLabel` / `--suggestion-label`. There is no per-call override of the canonical label: the label is a repository-wide convention (§2.7), and cleanup depends on it. The earlier names `suggestionPullRequests` / `--suggestion-prs` are replaced by the names above. None of them was released, so no compatibility shim exists: the old option names are refused as unknown options, and the old flags as unknown options (exit 1).
 
 `validateSarifReview` and `validate` accept the same options, because they take publication's options.
 
-The setting and the label are part of the publication's **input identity**: when enabled, the input fingerprint's identity document gains `suggestionPullRequests: { label }`. When disabled, the identity document is exactly what it was, so default-off fingerprints, requests and state files are unchanged. Retrying a state path with a different setting or label is refused as a `state-mismatch` ("belongs to a different original input") before any request.
+**Publication identity.** All of these settings are part of the publication's input identity: when enabled, the input fingerprint's identity document gains
+
+```text
+suggestionPullRequests: { markReady: <boolean>, pullRequestLabels: [<extra labels, deduplicated among themselves, in the order given>] }
+```
+
+When disabled, the identity document is exactly what it was, so default-off fingerprints, requests and state files are unchanged. Retrying a state path with any different setting is refused as a `state-mismatch` ("belongs to a different original input") before any request. The canonical label is not a caller setting: it is resolved from the repository once, when the publication is planned, and recorded in the plan (§2.9), so a later change to the repository configuration never changes a publication already planned.
 
 ### 2.3 Explicit groups in SARIF
 
@@ -79,44 +94,57 @@ A group edit is applied to the reviewed file exactly as a native suggestion's re
 
 ### 2.5 Repository, target branch and revision
 
-- **Same repository only** (D25). The pull request's head repository must be its base repository (`suggestion-pr-fork-unsupported`).
-- **Target.** Each suggestion pull request's base is the original pull request's head branch (`head.ref`), read from the pull request during validation. It is never the default branch: when the original's head branch *is* the repository's default branch, the review is blocked (`suggestion-pr-default-branch-unsupported`), because GitHub acts on closing keywords in a pull request that targets the default branch, and the suggestion carries the reviewers' own feedback text verbatim.
-- **Base commit.** Each proposal branch is one commit whose parent is the **reviewed commit**, and it is created only when the reviewed commit is the pull request's current head (`suggestion-pr-historical-unsupported`). The proposed changes are therefore exactly the pull request's diff from the reviewed state, never a rebase or a merge.
+- **Supported scope** (owner decision, #27): original pull requests whose head branch is in the repository itself and whose base is the repository's **default branch**. Other bases and forks are **not yet supported**. The refusal names the capability that is missing, not a policy:
+  - a fork (`suggestion-pr-fork-unsupported`): the suggestion would have to be opened in the fork, as a pull request into the fork's branch, and this tool creates branches and pull requests only in the original's repository. A possible later route is a pull request from the reviewer's fork into the original fork's branch. A head repository that was deleted leaves no branch to propose into.
+  - another base (`suggestion-pr-base-unsupported`): following a suggestion through an original that merges into a branch other than the default branch (for example one pull request of a stack, which GitHub retargets when the branch below it merges) has not been built or verified yet.
+- **Target.** Each suggestion pull request's base is the original pull request's head branch (`head.ref`), read from the pull request during validation. Because the original's base is the default branch, its head branch never is.
+- **Base commit.** Each proposal branch is one commit whose parent is the **reviewed commit**. The proposed changes are therefore exactly the pull request's diff from the reviewed state, never a rebase or a merge.
+- **A head that moved on since the review.** The owner decided (#27) that a branch that moved forward after the review is not a reason to refuse; handling rewritten history (a force-push) is tracked in [#28](https://github.com/mike-north/sarif-to-comment/issues/28), which also carries that relaxation. Until then the suggestion is created only when the reviewed commit is still the pull request's head (`suggestion-pr-historical-unsupported`), and the refusal says what is missing: a check that the reviewed commit is still part of the branch, so the suggestion can be proposed on top of later commits.
 - **A head that moves later** (after validation) is not chased. The branch keeps the reviewed commit as its parent, the pull request still targets the head branch, and nothing is retargeted, rebased or re-validated on retry. GitHub shows the suggestion's own changes; whether they still merge cleanly is for the person accepting them.
-- **Draft pull requests.** Suggestion pull requests are always created as drafts, in both review modes. Draft status avoids automatic review requests to code owners and is the accepted D26 form. A repository that does not allow draft pull requests refuses the create; that refusal is recorded like any other (§2.9).
+- **Draft or ready.** Suggestion pull requests are created as drafts, in both review modes, unless `markSuggestionPullRequestsReady` asks for them ready for review (owner decision, #27). A draft avoids automatic review requests to code owners, and cannot be merged until someone with write access marks it ready (the lifecycle, §2.11). A repository that does not allow draft pull requests refuses the create; that refusal is recorded like any other (§2.9).
 
 ### 2.6 Branch naming and ownership
 
-Each suggestion's proposal branch is `sarif-to-comment/suggestions/<pull number>/<suggestion id>`, where the suggestion id is a random v4 UUID generated once per suggestion and persisted before any write. The name is unique to one suggestion of one publication, so a new publication (a new state path) never collides with an earlier one.
+Each suggestion's proposal branch is `suggestion-pr/<pull number>/<suggestion id>` ([convention §5](suggestion-pr-convention.md#5-the-branch)), where the suggestion id is a random v4 UUID generated once per suggestion and persisted before any write. The name is unique to one suggestion of one publication, so a new publication (a new state path) never collides with an earlier one.
 
-The tool owns only branches it created under that prefix, and only to create them: it creates each branch exactly once, pointing at its proposal commit, and never updates, force-pushes, rebases or deletes it. A branch a person has since changed is left as it is (§2.10). Deleting branches is outside publication; cleanup of pull requests (#6) is also distinct from branch deletion.
+The tool owns only branches it created, and only to create them: it creates each branch exactly once, pointing at its proposal commit, and never updates, force-pushes, rebases or deletes it. A branch a person has since changed is left as it is (§2.10). Deleting branches is outside publication; cleanup closes pull requests only, and branch removal is left to people or to GitHub's automatic deletion of merged branches.
 
 The proposal commit is created through GitHub's Git database API: one blob per created or edited file, whose Git blob id is computed locally from the exact proposed bytes and must equal the host's answer; one tree based on the reviewed commit's tree (a deletion is a `sha: null` entry); one commit with the reviewed commit as its only parent. Before the branch is created, the commit is read back: its tree, parent, and every changed path (blob id and mode, or absence for a deletion) must be exactly as proposed. An edited file keeps its existing mode; a created file has its proposed mode. These objects are content-addressed and invisible until a branch points at them, so creating them again after a failure creates nothing a person can see and is not an uncertain write.
 
-### 2.7 Relationship: reference, marker and label
+### 2.7 Relationship: reference, marker and labels
 
-A suggestion pull request's body establishes the relationship; the original pull request is never edited.
+A suggestion pull request's body establishes the relationship; the original pull request is never edited. Everything below is the [convention](suggestion-pr-convention.md); nothing GitHub shows names SARIF or this tool.
 
 - **Ordinary reference.** The body begins `Suggested in a review of #<pull> at commit <reviewed commit>.` The `#<pull>` reference creates GitHub's cross-reference on the original pull request (the D21 backlink). It is not a closing keyword.
-- **Structured marker.** The body ends with one hidden line:
+- **Structured marker.** The body ends with one hidden line ([convention §7](suggestion-pr-convention.md#7-the-marker)):
 
   ```
-  <!-- sarif-to-comment:suggestion {"id":"<suggestion id>","original":{"owner":"<owner>","pullNumber":<pull>,"repo":"<repo>"},"publication":"<publication id>","reviewedCommit":"<40-hex>","version":1} -->
+  <!-- suggestion-pr {"version":1,"original":{"owner":"<owner>","repo":"<repo>","pullNumber":<pull>},"reviewedCommit":"<40-hex>","id":"<suggestion id>","batch":"<publication id>"} -->
   ```
 
-  The JSON is canonical (keys sorted, no whitespace). `id` identifies this suggestion, `publication` the logical publication (one per state path), `original` the original pull request, and `reviewedCommit` the proposal's parent. The marker is metadata, not a secret, and never contains `-->`.
-- **Label.** After creation the configured label is added. The label must already exist in the repository; validation reads it and blocks otherwise (`suggestion-label-missing`), naming the label and how to create it or choose another. The tool never creates labels, so a typo cannot create a stray label and label administration stays with the repository. The label's name as the host reports it is what is applied.
+  The JSON is canonical: exactly these members in this order, no whitespace. `id` identifies this suggestion (its branch carries it), `batch` groups the suggestions of one review (this tool uses its publication id, one per state path), `original` names the original pull request, and `reviewedCommit` the proposal's parent. The marker is metadata, not a secret, and never contains `-->`. The review-body marker released in 0.2.x is not part of the convention and is unchanged.
+- **Canonical label.** Resolved identically by `publish`, `validate` and `close-suggestion-prs`: the `label` of the optional, read-only, hand-maintained `.github/suggestion-prs.json` (`{ "label": "…" }`), read from the current commit of the repository's **default branch** so that a pull request cannot change its own label; otherwise **`suggestion-pr`**. The tool never writes that file, and keeps no state in the repository. The file's states are exactly those of [convention §4](suggestion-pr-convention.md#4-repository-configuration):
+
+  | File on the default branch | Outcome |
+  | --- | --- |
+  | Absent, or an object without `label` | The default `suggestion-pr` |
+  | An object whose `label` is a valid label name | That label |
+  | Invalid UTF-8 or JSON; not an object; `label` not a string; `label` empty, containing a comma or otherwise not a label name; a directory, symbolic link or submodule at the path | **blocked** before any write (`suggestion-pr-configuration-invalid`), with a problem naming the file and the field; `validate` reports the same |
+  | The read failed (network, HTTP 403, 5xx, a malformed answer) | Operational: `publish` rejects and `validate` answers `incomplete`. Never a silent default. |
+
+  The file is read through Git objects (the default branch's reference, its commit, the trees on the path and the blob), never the Contents API, which would follow a symbolic link to another path's text. A configuration file over the 1,000,000-byte source limit is invalid.
+- **Labels applied.** Every suggestion pull request carries the canonical label and every extra label (§2.2), all added in one request after creation. **Every label must already exist:** validation reads each one and, if any is missing, blocks the whole review before any write (`suggestion-label-missing`, one problem per missing label, naming it and where it came from); `validate` reports the same. The tool never creates labels, so a typo cannot create a stray label and label administration stays with the repository. Each label's name as the host reports it is what is applied.
 - **Permission.** Validation reads the repository's permissions for the authenticated account and blocks when it cannot push (`suggestion-pr-permission-missing`). This reflects the account's role; a token restricted below that role is discovered only when a write is refused (§2.9).
 
 ### 2.8 Readiness
 
 Everything below runs in the shared review preflight, so `validate` and `publish` report the same outcome. It is read-only.
 
-1. Whole-review preparation of the SARIF with the setting: every rule of §2.3–§2.4, the file-operation rules, and the existing limits. With the setting enabled, one more limit applies: at most **10 suggestion pull requests** per review (`too-many-suggestion-prs`), a conservative product limit against pull-request storms; and every suggestion pull request body is held to the existing 60,000-character limit (`suggestion-body-too-large`). A created file in a suggestion pull request may hold at most 1,000,000 bytes (`suggestion-file-too-large`), the source-read limit. File-content refusals of the file-operation contract (for example bare carriage returns) still apply.
-2. With the setting enabled, the pull request's head branch and repositories and the repository's default branch and permissions are read before preparation, because the suggestion texts name the head branch. Only when the ready preparation needs at least one suggestion pull request are the host capability checks applied, all reported together: `suggestion-pr-fork-unsupported`, `suggestion-pr-historical-unsupported`, `suggestion-pr-default-branch-unsupported`, `suggestion-pr-permission-missing`, `suggestion-label-missing`; the label is read only then. A failed read is operational (`publish` rejects, `validate` answers `incomplete`). With the setting disabled, none of these reads happens.
+1. Whole-review preparation of the SARIF with the setting: every rule of §2.3–§2.4, the file-operation rules, and the existing limits. With the setting enabled, one more limit applies: at most **10 suggestion pull requests** per review (`too-many-suggestion-prs`), a conservative product limit against pull-request storms; and every suggestion pull request body is held to the existing 60,000-character limit (`suggestion-body-too-large`), never truncated. A created file in a suggestion pull request may hold at most 1,000,000 bytes (`suggestion-file-too-large`), the source-read limit. File-content refusals of the file-operation contract (for example bare carriage returns) still apply. These limits are the owner-accepted ones (#27), and they are this tool's, not the convention's.
+2. With the setting enabled, the pull request's branches and repositories and the repository's default branch and permissions are read before preparation, because the suggestion texts name the head branch. Only when the ready preparation needs at least one suggestion pull request are the repository checks applied, all reported together: `suggestion-pr-fork-unsupported`, `suggestion-pr-base-unsupported`, `suggestion-pr-historical-unsupported`, `suggestion-pr-permission-missing`, `suggestion-pr-configuration-invalid`, `suggestion-label-missing`. The repository configuration and the labels are read only then (the canonical label is not checked when the configuration is invalid; the extra labels still are). A failed read is operational (`publish` rejects, `validate` answers `incomplete`). With the setting disabled, none of these reads happens.
 3. The authenticated account's numeric id, as today.
 
-A `ready` assessment with suggestion pull requests says how many would be created, into which branch and with which label, for example ``Publication would also create 1 draft suggestion pull request into `feature/retry`, labeled `suggestion`.`` Codes are internal, as always (D13); the Markdown and `problems` are the contract.
+A `ready` assessment with suggestion pull requests says how many would be created, into which branch, in which form and with which labels, for example ``Publication would also create 1 draft suggestion pull request into `feature/retry`, labeled `suggestion-pr`.`` or ``Publication would also create 2 suggestion pull requests, ready for review, into `feature/retry`, labeled `suggestion-pr` and `docs`.`` Codes are internal, as always (D13); the Markdown and `problems` are the contract.
 
 ### 2.9 Durable identity and the order of writes
 
@@ -124,30 +152,30 @@ The caller's single `statePath` identifies the publication. With suggestion pull
 
 | File | Holds | Written |
 | --- | --- | --- |
-| `<statePath>` | The **plan**: format `sarif-to-comment.companion-publication-state`, version 1; destination, reviewed commit, input fingerprint, author id, mode, head branch, label; the publication id; for each suggestion its id, branch, title, body (with marker), commit message and exact changes; the review's body sections and inline comments; a fingerprint over all of it. | Once, exclusively, before any write. Never changed. |
+| `<statePath>` | The **plan**: format `sarif-to-comment.companion-publication-state`, version 1; destination, reviewed commit, input fingerprint, author id, mode, head branch, the labels (the canonical label first, then the extra labels, each as GitHub names it), whether the pull requests are created ready for review; the publication id (the marker's `batch`); for each suggestion its id, branch, title, body (with marker), commit message and exact changes; the review's body sections and inline comments; a fingerprint over all of it. | Once, exclusively, before any write. Never changed. |
 | `<statePath>.suggestion-<n>-branch` | Intent: the proposal commit. Receipt: the branch verified at that commit. | Claimed exclusively before the branch is created. |
 | `<statePath>.suggestion-<n>-pull` | Intent to create the pull request. Receipt: its number and URL. | Claimed exclusively before the pull request is created. |
-| `<statePath>.suggestion-<n>-label` | Intent to label pull request N. Receipt: the label verified on it. | Claimed exclusively before the label is added. |
+| `<statePath>.suggestion-<n>-labels` | Intent to label pull request N with the plan's labels. Receipt: every label verified on it. | Claimed exclusively before the labels are added. |
 | `<statePath>.review` | The review's own publication record, exactly the existing version-1 format (marker, saved request, receipt or refusal). | By the existing publication core, before the review is sent. |
 
-Order: for each suggestion in turn, proposal commit, branch, pull request, label; then the review, whose body links every suggestion pull request by number. Each step's intent is persisted and exclusively claimed **before** its write is sent, and a claimed step is **never sent again** by any invocation, whatever a later lookup shows. The Git objects of §2.6 are the only writes made without a claim, because they are invisible and content-addressed. A step whose claim another invocation holds is only investigated, so concurrent invocations never duplicate a write.
+Order: for each suggestion in turn, proposal commit, branch, pull request, labels (one request adding every label); then the review, whose body links every suggestion pull request by number. Each step's intent is persisted and exclusively claimed **before** its write is sent, and a claimed step is **never sent again** by any invocation, whatever a later lookup shows. The Git objects of §2.6 are the only writes made without a claim, because they are invisible and content-addressed. A step whose claim another invocation holds is only investigated, so concurrent invocations never duplicate a write.
 
 Without suggestion pull requests, and when enabled but the review needs none, the state file is the existing version-1 record, byte for byte.
 
-**Definitive refusals.** When GitHub definitively refuses a branch, pull-request or label write (HTTP 400, 401, 403, 404, 409, 422 or 429), the step's record becomes a terminal refusal with only the status and a bounded message, no later step is sent, and the review is not published (it would link a suggestion that does not exist). Later calls report the recorded refusal without contacting GitHub. Anything already created is left as it is and listed.
+**Definitive refusals.** When GitHub definitively refuses a branch, pull-request or labels write (HTTP 400, 401, 403, 404, 409, 422 or 429), the step's record becomes a terminal refusal with only the status and a bounded message, no later step is sent, and the review is not published (it would link a suggestion that does not exist). Later calls report the recorded refusal without contacting GitHub. Anything already created is left as it is and listed.
 
 ### 2.10 Recovery and human changes
 
-A call that finds a plan continues it: each completed step is reported from its receipt with no request; each claimed but unsettled step is **investigated**; each unclaimed step is performed. Every investigation is read-only and requires the same authenticated account id as the plan.
+A call that meets an existing plan continues it: each completed step is reported from its receipt with no request; each claimed but unsettled step is **investigated**; each unclaimed step is performed. Every investigation is read-only and requires the same authenticated account id as the plan.
 
 | Step | Investigation | Complete when | Otherwise |
 | --- | --- | --- | --- |
 | Branch | Read `refs/heads/<branch>` | It points at the intended commit | Absent: `not-found`. Elsewhere: `candidate-differs` (a person may have pushed). |
 | Pull request | List the repository's pull requests whose head is the proposal branch (`state=all`) | Exactly one carries the exact marker line, is authored by the plan's account, has the proposal branch as head in this repository and the original's head branch as base | None: `not-found`. Several: `ambiguous`. Wrong author, head or base: `candidate-mismatch`. |
-| Label | Read the pull request's labels | The label is present | `not-found` |
+| Labels | Read the pull request's labels | Every planned label is present (compared case-insensitively) | `not-found`, naming the missing labels |
 | Review | The existing review investigation | As today | As today |
 
-Any unsettled outcome stops the publication as **uncertain**, naming the step, what is already established, and that a retry with the same state path only rechecks and never sends that step again. Absence is never treated as proof that nothing was created (delayed visibility), and the label is never needed to find a pull request.
+Any unsettled outcome stops the publication as **uncertain**, naming the step, what is already established, and that a retry with the same state path only rechecks and never sends that step again. Absence is never treated as proof that nothing was created (delayed visibility), and the labels are never needed to locate a pull request.
 
 Before a pull request is created, the proposal branch is read once more. If it no longer points at the proposal commit, nothing is created and the outcome is uncertain (`branch-changed`): the branch is never recreated, reset or force-pushed.
 
@@ -159,8 +187,8 @@ Exact outcomes for human changes (D29: none is repaired, restored or reconciled)
 | Pushes to a proposal branch after its pull request exists | Not inspected; publication continues. |
 | Edits a suggestion pull request's title or body, keeping the marker line | The pull request is still recognized; the edit is kept. |
 | Removes the marker line before the pull request step was settled | `not-found`; the pull request is never recreated. |
-| Closes or merges a suggestion pull request before the label or review | The label is still applied and the review still links it; nothing is reopened. |
-| Removes the label | Before the label step settled: `not-found`, never re-applied. After: not inspected. |
+| Closes, merges or marks ready a suggestion pull request before its labels or the review | The labels are still applied and the review still links it; nothing is reopened or converted. |
+| Removes a label | Before the labels step settled: `not-found`, never re-applied. After: not inspected. |
 | Edits, submits or deletes the review | As today (the review record). |
 
 ### 2.11 Presentation
@@ -197,6 +225,8 @@ Merging this pull request into HEADREF applies this change:     (or: these K cha
 - CHANGE
 - …
 
+LIFECYCLE
+
 ---
 
 ITEMS
@@ -204,38 +234,54 @@ ITEMS
 MARKER
 ```
 
+`LIFECYCLE` is the brief lifecycle note the owner asked for in each body (#27; [convention §8](suggestion-pr-convention.md#8-lifecycle)). For a draft:
+
+```
+**How this suggestion is accepted:** it is a draft pull request into HEADREF, the branch of #PULL. A draft cannot be merged: someone with write access first marks it ready for review. The author of #PULL then decides whether to merge it, and #PULL carries the change to its base. Once #PULL is merged or closed, this pull request can be closed.
+```
+
+Created ready for review:
+
+```
+**How this suggestion is accepted:** it is a pull request into HEADREF, the branch of #PULL. The author of #PULL decides whether to merge it, and #PULL carries the change to its base. Once #PULL is merged or closed, this pull request can be closed.
+```
+
 The commit message is the title, a blank line, and `Suggested in a review of OWNER/REPO pull request PULL at commit REVIEWED.`
 
-**Outcomes.** A published outcome gains `suggestions: [{ number, url, branch }]`, present only when suggestion pull requests were created; its Markdown lists them. Uncertain and refused outcomes list what is already established. Everything else is unchanged.
+**Outcomes.** A published outcome gains `suggestions: [{ number, url, branch }]`, present only when suggestion pull requests were created; its Markdown lists them after ``Suggestion pull requests (drafts into `HEADREF`, labeled LABELS):`` or ``Suggestion pull requests (ready for review, into `HEADREF`, labeled LABELS):``, where LABELS lists every applied label as code spans joined like `` `a` ``, `` `a` and `b` ``, `` `a`, `b` and `c` ``. Uncertain and refused outcomes list what is already established. Everything else is unchanged.
 
 ## 3. Worked example
 
-Pull request `octo/widgets#7`, head branch `feature/retry`, reviewed at its head `2222222…`. One run bound to that commit holds:
+Pull request `octo/widgets#7`, head branch `feature/retry`, base `main` (the default branch), reviewed at its head `2222222…`. The repository has no `.github/suggestion-prs.json`, so the canonical label is `suggestion-pr`. One run bound to that commit holds:
 
 1. "Retry once on timeout." with a fix replacing line 3 of `src/client.ts`, in group `retry-with-test`;
 2. "Cover the retry." creating `test/client.test.ts`, in group `retry-with-test`;
 3. "Typo." with a native-suggestion-eligible fix on line 1 of `README.md`, in no group.
 
-Disabled: blocked, `acceptance-group-requires-suggestion-prs` at `/runs/0/results/0`. Enabled, with the `suggestion` label present and push permission: one draft pull request from `sarif-to-comment/suggestions/7/<id>` into `feature/retry`, titled `Suggestion for #7: retry-with-test (2 changes)`, whose single commit edits line 3 of `src/client.ts` and adds `test/client.test.ts`, labeled `suggestion`; then one draft review whose inline comment on `README.md` carries the native suggestion and whose body section links the pull request, lists both changes and presents both findings.
+Disabled: blocked, `acceptance-group-requires-suggestion-prs` at `/runs/0/results/0`. Enabled (`--allow-suggestion-prs --pr-labels team-a`), with the labels `suggestion-pr` and `team-a` present and push permission: one draft pull request from `suggestion-pr/7/<id>` into `feature/retry`, titled `Suggestion for #7: retry-with-test (2 changes)`, whose single commit edits line 3 of `src/client.ts` and adds `test/client.test.ts`, labeled `suggestion-pr` and `team-a`, with the draft lifecycle note; then one draft review whose inline comment on `README.md` carries the native suggestion and whose body section links the pull request, lists both changes and presents both findings. With `--mark-suggestion-prs-ready` as well, the pull request is created ready for review and its body carries the ready lifecycle note. If `team-a` did not exist, the review would be blocked before any write, and `validate` would say the same.
 
 ## 4. Decisions awaiting acceptance
 
-1. **Off by default, explicit opt-in** (§2.1). *Decided by the owner on September 29, 2026 ([issue #5](https://github.com/mike-north/sarif-to-comment/issues/5)); no longer awaiting acceptance.* The earlier provisional D22 default ("enabled when omitted") is superseded. Items 2–12 below remain awaiting owner acceptance.
-2. **Option names** `suggestionPullRequests` / `suggestionLabel` and `--suggestion-prs` / `--suggestion-label` (§2.2). Alternatives: a single `suggestionPullRequests: { label }` object (less uniform with the boolean options), or `companion…` names (the specification's term is "suggestion PR").
-3. **Group representation** `properties.sarifToComment.acceptanceGroup` (§2.3), with members holding one change each, at least two distinct changes, and no feedback-only members. Alternatives: a multi-file SARIF fix (a fix structure left to #9), or a run-level group table (indirection without benefit).
-4. **Same repository, head-branch target, reviewed-commit parent, refusal of historical reviews, forks and default-branch heads** (§2.5). Alternatives: basing on the current head (would propose against unreviewed code) or accepting any ancestor (needs a comparison read and still proposes a stale diff).
-5. **Always draft** suggestion pull requests (§2.5). Alternative: ready pull requests for submitted reviews, which request code-owner reviews and trigger more automation.
-6. **Branch prefix and ownership** (§2.6): create once, never update or delete.
-7. **Label must exist; the tool never creates it; default name `suggestion`** (§2.7), the name the recorded experiments used. Alternative: create it on demand, which needs label administration rights and turns a typo into a new label.
-8. **Structured marker** (§2.7), in the form #6 will parse.
-9. **Limits** (§2.8): at most 10 suggestion pull requests per review; bodies at most 60,000 characters; created files at most 1,000,000 bytes.
-10. **State layout** (§2.9): a plan file at the state path with one sibling file per claimed step and the unchanged review record beside it. Alternative: a single rewritten file, which cannot claim individual steps exclusively across processes.
-11. **Recovery lookup by proposal branch** (§2.10): pull requests are found by their unique head branch and verified by marker, rather than by traversing the original's backlinks first (D28's "SHOULD begin with backlinks"). The branch is unique to the suggestion, so its listing is the narrowest candidate set; neither lookup may establish absence.
-12. **Refusal and branch-change outcomes** (§2.9, §2.10): a refused step stops the publication without the review; a changed branch stops before its pull request.
+Decided by the owner, and no longer awaiting acceptance:
+
+- **Off by default, explicit opt-in** (§2.1): [#5](https://github.com/mike-north/sarif-to-comment/issues/5). The earlier provisional D22 default ("enabled when omitted") is superseded.
+- **The convention, options, labels and lifecycle** ([#27](https://github.com/mike-north/sarif-to-comment/issues/27)): the tool-neutral [convention](suggestion-pr-convention.md) (label `suggestion-pr`, the optional default-branch configuration file, branch `suggestion-pr/<pull>/<id>`, the marker with `batch`, neutral title and body with no closing keywords); the option names `allowSuggestionPullRequests` / `--allow-suggestion-prs`, `pullRequestLabels` / `--pr-labels`, `markSuggestionPullRequestsReady` / `--mark-suggestion-prs-ready`, and the removal of the per-call label; all of them in the publication identity; every label must already exist, the tool never creates one, and a missing label blocks before any write; drafts by default; branches created once and never updated, force-pushed or deleted; native suggestions first; same repository with a default-branch base, with forks and other bases not yet supported; and the limits and mechanics as merged (at most 10 suggestion pull requests per review, bodies of at most 60,000 characters, created files of at most 1 MB, per-step state persisted before each attempt, recovery by unique branch plus exact marker, a refused step stops publication, a retry never overwrites human pushes).
+- **A branch that moved forward after the review is not a reason to refuse** (#27). The relaxation itself is implemented with [#28](https://github.com/mike-north/sarif-to-comment/issues/28); until then the refusal of §2.5 stands, worded as a missing capability.
+
+Still awaiting the owner:
+
+1. **Group representation** `properties.sarifToComment.acceptanceGroup` (§2.3), with members holding one change each, at least two distinct changes, and no feedback-only members. Alternatives: a multi-file SARIF fix (a fix structure left to #9), or a run-level group table (indirection without benefit).
+2. **Head-branch target and reviewed-commit parent** (§2.5), and not chasing a head that moves after validation. Alternative: basing on the current head (would propose against unreviewed code).
+3. **Presentation details** (§2.11): the exact lifecycle note and the review-body section. The owner asked for a brief lifecycle note in each body; its wording is this contract's.
+4. **Refusal wording** for the unsupported cases (§2.5), in particular why an original into a non-default base is not yet supported (the stacked-pull-request retargeting path is unbuilt and unverified).
+5. **Details of the options** (§2.2): the CLI trims spaces around `--pr-labels` names; extra labels are deduplicated keeping the first spelling; the identity document's shape.
+6. **Details of the configuration read** (§2.7): through Git objects, with a symbolic link, directory or submodule, and a file over 1,000,000 bytes, treated as invalid; unknown members ignored ([convention open questions](suggestion-pr-convention.md#10-open-questions)).
+7. **One request for all labels**, and one labels step and state file per suggestion (§2.9).
 
 ## 5. What cleanup (#6) can rely on
 
-- Every suggestion pull request this tool creates carries the configured label (once its label step completes) and exactly one marker line of §2.7, whose `original` names the original pull request in the same repository. Suggestion-first enumeration can list open pull requests with the label and parse the marker; targeted discovery can start from the original's cross-reference backlinks, which the body's ordinary reference creates.
-- The marker, not the title, is the relationship. A labeled pull request without a parseable marker is not one of this tool's suggestions.
-- The label may be missing when a publication stopped before its label step, or when a person removed it; such a suggestion is still found from the original's backlinks and its marker.
-- Proposal branches are named `sarif-to-comment/suggestions/<pull>/<id>` and are never changed by the tool after creation.
+- Every suggestion pull request this tool creates follows the [convention](suggestion-pr-convention.md): it carries the canonical label and any extra labels (once its labels step completes) and exactly one marker line of §2.7, whose `original` names the original pull request in the same repository. Suggestion-first enumeration can list open pull requests with the canonical label and parse the marker; targeted discovery can start from the original's cross-reference backlinks, which the body's ordinary reference creates.
+- The marker, not the title, is the relationship. A labeled pull request without a recognized marker is not a suggestion pull request.
+- The labels may be missing when a publication stopped before its labels step, or when a person removed them; such a suggestion is still reached from the original's backlinks and its marker.
+- Proposal branches are named `suggestion-pr/<pull>/<id>` and are never changed by the tool after creation.
+- The canonical label is resolved the same way for cleanup as for publication (§2.7).
