@@ -187,7 +187,7 @@ One entry per code: its severity, its title, what it means and its typical remed
 
 | Code | Severity | Title | Meaning | Typical remedies |
 |---|---|---|---|---|
-| `usage-error` | error | The command line is not valid | An option is unknown, missing, repeated or has a value the command does not accept, or the command is unknown. Nothing was read or written. | Correct the command line; `--help` shows the command's usage. |
+| `usage-error` | error | The command line is not valid | An option is unknown, missing, repeated or has a value the command does not accept, or the command is unknown. Nothing was read or written. | Correct the command line; run the command with `--help` for its usage. |
 | `github-token-missing` | error | No GitHub token is set | `validate`, `publish` and `close-suggestion-prs` read GitHub and need a token in `GH_TOKEN` or `GITHUB_TOKEN`. There is no token flag. | Set GH_TOKEN (or GITHUB_TOKEN) to a personal access token or user token. |
 | `file-unreadable` | error | A file could not be read | An input file does not exist, is not readable, or could not be read again before it was replaced. | Check the path and the file's permissions, then run the command again. |
 | `file-not-utf8` | error | A file is not UTF-8 text | SARIF and message files must be UTF-8 encoded. | Save the file as UTF-8, then run the command again. |
@@ -315,6 +315,9 @@ One entry per code: its severity, its title, what it means and its typical remed
 | `fix-binary-unsupported` | error | A fix inserts binary content | Binary content cannot be presented as a suggestion. | Express the fix as text, or remove it. |
 | `fix-replacements-overlap` | error | A fix's replacements overlap | Two replacements overlap or start at the same position, so their combined effect is not defined. | Correct the fix. |
 | `fix-replacements-unlocatable` | error | A fix's replacements cannot be located together | The replacements of one file cannot be located together in its text. | Correct the fix against the reviewed source. |
+| `replacement-invalid` | error | A fix's replacement cannot be applied | Its region or inserted text is not valid for the file it edits; the message gives the reason. | Correct the fix against the reviewed source. |
+| `replacement-unsupported` | error | A fix's replacement form is not supported | For example a byte region, which cannot be applied as text. | Express the replacement in lines and columns or character offsets. |
+| `replacement-unanchored` | error | A fix edits an empty file | A replacement in an empty file has no line to anchor a suggestion on. | Propose the content as a new file, or enable suggestion pull requests. |
 | `fix-changes-require-suggestion-prs` | error | A fix with several changes needs suggestion pull requests | A SARIF fix is accepted whole; a fix with several changes is published as one suggestion pull request, never split. | Enable suggestion pull requests (`--allow-suggestion-prs`, `allowSuggestionPullRequests`). |
 | `overlapping-replacements` | error | Replacements of different findings overlap | Two findings propose different replacements for overlapping lines; no winner is chosen. | Reconcile the findings' fixes. |
 | `suggestion-source-not-reviewed` | error | A fix edits another revision than the reviewed commit | Its applicability to the reviewed commit is unverified. | Derive the fix from the reviewed commit. |
@@ -398,7 +401,6 @@ One entry per code: its severity, its title, what it means and its typical remed
 | `suggestion-pr-close-not-permitted` | warning | GitHub did not allow this account to close a suggestion pull request | Everything else is done; the pull request is eligible but still open. | Someone allowed to close it can run cleanup again. |
 | `suggestion-pr-cleanup-failed` | error | Reading or closing a suggestion pull request failed | Cleanup could not finish for this pull request; running it again is safe. | Run cleanup again later. |
 | `suggestion-pr-not-conforming` | note | A pull request does not follow the suggestion pull request convention | It was not touched: its marker, repository, original, fork or branch does not conform. | — |
-
 
 ## Open questions
 

@@ -25,7 +25,7 @@ export const DIAGNOSTIC_CATALOG = {
   'usage-error': {
     severity: 'error',
     title: 'The command line is not valid',
-    remedies: ['Correct the command line; `--help` shows the command\'s usage.'],
+    remedies: ['Correct the command line; run the command with `--help` for its usage.'],
   },
   'github-token-missing': {
     severity: 'error',

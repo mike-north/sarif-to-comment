@@ -348,7 +348,9 @@ describe('on a terminal', () => {
     const argv = ['add-comment', '--sarif', 'invalid.sarif.json', '--file', 'a.ts', '--line', '1', '--message', 'M', '--color', 'never'];
     const narrow = await inProcess(argv, new Capture(true, 30), {}, dir);
     const remedy = 'Correct the document so that it conforms to the SARIF 2.1.0 schema.';
-    for (const line of narrow.stderr.split('\n')) assert.ok(line.length <= 30, `${JSON.stringify(line)} fits 30 columns`);
+    // The header (badge, title, code) is one line by design; the message and remedies are wrapped.
+    const body = narrow.stderr.split('\n').filter((line) => !/^[✖▲ℹ] /.test(line));
+    for (const line of body) assert.ok(line.length <= 30, `${JSON.stringify(line)} fits 30 columns`);
     assert.equal(narrow.stderr.includes(remedy), false, 'the remedy was wrapped');
     const pipe = await inProcess(argv, new Capture(false), {}, dir);
     assert.ok(pipe.stderr.includes(`  → ${remedy}\n`), 'not wrapped off a terminal');

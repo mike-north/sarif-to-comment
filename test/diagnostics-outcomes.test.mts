@@ -244,7 +244,7 @@ describe('addStagedChangesToSarif', () => {
     }], outcome['diagnostics']);
     assert.equal(
       outcome['markdown'],
-      '**Staged changes could not be added; nothing was produced.**\n\n- `n.bin`: is binary (it contains NUL bytes) in the index; binary changes cannot be proposed as text. Unstage it and retry.',
+      '**Staged changes could not be added; nothing was produced.**\n\n- `n.bin`: is binary (it contains NUL bytes) in the index; binary changes cannot be proposed as text. Unstage it and retry.\n',
     );
   });
 });
