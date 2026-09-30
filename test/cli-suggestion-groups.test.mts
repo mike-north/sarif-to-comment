@@ -145,13 +145,14 @@ describe('group-fixes edits the SARIF file in place', () => {
       status: 'grouped',
       sarif: { path: file, written: true },
       group: 'retry-with-test',
+      extended: false,
       findings: [
         { ref: '/runs/0/results/0', runIndex: 0, resultIndex: 0, tool: TOOL, changes: 1 },
         { ref: '/runs/0/results/1', runIndex: 0, resultIndex: 1, tool: TOOL, changes: 1 },
       ],
       changes: 2,
     });
-    assert.deepEqual(Object.keys(doc), ['command', 'status', 'sarif', 'group', 'findings', 'changes']);
+    assert.deepEqual(Object.keys(doc), ['command', 'status', 'sarif', 'group', 'extended', 'findings', 'changes']);
     const expected = library.groupSarifFixes(before, { findings: selectors, group: 'retry-with-test' });
     assert.equal(expected.status, 'grouped');
     assert.equal(fs.readFileSync(file, 'utf8'), serialized(dig(expected, 'sarif')), 'the CLI writes what the library returns');
@@ -175,6 +176,31 @@ describe('group-fixes edits the SARIF file in place', () => {
     ].join('\n'));
   });
 
+  test('a single --finding extends an existing group; human output says so', () => {
+    const dir = tempDir('group-extend');
+    const file = reviewFile(dir);
+    json(run(['group-fixes', '--sarif', file, ...findingFlags(selectorsFor(file, '/runs/0/results/0', '/runs/0/results/1')), '--group', 'retry-with-test', '--format', 'json']));
+    const doc = json(run(['group-fixes', '--sarif', file, ...findingFlags(selectorsFor(file, '/runs/0/results/0')), '--group', 'retry-with-test', '--format', 'json']));
+    assert.equal(doc['status'], 'grouped');
+    assert.equal(doc['extended'], true);
+    const more = asRecord(readJson(file));
+    asArray(dig(more, 'runs', 0, 'results')).push({ message: { text: 'And the index.' }, fixes: [lineFix('docs/index.md', 1, '# Index')] });
+    fs.writeFileSync(file, serialized(more));
+    const human = run(['group-fixes', '--sarif', file, ...findingFlags(selectorsFor(file, '/runs/0/results/3')), '--group', 'retry-with-test']);
+    assert.equal(human.status, 0, human.stdout + human.stderr);
+    assert.equal(human.stdout.split('\n')[0], `Added 1 finding in ${file} to suggestion group "retry-with-test": 3 distinct changes to accept together.`);
+  });
+
+  test('a single --finding for a new group is refused (exit 2), not a usage error', () => {
+    const dir = tempDir('group-single');
+    const file = reviewFile(dir);
+    const before = bytesOf(file);
+    const result = run(['group-fixes', '--sarif', file, ...findingFlags(selectorsFor(file, '/runs/0/results/0')), '--group', 'g', '--format', 'json']);
+    assert.equal(result.status, 2, result.stdout);
+    assert.equal(json(result)['status'], 'refused');
+    assert.deepEqual(bytesOf(file), before);
+  });
+
   test('--output writes a new file and leaves the input byte-for-byte unchanged', () => {
     const dir = tempDir('group-output');
     const file = reviewFile(dir);
@@ -188,6 +214,7 @@ describe('group-fixes edits the SARIF file in place', () => {
       sarif: { path: file, written: false },
       output: { path: output, written: true },
       group: 'g',
+      extended: false,
       findings: [
         { ref: '/runs/0/results/0', runIndex: 0, resultIndex: 0, tool: TOOL, changes: 1 },
         { ref: '/runs/0/results/1', runIndex: 0, resultIndex: 1, tool: TOOL, changes: 1 },
@@ -270,7 +297,6 @@ describe('group-fixes edits the SARIF file in place', () => {
   });
 
   const usage: readonly (readonly [string, (file: string, dir: string) => string[], string])[] = [
-    ['one --finding', (file) => ['--finding', selectorsFor(file, '/runs/0/results/0')[0] ?? '', '--group', 'g'], 'at least two'],
     ['no --group', (file) => findingFlags(selectorsFor(file, '/runs/0/results/0', '/runs/0/results/1')), '--group'],
     ['an invalid group name', (file) => [...findingFlags(selectorsFor(file, '/runs/0/results/0', '/runs/0/results/1')), '--group', 'g '], '1-100 characters'],
     ['a bare position', (file) => ['--finding', '/runs/0/results/0', ...findingFlags(selectorsFor(file, '/runs/0/results/1')), '--group', 'g'], 'inspect'],

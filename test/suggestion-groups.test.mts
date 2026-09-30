@@ -8,7 +8,8 @@
  * separate from extraction: it names findings by inspection selectors, never
  * infers anything, and returns a new document. The rules (issue #29, owner
  * decisions of September 29, 2026): a group needs at least two distinct
- * changes; a finding belongs to at most one group; only a finding's primary
+ * changes; a name already in use extends that group, but groups are never
+ * joined; a finding belongs to at most one group; only a finding's primary
  * (first) fix is a member, alternatives never; a member without a change is
  * refused; a stale selector is refused.
  *
@@ -209,6 +210,7 @@ describe('groupSarifFixes groups the primary fixes of findings across the docume
       status: 'grouped',
       sarif: outcome.sarif,
       group: 'retry-with-test',
+      extended: false,
       findings: [
         { ref: '/runs/0/results/0', runIndex: 0, resultIndex: 0, tool: TOOL, changes: 1 },
         { ref: '/runs/0/results/1', runIndex: 0, resultIndex: 1, tool: TOOL, changes: 1 },
@@ -308,16 +310,70 @@ describe('groupSarifFixes refuses what the rules forbid, changing nothing', () =
     });
   });
 
-  test('a group name the document already uses (groups are created whole, never extended or joined)', () => {
+  test('a group name already in use extends that group; the result counts the whole group', () => {
     const first = threeEdits();
     const once = grouped(groupSarifFixes(first, { findings: selectorsAt(first, '/runs/0/results/0', '/runs/0/results/1'), group: 'script' })).sarif;
-    const extended = structuredClone(once);
-    asArray(dig(extended, 'runs', 1, 'results')).push(finding('More.', 'docs/x.md', 1, { fixes: [lineFix('docs/x.md', 1, 'x')] }));
-    const outcome = refused(groupSarifFixes(extended, { findings: selectorsAt(extended, '/runs/1/results/0', '/runs/1/results/1'), group: 'script' }));
+    const more = structuredClone(once);
+    asArray(dig(more, 'runs', 1, 'results')).push(finding('More.', 'docs/x.md', 1, { fixes: [lineFix('docs/x.md', 1, 'x')] }));
+    const outcome = grouped(groupSarifFixes(more, { findings: selectorsAt(more, '/runs/1/results/1', '/runs/1/results/0'), group: 'script' }));
+    assert.deepEqual(outcome.sarif, expectGrouped(more, 'script', [[1, 0], [1, 1]]), 'only the named findings change');
+    assert.deepEqual(outcome, {
+      status: 'grouped',
+      sarif: outcome.sarif,
+      group: 'script',
+      extended: true,
+      findings: [
+        { ref: '/runs/1/results/0', runIndex: 1, resultIndex: 0, tool: 'Second bot', changes: 1 },
+        { ref: '/runs/1/results/1', runIndex: 1, resultIndex: 1, tool: 'Second bot', changes: 1 },
+      ],
+      changes: 4,
+    });
+  });
+
+  test('a single finding may extend an existing group', () => {
+    const first = threeEdits();
+    const once = grouped(groupSarifFixes(first, { findings: selectorsAt(first, '/runs/0/results/0', '/runs/0/results/1'), group: 'script' })).sarif;
+    const outcome = grouped(groupSarifFixes(once, { findings: selectorsAt(once, '/runs/1/results/0'), group: 'script' }));
+    assert.deepEqual(outcome.sarif, expectGrouped(once, 'script', [[1, 0]]));
+    assert.equal(outcome.extended, true);
+    assert.equal(outcome.changes, 3);
+  });
+
+  test('naming a finding already in the same group is accepted and leaves it as it is', () => {
+    const first = threeEdits();
+    const once = grouped(groupSarifFixes(first, { findings: selectorsAt(first, '/runs/0/results/0', '/runs/0/results/1'), group: 'script' })).sarif;
+    const outcome = grouped(groupSarifFixes(once, { findings: selectorsAt(once, '/runs/0/results/1', '/runs/1/results/0'), group: 'script' }));
+    assert.deepEqual(outcome.sarif, expectGrouped(once, 'script', [[1, 0]]));
+    assert.deepEqual(dig(outcome.sarif, 'runs', 0, 'results', 1), dig(once, 'runs', 0, 'results', 1));
+  });
+
+  test('extending never joins groups: a finding in another group is refused', () => {
+    const first = threeEdits();
+    const once = grouped(groupSarifFixes(first, { findings: selectorsAt(first, '/runs/0/results/0', '/runs/0/results/1'), group: 'script' })).sarif;
+    const outcome = refused(groupSarifFixes(once, { findings: selectorsAt(once, '/runs/0/results/1'), group: 'docs' }));
+    assert.deepEqual(outcome.problems.map((p) => p.message), [
+      '`/runs/0/results/1` is already in suggestion group "script"; a finding belongs to at most one group. Ungroup it first to move it.',
+      'The findings hold only 1 distinct change; a group needs at least two distinct changes to accept together (identical changes count once).',
+    ]);
+  });
+
+  test('a new group of a single finding with one change is refused (fewer than two distinct changes)', () => {
+    const sarif = threeEdits();
+    const outcome = refused(groupSarifFixes(sarif, { findings: selectorsAt(sarif, '/runs/0/results/0'), group: 'solo' }));
     assert.deepEqual(outcome.problems, [{
-      message: 'Suggestion group "script" already exists in this document (`/runs/0/results/0`); a group is created whole and never extended or joined. Choose another name, or ungroup the existing group first.',
+      message: 'The findings hold only 1 distinct change; a group needs at least two distinct changes to accept together (identical changes count once).',
       pointer: '/runs/0/results/0',
     }]);
+  });
+
+  test('a member without a change is refused when extending too', () => {
+    const first = threeEdits();
+    const once = grouped(groupSarifFixes(first, { findings: selectorsAt(first, '/runs/0/results/0', '/runs/0/results/1'), group: 'script' })).sarif;
+    const more = structuredClone(once);
+    asArray(dig(more, 'runs', 1, 'results')).push(finding('Remark.', 'docs/x.md', 1));
+    const outcome = refused(groupSarifFixes(more, { findings: selectorsAt(more, '/runs/1/results/1'), group: 'script' }));
+    assert.equal(outcome.problems.length, 1);
+    assert.match(outcome.problems[0]?.message ?? '', /proposes no change/);
   });
 
   test('fewer than two distinct changes: identical fixes count once', () => {
@@ -406,7 +462,7 @@ describe('selectors: stale and ambiguous selections are refused', () => {
   const misuse: readonly (readonly [string, (s: Json) => unknown, RegExp])[] = [
     ['a bare position instead of a selector', (s) => ({ findings: ['/runs/0/results/0', selectorAt(s, '/runs/0/results/1')], group: 'g' }), /selector.*inspect/i],
     ['the same finding named twice (ambiguous)', (s) => ({ findings: [selectorAt(s, '/runs/0/results/0'), selectorAt(s, '/runs/0/results/0')], group: 'g' }), /twice/],
-    ['a single finding (a single fix with several changes is already accepted whole)', (s) => ({ findings: [selectorAt(s, '/runs/0/results/0')], group: 'g' }), /at least two/],
+    ['an empty findings list', () => ({ findings: [], group: 'g' }), /at least one/],
     ['no findings list', () => ({ group: 'g' }), /findings/],
     ['a group name with surrounding whitespace', (s) => ({ findings: selectorsAt(s, '/runs/0/results/0', '/runs/0/results/1'), group: ' g' }), /1-100 characters/],
     ['an empty group name', (s) => ({ findings: selectorsAt(s, '/runs/0/results/0', '/runs/0/results/1'), group: '' }), /1-100 characters/],
