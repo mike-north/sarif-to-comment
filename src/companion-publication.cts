@@ -5,8 +5,10 @@
  *
  * Scope: take a wholly validated preparation that needs suggestion pull
  * requests and create, exactly once each, every remote object it implies —
- * per suggestion a proposal commit, its branch, its pull request and its
- * label — and then the review, which links every suggestion by number. It
+ * per suggestion a proposal commit, its branch, its pull request (a draft
+ * unless the plan says ready) and its labels, all under the tool-neutral
+ * convention (docs/suggestion-pr-convention.md) — and then the review, which
+ * links every suggestion by number. It
  * never updates, force-pushes, closes, reopens, relabels or deletes anything,
  * and recovery never restores what a person changed (D29).
  *
@@ -14,11 +16,13 @@
  * before any write and never changed: format
  * 'sarif-to-comment.companion-publication-state', version 1, with the
  * destination, reviewed commit, input fingerprint, author id, mode, head
- * branch, label, publication id, every suggestion (id, branch, title, body,
- * commit message, exact changes, rendered section parts) and the review's
- * body sections and inline comments, bound by a fingerprint over all of it.
+ * branch, labels (the canonical label first, as GitHub names them), whether
+ * the pull requests are created ready for review, the publication id (the
+ * markers' `batch`), every suggestion (id, branch, title, body, commit
+ * message, exact changes, rendered section parts) and the review's body
+ * sections and inline comments, bound by a fingerprint over all of it.
  * Each step that a person could see has its own record beside it,
- * `<statePath>.suggestion-<n>-branch|pull|label` (format
+ * `<statePath>.suggestion-<n>-branch|pull|labels` (format
  * 'sarif-to-comment.companion-step', version 1), claimed exclusively
  * (hard link) with its intent before its write is sent, and later replaced
  * atomically by its receipt or by the host's definitive refusal. The review
@@ -42,8 +46,9 @@
  * startCompanionPublication(input, internals?) -> Promise<Outcome>
  *   input: identity (destination, reviewedCommit, inputFingerprint,
  *   statePath, submit), the ready preparation's `suggestions` and review
- *   comments, the head branch and the label (as GitHub names it), and the
- *   transport (src/github.cts's client).
+ *   comments, the head branch, the labels (as GitHub names them), whether to
+ *   create the pull requests ready for review, and the transport
+ *   (src/github.cts's client).
  * continueCompanionPublication(identity, internals?) -> Promise<Outcome>
  *   For an existing plan: identity mismatches are refused locally
  *   (PublicationStateError 'state-mismatch') before any request.
@@ -84,6 +89,7 @@ import {
 } from './publication.cjs';
 import type { IPublicationFs, IPublicationInternals, PublicationMode } from './publication.cjs';
 import { formatSuggestionMarker } from './suggestion-marker.cjs';
+import { suggestionPrBranch } from './suggestion-pr-convention.cjs';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -117,9 +123,10 @@ export interface ICompanionTransport {
     readonly head: string;
     readonly base: string;
     readonly body: string;
+    readonly draft: boolean;
   }): Promise<{ readonly number: number; readonly htmlUrl: string }>;
   listBranchPullRequests(request: { readonly owner: string; readonly repo: string; readonly branch: string }): Promise<readonly IBranchPullRequest[]>;
-  addLabel(request: { readonly owner: string; readonly repo: string; readonly number: number; readonly label: string }): Promise<void>;
+  addLabels(request: { readonly owner: string; readonly repo: string; readonly number: number; readonly labels: readonly string[] }): Promise<void>;
   listLabels(request: { readonly owner: string; readonly repo: string; readonly number: number }): Promise<readonly string[]>;
 }
 
@@ -138,7 +145,10 @@ export interface IStartCompanionInput extends ICompanionIdentity {
   readonly suggestions: IPreparedSuggestions;
   readonly comments: readonly PreparedComment[];
   readonly headRef: string;
-  readonly label: string;
+  /** Every label, as GitHub names it: the canonical label first. */
+  readonly labels: readonly string[];
+  /** Whether the pull requests are created ready for review instead of as drafts. */
+  readonly ready: boolean;
 }
 
 /** One planned suggestion: its prepared texts plus the identity chosen for it. */
@@ -159,14 +169,15 @@ interface IPlanRecord {
   readonly authorId: number;
   readonly submit: boolean;
   readonly headRef: string;
-  readonly label: string;
+  readonly labels: readonly string[];
+  readonly ready: boolean;
   readonly suggestions: readonly IPlanSuggestion[];
   readonly review: { readonly sections: readonly (string | number)[]; readonly comments: readonly PreparedComment[] };
   readonly planFingerprint: string;
 }
 
 /** The three steps a person can see, per suggestion. */
-type StepName = 'branch' | 'pull' | 'label';
+type StepName = 'branch' | 'pull' | 'labels';
 
 /** A persisted definitive refusal: only its status and bounded message. */
 interface IStepRejection {
@@ -198,15 +209,15 @@ interface IPullStep extends IStepBase {
   readonly rejection?: IStepRejection;
 }
 
-/** A label step: the pull request it labels. */
-interface ILabelStep extends IStepBase {
-  readonly step: 'label';
+/** A labels step: the pull request it labels. */
+interface ILabelsStep extends IStepBase {
+  readonly step: 'labels';
   readonly number: number;
   readonly phase: 'sending' | 'completed' | 'rejected';
   readonly rejection?: IStepRejection;
 }
 
-type StepRecord = IBranchStep | IPullStep | ILabelStep;
+type StepRecord = IBranchStep | IPullStep | ILabelsStep;
 
 /** A created suggestion pull request, as outcomes report it. */
 export interface ICompanionSuggestionRef {
@@ -232,7 +243,8 @@ export interface ICompanionPublished {
   readonly receiptPersisted: boolean;
   readonly suggestions: readonly ICompanionSuggestionRef[];
   readonly headRef: string;
-  readonly label: string;
+  readonly labels: readonly string[];
+  readonly ready: boolean;
 }
 
 export interface ICompanionUncertain {
@@ -269,16 +281,13 @@ const PLAN_FORMAT = 'sarif-to-comment.companion-publication-state';
 const STEP_FORMAT = 'sarif-to-comment.companion-step';
 const RECORD_VERSION = 1;
 
-/** Prefix of every proposal branch this tool creates. */
-const BRANCH_PREFIX = 'sarif-to-comment/suggestions';
-
 const FULL_SHA = /^[0-9a-f]{40}$/;
 const FINGERPRINT = /^sha256:[0-9a-f]{64}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 const PLAN_KEYS: readonly string[] = [
-  'authorId', 'destination', 'format', 'headRef', 'inputFingerprint', 'label', 'planFingerprint', 'publication',
-  'review', 'reviewedCommit', 'submit', 'suggestions', 'version',
+  'authorId', 'destination', 'format', 'headRef', 'inputFingerprint', 'labels', 'planFingerprint', 'publication',
+  'ready', 'review', 'reviewedCommit', 'submit', 'suggestions', 'version',
 ];
 const SUGGESTION_KEYS: readonly string[] = ['body', 'branch', 'changeCount', 'changeLines', 'changes', 'commitMessage', 'id', 'items', 'title'];
 const COMMENT_KEYS: ReadonlySet<string> = new Set(['path', 'side', 'line', 'startSide', 'startLine', 'body']);
@@ -347,14 +356,17 @@ function planProblem(record: unknown): string | null {
   if (typeof record['inputFingerprint'] !== 'string' || !FINGERPRINT.test(record['inputFingerprint'])) return 'malformed inputFingerprint';
   if (!isPositiveInteger(record['authorId'])) return 'malformed authorId';
   if (typeof record['submit'] !== 'boolean') return 'malformed mode';
-  if (!isNonEmptyString(record['headRef']) || !isNonEmptyString(record['label'])) return 'malformed head branch or label';
+  if (!isNonEmptyString(record['headRef'])) return 'malformed head branch';
+  const labels = record['labels'];
+  if (!isList(labels) || labels.length === 0 || !labels.every(isNonEmptyString)) return 'malformed labels';
+  if (typeof record['ready'] !== 'boolean') return 'malformed ready setting';
   const suggestions = record['suggestions'];
   if (!isList(suggestions) || suggestions.length === 0) return 'no suggestions';
   for (const [i, s] of suggestions.entries()) {
     if (!isPlainObject(s) || !hasExactKeys(s, SUGGESTION_KEYS)) return `suggestion ${String(i + 1)} fields are not the expected set`;
     const id = s['id'];
     if (typeof id !== 'string' || !UUID.test(id)) return `suggestion ${String(i + 1)} has a malformed id`;
-    if (s['branch'] !== `${BRANCH_PREFIX}/${String(destination['pullNumber'])}/${id}`) return `suggestion ${String(i + 1)} has another branch`;
+    if (s['branch'] !== suggestionPrBranch(destination['pullNumber'], id)) return `suggestion ${String(i + 1)} has another branch`;
     for (const key of ['title', 'body', 'commitMessage', 'changeLines', 'items']) {
       if (!isNonEmptyString(s[key])) return `suggestion ${String(i + 1)} has a malformed ${key}`;
     }
@@ -384,11 +396,11 @@ function stepProblem(record: unknown, plan: IPlanRecord, id: string, step: StepN
   const phase = record['phase'];
   if (phase !== 'sending' && phase !== 'completed' && phase !== 'rejected') return 'unknown step phase';
   const base = ['format', 'phase', 'publication', 'step', 'suggestion', 'version'];
-  const own = step === 'branch' ? ['commit'] : step === 'label' ? ['number'] : [];
+  const own = step === 'branch' ? ['commit'] : step === 'labels' ? ['number'] : [];
   const terminal = phase === 'rejected' ? ['rejection'] : phase === 'completed' && step === 'pull' ? ['receipt'] : [];
   if (!hasExactKeys(record, [...base, ...own, ...terminal])) return 'step fields do not match its phase';
   if (step === 'branch' && (typeof record['commit'] !== 'string' || !FULL_SHA.test(record['commit']))) return 'malformed commit';
-  if (step === 'label' && !isPositiveInteger(record['number'])) return 'malformed pull request number';
+  if (step === 'labels' && !isPositiveInteger(record['number'])) return 'malformed pull request number';
   if (phase === 'completed' && step === 'pull') {
     const receipt = record['receipt'];
     if (!isPlainObject(receipt) || !hasExactKeys(receipt, ['htmlUrl', 'number']) || !isPositiveInteger(receipt['number']) || !isNonEmptyString(receipt['htmlUrl'])) {
@@ -477,10 +489,10 @@ export async function startCompanionPublication(input: IStartCompanionInput, int
   const authorId = await authenticatedUserId(input.transport);
   const publication = crypto.randomUUID();
   const { owner, repo, pullNumber } = input.destination;
-  const target: ISuggestionContext = { owner, repo, pullNumber, reviewedCommit: input.reviewedCommit, headRef: input.headRef };
+  const target: ISuggestionContext = { owner, repo, pullNumber, reviewedCommit: input.reviewedCommit, headRef: input.headRef, ready: input.ready };
   const suggestions = input.suggestions.companions.map((companion): IPlanSuggestion => {
     const id = crypto.randomUUID();
-    const marker = formatSuggestionMarker({ id, publication, owner, repo, pullNumber, reviewedCommit: input.reviewedCommit });
+    const marker = formatSuggestionMarker({ id, batch: publication, owner, repo, pullNumber, reviewedCommit: input.reviewedCommit });
     return {
       title: companion.title,
       commitMessage: companion.commitMessage,
@@ -489,7 +501,7 @@ export async function startCompanionPublication(input: IStartCompanionInput, int
       changeLines: companion.changeLines,
       items: companion.items,
       id,
-      branch: `${BRANCH_PREFIX}/${String(pullNumber)}/${id}`,
+      branch: suggestionPrBranch(pullNumber, id),
       body: renderSuggestionPullBody(companion, marker, target),
     };
   });
@@ -503,7 +515,8 @@ export async function startCompanionPublication(input: IStartCompanionInput, int
     authorId,
     submit: input.submit,
     headRef: input.headRef,
-    label: input.label,
+    labels: [...input.labels],
+    ready: input.ready,
     suggestions,
     review: { sections: input.suggestions.sections, comments: input.comments },
   } as const;
@@ -716,7 +729,7 @@ class Publication {
       if (this.claim(index, intent)) {
         try {
           responseNumber = (await this.transport.createPullRequest({
-            ...this.where, title: s.title, head: s.branch, base: this.plan.headRef, body: s.body,
+            ...this.where, title: s.title, head: s.branch, base: this.plan.headRef, body: s.body, draft: !this.plan.ready,
           })).number;
         } catch (err) {
           if (isHostRejection(err)) return this.rejected(index, intent, err, `create the suggestion pull request for ${label} from \`${s.branch}\``);
@@ -741,7 +754,7 @@ class Publication {
     } catch (err) {
       return this.lookupFailed('pull', index, `the pull requests from \`${s.branch}\``, err);
     }
-    const marker = formatSuggestionMarker({ ...this.where, pullNumber: this.plan.destination.pullNumber, id: s.id, publication: this.plan.publication, reviewedCommit: this.plan.reviewedCommit });
+    const marker = formatSuggestionMarker({ ...this.where, pullNumber: this.plan.destination.pullNumber, id: s.id, batch: this.plan.publication, reviewedCommit: this.plan.reviewedCommit });
     const byNumber = new Map<number, IBranchPullRequest>();
     for (const pr of listed) {
       if (typeof pr.body === 'string' && pr.body.split(/\r?\n/).includes(marker)) byNumber.set(pr.number, pr);
@@ -770,40 +783,45 @@ class Publication {
     return { done: true, value: receipt };
   }
 
-  /** The configured label on the suggestion pull request, added once and verified. */
-  async label(index: number, number: number): Promise<Settled<null>> {
-    const what = `label \`${this.plan.label}\` on suggestion pull request #${String(number)}`;
-    let record = this.readStep<ILabelStep>(index, 'label');
+  /** Every planned label on the suggestion pull request, added once in one request and verified. */
+  async labels(index: number, number: number): Promise<Settled<null>> {
+    const names = this.plan.labels.map((label) => `\`${label}\``).join(', ');
+    const what = `label${this.plan.labels.length === 1 ? '' : 's'} ${names} on suggestion pull request #${String(number)}`;
+    let record = this.readStep<ILabelsStep>(index, 'labels');
     let sendCause: unknown;
     if (record === undefined) {
       await this.requireAuthor();
-      const intent: ILabelStep = { ...this.base(index), step: 'label', number, phase: 'sending' };
+      const intent: ILabelsStep = { ...this.base(index), step: 'labels', number, phase: 'sending' };
       if (this.claim(index, intent)) {
         try {
-          await this.transport.addLabel({ ...this.where, number, label: this.plan.label });
+          await this.transport.addLabels({ ...this.where, number, labels: this.plan.labels });
         } catch (err) {
           if (isHostRejection(err)) return this.rejected(index, intent, err, `add the ${what}`);
           sendCause = err;
         }
       }
-      record = this.readStep<ILabelStep>(index, 'label');
-      if (record === undefined) throw new PublicationStateError('state-io', `The label step of suggestion ${String(index + 1)} vanished.`);
+      record = this.readStep<ILabelsStep>(index, 'labels');
+      if (record === undefined) throw new PublicationStateError('state-io', `The labels step of suggestion ${String(index + 1)} vanished.`);
     }
     if (record.phase === 'completed') return { done: true, value: null };
     if (record.phase === 'rejected') {
       const { status, message } = record.rejection ?? { status: 0, message: '' };
-      return { done: false, outcome: this.rejectedOutcome('label', index, status, message, `add the ${what}`, 'record') };
+      return { done: false, outcome: this.rejectedOutcome('labels', index, status, message, `add the ${what}`, 'record') };
     }
     await this.requireAuthor();
-    let names: readonly string[];
+    let present: readonly string[];
     try {
-      names = await this.transport.listLabels({ ...this.where, number: record.number });
+      present = await this.transport.listLabels({ ...this.where, number: record.number });
     } catch (err) {
-      return this.lookupFailed('label', index, `the labels of suggestion pull request #${String(record.number)}`, err);
+      return this.lookupFailed('labels', index, `the labels of suggestion pull request #${String(record.number)}`, err);
     }
-    if (!names.includes(this.plan.label)) {
-      return this.uncertain('label', index,
-        `Suggestion pull request #${String(record.number)} does not carry the label \`${this.plan.label}\`. Its application may not be visible yet or may not have reached GitHub, or a person may have removed it. This state path never applies it again.`,
+    // GitHub label names are unique case-insensitively.
+    const carried = new Set(present.map((name) => name.toLowerCase()));
+    const missing = this.plan.labels.filter((label) => !carried.has(label.toLowerCase()));
+    if (missing.length > 0) {
+      const list = missing.map((label) => `\`${label}\``).join(', ');
+      return this.uncertain('labels', index,
+        `Suggestion pull request #${String(record.number)} does not carry the label${missing.length === 1 ? '' : 's'} ${list}. Their application may not be visible yet or may not have reached GitHub, or a person may have removed them. This state path never applies them again.`,
         sendCause);
     }
     this.settle(index, { ...record, phase: 'completed' });
@@ -811,7 +829,7 @@ class Publication {
   }
 }
 
-/** Runs every step in order: per suggestion its branch, pull request and label; then the review. */
+/** Runs every step in order: per suggestion its branch, pull request and labels; then the review. */
 async function drive(publication: Publication): Promise<CompanionOutcome> {
   const pulls: { readonly number: number; readonly htmlUrl: string }[] = [];
   for (const index of publication.plan.suggestions.keys()) {
@@ -819,7 +837,7 @@ async function drive(publication: Publication): Promise<CompanionOutcome> {
     if (!branch.done) return branch.outcome;
     const pull = await publication.pull(index, branch.value);
     if (!pull.done) return pull.outcome;
-    const labelled = await publication.label(index, pull.value.number);
+    const labelled = await publication.labels(index, pull.value.number);
     if (!labelled.done) return labelled.outcome;
     pulls.push(pull.value);
   }
@@ -839,7 +857,7 @@ async function review(publication: Publication, pulls: readonly { readonly numbe
   };
   let result = await recoverPublication(identity);
   if (result.status === 'missing') {
-    const target: ISuggestionContext = { ...plan.destination, reviewedCommit: plan.reviewedCommit, headRef: plan.headRef };
+    const target: ISuggestionContext = { ...plan.destination, reviewedCommit: plan.reviewedCommit, headRef: plan.headRef, ready: plan.ready };
     const body = renderReviewBody({ companions: plan.suggestions, sections: plan.review.sections }, pulls.map((p) => p.number), target);
     result = await publishPreparedReview({ ...identity, preparedReview: { body, comments: plan.review.comments } });
   }
@@ -850,7 +868,10 @@ async function review(publication: Publication, pulls: readonly { readonly numbe
   });
   switch (result.status) {
     case 'published':
-      return { status: 'published', review: result.review, via: result.via, receiptPersisted: result.receiptPersisted, suggestions, headRef: plan.headRef, label: plan.label };
+      return {
+        status: 'published', review: result.review, via: result.via, receiptPersisted: result.receiptPersisted, suggestions,
+        headRef: plan.headRef, labels: plan.labels, ready: plan.ready,
+      };
     case 'uncertain':
       return { status: 'uncertain', step: 'review', detail: result.detail, established: publication.established, ...(result.cause === undefined ? {} : { cause: result.cause }) };
     case 'rejected':

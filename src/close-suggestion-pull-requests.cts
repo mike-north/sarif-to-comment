@@ -1,14 +1,16 @@
 /**
- * closeSuggestionPullRequests: on-demand cleanup of companion suggestion pull
- * requests whose original pull request has merged or closed (the eighth
- * public operation; the package entry re-exports it). Contract:
+ * closeSuggestionPullRequests: on-demand cleanup of suggestion pull requests
+ * whose original pull request has merged or closed (the eighth public
+ * operation; the package entry re-exports it). Contract:
  * docs/suggestion-cleanup-contract.md.
  *
  * Cleanup is not publication and not review maintenance (D27, D29): it acts
- * only on suggestion pull requests this tool created, recognized by their
- * structured marker (src/suggestion-marker.cts), and its only write is to
- * close one. It never deletes or updates a branch, edits a body, title or
- * label, comments, or touches the original. It keeps no local record.
+ * only on suggestion pull requests that conform to the tool-neutral
+ * convention (docs/suggestion-pr-convention.md), whichever tool created
+ * them, recognized by their structured marker (src/suggestion-marker.cts),
+ * and its only write is to close one. It never deletes or updates a branch,
+ * edits a body, title or label, comments, or touches the original. It keeps
+ * no local record, and never writes the repository configuration.
  *
  * ---------------------------------------------------------------------------
  * closeSuggestionPullRequests(input, internals?) -> Promise<Outcome>
@@ -16,12 +18,17 @@
  * input (unknown keys are refused; a TypeError before any request):
  *   repository:          { owner, repo }
  *   token:               GitHub user/PAT credential; never shown
- *   label?:              the suggestion label (default 'suggestion'); the
- *                        publication rule plus no comma
+ *   label?:              a migration override of the canonical label (a
+ *                        label name under the convention: no comma)
  *   originalPullNumber?: targeted mode: only pull requests referencing it
  *   dryRun?:             discover and verify, write nothing
  *
  * Sequence (every read completes before the first write):
+ *   0. The label: the override, or else the repository's canonical label
+ *      resolved exactly as publication resolves it (contract §2.2.1): the
+ *      configuration on the default branch, otherwise 'suggestion-pr'. An
+ *      invalid configuration rejects, naming the file and field; a failed
+ *      read rejects as operational.
  *   1. Discovery. Sweep: every open pull request with the label (the
  *      client's labeled issues listing). Targeted: the original is resolved
  *      first; if it cannot be verified nothing else is read; otherwise its
@@ -32,15 +39,15 @@
  *      and label, then the original's state, resolved once per original.
  *   3. Verification of each suggestion whose original ended, on a fresh read
  *      (contract §2.8): still open, same marker line, head and base in this
- *      repository, head branch sarif-to-comment/suggestions/<original>/<id>,
- *      still labeled.
+ *      repository, head branch suggestion-pr/<original>/<id>, still labeled.
  *   4. Unless dryRun, one close per eligible suggestion, ascending. A 403 or
  *      404 refusal is permission-limited; any other failure is failed.
  *
  * Outcome: { status, dryRun, originals, suggestions, markdown } (see the
- * public types below). Rejects for invalid input, for an operational failure
+ * public types below). Rejects for invalid input, for an invalid or
+ * unreadable repository configuration (step 0), for an operational failure
  * during discovery (step 1), and for a defect in this package during steps
- * 1-3: always before anything has been written. From step 4 on, every
+ * 0-3: always before anything has been written. From step 4 on, every
  * failure is reported in the outcome, so the closes already made are never
  * lost. Neither an outcome nor a rejection contains the token.
  *
@@ -53,10 +60,20 @@
 import { GitHubError, createGitHubClient as defaultCreateGitHubClient } from './github.cjs';
 import type { ICreateGitHubClientOptions, IGitHubClient, IPullRequestSnapshot } from './github.cjs';
 import type { IGitHubRepository } from './public-types.cjs';
-import { DEFAULT_SUGGESTION_LABEL, LABEL_RULE, isLabelName, messageChain, redact, withoutCredential } from './review-preflight.cjs';
+import { messageChain, redact, withoutCredential } from './review-preflight.cjs';
 import { OWNER_PATTERN, REPO_PATTERN, isPlainObject } from './sarif-common.cjs';
 import { findSuggestionMarker } from './suggestion-marker.cjs';
 import type { ISuggestionMarkerFields } from './suggestion-marker.cjs';
+import {
+  LABEL_RULE,
+  SUGGESTION_PR_CONFIGURATION_PATH,
+  configurationProblem,
+  isLabelName,
+  labelSourceText,
+  resolveCanonicalLabel,
+  suggestionPrBranch,
+} from './suggestion-pr-convention.cjs';
+import type { LabelSource } from './suggestion-pr-convention.cjs';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -76,9 +93,12 @@ export interface ICloseSuggestionPullRequestsInput {
    */
   readonly token: string;
   /**
-   * The label suggestion pull requests carry (default `suggestion`): 1-50
+   * A migration override of the repository's canonical suggestion label, for
+   * sweeping suggestions left under a previously configured label: 1-50
    * characters without commas, control or invisible formatting characters or
-   * surrounding whitespace.
+   * surrounding whitespace. Omitted (the normal case): the canonical label,
+   * the `label` of `.github/suggestion-prs.json` on the default branch,
+   * otherwise `suggestion-pr`, exactly as publication resolves it.
    */
   readonly label?: string | undefined;
   /**
@@ -122,8 +142,8 @@ export interface IOriginalPullRequest {
  * - `unverified`: its original could not be verified, so it was left open.
  * - `permission-limited`: GitHub refused to let this account close it.
  * - `failed`: reading or closing it failed; running cleanup again is safe.
- * - `not-ours`: it is not recognizably one of this tool's suggestion pull
- *   requests (no, several or a changed marker, another repository or
+ * - `not-ours`: it does not conform to the suggestion pull request
+ *   convention (no, several or a changed marker, another repository or
  *   original, a fork, or another branch), so it was not touched.
  * - `unlabeled`: it does not carry the label, so it was not touched.
  *
@@ -194,10 +214,19 @@ export interface ICloseSuggestionPullRequestsOutcome {
 // Private seam
 
 /** What cleanup needs from a GitHub client. */
-type CleanupClient = Pick<IGitHubClient, 'listOpenLabeledPullRequests' | 'getPullRequest' | 'listCrossReferencingPullRequests' | 'closePullRequest'>;
+type CleanupClient = Pick<
+  IGitHubClient,
+  'readDefaultBranchFile' | 'listOpenLabeledPullRequests' | 'getPullRequest' | 'listCrossReferencingPullRequests' | 'closePullRequest'
+>;
 
 /** The client methods cleanup calls. */
-const CLEANUP_METHODS: readonly (keyof CleanupClient)[] = ['listOpenLabeledPullRequests', 'getPullRequest', 'listCrossReferencingPullRequests', 'closePullRequest'];
+const CLEANUP_METHODS: readonly (keyof CleanupClient)[] = [
+  'readDefaultBranchFile',
+  'listOpenLabeledPullRequests',
+  'getPullRequest',
+  'listCrossReferencingPullRequests',
+  'closePullRequest',
+];
 
 /**
  * The private test seam of {@link closeSuggestionPullRequests}, shaped like
@@ -229,9 +258,18 @@ interface ICaptured {
   readonly owner: string;
   readonly repo: string;
   readonly token: string;
-  readonly label: string;
+  /** The migration override, when given. */
+  readonly label: string | undefined;
   readonly originalPullNumber: number | undefined;
   readonly dryRun: boolean;
+}
+
+/** The label a run sweeps and verifies with, and where it came from. */
+interface ICleanupLabel {
+  readonly name: string;
+  readonly source: LabelSource | 'override';
+  /** The default branch it was read from (with a repository source). */
+  readonly branch: string;
 }
 
 function invalid(message: string): TypeError {
@@ -273,7 +311,26 @@ function capture(input: unknown): ICaptured {
   }
   const dryRun = dataField(input, 'dryRun', 'dryRun');
   if (dryRun !== undefined && typeof dryRun !== 'boolean') throw invalid('dryRun must be a boolean');
-  return { owner, repo, token, label: label ?? DEFAULT_SUGGESTION_LABEL, originalPullNumber, dryRun: dryRun ?? false };
+  return { owner, repo, token, label, originalPullNumber, dryRun: dryRun ?? false };
+}
+
+/**
+ * The label a run uses (contract §2.2.1): the override, without reading the
+ * configuration; otherwise the canonical label, resolved exactly as
+ * publication resolves it. An invalid configuration is refused, naming the
+ * file and field; a failed read propagates as the operational error it is.
+ */
+async function resolveLabel(captured: ICaptured, client: CleanupClient): Promise<ICleanupLabel> {
+  if (captured.label !== undefined) return { name: captured.label, source: 'override', branch: '' };
+  const { owner, repo } = captured;
+  const configuration = await client.readDefaultBranchFile({ owner, repo, path: SUGGESTION_PR_CONFIGURATION_PATH });
+  const canonical = resolveCanonicalLabel(configuration);
+  if (canonical.status === 'invalid') {
+    throw new Error(
+      `${configurationProblem(`${owner}/${repo}`, canonical.branch, canonical.detail)} Fix it on the default branch, or name the label to check with label (--label).`,
+    );
+  }
+  return { name: canonical.label, source: canonical.source, branch: canonical.branch };
 }
 
 // ---------------------------------------------------------------------------
@@ -306,6 +363,7 @@ class Cleanup {
 
   constructor(
     private readonly captured: ICaptured,
+    private readonly label: ICleanupLabel,
     private readonly client: CleanupClient,
   ) {}
 
@@ -381,8 +439,8 @@ class Cleanup {
 
   /** Every open pull request with the label, each once. */
   private async labeledCandidates(): Promise<ICandidate[]> {
-    const { owner, repo, label } = this.captured;
-    const listed = await this.client.listOpenLabeledPullRequests({ owner, repo, label });
+    const { owner, repo } = this.captured;
+    const listed = await this.client.listOpenLabeledPullRequests({ owner, repo, label: this.label.name });
     return unique(listed.map((pr) => ({ number: pr.number, url: pr.htmlUrl, body: pr.body, labels: pr.labels, state: 'open' as const })));
   }
 
@@ -428,7 +486,7 @@ class Cleanup {
     }
     const original = marker.pullNumber;
     const reading = findSuggestionMarker(fresh.body);
-    const branch = `sarif-to-comment/suggestions/${String(original)}/${marker.id}`;
+    const branch = suggestionPrBranch(original, marker.id);
     if (fresh.state !== 'open') {
       this.report(candidate, original, 'already-closed');
     } else if (reading.kind !== 'marker' || reading.line !== line) {
@@ -476,7 +534,7 @@ class Cleanup {
   }
 
   private hasLabel(labels: readonly string[]): boolean {
-    const wanted = this.captured.label.toLowerCase();
+    const wanted = this.label.name.toLowerCase();
     return labels.some((label) => label.toLowerCase() === wanted);
   }
 
@@ -510,7 +568,7 @@ class Cleanup {
       dryRun: this.captured.dryRun,
       originals,
       suggestions,
-      markdown: this.safe(renderMarkdown(this.captured, status, originals, checked)),
+      markdown: this.safe(renderMarkdown(this.captured, this.label, status, originals, checked)),
     };
   }
 }
@@ -554,7 +612,7 @@ function resultText(entry: IChecked, label: string): string {
     case 'failed':
       return entry.failedWhile === 'reading' ? `not closed, it could not be read again before closing: ${reason}` : `not closed, the close failed: ${reason}`;
     case 'not-ours':
-      return `skipped, not one of this tool's suggestion pull requests: ${reason}`;
+      return `skipped, not a conforming suggestion pull request: ${reason}`;
     case 'unlabeled':
       return `skipped, it does not carry the label \`${label}\``;
   }
@@ -566,16 +624,22 @@ const TITLES: Readonly<Record<CloseSuggestionPullRequestsStatus, string>> = {
   incomplete: '## Suggestion pull request cleanup incomplete',
 };
 
+/** Where the label came from, as the scope line says it (contract §2.10). */
+function labelSource(label: ICleanupLabel): string {
+  return label.source === 'override' ? "a label given in place of the repository's suggestion label" : labelSourceText(label.source, label.branch);
+}
+
 function renderMarkdown(
   captured: ICaptured,
+  label: ICleanupLabel,
   status: CloseSuggestionPullRequestsStatus,
   originals: readonly IOriginalPullRequest[],
   checked: readonly IChecked[],
 ): string {
   const where = `${captured.owner}/${captured.repo}`;
   const scope = captured.originalPullNumber === undefined
-    ? `Checked the open pull requests labeled \`${captured.label}\` in ${where}.`
-    : `Checked the pull requests that reference #${String(captured.originalPullNumber)} in ${where}.`;
+    ? `Checked the open pull requests labeled \`${label.name}\` in ${where} (${labelSource(label)}).`
+    : `Checked the pull requests that reference #${String(captured.originalPullNumber)} in ${where}; the suggestion label is \`${label.name}\` (${labelSource(label)}).`;
   const lines = [status === 'complete' && captured.dryRun ? '## Suggestion pull request cleanup: dry run' : TITLES[status], '', scope, ''];
   if (originals.length > 0) lines.push('Original pull requests:', '', ...originals.map(originalLine), '');
   if (checked.length === 0) {
@@ -584,7 +648,7 @@ function renderMarkdown(
     lines.push('Suggestion pull requests:', '');
     for (const entry of checked) {
       const forOriginal = entry.original === null ? '' : ` (for #${String(entry.original)})`;
-      lines.push(`- #${String(entry.number)}${forOriginal}: ${resultText(entry, captured.label)}`);
+      lines.push(`- #${String(entry.number)}${forOriginal}: ${resultText(entry, label.name)}`);
     }
     lines.push('');
   }
@@ -603,14 +667,17 @@ function renderMarkdown(
 // Entry point
 
 /**
- * Closes this tool's open companion suggestion pull requests whose original
- * pull request has merged or closed, in one repository.
+ * Closes open suggestion pull requests whose original pull request has
+ * merged or closed, in one repository.
  *
  * @remarks
- * Suggestion pull requests are recognized by the structured marker the
- * publisher writes into their description, never by their title. By default
- * every open pull request carrying the suggestion label is checked; with
- * `originalPullNumber`, only the pull requests referencing that original.
+ * Suggestion pull requests follow the tool-neutral suggestion pull request
+ * convention, whichever tool created them: they are recognized by the
+ * structured marker in their description, never by their title. By default
+ * every open pull request carrying the repository's canonical suggestion
+ * label is checked (the `label` of `.github/suggestion-prs.json` on the
+ * default branch, otherwise `suggestion-pr`); with `originalPullNumber`,
+ * only the pull requests referencing that original.
  * A suggestion is closed only after its original has been read and found
  * merged or closed, and after the suggestion itself has been read again and
  * verified: an original that cannot be read is `unverified`, never treated as
@@ -628,8 +695,10 @@ function renderMarkdown(
  * this account) or `incomplete` (an original could not be verified or an
  * action failed).
  * @throws `TypeError` for invalid input, before any request. An `Error` when
- * discovery fails (GitHub, network, authentication), before anything was
- * closed. Neither a result nor a rejection contains the token.
+ * the repository configuration is invalid (naming the file and field) or
+ * cannot be read, or when discovery fails (GitHub, network,
+ * authentication), before anything was closed. Neither a result nor a
+ * rejection contains the token.
  *
  * @example
  * ```ts
@@ -672,7 +741,8 @@ export async function closeSuggestionPullRequestsWithInternals(
   try {
     const client = createGitHubClient({ token: captured.token, fetch: globalThis.fetch });
     if (!isCleanupClient(client)) throw new Error('This GitHub client cannot close suggestion pull requests.');
-    return await new Cleanup(captured, client).run();
+    const label = await resolveLabel(captured, client);
+    return await new Cleanup(captured, label, client).run();
   } catch (err) {
     throw withoutCredential(err, captured.token);
   }

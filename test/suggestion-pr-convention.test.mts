@@ -87,7 +87,7 @@ describe('the convention module (docs/suggestion-pr-convention.md)', () => {
     ['unknown members are ignored', file('{ "other": 1 }'), { status: 'resolved', label: 'suggestion-pr', source: 'default', branch: 'main' }],
     ['a valid label', file('{ "label": "proposal" }\n'), { status: 'resolved', label: 'proposal', source: 'repository', branch: 'main' }],
     ['a label with inner spaces and case', file('{"label":"Proposed Change"}'), { status: 'resolved', label: 'Proposed Change', source: 'repository', branch: 'main' }],
-    ['a leading byte-order mark is allowed', file('﻿{"label":"proposal"}'), { status: 'resolved', label: 'proposal', source: 'repository', branch: 'main' }],
+    ['a leading byte-order mark is allowed', file('\uFEFF{"label":"proposal"}'), { status: 'resolved', label: 'proposal', source: 'repository', branch: 'main' }],
   ];
   for (const [what, input, expected] of resolved) {
     test(`resolves: ${what}`, () => {

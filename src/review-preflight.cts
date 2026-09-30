@@ -22,9 +22,12 @@
  *   Shared fields (unknown keys are refused; spec.ownKeys adds more):
  *     sarif, destination { owner, repo, pullNumber }, reviewedCommit, token,
  *     sourceRootUri?, oldSourceCommit?, options? { ignoreApprovalHold?, submit?,
- *     suggestionPullRequests?, suggestionLabel? } — suggestionLabel only with
- *     suggestionPullRequests: true; enabled, the captured suggestionLabel is
- *     the label (default 'suggestion'), otherwise it is undefined
+ *     allowSuggestionPullRequests?, pullRequestLabels?,
+ *     markSuggestionPullRequestsReady? } — the last two only with
+ *     allowSuggestionPullRequests: true (docs/companion-suggestion-pr-contract.md
+ *     §2.2); enabled, the captured suggestionPullRequests holds the extra
+ *     labels (deduplicated case-insensitively, first spelling kept) and
+ *     whether to create them ready, otherwise it is undefined
  *   The SARIF, destination and options are deep JSON copies of own data
  *   properties only: caller getters never run, and cycles and non-JSON values
  *   are refused rather than dropped or coerced. Fields are checked in a fixed
@@ -38,21 +41,32 @@
  *   enabled (docs/companion-suggestion-pr-contract.md §2.8), the client's
  *   readSuggestionTarget is read before preparation (its head branch is named
  *   in the suggestion texts); a ready review that needs suggestion pull
- *   requests is then checked against the repository — same repository,
- *   reviewed head, head branch not the default branch, push permission, and
- *   the label read through findLabel — all reported together as a block.
- *   Ready carries the head branch and the label as GitHub names it.
+ *   requests is then checked against the repository — same repository, a
+ *   base that is the default branch, the reviewed head, push permission, the
+ *   repository configuration read through readDefaultBranchFile
+ *   (docs/suggestion-pr-convention.md §4), and every label (canonical and
+ *   extra) read through findLabel — all reported together as a block.
+ *   Ready carries the head branch, the labels as GitHub names them (the
+ *   canonical label first) and whether to create them ready for review.
  *   Operational failures (GitHub, network, source reads, existence checks,
- *   repository and label reads, a context for another pull request or
- *   commit) reject.
+ *   repository, configuration and label reads, a context for another pull
+ *   request or commit) reject.
  */
 
 import * as util from 'node:util';
 
-import type { IFetchContextRequest, IPullRequestDestination, ISuggestionTarget } from './github.cjs';
+import type { IDefaultBranchFile, IFetchContextRequest, IPullRequestDestination, ISuggestionTarget } from './github.cjs';
 import { blockedBy, codeSpan, prepareReview } from './prepare-review.cjs';
 import type { IBlockedOutcome, IDiagnostic, IReadyOutcome } from './prepare-review.cjs';
 import type { IJsonObject, IPlainObject, JsonValue } from './sarif-common.cjs';
+import {
+  LABEL_RULE,
+  SUGGESTION_PR_CONFIGURATION_PATH,
+  configurationProblem,
+  isLabelName,
+  resolveCanonicalLabel,
+  uniqueLabels,
+} from './suggestion-pr-convention.cjs';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -81,11 +95,19 @@ export interface ICapturedReview {
    */
   readonly submit: boolean | undefined;
   /**
-   * The label suggestion pull requests carry when the caller enabled them
+   * The suggestion pull request settings when the caller allowed them
    * (docs/companion-suggestion-pr-contract.md §2.2); undefined when they are
-   * disabled, as they are unless enabled.
+   * disabled, as they are unless allowed.
    */
-  readonly suggestionLabel: string | undefined;
+  readonly suggestionPullRequests: ICapturedSuggestionSettings | undefined;
+}
+
+/** The caller's suggestion pull request settings, once allowed. */
+export interface ICapturedSuggestionSettings {
+  /** Extra labels in the order given, deduplicated case-insensitively (first spelling kept). */
+  readonly pullRequestLabels: readonly string[];
+  /** Whether suggestion pull requests are created ready for review instead of as drafts. */
+  readonly markReady: boolean;
 }
 
 /**
@@ -120,14 +142,29 @@ export interface IContextClient {
   readonly readSuggestionTarget?: ((request: IPullRequestDestination) => Promise<ISuggestionTarget>) | undefined;
   /** Read only when a ready review needs suggestion pull requests. */
   readonly findLabel?: ((request: { readonly owner: string; readonly repo: string; readonly name: string }) => Promise<string | null>) | undefined;
+  /** Read only when a ready review needs suggestion pull requests: the repository configuration. */
+  readonly readDefaultBranchFile?:
+    | ((request: { readonly owner: string; readonly repo: string; readonly path: string }) => Promise<IDefaultBranchFile>)
+    | undefined;
+}
+
+/** What suggestion pull requests a ready review creates, and how. */
+export interface IReadySuggestionPullRequests {
+  /** The original pull request's head branch, which they target. */
+  readonly headRef: string;
+  /** Every label they carry, as GitHub names it: the canonical label first, then the extra labels. */
+  readonly labels: readonly string[];
+  /** Whether they are created ready for review instead of as drafts. */
+  readonly ready: boolean;
 }
 
 /**
  * A ready preparation, and — when it needs suggestion pull requests — the
- * head branch they target and the label as GitHub names it.
+ * head branch they target, their labels as GitHub names them, and whether
+ * they are created ready for review.
  */
 export interface IDestinationReady extends IReadyOutcome {
-  readonly suggestionPullRequests?: { readonly headRef: string; readonly label: string };
+  readonly suggestionPullRequests?: IReadySuggestionPullRequests;
 }
 
 /** What the preflight answers: ready (possibly with suggestion pull requests) or blocked. */
@@ -137,13 +174,13 @@ export type DestinationOutcome = IDestinationReady | IBlockedOutcome;
 const SHARED_KEYS: readonly string[] = ['sarif', 'destination', 'reviewedCommit', 'token', 'sourceRootUri', 'oldSourceCommit', 'options'];
 
 /** Every accepted option: the approval-hold override, the explicit submitted mode, and suggestion pull requests. */
-const OPTION_KEYS: ReadonlySet<string> = new Set(['ignoreApprovalHold', 'submit', 'suggestionPullRequests', 'suggestionLabel']);
-
-/** The label suggestion pull requests carry unless the caller names another (also cleanup's default). */
-export const DEFAULT_SUGGESTION_LABEL = 'suggestion';
-
-/** Characters a label name may not hold: controls and invisible formatting characters. */
-const INVISIBLE_IN_LABEL = /[\u0000-\u001F\u007F-\u009F\uFEFF\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069\u2028\u2029]/;
+const OPTION_KEYS: ReadonlySet<string> = new Set([
+  'ignoreApprovalHold',
+  'submit',
+  'allowSuggestionPullRequests',
+  'pullRequestLabels',
+  'markSuggestionPullRequestsReady',
+]);
 
 /** A full, immutable, lowercase Git commit id. */
 const COMMIT_PATTERN = /^[0-9a-f]{40}$/;
@@ -267,27 +304,6 @@ class InputRefusals {
   }
 }
 
-/**
- * Whether `value` can name a suggestion label exactly: 1-50 UTF-16 code
- * units, none invisible, not whitespace-padded, and no comma. GitHub's label
- * filter reads a comma as a list of labels, so cleanup could never select a
- * label containing one (docs/suggestion-cleanup-contract.md §2.2); publication
- * and cleanup share this rule.
- */
-export function isLabelName(value: unknown): value is string {
-  return (
-    typeof value === 'string' &&
-    value.length >= 1 &&
-    value.length <= 50 &&
-    !INVISIBLE_IN_LABEL.test(value) &&
-    !/^\s|\s$/.test(value) &&
-    !value.includes(',')
-  );
-}
-
-/** What a valid suggestion label is, for refusals naming the field or flag that gave one. */
-export const LABEL_RULE = '1-50 characters without commas, control or invisible formatting characters or surrounding whitespace';
-
 function isCommit(value: unknown): value is string {
   return typeof value === 'string' && COMMIT_PATTERN.test(value);
 }
@@ -376,7 +392,7 @@ export function captureReviewInput<Own extends object>(input: unknown, spec: IRe
   const optionsValue = field('options');
   let ignoreApprovalHold: boolean | undefined;
   let submit: boolean | undefined;
-  let suggestionLabel: string | undefined;
+  let suggestionPullRequests: ICapturedSuggestionSettings | undefined;
   if (optionsValue !== undefined) {
     if (!isPlainObject(optionsValue)) throw invalid('options must be a plain object');
     const options = refusals.captureRoot(optionsValue, 'options');
@@ -389,22 +405,41 @@ export function captureReviewInput<Own extends object>(input: unknown, spec: IRe
     const submitValue = options['submit'];
     if (submitValue !== undefined && typeof submitValue !== 'boolean') throw invalid('options.submit must be a boolean');
     submit = submitValue;
-    const enabled = options['suggestionPullRequests'];
-    if (enabled !== undefined && typeof enabled !== 'boolean') throw invalid('options.suggestionPullRequests must be a boolean');
-    const label = options['suggestionLabel'];
-    if (label !== undefined && enabled !== true) {
-      throw invalid('options.suggestionLabel applies only with options.suggestionPullRequests: true');
-    }
-    if (label !== undefined && !isLabelName(label)) {
-      throw invalid(`options.suggestionLabel must be ${LABEL_RULE}`);
-    }
-    if (enabled === true) suggestionLabel = label ?? DEFAULT_SUGGESTION_LABEL;
+    suggestionPullRequests = captureSuggestionSettings(options, invalid);
   }
 
   const shared: ICapturedReview = {
-    sarif, destination, reviewedCommit, oldSourceCommit, token, sourceRootUri, ignoreApprovalHold, submit, suggestionLabel,
+    sarif, destination, reviewedCommit, oldSourceCommit, token, sourceRootUri, ignoreApprovalHold, submit, suggestionPullRequests,
   };
   return { ...own, ...shared };
+}
+
+/**
+ * The suggestion pull request options (docs/companion-suggestion-pr-contract.md
+ * §2.2): the opt-in, then the extra labels and the ready setting, which
+ * require it. Undefined unless allowed.
+ */
+function captureSuggestionSettings(options: IJsonObject, invalid: (message: string) => TypeError): ICapturedSuggestionSettings | undefined {
+  const allow = options['allowSuggestionPullRequests'];
+  if (allow !== undefined && typeof allow !== 'boolean') throw invalid('options.allowSuggestionPullRequests must be a boolean');
+  const extras = options['pullRequestLabels'];
+  if (extras !== undefined && allow !== true) {
+    throw invalid('options.pullRequestLabels applies only with options.allowSuggestionPullRequests: true');
+  }
+  const labels: string[] = [];
+  if (extras !== undefined) {
+    if (!Array.isArray(extras)) throw invalid('options.pullRequestLabels must be an array of label names');
+    for (const [i, label] of extras.entries()) {
+      if (!isLabelName(label)) throw invalid(`options.pullRequestLabels[${String(i)}] must be ${LABEL_RULE}`);
+      labels.push(label);
+    }
+  }
+  const ready = options['markSuggestionPullRequestsReady'];
+  if (ready !== undefined && allow !== true) {
+    throw invalid('options.markSuggestionPullRequestsReady applies only with options.allowSuggestionPullRequests: true');
+  }
+  if (ready !== undefined && typeof ready !== 'boolean') throw invalid('options.markSuggestionPullRequestsReady must be a boolean');
+  return allow === true ? { pullRequestLabels: uniqueLabels(labels), markReady: ready ?? false } : undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -466,14 +501,15 @@ export async function prepareForDestination(captured: ICapturedReview, client: I
   const { context, readSource, fileExists } = await client.fetchContext(contextRequest);
   verifyContext(context, captured);
 
+  const settings = captured.suggestionPullRequests;
   let target: ISuggestionTarget | undefined;
-  if (captured.suggestionLabel !== undefined) {
+  if (settings !== undefined) {
     if (client.readSuggestionTarget === undefined) throw new Error('This GitHub client cannot publish suggestion pull requests.');
     target = await client.readSuggestionTarget(captured.destination);
   }
   const options = {
     ...(captured.ignoreApprovalHold === undefined ? {} : { ignoreApprovalHold: captured.ignoreApprovalHold }),
-    ...(target === undefined ? {} : { suggestionPullRequests: { headRef: target.headRef } }),
+    ...(target === undefined || settings === undefined ? {} : { suggestionPullRequests: { headRef: target.headRef, ready: settings.markReady } }),
   };
   const prepareInput = {
     sarif: captured.sarif,
@@ -488,53 +524,95 @@ export async function prepareForDestination(captured: ICapturedReview, client: I
   if (prepared.status !== 'ready' || prepared.review.commitId !== captured.reviewedCommit) {
     throw new Error('Review preparation returned an unexpected outcome; nothing was published.');
   }
-  if (prepared.suggestions === undefined || target === undefined || captured.suggestionLabel === undefined) return prepared;
-  return checkSuggestionTarget(prepared, target, captured.suggestionLabel, captured, client);
+  if (prepared.suggestions === undefined || target === undefined || settings === undefined) return prepared;
+  return checkSuggestionTarget(prepared, target, settings, captured, client);
+}
+
+/** A label a suggestion pull request must carry, and where it came from (for the missing-label problem). */
+interface IWantedLabel {
+  readonly name: string;
+  readonly source: 'default' | 'repository' | 'extra';
 }
 
 /**
  * The repository facts suggestion pull requests need, all reported together
- * (contract §2.5, §2.7): the same repository, the reviewed head, a head
- * branch that is not the default branch, push permission and an existing
- * label. Ready with the head branch and the label's own name, or blocked.
+ * in a fixed order (contract §2.5, §2.7): the same repository, a base that is
+ * the default branch, the reviewed head, push permission, a valid repository
+ * configuration, and every label. Ready with the head branch, the labels'
+ * own names and the ready setting, or blocked.
  */
 async function checkSuggestionTarget(
   prepared: IReadyOutcome,
   target: ISuggestionTarget,
-  label: string,
+  settings: ICapturedSuggestionSettings,
   captured: ICapturedReview,
   client: IContextClient,
 ): Promise<DestinationOutcome> {
   const { owner, repo } = captured.destination;
   const repository = `${owner}/${repo}`;
-  if (client.findLabel === undefined) throw new Error('This GitHub client cannot publish suggestion pull requests.');
-  const found = await client.findLabel({ owner, repo, name: label });
+  if (client.findLabel === undefined || client.readDefaultBranchFile === undefined) {
+    throw new Error('This GitHub client cannot publish suggestion pull requests.');
+  }
+  const configuration = await client.readDefaultBranchFile({ owner, repo, path: SUGGESTION_PR_CONFIGURATION_PATH });
+  const canonical = resolveCanonicalLabel(configuration);
   const problems: IDiagnostic[] = [];
   const problem = (code: string, message: string): void => {
     problems.push({ code, message });
   };
   // GitHub's own name for the pull request's repository decides sameness, whatever the caller's letter case.
-  if (target.headRepository === null || target.headRepository.toLowerCase() !== target.baseRepository.toLowerCase()) {
+  if (target.headRepository === null) {
+    problem('suggestion-pr-fork-unsupported', "The pull request's head repository was deleted, so there is no branch to propose a suggestion into.");
+  } else if (target.headRepository.toLowerCase() !== target.baseRepository.toLowerCase()) {
     problem('suggestion-pr-fork-unsupported',
-      `The pull request's head branch is in ${target.headRepository ?? 'a deleted repository'}, not ${target.baseRepository}; suggestion pull requests are supported only within one repository.`);
+      `Suggestion pull requests are not yet supported for a pull request from a fork: its head branch ${codeSpan(target.headRef)} is in ${target.headRepository}, so a suggestion would have to be opened there, as a pull request into that branch, and this tool opens suggestion pull requests only in ${target.baseRepository}.`);
+  }
+  if (target.baseRef !== target.defaultBranch) {
+    problem('suggestion-pr-base-unsupported',
+      `Suggestion pull requests are not yet supported for a pull request into ${codeSpan(target.baseRef)}, which is not the default branch ${codeSpan(target.defaultBranch)} of ${repository}: following a suggestion through a pull request that merges into another branch (for example one of a stack of pull requests, which GitHub retargets when the branch below it merges) is not built yet.`);
   }
   if (target.headSha !== captured.reviewedCommit) {
     problem('suggestion-pr-historical-unsupported',
-      `The reviewed commit ${captured.reviewedCommit} is not the pull request's head ${target.headSha}; a suggestion pull request proposes changes to the reviewed head only. Review the current head, or publish without suggestion pull requests.`);
-  }
-  if (target.headRef === target.defaultBranch) {
-    problem('suggestion-pr-default-branch-unsupported',
-      `The pull request's head branch ${codeSpan(target.headRef)} is the repository's default branch; a suggestion pull request targeting it could close issues or pull requests through keywords in its feedback.`);
+      `The reviewed commit ${captured.reviewedCommit} is no longer the pull request's head ${target.headSha}. Proposing a suggestion on top of later commits needs a check that the reviewed commit is still part of the branch, which is not yet supported. Review the current head, or publish without suggestion pull requests.`);
   }
   if (!target.canPush) {
     problem('suggestion-pr-permission-missing', `The authenticated account cannot push to ${repository}, which creating proposal branches requires.`);
   }
-  if (found === null) {
-    problem('suggestion-label-missing',
-      `The label ${codeSpan(label)} does not exist in ${repository}. Create it, or choose an existing label with suggestionLabel (--suggestion-label); labels are never created automatically.`);
+  if (canonical.status === 'invalid') {
+    problem('suggestion-pr-configuration-invalid',
+      `${configurationProblem(repository, canonical.branch, canonical.detail)} Fix it on the default branch; suggestion pull requests take their label from it.`);
   }
-  if (problems.length > 0 || found === null) return blockedBy(problems, prepared.warnings);
-  return { ...prepared, suggestionPullRequests: { headRef: target.headRef, label: found } };
+
+  // The canonical label first (when the configuration names one validly),
+  // then each extra label not already wanted, compared case-insensitively.
+  const wanted: IWantedLabel[] = canonical.status === 'resolved' ? [{ name: canonical.label, source: canonical.source }] : [];
+  for (const name of settings.pullRequestLabels) {
+    if (!wanted.some((w) => w.name.toLowerCase() === name.toLowerCase())) wanted.push({ name, source: 'extra' });
+  }
+  const found: string[] = [];
+  for (const label of wanted) {
+    const name = await client.findLabel({ owner, repo, name: label.name });
+    if (name === null) problem('suggestion-label-missing', missingLabelMessage(label, repository, configuration.branch));
+    else found.push(name);
+  }
+  if (problems.length > 0) return blockedBy(problems, prepared.warnings);
+  return { ...prepared, suggestionPullRequests: { headRef: target.headRef, labels: uniqueLabels(found), ready: settings.markReady } };
+}
+
+/** The missing-label problem: the label, where it came from, and what to do. */
+function missingLabelMessage(label: IWantedLabel, repository: string, defaultBranch: string): string {
+  const where = {
+    default: `It is the default suggestion label: create it, or name another existing label in ${codeSpan(SUGGESTION_PR_CONFIGURATION_PATH)} on the default branch.`,
+    repository: `It is the suggestion label set in ${codeSpan(SUGGESTION_PR_CONFIGURATION_PATH)} on ${codeSpan(defaultBranch)}: create it, or change that file.`,
+    extra: 'It was given in pullRequestLabels (--pr-labels): create it, or leave it out.',
+  }[label.source];
+  return `The label ${codeSpan(label.name)} does not exist in ${repository}. ${where} Labels are never created automatically.`;
+}
+
+/** Label names as code spans in a sentence: `a`; `a` and `b`; `a`, `b` and `c`. */
+export function labelList(labels: readonly string[]): string {
+  const spans = labels.map(codeSpan);
+  const last = spans.at(-1) ?? '';
+  return spans.length <= 1 ? last : `${spans.slice(0, -1).join(', ')} and ${last}`;
 }
 
 /** The explanation of a blocked review, shown identically by publication and assessment. */

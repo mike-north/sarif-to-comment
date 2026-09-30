@@ -608,7 +608,7 @@ describe('targeted discovery from one original (§2.4, D21)', () => {
     const outcome = await cleanup(world, { originalPullNumber: 37 });
     assert.equal(outcome['status'], 'complete');
     assert.deepEqual(results(outcome), [[40, 37, 'unlabeled'], [41, 37, 'closed']]);
-    assert.ok(markdown(outcome).includes('- #40 (for #37): skipped, it does not carry the label `suggestion`'), markdown(outcome));
+    assert.ok(markdown(outcome).includes('- #40 (for #37): skipped, it does not carry the label `suggestion-pr`'), markdown(outcome));
     assert.deepEqual(writes(world), closes(41));
   });
 

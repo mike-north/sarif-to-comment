@@ -37,6 +37,27 @@ Description
 </th></tr></thead>
 <tbody><tr><td>
 
+[allowSuggestionPullRequests?](./sarif-to-comment.ipublishsarifreviewoptions.allowsuggestionpullrequests.md)
+
+
+</td><td>
+
+`readonly`
+
+
+</td><td>
+
+boolean \| undefined
+
+
+</td><td>
+
+_(Optional)_ Allow suggestion pull requests: whole-file creations and deletions, and explicitly grouped changes (`properties.sarifToComment.acceptanceGroup`<!-- -->), are proposed as pull requests into the pull request's head branch, which the review links. They follow the tool-neutral suggestion pull request convention and carry the repository's canonical label: the `label` of`.github/suggestion-prs.json` on the default branch, otherwise`suggestion-pr`<!-- -->. Omitted or `false`<!-- -->: disabled; creations and deletions are shown in the review body and a grouped document is refused, naming this option. Small edits stay native suggestions either way. Part of the publication identity.
+
+
+</td></tr>
+<tr><td>
+
 [ignoreApprovalHold?](./sarif-to-comment.ipublishsarifreviewoptions.ignoreapprovalhold.md)
 
 
@@ -58,6 +79,48 @@ _(Optional)_ Publish despite an approval hold declared in the SARIF (`properties
 </td></tr>
 <tr><td>
 
+[markSuggestionPullRequestsReady?](./sarif-to-comment.ipublishsarifreviewoptions.marksuggestionpullrequestsready.md)
+
+
+</td><td>
+
+`readonly`
+
+
+</td><td>
+
+boolean \| undefined
+
+
+</td><td>
+
+_(Optional)_ Create suggestion pull requests ready for review instead of as drafts (the default). A draft cannot be merged until someone with write access marks it ready. Allowed only with `allowSuggestionPullRequests: true`<!-- -->. Part of the publication identity.
+
+
+</td></tr>
+<tr><td>
+
+[pullRequestLabels?](./sarif-to-comment.ipublishsarifreviewoptions.pullrequestlabels.md)
+
+
+</td><td>
+
+`readonly`
+
+
+</td><td>
+
+readonly string\[\] \| undefined
+
+
+</td><td>
+
+_(Optional)_ Extra labels every suggestion pull request carries in addition to the canonical label, for example a team or campaign tag. Deduplicated case-insensitively, so listing the canonical label is harmless. Each must already exist (a missing one blocks the review; labels are never created) and be 1-50 characters without commas, control or invisible formatting characters or surrounding whitespace. Allowed only with`allowSuggestionPullRequests: true`<!-- -->. Part of the publication identity.
+
+
+</td></tr>
+<tr><td>
+
 [submit?](./sarif-to-comment.ipublishsarifreviewoptions.submit.md)
 
 
@@ -74,48 +137,6 @@ boolean \| undefined
 </td><td>
 
 _(Optional)_ Create the review already submitted, as a comment review (GitHub's`COMMENT` event), instead of leaving a draft. Omitted or `false` leaves a draft. It never approves or requests changes, and nothing is inferred from finding severity. Every readiness check and approval hold applies unchanged. The mode is part of the publication identity: a state path is always retried with the mode it started with.
-
-
-</td></tr>
-<tr><td>
-
-[suggestionLabel?](./sarif-to-comment.ipublishsarifreviewoptions.suggestionlabel.md)
-
-
-</td><td>
-
-`readonly`
-
-
-</td><td>
-
-string \| undefined
-
-
-</td><td>
-
-_(Optional)_ The existing label every suggestion pull request carries (default`suggestion`<!-- -->). Allowed only with `suggestionPullRequests: true`<!-- -->. It is never created: a missing label blocks the review.
-
-
-</td></tr>
-<tr><td>
-
-[suggestionPullRequests?](./sarif-to-comment.ipublishsarifreviewoptions.suggestionpullrequests.md)
-
-
-</td><td>
-
-`readonly`
-
-
-</td><td>
-
-boolean \| undefined
-
-
-</td><td>
-
-_(Optional)_ Allow companion suggestion pull requests: whole-file creations and deletions, and explicitly grouped changes (`properties.sarifToComment.acceptanceGroup`<!-- -->), are proposed as draft pull requests into the pull request's head branch, which the review links. Omitted or `false`<!-- -->: disabled; creations and deletions are shown in the review body and a grouped document is refused, naming this option. Small edits stay native suggestions either way. The setting and the label are part of the publication identity.
 
 
 </td></tr>

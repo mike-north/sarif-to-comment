@@ -37,9 +37,10 @@
  *                                              // submitted, event COMMENT;
  *                                              // part of the publication
  *                                              // identity (never inferred)
- *               suggestionPullRequests?: boolean,  // companion suggestion
- *               suggestionLabel?: string }     // pull requests
- *                                              // (docs/companion-suggestion-pr-contract.md)
+ *               allowSuggestionPullRequests?: boolean,     // suggestion pull
+ *               pullRequestLabels?: string[],              // requests (docs/
+ *               markSuggestionPullRequestsReady?: boolean } // companion-
+ *                                              // suggestion-pr-contract.md §2.2)
  *
  * Outcome — the consumer contract is `status` plus human-readable `markdown`
  * (and the listed identifiers). Internal reason codes, evidence and diagnostics
@@ -74,7 +75,9 @@
  *      latter two are checked separately by publication state) and the
  *      approval-hold override (it authorizes, but does not change, content).
  *      With suggestion pull requests enabled, the document also holds
- *      suggestionPullRequests: { label }; disabled, it is exactly as above.
+ *      suggestionPullRequests: { markReady, pullRequestLabels } (the extra
+ *      labels deduplicated, in the order given); disabled, it is exactly as
+ *      above.
  *   3. When the state path holds a companion publication plan
  *      (src/companion-publication.cts), continue it: identity checks, then
  *      only the steps it still lacks. Otherwise recoverPublication with only
@@ -109,6 +112,7 @@ import {
   blockedReviewMarkdown,
   captureReviewInput,
   destinationLabel,
+  labelList,
   prepareForDestination,
   redact,
   templateText,
@@ -161,22 +165,35 @@ export interface IPublishSarifReviewOptions {
    */
   readonly submit?: boolean | undefined;
   /**
-   * Allow companion suggestion pull requests: whole-file creations and
-   * deletions, and explicitly grouped changes
-   * (`properties.sarifToComment.acceptanceGroup`), are proposed as draft pull
-   * requests into the pull request's head branch, which the review links.
-   * Omitted or `false`: disabled; creations and deletions are shown in the
-   * review body and a grouped document is refused, naming this option. Small
-   * edits stay native suggestions either way. The setting and the label are
-   * part of the publication identity.
+   * Allow suggestion pull requests: whole-file creations and deletions, and
+   * explicitly grouped changes (`properties.sarifToComment.acceptanceGroup`),
+   * are proposed as pull requests into the pull request's head branch, which
+   * the review links. They follow the tool-neutral suggestion pull request
+   * convention and carry the repository's canonical label: the `label` of
+   * `.github/suggestion-prs.json` on the default branch, otherwise
+   * `suggestion-pr`. Omitted or `false`: disabled; creations and deletions
+   * are shown in the review body and a grouped document is refused, naming
+   * this option. Small edits stay native suggestions either way. Part of the
+   * publication identity.
    */
-  readonly suggestionPullRequests?: boolean | undefined;
+  readonly allowSuggestionPullRequests?: boolean | undefined;
   /**
-   * The existing label every suggestion pull request carries (default
-   * `suggestion`). Allowed only with `suggestionPullRequests: true`. It is
-   * never created: a missing label blocks the review.
+   * Extra labels every suggestion pull request carries in addition to the
+   * canonical label, for example a team or campaign tag. Deduplicated
+   * case-insensitively, so listing the canonical label is harmless. Each
+   * must already exist (a missing one blocks the review; labels are never
+   * created) and be 1-50 characters without commas, control or invisible
+   * formatting characters or surrounding whitespace. Allowed only with
+   * `allowSuggestionPullRequests: true`. Part of the publication identity.
    */
-  readonly suggestionLabel?: string | undefined;
+  readonly pullRequestLabels?: readonly string[] | undefined;
+  /**
+   * Create suggestion pull requests ready for review instead of as drafts
+   * (the default). A draft cannot be merged until someone with write access
+   * marks it ready. Allowed only with `allowSuggestionPullRequests: true`.
+   * Part of the publication identity.
+   */
+  readonly markSuggestionPullRequestsReady?: boolean | undefined;
 }
 
 /**
@@ -426,9 +443,9 @@ function jsonMember(object: IJsonObject, key: string): JsonValue {
 
 /**
  * Fingerprint of everything that determines the prepared content (see module
- * doc). Enabled suggestion pull requests and their label change what is
- * published, so they are part of it; disabled, the identity document is
- * exactly what it always was.
+ * doc). Enabled suggestion pull requests, their extra labels and their ready
+ * setting change what is published, so they are part of it; disabled, the
+ * identity document is exactly what it always was.
  */
 function inputFingerprintOf(captured: ICapturedInput): string {
   const identity: IJsonObject = {
@@ -437,7 +454,14 @@ function inputFingerprintOf(captured: ICapturedInput): string {
     sarif: captured.sarif,
     sourceRootUri: captured.sourceRootUri ?? null,
     oldSourceCommit: captured.oldSourceCommit ?? null,
-    ...(captured.suggestionLabel === undefined ? {} : { suggestionPullRequests: { label: captured.suggestionLabel } }),
+    ...(captured.suggestionPullRequests === undefined
+      ? {}
+      : {
+          suggestionPullRequests: {
+            markReady: captured.suggestionPullRequests.markReady,
+            pullRequestLabels: [...captured.suggestionPullRequests.pullRequestLabels],
+          },
+        }),
   };
   return `sha256:${crypto.createHash('sha256').update(canonicalJson(identity), 'utf8').digest('hex')}`;
 }
@@ -562,7 +586,7 @@ function present(result: PublicationResult, captured: ICapturedInput, prepared?:
 /** The client methods a companion publication calls, beyond the review context. */
 const COMPANION_METHODS: readonly string[] = [
   'getAuthenticatedUser', 'createReview', 'listReviews', 'listReviewComments', 'createProposalCommit', 'getBranch',
-  'createBranch', 'createPullRequest', 'listBranchPullRequests', 'addLabel', 'listLabels',
+  'createBranch', 'createPullRequest', 'listBranchPullRequests', 'addLabels', 'listLabels',
 ];
 
 /**
@@ -594,10 +618,11 @@ function presentCompanion(outcome: CompanionOutcome, captured: ICapturedInput, p
     case 'published': {
       const suggestions = outcome.suggestions.map((s) => ({ number: s.number, url: s.htmlUrl, branch: s.branch }));
       const listed = suggestions.map((s) => `- [#${String(s.number)}](${s.url}) from ${code(s.branch)}`);
+      const form = outcome.ready ? `ready for review, into ${code(outcome.headRef)}` : `drafts into ${code(outcome.headRef)}`;
       const markdown = [
         publishedMarkdown(outcome, captured, prepared),
         '',
-        `Suggestion pull requests (drafts into ${code(outcome.headRef)}, labeled ${code(outcome.label)}):`,
+        `Suggestion pull requests (${form}, labeled ${labelList(outcome.labels)}):`,
         '',
         ...listed,
       ].join('\n');
@@ -681,7 +706,8 @@ async function run(captured: ICapturedInput, createGitHubClient: CreatePublishin
       suggestions: prepared.suggestions,
       comments: prepared.review.comments,
       headRef: prepared.suggestionPullRequests.headRef,
-      label: prepared.suggestionPullRequests.label,
+      labels: prepared.suggestionPullRequests.labels,
+      ready: prepared.suggestionPullRequests.ready,
     });
     return presentCompanion(outcome, captured, prepared);
   }

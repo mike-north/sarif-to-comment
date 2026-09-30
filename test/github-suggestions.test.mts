@@ -394,7 +394,7 @@ describe('readDefaultBranchFile (docs/suggestion-pr-convention.md §4)', () => {
     assert.equal(read.branch, 'trunk');
     assert.equal(read.commit, DEFAULT_HEAD);
     assert.equal(read.content.kind, 'file');
-    assert.equal(read.content.kind === 'file' ? Buffer.from(read.content.bytes).toString('utf8') : null, CONFIG_TEXT);
+    assert.equal(Buffer.from(read.content.bytes).toString('utf8'), CONFIG_TEXT);
     assert.equal(script.sent.some((r) => r.url.includes('/contents/')), false, 'never the Contents API');
     assert.deepEqual([...new Set(script.sent.map((r) => r.method))], ['GET']);
   });

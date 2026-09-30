@@ -46,10 +46,11 @@
  *                    // operational and propagates unchanged.
  *   options?: {
  *     ignoreApprovalHold?: boolean,   // bypasses only an approval hold
- *     suggestionPullRequests?: { headRef },  // enabled: whole-file proposals
- *                                     // and explicit groups become
+ *     suggestionPullRequests?: { headRef, ready },  // enabled: whole-file
+ *                                     // proposals and explicit groups become
  *                                     // suggestion pull requests into the
- *                                     // named head branch
+ *                                     // named head branch, drafts unless
+ *                                     // `ready` (it words their lifecycle note)
  *     maxComments?: number,           // default 100 inline comments
  *     maxCommentBodyChars?: number,   // default 60000 UTF-16 units per comment
  *                                     // body and for the review body
@@ -437,10 +438,12 @@ type ExistenceCheck = (commit: string, path: string) => unknown;
 /**
  * Suggestion pull requests are enabled (docs/companion-suggestion-pr-contract.md):
  * `headRef` is the pull request's head branch they would target, which their
- * rendered text names.
+ * rendered text names, and `ready` whether they are created ready for review
+ * (their lifecycle note says which).
  */
 interface ISuggestionPullRequestsOption {
   readonly headRef: string;
+  readonly ready: boolean;
 }
 
 /** Caller options; every limit defaults to PRODUCT_LIMITS. */
@@ -842,6 +845,8 @@ export interface ISuggestionContext {
   readonly reviewedCommit: string;
   /** The original pull request's head branch, which the suggestion targets. */
   readonly headRef: string;
+  /** Whether the suggestion is created ready for review instead of as a draft (its lifecycle note says which). */
+  readonly ready: boolean;
 }
 
 /** What the unit-based assembly produces; `suggestions` is null when the review is blocked. */
@@ -1176,8 +1181,11 @@ function validateCallerInput(input: unknown): asserts input is IPrepareReviewInp
     const hold = options['ignoreApprovalHold'];
     if (hold !== undefined && typeof hold !== 'boolean') fail('`options.ignoreApprovalHold` must be a boolean.');
     const suggestions = options['suggestionPullRequests'];
-    if (suggestions !== undefined && !(isPlainObject(suggestions) && typeof suggestions['headRef'] === 'string' && suggestions['headRef'] !== '')) {
-      fail('`options.suggestionPullRequests` must be { headRef } naming the pull request\'s head branch.');
+    if (
+      suggestions !== undefined &&
+      !(isPlainObject(suggestions) && typeof suggestions['headRef'] === 'string' && suggestions['headRef'] !== '' && typeof suggestions['ready'] === 'boolean')
+    ) {
+      fail('`options.suggestionPullRequests` must be { headRef, ready } naming the pull request\'s head branch and whether they are created ready for review.');
     }
   }
 }
@@ -2689,7 +2697,7 @@ function assembleWithSuggestions(items: readonly IPreparedItem[], state: IPrepar
     if (enabled === undefined) {
       report.error('acceptance-group-requires-suggestion-prs', item.pointer,
         `Acceptance group ${JSON.stringify(item.group)} must be accepted as one unit, which needs a suggestion pull request. `
-        + 'Enable suggestion pull requests (options.suggestionPullRequests or --suggestion-prs); a group is never split into separate suggestions or published in part.');
+        + 'Enable suggestion pull requests (options.allowSuggestionPullRequests or --allow-suggestion-prs); a group is never split into separate suggestions or published in part.');
     }
   }
 
@@ -2795,9 +2803,10 @@ function assembleWithSuggestions(items: readonly IPreparedItem[], state: IPrepar
 
   const target: ISuggestionContext = {
     owner: context.owner, repo: context.repo, pullNumber: context.pullNumber, reviewedCommit: context.reviewedCommit, headRef: enabled.headRef,
+    ready: enabled.ready,
   };
   const companions = units.map((unit) => prepareCompanion(unit, target, context));
-  const sizingMarker = formatSuggestionMarker({ ...target, id: SIZING_UUID, publication: SIZING_UUID });
+  const sizingMarker = formatSuggestionMarker({ ...target, id: SIZING_UUID, batch: SIZING_UUID });
   const { maxCommentBodyChars } = options;
   for (const [i, companion] of companions.entries()) {
     const size = renderSuggestionPullBody(companion, sizingMarker, target).length;
@@ -2909,10 +2918,25 @@ function renderReviewBody(suggestions: IPreparedSuggestions, numbers: readonly n
     .join(SEPARATOR);
 }
 
+/**
+ * The brief lifecycle note every suggestion pull request body carries
+ * (docs/companion-suggestion-pr-contract.md §2.11; docs/suggestion-pr-convention.md §8):
+ * how a draft becomes mergeable, who decides, and when it can be closed.
+ */
+function lifecycleNote(target: ISuggestionContext): string {
+  const pull = `#${String(target.pullNumber)}`;
+  const branch = codeSpan(target.headRef);
+  const accepted = target.ready
+    ? `it is a pull request into ${branch}, the branch of ${pull}. The author of ${pull} decides whether to merge it`
+    : `it is a draft pull request into ${branch}, the branch of ${pull}. A draft cannot be merged: someone with write access first marks it ready for review. The author of ${pull} then decides whether to merge it`;
+  return `**How this suggestion is accepted:** ${accepted}, and ${pull} carries the change to its base. Once ${pull} is merged or closed, this pull request can be closed.`;
+}
+
 /** A suggestion pull request's body, ending with its structured marker line. */
 function renderSuggestionPullBody(companion: IPreparedCompanion, marker: string, target: ISuggestionContext): string {
   return `Suggested in a review of #${String(target.pullNumber)} at commit ${target.reviewedCommit}.`
-    + `\n\n${mergeSentence(companion, 'this pull request', target.headRef)}\n\n${companion.changeLines}${SEPARATOR}${companion.items}\n\n${marker}`;
+    + `\n\n${mergeSentence(companion, 'this pull request', target.headRef)}\n\n${companion.changeLines}\n\n${lifecycleNote(target)}`
+    + `${SEPARATOR}${companion.items}\n\n${marker}`;
 }
 
 /** The identity of a proposal: equal proposals share one section (R8). */

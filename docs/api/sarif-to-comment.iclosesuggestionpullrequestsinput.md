@@ -73,7 +73,7 @@ string \| undefined
 
 </td><td>
 
-_(Optional)_ The label suggestion pull requests carry (default `suggestion`<!-- -->): 1-50 characters without commas, control or invisible formatting characters or surrounding whitespace.
+_(Optional)_ A migration override of the repository's canonical suggestion label, for sweeping suggestions left under a previously configured label: 1-50 characters without commas, control or invisible formatting characters or surrounding whitespace. Omitted (the normal case): the canonical label, the `label` of `.github/suggestion-prs.json` on the default branch, otherwise `suggestion-pr`<!-- -->, exactly as publication resolves it.
 
 
 </td></tr>

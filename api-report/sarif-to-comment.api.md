@@ -331,10 +331,11 @@ export interface IPublishSarifReviewInput {
 
 // @public
 export interface IPublishSarifReviewOptions {
+    readonly allowSuggestionPullRequests?: boolean | undefined;
     readonly ignoreApprovalHold?: boolean | undefined;
+    readonly markSuggestionPullRequestsReady?: boolean | undefined;
+    readonly pullRequestLabels?: readonly string[] | undefined;
     readonly submit?: boolean | undefined;
-    readonly suggestionLabel?: string | undefined;
-    readonly suggestionPullRequests?: boolean | undefined;
 }
 
 // @public
