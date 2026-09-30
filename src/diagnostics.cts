@@ -103,6 +103,73 @@ export function diagnosticOf(value: IDiagnostic): IDiagnostic {
   };
 }
 
+/** Every field of the model (docs/diagnostic.v1.schema.json, `diagnostic`). */
+const DIAGNOSTIC_KEYS: ReadonlySet<string> = new Set(['severity', 'code', 'title', 'message', 'location', 'subject', 'remedies']);
+
+/** Every field of a location (docs/diagnostic.v1.schema.json, `location`). */
+const LOCATION_KEYS: ReadonlySet<string> = new Set(['pointer', 'path', 'startLine', 'endLine']);
+
+/** The schema's code pattern: kebab-case. */
+const CODE_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+/** Whether `value` is a plain JSON object (not an array or null). */
+function isObjectValue(value: unknown): value is Readonly<Record<string, unknown>> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isNonEmptyText(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+function isLineNumber(value: unknown): boolean {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 1;
+}
+
+/** Why `value` is not a location of the model, or null. */
+function locationProblem(value: unknown): string | null {
+  if (!isObjectValue(value)) return 'its location is not an object';
+  const keys = Object.keys(value);
+  if (keys.length === 0 || !keys.every((key) => LOCATION_KEYS.has(key))) return 'its location has no field, or a field the model does not define';
+  if (Object.hasOwn(value, 'pointer') && typeof value['pointer'] !== 'string') return 'its location pointer is not a string';
+  if (Object.hasOwn(value, 'path') && !isNonEmptyText(value['path'])) return 'its location path is not a non-empty string';
+  for (const key of ['startLine', 'endLine']) {
+    if (Object.hasOwn(value, key) && !isLineNumber(value[key])) return `its location ${key} is not a positive integer`;
+  }
+  return null;
+}
+
+/**
+ * Why `value` is not a diagnostic of the model, or null: exactly the fields
+ * and constraints of docs/diagnostic.v1.schema.json. Used where diagnostics
+ * are read back rather than made here, such as the warnings a publication
+ * state records (issue #42); the code is checked for its form, not against
+ * this version's catalog, so that what was recorded is reported as it was.
+ */
+export function diagnosticProblem(value: unknown): string | null {
+  if (!isObjectValue(value)) return 'it is not an object';
+  if (!Object.keys(value).every((key) => DIAGNOSTIC_KEYS.has(key))) return 'it has a field the model does not define';
+  const { severity, code, title, message } = value;
+  if (severity !== 'error' && severity !== 'warning' && severity !== 'note') return 'its severity is not error, warning or note';
+  if (typeof code !== 'string' || !CODE_PATTERN.test(code)) return 'its code is not a kebab-case code';
+  if (!isNonEmptyText(title) || title.includes('\n')) return 'its title is not one non-empty line';
+  if (!isNonEmptyText(message)) return 'its message is not a non-empty string';
+  if (Object.hasOwn(value, 'location')) {
+    const problem = locationProblem(value['location']);
+    if (problem !== null) return problem;
+  }
+  if (Object.hasOwn(value, 'subject') && !isNonEmptyText(value['subject'])) return 'its subject is not a non-empty string';
+  if (Object.hasOwn(value, 'remedies')) {
+    const remedies = value['remedies'];
+    if (!Array.isArray(remedies) || remedies.length === 0 || !remedies.every(isNonEmptyText)) return 'its remedies are not a non-empty list of non-empty strings';
+  }
+  return null;
+}
+
+/** Whether `value` is a diagnostic of the model (see {@link diagnosticProblem}). */
+export function isDiagnostic(value: unknown): value is IDiagnostic {
+  return diagnosticProblem(value) === null;
+}
+
 /** Rank of each severity in an outcome's list. */
 const RANK: Readonly<Record<DiagnosticSeverity, number>> = { error: 0, warning: 1, note: 2 };
 

@@ -672,6 +672,14 @@ export const DIAGNOSTIC_CATALOG = {
     title: 'A suggestion group holds fewer than two distinct changes',
     remedies: ['Remove the group, and the change is published on its own; or add another change to it.'],
   },
+  'suggestion-group-change-shared': {
+    severity: 'error',
+    title: 'A group\'s change is also proposed outside the group',
+    remedies: [
+      'Name the finding outside the group in it too (`group-fixes`).',
+      'Or take the group\'s findings that carry the change out of the group (`ungroup-fixes`).',
+    ],
+  },
   'too-many-suggestion-prs': {
     severity: 'error',
     title: 'The review would create too many suggestion pull requests',

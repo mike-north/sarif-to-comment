@@ -19,8 +19,10 @@
  * branch, labels (the canonical label first, as GitHub names them), whether
  * the pull requests are created ready for review, the publication id (the
  * markers' `batch`), every suggestion (id, branch, title, body, commit
- * message, exact changes, rendered section parts) and the review's body
- * sections and inline comments, bound by a fingerprint over all of it.
+ * message, exact changes, rendered section parts), the review's body
+ * sections and inline comments, and preparation's warnings when there are
+ * any (`warnings`, a non-empty list of diagnostics that are not errors, in
+ * either version; issue #42), bound by a fingerprint over all of it.
  * Version 2 adds `reappliedOnto`: the commit every proposal is based on
  * instead of the reviewed commit, because the pull request's history was
  * rewritten (docs/companion-suggestion-pr-contract.md §2.5.1); its markers
@@ -67,7 +69,9 @@
  *   Whether the file at the state path is a plan (never guessed further:
  *   anything else is for the version-1 reader to accept or refuse).
  *
- * Outcome (private; presented by src/publish-sarif-review.cts):
+ * Outcome (private; presented by src/publish-sarif-review.cts), each with
+ * the plan's `warnings` ([] when it records none), on the call that planned
+ * the publication and on every later call alike:
  *   { status: 'published', review, via, receiptPersisted, suggestions }
  *   { status: 'uncertain', step, suggestion?, detail, established, cause? }
  *   { status: 'rejected', step, suggestion?, httpStatus, detail, established,
@@ -81,6 +85,7 @@ import * as crypto from 'node:crypto';
 import * as nodeFs from 'node:fs';
 
 import type { IBranchPullRequest, ProposalChange } from './github.cjs';
+import type { IDiagnostic } from './public-types.cjs';
 import type { IPreparedCompanion, IPreparedSuggestions, ISuggestionContext, PreparedComment } from './prepare-review.cjs';
 import { renderReviewBody, renderSuggestionPullBody } from './prepare-review.cjs';
 import {
@@ -96,6 +101,7 @@ import {
   recoverPublication,
   replaceFileDurably,
   thrownMessage,
+  warningsProblem,
   MAX_REJECTION_MESSAGE,
 } from './publication.cjs';
 import type { IPublicationFs, IPublicationInternals, PublicationMode } from './publication.cjs';
@@ -176,6 +182,8 @@ export interface IStartCompanionInput extends ICompanionIdentity {
   readonly ready: boolean;
   /** The commit the suggestions are re-applied onto after a rewritten history; absent when they are based on the reviewed commit. */
   readonly reappliedOnto?: string;
+  /** Preparation's warnings, recorded with the plan and reported by every call for this state path. */
+  readonly warnings: readonly IDiagnostic[];
 }
 
 /** One planned suggestion: its prepared texts plus the identity chosen for it. */
@@ -203,6 +211,8 @@ interface IPlanRecord {
   readonly reappliedOnto?: string;
   readonly suggestions: readonly IPlanSuggestion[];
   readonly review: { readonly sections: readonly (string | number)[]; readonly comments: readonly PreparedComment[] };
+  /** Preparation's warnings; present exactly when there are any. */
+  readonly warnings?: readonly IDiagnostic[];
   readonly planFingerprint: string;
 }
 
@@ -301,7 +311,11 @@ export interface ICompanionRejected {
   readonly baseCheck?: BaseCheck;
 }
 
-export type CompanionOutcome = ICompanionPublished | ICompanionUncertain | ICompanionRejected;
+/** What the steps conclude, before the plan's warnings are added. */
+type StepsOutcome = ICompanionPublished | ICompanionUncertain | ICompanionRejected;
+
+/** Every outcome, with the plan's warnings ([] when it records none). */
+export type CompanionOutcome = StepsOutcome & { readonly warnings: readonly IDiagnostic[] };
 
 /** A step's settled state: done (with its value), or the outcome that stops the publication. */
 type Settled<T> = { readonly done: true; readonly value: T } | { readonly done: false; readonly outcome: ICompanionUncertain | ICompanionRejected };
@@ -383,7 +397,8 @@ function planProblem(record: unknown): string | null {
   if (!isPlainObject(record) || record['format'] !== PLAN_FORMAT) return 'not a companion publication plan';
   const version = record['version'];
   if (version !== RECORD_VERSION && version !== REAPPLIED_PLAN_VERSION) return 'unsupported plan version';
-  if (!hasExactKeys(record, version === RECORD_VERSION ? PLAN_KEYS : [...PLAN_KEYS, 'reappliedOnto'])) return 'plan fields are not the expected set';
+  const keys = [...(version === RECORD_VERSION ? PLAN_KEYS : [...PLAN_KEYS, 'reappliedOnto']), ...(Object.hasOwn(record, 'warnings') ? ['warnings'] : [])];
+  if (!hasExactKeys(record, keys)) return 'plan fields are not the expected set';
   const destination = record['destination'];
   if (!isPlainObject(destination) || !hasExactKeys(destination, ['owner', 'pullNumber', 'repo'])
     || !isNonEmptyString(destination['owner']) || !isNonEmptyString(destination['repo']) || !isPositiveInteger(destination['pullNumber'])) {
@@ -423,6 +438,12 @@ function planProblem(record: unknown): string | null {
     return 'malformed review sections';
   }
   if (!isList(review['comments']) || !review['comments'].every(isPreparedComment)) return 'malformed review comments';
+  if (Object.hasOwn(record, 'warnings')) {
+    const warnings = record['warnings'];
+    const problem = warningsProblem(warnings);
+    if (problem !== null) return `malformed warnings (${problem})`;
+    if (isList(warnings) && warnings.length === 0) return 'malformed warnings (present, but empty)';
+  }
   const { planFingerprint, ...rest } = record;
   if (typeof planFingerprint !== 'string' || planFingerprint !== fingerprintOf(rest)) return 'the plan does not match its fingerprint';
   return null;
@@ -563,13 +584,22 @@ export async function startCompanionPublication(input: IStartCompanionInput, int
     ...reapplied,
     suggestions,
     review: { sections: input.suggestions.sections, comments: input.comments },
+    ...(input.warnings.length === 0 ? {} : { warnings: structuredClone(input.warnings) }),
   } as const;
   const plan: IPlanRecord = { ...unsigned, planFingerprint: fingerprintOf(structuredClone(unsigned)) };
   if (!claimNewFile(fs, input.statePath, serialize(plan), 'publication plan')) {
     // Another invocation claimed this identity first; continue its plan.
     return continueCompanionPublication(input, internals);
   }
-  return drive(new Publication(fs, input, plan, authorId));
+  return withPlanWarnings(plan, await drive(new Publication(fs, input, plan, authorId)));
+}
+
+/**
+ * `outcome` with the plan's warnings: every call reports the warnings the
+ * plan records, whatever this call's own preparation found (issue #42).
+ */
+function withPlanWarnings(plan: IPlanRecord, outcome: StepsOutcome): CompanionOutcome {
+  return { ...outcome, warnings: plan.warnings === undefined ? [] : structuredClone(plan.warnings) };
 }
 
 /** Continues the plan at `statePath` (see the module documentation). */
@@ -580,7 +610,7 @@ export async function continueCompanionPublication(identity: ICompanionIdentity,
   const publication = new Publication(fs, identity, plan, null);
   const baseCheck = publication.hasSuggestionWorkLeft() ? await checkPlannedBase(plan, identity.transport) : undefined;
   const outcome = await drive(publication);
-  return baseCheck === undefined ? outcome : { ...outcome, baseCheck };
+  return withPlanWarnings(plan, baseCheck === undefined ? outcome : { ...outcome, baseCheck });
 }
 
 /**
@@ -910,7 +940,7 @@ class Publication {
 }
 
 /** Runs every step in order: per suggestion its branch, pull request and labels; then the review. */
-async function drive(publication: Publication): Promise<CompanionOutcome> {
+async function drive(publication: Publication): Promise<StepsOutcome> {
   const pulls: { readonly number: number; readonly htmlUrl: string }[] = [];
   for (const index of publication.plan.suggestions.keys()) {
     const branch = await publication.branch(index);
@@ -925,7 +955,7 @@ async function drive(publication: Publication): Promise<CompanionOutcome> {
 }
 
 /** The review, published by the version-1 core at `<statePath>.review` once every suggestion exists. */
-async function review(publication: Publication, pulls: readonly { readonly number: number; readonly htmlUrl: string }[]): Promise<CompanionOutcome> {
+async function review(publication: Publication, pulls: readonly { readonly number: number; readonly htmlUrl: string }[]): Promise<StepsOutcome> {
   const { plan } = publication;
   const identity = {
     destination: plan.destination,

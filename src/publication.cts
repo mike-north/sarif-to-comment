@@ -76,6 +76,11 @@
  *   preparedReview:   { body: string, comments: Comment[] }
  *     Comment: { path, side: 'LEFT'|'RIGHT', line, startSide?, startLine?, body }
  *     (start fields together or not at all; omitted for single-line comments)
+ *   warnings?:        Diagnostic[]  // preparation's warnings and notes
+ *                     (docs/diagnostic.v1.schema.json, never errors); they
+ *                     belong to the publication (issue #42): recorded in the
+ *                     intent, and reported by every outcome for the state
+ *                     path, never taken from a later preparation
  *
  * recoverPublication never creates. It is for callers that must learn whether
  * an identity already exists before doing branch-dependent preparation.
@@ -95,6 +100,8 @@
  *
  * Outcome (private to the package; publishSarifReview presents it, with its
  * public diagnostics):
+ *   Every outcome read from a record also carries `warnings`: the record's
+ *   recorded warnings, or [] when it records none.
  *   { status: 'published', via: 'created'|'recovered'|'receipt',
  *     review: { id, htmlUrl }, marker, statePath, receiptPersisted: boolean,
  *     cause? }   // cause present only when the receipt could not be persisted
@@ -132,19 +139,24 @@
  *   Transport errors from read-only context (getAuthenticatedUser) propagate
  *   unchanged.
  *
- * State record v1 (JSON, created mode 0600, never contains credentials):
- *   { format: 'sarif-to-comment.publication-state', version: 1,
+ * State record (JSON, created mode 0600, never contains credentials):
+ *   { format: 'sarif-to-comment.publication-state', version: 1 | 2,
  *     phase: 'sending' | 'completed' | 'rejected', marker, destination,
  *     reviewedCommit, inputFingerprint, authorId, request, requestFingerprint,
+ *     warnings?: Diagnostic[],
  *     receipt?: { reviewId, htmlUrl, via: 'created'|'recovered' },
  *     rejection?: { status, message } }
+ *   Version 2 is version 1 plus `warnings` (issue #42): present exactly in
+ *   version 2, a non-empty list of diagnostics that are not errors, written
+ *   with the intent and kept by every later phase. A publication without
+ *   warnings writes version 1, byte for byte what earlier versions wrote.
  *   `request` has an `event` key exactly for a submitted publication, and its
  *   only value is 'COMMENT'; a request without it is a draft's, so every
  *   record written before submitted publication existed reads as a draft.
  *   `receipt` is present exactly when phase is 'completed'; `rejection` exactly
  *   when phase is 'rejected' (status: integer 400-499 except 408; message: at
- *   most 1000 characters). The version stays 1 while the format is unreleased;
- *   any shape other than these is corrupt. As in 0.2.0, a phase that is a
+ *   most 1000 characters). Any shape other than these is corrupt. As in
+ *   0.2.0, a version-1 record's phase that is a
  *   JSON array whose string form names a phase (['sending'], [['rejected']])
  *   is also read: its record must carry that phase's field set, its receipt or
  *   rejection value is never validated or answered from, and it is
@@ -156,6 +168,9 @@
 import * as crypto from 'node:crypto';
 import * as nodeFs from 'node:fs';
 import * as path from 'node:path';
+
+import { diagnosticProblem } from './diagnostics.cjs';
+import type { IDiagnostic } from './public-types.cjs';
 
 // ---------------------------------------------------------------------------
 // Domain types (private to this module; the transport contract is structural
@@ -302,10 +317,11 @@ interface IRejection {
   readonly message: string;
 }
 
-/** Fields every v1 state record carries, whatever its phase. */
+/** Fields every state record carries, whatever its phase. */
 interface IStateRecordBase {
   readonly format: typeof STATE_FORMAT;
-  readonly version: typeof STATE_VERSION;
+  /** 1, or 2 exactly when `warnings` is present. */
+  readonly version: typeof STATE_VERSION | typeof WARNED_STATE_VERSION;
   readonly marker: string;
   readonly destination: IPublicationDestination;
   readonly reviewedCommit: string;
@@ -313,6 +329,8 @@ interface IStateRecordBase {
   readonly authorId: number;
   readonly request: ICreateReviewRequest;
   readonly requestFingerprint: string;
+  /** Preparation's warnings (version 2 only): reported by every outcome for this state path. */
+  readonly warnings?: readonly IDiagnostic[];
 }
 
 /** An intent record: sending may have begun; only investigation may follow. */
@@ -424,6 +442,8 @@ interface IPublishedOutcome {
   readonly statePath: string;
   readonly receiptPersisted: boolean;
   readonly cause?: unknown;
+  /** The record's warnings; empty when it records none. */
+  readonly warnings: readonly IDiagnostic[];
 }
 
 /** Delivery that could not be verified; nothing was repaired or resent. */
@@ -435,6 +455,8 @@ interface IUncertainOutcome {
   readonly detail: string;
   readonly cause?: unknown;
   readonly candidates?: readonly ICandidateRef[];
+  /** The record's warnings; empty when it records none. */
+  readonly warnings: readonly IDiagnostic[];
 }
 
 /** The host definitively refused the single create; it is never resent. */
@@ -447,6 +469,8 @@ interface IRejectedOutcome {
   readonly detail: string;
   readonly rejectionPersisted: boolean;
   readonly cause?: unknown;
+  /** The record's warnings; empty when it records none. */
+  readonly warnings: readonly IDiagnostic[];
 }
 
 /** Recover only: no record exists at the state path. */
@@ -477,8 +501,11 @@ type Writable<T> = { -readonly [K in keyof T]: T[K] };
 /** Identifies a file as this module's publication state (never guessed from content). */
 const STATE_FORMAT = 'sarif-to-comment.publication-state';
 
-/** The only record version read or written; any other version is corrupt state. */
+/** The record version without warnings, byte for byte what 0.2.x wrote. */
 const STATE_VERSION = 1;
+
+/** The record version that adds preparation's `warnings` (issue #42); any other version is corrupt state. */
+const WARNED_STATE_VERSION = 2;
 
 /** Owner-only permissions for state files: they hold review content, not credentials. */
 const STATE_FILE_MODE = 0o600;
@@ -823,15 +850,33 @@ function isCoercedPhase(phase: unknown): phase is CoercedPhase {
   return typeof inner === 'string' && isRecordPhase(inner);
 }
 
-/** Why a parsed value is not a consistent v1 state record, or null. */
+/**
+ * Why `warnings` is not a list of recorded warnings, or null: a list of
+ * diagnostics of the model that are not errors (a ready preparation has
+ * none), possibly empty. The caller decides whether empty is allowed.
+ */
+function warningsProblem(warnings: unknown): string | null {
+  if (!isList(warnings)) return 'warnings are not a list';
+  for (const [i, warning] of warnings.entries()) {
+    const problem = diagnosticProblem(warning);
+    if (problem !== null) return `warning ${String(i + 1)} is not a diagnostic: ${problem}`;
+    if (isPlainObject(warning) && warning['severity'] === 'error') return `warning ${String(i + 1)} is an error`;
+  }
+  return null;
+}
+
+/** Why a parsed value is not a consistent state record, or null. */
 function recordProblem(record: unknown): string | null {
   if (!isPlainObject(record)) return 'record is not a JSON object';
   if (record['format'] !== STATE_FORMAT) return 'unknown record format';
-  if (record['version'] !== STATE_VERSION) return 'unsupported record version';
+  const version = record['version'];
+  if (version !== STATE_VERSION && version !== WARNED_STATE_VERSION) return 'unsupported record version';
+  const warned = version === WARNED_STATE_VERSION;
+  const withWarnings = (keys: readonly string[]): readonly string[] => (warned ? [...keys, 'warnings'].sort() : keys);
   const keysByPhase: Readonly<Record<RecordPhase, readonly string[]>> = {
-    sending: SENDING_KEYS,
-    completed: COMPLETED_KEYS,
-    rejected: REJECTED_KEYS,
+    sending: withWarnings(SENDING_KEYS),
+    completed: withWarnings(COMPLETED_KEYS),
+    rejected: withWarnings(REJECTED_KEYS),
   };
   // The phase is looked up as a property key, which coerces a parsed JSON
   // value to its string form (0.2.0 behavior, kept for existing state files).
@@ -842,7 +887,15 @@ function recordProblem(record: unknown): string | null {
   // refuses nothing JSON.parse can produce; it establishes the parsed phase
   // type from the value itself rather than from its coercion.
   if (typeof phase !== 'string' && !isCoercedPhase(phase)) return 'unknown record phase';
+  // Only version-1 records predate string phases; version 2 was never written otherwise.
+  if (warned && typeof phase !== 'string') return 'unknown record phase';
   if (!hasExactKeys(record, keysByPhase[phaseKey])) return 'record fields do not match its phase';
+  if (warned) {
+    const warnings = record['warnings'];
+    const problem = warningsProblem(warnings);
+    if (problem !== null) return `malformed warnings (${problem})`;
+    if (isList(warnings) && warnings.length === 0) return 'a version-2 record has no warnings';
+  }
   const marker = record['marker'];
   if (typeof marker !== 'string' || !MARKER_PATTERN.test(marker)) return 'malformed marker';
   const destination = record['destination'];
@@ -915,7 +968,7 @@ function recordProblem(record: unknown): string | null {
   return null;
 }
 
-/** Whether a parsed value is a consistent v1 state record (see recordProblem). */
+/** Whether a parsed value is a consistent state record (see recordProblem). */
 function isStateRecord(record: unknown): record is ParsedStateRecord {
   return recordProblem(record) === null;
 }
@@ -1295,6 +1348,11 @@ function differs(candidate: IHostReviewSummary, what: string): Verdict {
 // Outcomes
 // ---------------------------------------------------------------------------
 
+/** The warnings a record reports: its own (version 2), or none. */
+function recordedWarnings(record: IStateRecordBase): readonly IDiagnostic[] {
+  return record.warnings === undefined ? [] : structuredClone(record.warnings);
+}
+
 /** A published outcome; `cause` is present only when the receipt could not be saved. */
 function publishedOutcome(
   record: IStateRecordBase,
@@ -1311,6 +1369,7 @@ function publishedOutcome(
     marker: record.marker,
     statePath,
     receiptPersisted,
+    warnings: recordedWarnings(record),
   };
   if (cause !== undefined) outcome.cause = cause;
   return outcome;
@@ -1329,6 +1388,7 @@ function uncertainOutcome(
     marker: record.marker,
     statePath,
     detail: verdict.detail,
+    warnings: recordedWarnings(record),
   };
   const cause = sendCause !== undefined ? sendCause : verdict.cause;
   if (cause !== undefined) outcome.cause = cause;
@@ -1358,6 +1418,7 @@ function knownRejectionOutcome(record: IRejectedRecord, statePath: string): IRej
     statePath,
     detail: rejectionDetail(status, message),
     rejectionPersisted: true,
+    warnings: recordedWarnings(record),
   };
 }
 
@@ -1414,6 +1475,7 @@ function settleRejection(
       : `GitHub refused the create-review request (HTTP ${String(err.status)}): ${message} The refusal could not be saved at ${statePath}; later calls on this state path will report uncertain delivery, and nothing is ever resent.`,
     rejectionPersisted,
     cause: err,
+    warnings: recordedWarnings(record),
   };
 }
 
@@ -1545,6 +1607,24 @@ async function continueExisting(
 // Entry points
 // ---------------------------------------------------------------------------
 
+/** Whether a value is a list of recorded warnings (see {@link warningsProblem}). */
+function isWarningList(value: unknown): value is readonly IDiagnostic[] {
+  return warningsProblem(value) === null;
+}
+
+/**
+ * The caller's preparation warnings, as a copy: absent means none. Anything
+ * but a list of diagnostics that are not errors is caller misuse (TypeError,
+ * before any I/O).
+ */
+function capturedWarnings(warnings: unknown): readonly IDiagnostic[] {
+  if (warnings === undefined) return [];
+  if (!isWarningList(warnings)) {
+    throw new TypeError(`Invalid publication input: warnings must be a list of diagnostics that are not errors (${String(warningsProblem(warnings))})`);
+  }
+  return structuredClone(warnings);
+}
+
 /**
  * Publishes a prepared review under a new identity at `statePath`, or — when
  * a record already exists there — continues that identity without sending.
@@ -1556,6 +1636,7 @@ async function publishPreparedReview(
 ): Promise<PublicationOutcome> {
   validateIdentity(input);
   validatePreparedReview(input['preparedReview']);
+  const warnings = capturedWarnings(input['warnings']);
   const fs: IPublicationFs = internals.fs || nodeFs;
   const { statePath, transport } = input;
 
@@ -1567,7 +1648,7 @@ async function publishPreparedReview(
   const request = buildRequest(input.destination, input.reviewedCommit, input['preparedReview'], marker, requestedMode(input));
   const record: ISendingRecord = {
     format: STATE_FORMAT,
-    version: STATE_VERSION,
+    version: warnings.length === 0 ? STATE_VERSION : WARNED_STATE_VERSION,
     phase: 'sending',
     marker,
     destination: {
@@ -1580,6 +1661,7 @@ async function publishPreparedReview(
     authorId,
     request,
     requestFingerprint: fingerprintOf(request),
+    ...(warnings.length === 0 ? {} : { warnings }),
   };
 
   if (!claimIntent(fs, statePath, record)) {
@@ -1635,6 +1717,7 @@ export {
   modeMismatch,
   replaceFileDurably,
   thrownMessage,
+  warningsProblem,
   MAX_REJECTION_MESSAGE,
   STATE_FORMAT,
 };

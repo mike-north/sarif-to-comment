@@ -30,6 +30,14 @@
  *   two distinct changes. Ungrouping never leaves a group with fewer than two
  *   distinct changes, because such a group can never be published; the
  *   refusal names the rest of the group, to dissolve it instead.
+ * - A change is carried by one group or by none (issue #42): a finding
+ *   outside the group may not carry a change identical to one of the
+ *   group's, since publication always refuses that
+ *   (`suggestion-group-change-shared`). Grouping names each such finding
+ *   with its current selector, to include it (or, in another group, to
+ *   ungroup it first); ungrouping names the members that stay with the
+ *   identical change, to ungroup them together. The identical change is
+ *   never moved into the group: that would be inference.
  * - Nothing is inferred: only the named findings change.
  *
  * Distinctness is judged structurally here (the replacement or operation as
@@ -434,6 +442,51 @@ function* findingsOf(log: IGroupableLog): Generator<{ readonly ref: string; read
   }
 }
 
+/** A list of findings' pointers as code spans, joined as the refusals word it. */
+function refList(refs: readonly string[]): string {
+  return refs.map((ref) => `\`${ref}\``).join(', ');
+}
+
+/** Why two groups (or a group and no group) cannot both carry one change, as the refusals end it. */
+const SHARED_OUTSIDE = 'publication always refuses that, because one change cannot be accepted both in the group\'s suggestion pull request and on its own.';
+const SHARED_BETWEEN_GROUPS = 'publication always refuses that, because one change cannot be accepted in two suggestion pull requests.';
+
+/** The group name a declared value is reported by: the name, or its JSON text when it is not a string. */
+function groupLabel(value: unknown): string {
+  return typeof value === 'string' ? value : JSON.stringify(value);
+}
+
+/**
+ * The pointers of the findings in `members` (document order) that carry each
+ * change: change identity to pointers.
+ */
+function carriers(log: IGroupableLog, members: (ref: string, result: unknown) => boolean): Map<string, string[]> {
+  const byKey = new Map<string, string[]>();
+  for (const { ref, runIndex, result } of findingsOf(log)) {
+    if (!isEditable(result) || !members(ref, result)) continue;
+    for (const key of changeKeysOf(result, runIndex)) {
+      const refs = byKey.get(key) ?? [];
+      if (!refs.includes(ref)) refs.push(ref);
+      byKey.set(key, refs);
+    }
+  }
+  return byKey;
+}
+
+/** The pointers (document order, once each) of the carriers of every change of `result` that `byKey` holds. */
+function sharing(result: IEditableObject, runIndex: number, byKey: ReadonlyMap<string, readonly string[]>): string[] {
+  const refs = new Set<string>();
+  for (const key of changeKeysOf(result, runIndex)) for (const ref of byKey.get(key) ?? []) refs.add(ref);
+  return [...refs].sort(compareRefs);
+}
+
+/** Document order of two finding pointers of the form `/runs/R/results/N`. */
+function compareRefs(a: string, b: string): number {
+  const [ra = 0, na = 0] = a.split('/').filter((part) => /^\d+$/.test(part)).map(Number);
+  const [rb = 0, nb = 0] = b.split('/').filter((part) => /^\d+$/.test(part)).map(Number);
+  return ra - rb || na - nb;
+}
+
 /** "no change" or "only 1 distinct change": a count below two, as the refusals word it. */
 function fewChanges(count: number): string {
   return count === 0 ? 'no change' : 'only 1 distinct change';
@@ -550,6 +603,24 @@ function groupSarifFixesWithUntypedInput(sarif: unknown, options: unknown): Grou
       pointer: firstMember,
     }));
   }
+  // A change is carried by one group or by none (issue #42): every finding
+  // left outside the group that carries one of its changes is named.
+  const isMember = (ref: string, result: unknown): boolean => selectedRefs.has(ref) || declaredGroup(result)?.value === group;
+  const memberCarriers = carriers(selection.log, isMember);
+  for (const { ref, runIndex, result } of findingsOf(selection.log)) {
+    if (!isEditable(result) || isMember(ref, result)) continue;
+    const shared = sharing(result, runIndex, memberCarriers);
+    if (shared.length === 0) continue;
+    const lead = `\`${ref}\` carries the same change as ${refList(shared)} of suggestion group ${JSON.stringify(group)}`;
+    const other = declaredGroup(result);
+    problems.push(createProblem('suggestion-group-change-shared', {
+      message: other === null
+        ? `${lead}, but would stay outside the group; ${SHARED_OUTSIDE} Name it in the group too: \`${findingSelector(ref, selection.digest)}\`.`
+        : `${lead}, but is in suggestion group ${JSON.stringify(groupLabel(other.value))}; ${SHARED_BETWEEN_GROUPS} `
+          + `Groups are never joined: ungroup it from ${JSON.stringify(groupLabel(other.value))} first to include it.`,
+      pointer: ref,
+    }));
+  }
   if (problems.length > 0) return refusedOutcome(operation, problems);
 
   for (const member of selection.findings) {
@@ -631,15 +702,30 @@ function ungroupSarifFixesWithUntypedInput(sarif: unknown, options: unknown): Un
   }
   const selectedRefs = new Set(selection.findings.map((f) => f.ref));
   for (const name of affected) {
-    const rest = [...findingsOf(selection.log)].filter(({ ref, result }) => !selectedRefs.has(ref) && declaredGroup(result)?.value === name);
+    const stays = (ref: string, result: unknown): boolean => !selectedRefs.has(ref) && declaredGroup(result)?.value === name;
+    const rest = [...findingsOf(selection.log)].filter(({ ref, result }) => stays(ref, result));
     if (rest.length === 0) continue;
     const keys = new Set(rest.flatMap(({ result, runIndex }) => (isEditable(result) ? changeKeysOf(result, runIndex) : [])));
-    if (keys.size >= 2) continue;
-    problems.push(createProblem('ungroup-leaves-single-change', {
-      message: `Suggestion group ${JSON.stringify(name)} would keep ${fewChanges(keys.size)} (${rest.map(({ ref }) => `\`${ref}\``).join(', ')}), and a group needs at least two. `
-        + `To dissolve the group, ungroup its other findings too: ${rest.map(({ ref }) => `\`${findingSelector(ref, selection.digest)}\``).join(', ')}.`,
-      pointer: rest[0]?.ref,
-    }));
+    if (keys.size < 2) {
+      problems.push(createProblem('ungroup-leaves-single-change', {
+        message: `Suggestion group ${JSON.stringify(name)} would keep ${fewChanges(keys.size)} (${rest.map(({ ref }) => `\`${ref}\``).join(', ')}), and a group needs at least two. `
+          + `To dissolve the group, ungroup its other findings too: ${rest.map(({ ref }) => `\`${findingSelector(ref, selection.digest)}\``).join(', ')}.`,
+        pointer: rest[0]?.ref,
+      }));
+    }
+    // A change is carried by one group or by none (issue #42): a finding
+    // leaving the group may not take a change a staying member carries.
+    const stayingCarriers = carriers(selection.log, stays);
+    for (const member of selection.findings) {
+      if (declaredGroup(member.result)?.value !== name) continue;
+      const shared = sharing(member.result, member.runIndex, stayingCarriers);
+      if (shared.length === 0) continue;
+      problems.push(createProblem('suggestion-group-change-shared', {
+        message: `\`${member.ref}\` carries the same change as ${refList(shared)}, which ${shared.length === 1 ? 'stays' : 'stay'} in suggestion group ${JSON.stringify(name)}; ${SHARED_OUTSIDE} `
+          + `Ungroup them together: ${shared.map((ref) => `\`${findingSelector(ref, selection.digest)}\``).join(', ')}.`,
+        pointer: member.ref,
+      }));
+    }
   }
   if (problems.length > 0) return refusedOutcome(operation, problems);
 
