@@ -732,6 +732,8 @@ describe('group rules (§2.3–§2.4), identical in validate and publish', () =>
       '',
       ...changes,
       '',
+      DRAFT_NOTE,
+      '',
       '---',
       '',
       ...items,

@@ -49,6 +49,8 @@ const POINTER = '/runs/0/results/0';
 const SNAPSHOT: Readonly<Record<string, string>> = {
   'src/app.js': 'const a = 1;\nconst b = parseA(input);\nconst c = 3;\n',
   'src/other.js': 'export const parse = parseA;\n',
+  // A file whose path Markdown cannot show exactly (it begins with a space).
+  ' odd.js': 'odd\n',
 };
 const BASE_SNAPSHOT: Readonly<Record<string, string>> = {
   'src/app.js': 'const a = 1;\nconst b = oldParse(input);\nconst c = 3;\n',
@@ -372,13 +374,14 @@ describe('an alternative that cannot be listed faithfully refuses the whole revi
   blocked('an alternative on a file the reviewed commit does not have', lineFix('src/missing.js', 1, 'x'), 'source-file-missing');
   blocked('an alternative whose content could open a suggestion block', lineFix('src/app.js', 2, 'const b = md`\n```suggestion\n`;'), 'alternative-suggestion-fence');
   blocked('an alternative whose content hides a bidirectional override', lineFix('src/app.js', 2, 'const b = parseB(input); // ‮'), 'alternative-content-unrepresentable');
+  blocked('an alternative on another file whose path Markdown cannot show exactly', lineFix('%20odd.js', 1, 'even'), 'alternative-path-unrepresentable');
   blocked('an alternative whose content has a carriage return that does not end a line', lineFix('src/app.js', 2, 'const b = 1;\rconst d = 2;'), 'alternative-content-unrepresentable');
 
   test('the refusal names the alternative and what it would need', async () => {
     const outcome = await prepare(log([finding([PRIMARY, lineFix('src/app.js', 2, 'const b = parseB(input); // ‮')])]));
     assertBlocked(outcome, [['alternative-content-unrepresentable', `${POINTER}/fixes/1`]]);
     assert.equal(outcome.diagnostics[0]?.message,
-      'Alternative fix (1) cannot be shown exactly: line 1 contains U+202E, which a code block does not show.');
+      'Alternative fix (1) cannot be shown exactly: replacement line 1 contains U+202E, which a code block does not show.');
   });
 });
 
