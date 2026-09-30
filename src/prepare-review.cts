@@ -173,14 +173,18 @@
  *   chosen: the first fix is presented exactly as a single fix would be, and
  *   an ineligible first fix blocks even when a later one would be eligible.
  *   An alternative is never applied, grouped or unioned, so it takes no part
- *   in overlap and conflict checks. It must be one text replacement in one
- *   file that applies exactly to the reviewed commit (like a fix, without the
- *   native-suggestion requirements), and its replacement lines must be
+ *   in overlap and conflict checks, and one changing several files or making
+ *   several replacements is listed as one alternative with a labelled part
+ *   per replacement. Each replacement must be text that applies exactly to
+ *   the reviewed commit (like a fix, without the native-suggestion
+ *   requirements); no two may change the same line; and its lines must be
  *   showable exactly in a code block (no invisible or bidirectional
- *   characters, no carriage return inside a line, no line that could open a
- *   suggestion block); line terminators are not shown. Anything else blocks
- *   at the alternative's own pointer (…/fixes/N). Alternatives are part of
- *   the item text, so they count toward every size limit.
+ *   characters, no carriage return inside a line, one line-ending style, no
+ *   line that could open a suggestion block), as must any path the listing
+ *   names. The block shows LF line breaks; CRLF is stated beside it.
+ *   Anything else blocks at the alternative's own pointer (…/fixes/N).
+ *   Alternatives are part of the item text, so they count toward every size
+ *   limit.
  * - Rules may live in tool extensions: result.rule.toolComponent (index, guid
  *   or name) selects the component, whose identity is kept in attribution.
  *   Unresolvable components block. Result taxa are kept in evidence with a
@@ -191,8 +195,7 @@
  *   their presence blocks the whole review so no finding is lost.
  * - Explicitly unsupported (blocking): multiple locations, logical-only
  *   locations, related locations, code flows, graphs, stacks, attachments,
- *   suppressions, an alternative fix that changes several files or makes
- *   several replacements, binary replacements, nested artifacts.
+ *   suppressions, binary replacements, nested artifacts.
  * - Owned namespace properties.sarifToComment on runs and results: `approval`
  *   ('awaiting-approval' holds; 'ready' is a declared, unverified state) and,
  *   on results, `proposedFileChanges` and `suggestionGroup`; any other key
@@ -234,11 +237,16 @@
  *   item      = message [ "\n\n**Fix:** " fix description ]
  *               [ "\n\n**Alternatives to consider:**" { "\n\n" alternative } ]
  *               "\n\n<sub>— " attribution "</sub>"
- *   alternative = "(" n ") " [ description "\n\n" ] change    (n = 1, 2, … per item)
- *   change    = "Replace " lines [ " of " code span of path ] " with:\n\n" fence "\n"
- *                 replacement lines without their final terminator "\n" fence
+ *   alternative = "(" n ") " [ description "\n\n" ] ( change | parts )   (n = 1, 2, … per item)
+ *   change    = "Replace " lines [ " of " code span of path ] " with" crlf ":\n\n" block
  *             | "Delete " lines [ " of " code span of path ] "."
- *               (the path is named only when it differs from the first fix's file)
+ *               (one replacement; the path is named only when it differs from
+ *               the first fix's file)
+ *   parts     = ( "Changes " N " files together:" | "Makes " N " replacements together:" )
+ *               { "\n\n" code span of path " — " ( "replace " lines " with" crlf ":\n\n" block
+ *                 | "delete " lines "." ) }       (one per replacement, in order)
+ *   crlf      = " (CRLF line endings)" when the replacement's lines end with CRLF, else ""
+ *   block     = fence "\n" replacement lines, LF-separated, without the final terminator "\n" fence
  *   lines     = "line " N | "lines " N "-" M     (whole lines of the reviewed file)
  *   attribution = tool name [ " " version ] [ " · " extension name [ " " version ] ]
  *                 [ " · rule " code span of ruleId ]
@@ -689,20 +697,31 @@ interface IPreparedSuggestion {
   readonly description: string | undefined;
 }
 
-/**
- * A further fix of a result, listed with it as an alternative: one exact
- * replacement of the reviewed file, never applied, grouped or unioned.
- */
-interface IPreparedAlternative {
-  /** The fix's index in the result's fixes[] (1 or more). */
-  readonly fix: number;
+/** One replacement of a listed alternative: an exact whole-line change of one reviewed file. */
+interface IAlternativePart {
   readonly path: string;
   readonly startLine: number;
   readonly endLine: number;
   readonly originalText: string;
   readonly replacementText: string;
-  /** The replacement lines as the code block shows them: without the final terminator, or the file's own byte-order mark. */
+  /**
+   * The replacement lines as the code block shows them: LF line breaks,
+   * without the final terminator or the file's own byte-order mark.
+   */
   readonly shownText: string;
+  /** Whether the replacement's lines end with CRLF, which is then stated beside the block. */
+  readonly crlf: boolean;
+}
+
+/**
+ * A further fix of a result, listed with it as an alternative: its exact
+ * replacements of reviewed files, in the producer's order, never applied,
+ * grouped or unioned.
+ */
+interface IPreparedAlternative {
+  /** The fix's index in the result's fixes[] (1 or more). */
+  readonly fix: number;
+  readonly parts: readonly IAlternativePart[];
   readonly description: string | undefined;
 }
 
@@ -756,11 +775,10 @@ interface IReplacementEvidence {
   readonly replacementText: string;
 }
 
-/** A further fix listed as an alternative: its index in fixes[], its file and its exact replacement. */
+/** A further fix listed as an alternative: its index in fixes[], and each file and exact replacement it makes. */
 interface IAlternativeEvidence {
   readonly fix: number;
-  readonly path: string;
-  readonly replacement: IReplacementEvidence;
+  readonly changes: readonly { readonly path: string; readonly replacement: IReplacementEvidence }[];
 }
 
 /** Fields every evidence record carries; optional ones are omitted when absent. */
@@ -1723,7 +1741,7 @@ async function prepareResult(
       suggestion = await prepareFix(itemAt(fixes, 0), pointer, runInfo, state);
     }
     // Every further fix is listed as an alternative, never chosen instead.
-    if (fixes) alternatives = await prepareAlternatives(fixes, suggestion ? suggestion.path : singlePath(edits), pointer, runInfo, state);
+    if (fixes) alternatives = await prepareAlternatives(fixes, pointer, runInfo, state);
   }
   // D3/D4: a result's explanation travels with its fix only when the result's
   // own source lies within the fix's replacement lines (one of them, for a fix
@@ -2423,13 +2441,11 @@ interface IAppliedFix {
 }
 
 /**
- * Reads one one-change fix and applies its one replacement to the reviewed
- * file exactly: a result's first fix presented as a native suggestion, or an
- * alternative. `native` adds the native-suggestion requirement that the
- * reviewed commit is the diff head, checked in the order it always was.
- * `subject` names the fix in shape diagnostics ("This fix", or "Alternative
- * fix (N)"). Returns the applied fix, or null after recording errors at
- * `pointer`.
+ * Reads a result's first fix, when it makes one change, and applies its one
+ * replacement to the reviewed file exactly. `native` adds the
+ * native-suggestion requirement that the reviewed commit is the diff head,
+ * checked in the order it always was. Returns the applied fix, or null after
+ * recording errors at `pointer`.
  */
 async function applyResultFix(
   fix: ISarifFix,
@@ -2437,7 +2453,6 @@ async function applyResultFix(
   runInfo: IRunInfo,
   state: IPreparationState,
   native: boolean,
-  subject = 'This fix',
 ): Promise<IAppliedFix | null> {
   const { report, context } = state;
   const fail = (code: string, message: string): null => {
@@ -2446,28 +2461,14 @@ async function applyResultFix(
   };
   // The schema requires at least one artifact change per fix and one
   // replacement per change. A first fix with several changes never reaches
-  // here: it is accepted whole, as committed edits (prepareFixEdits). An
-  // alternative's several changes are one change applied together, which
-  // its listing does not present yet.
-  if (fix.artifactChanges.length > 1) {
-    return fail('fix-multiple-files-unsupported',
-      `${subject} changes several files, which are applied together as one change; presenting a fix that changes several files is not supported yet.`);
-  }
+  // here: it is accepted whole, as committed edits (prepareFixEdits).
   const change = itemAt(fix.artifactChanges, 0);
-  if (change.replacements.length > 1) {
-    return fail('fix-multiple-replacements-unsupported',
-      `${subject} makes several replacements, which are applied together as one change; presenting a fix with several replacements is not supported yet.`);
-  }
   const replacement = itemAt(change.replacements, 0);
   if (replacement.insertedContent && replacement.insertedContent.binary !== undefined) {
-    return fail('fix-binary-unsupported', `${subject} inserts binary content, which cannot be presented as text.`);
+    return fail('fix-binary-unsupported', 'This fix inserts binary content, which cannot be presented as text.');
   }
-  if (runInfo.newlineError) return fail(runInfo.newlineError[0], runInfo.newlineError[1]);
-  if (runInfo.provenanceError) return fail(runInfo.provenanceError[0], runInfo.provenanceError[1]);
-  if (runInfo.sourceCommit !== context.reviewedCommit) {
-    return fail('suggestion-source-not-reviewed',
-      `The fix edits ${runInfo.sourceCommit}, not the reviewed commit; its applicability there is unverified.`);
-  }
+  const runProblem = fixRunProblem(runInfo, context);
+  if (runProblem) return fail(runProblem[0], runProblem[1]);
   if (native && context.reviewedCommit !== context.diff.headCommit) {
     return fail('suggestion-historical-unsupported',
       'The reviewed commit is not the pull request head, so a native suggestion could not be applied to the reviewed text.');
@@ -2476,21 +2477,47 @@ async function applyResultFix(
   if (!source) return null;
 
   const description = fix.description ? resolveMessage(fix.description, undefined, runInfo.driver, pointer, state).markdown : undefined;
+  const edit = applyExactly(source.text, replacement, runInfo, state);
+  if (edit.problem) return fail(edit.problem[0], edit.problem[1]);
+  return { source, edit: edit.edit, description };
+}
+
+/** Why a run's fixes cannot be read against the reviewed commit, as [code, message], or null. */
+function fixRunProblem(runInfo: IRunInfo, context: IPreparationContext): Problem | null {
+  if (runInfo.newlineError) return runInfo.newlineError;
+  if (runInfo.provenanceError) return runInfo.provenanceError;
+  if (runInfo.sourceCommit !== context.reviewedCommit) {
+    return ['suggestion-source-not-reviewed', `The fix edits ${runInfo.sourceCommit}, not the reviewed commit; its applicability there is unverified.`];
+  }
+  return null;
+}
+
+/**
+ * Applies one text replacement to a reviewed file exactly, through the
+ * replacement module, in every column unit the run allows (without a
+ * declared columnKind both must agree). Returns the edit or the problem.
+ */
+function applyExactly(
+  sourceText: string,
+  replacement: ISarifReplacement,
+  runInfo: IRunInfo,
+  state: IPreparationState,
+): { readonly edit: IAppliedFix['edit']; readonly problem?: undefined } | { readonly problem: Problem } {
   const insertedText = replacement.insertedContent && replacement.insertedContent.text !== undefined
     ? replacement.insertedContent.text : '';
   const kinds = runInfo.columnKind === undefined ? COLUMN_KINDS : [runInfo.columnKind];
   const outcomes = kinds.map((columnKind) => state.applyFix({
-    sourceText: source.text, deletedRegion: replacement.deletedRegion, insertedText, columnKind,
+    sourceText, deletedRegion: replacement.deletedRegion, insertedText, columnKind,
   }));
   const edit = itemAt(outcomes, 0);
   if (outcomes.some((o) => JSON.stringify(o) !== JSON.stringify(edit))) {
-    return fail('column-kind-required',
-      'The run declares no columnKind and this replacement edits different text in UTF-16 code units and in Unicode code points.');
+    return { problem: ['column-kind-required',
+      'The run declares no columnKind and this replacement edits different text in UTF-16 code units and in Unicode code points.'] };
   }
   if (edit.kind !== 'replacement') {
-    return fail(`replacement-${edit.kind}`, `The replacement cannot be applied (${edit.reason}): ${edit.message}`);
+    return { problem: [`replacement-${edit.kind}`, `The replacement cannot be applied (${edit.reason}): ${edit.message}`] };
   }
-  return { source, edit, description };
+  return { edit };
 }
 
 /**
@@ -2709,59 +2736,101 @@ function fileRegionEdits(
 
 /**
  * Prepares a result's further fixes (fixes[1…]) as alternatives, in the
- * producer's order. Each is one exact replacement of the reviewed file, as a
- * fix is, but it is only listed: it needs no inline placement or native
- * payload, and it is never applied, so it takes no part in conflict checks.
- * Its replacement lines must be showable exactly in a code block, and its
- * path too when it differs from `primaryPath` (the first fix's file, when
- * that fix was prepared), since only then is the path named. Every
- * alternative is checked, and each problem is recorded at the alternative's
- * own pointer; the list is complete only when no problem was recorded.
+ * producer's order. An alternative is only listed, never applied: it needs
+ * no inline placement or native payload and takes no part in conflict
+ * checks, so a fix changing several files or making several replacements is
+ * listed too, one labelled part per replacement. Each replacement must apply
+ * exactly to the reviewed file, and its lines, its line-ending style and any
+ * path the listing names must be showable exactly. Every alternative is
+ * checked; its first problem is recorded at its own pointer, and the list is
+ * complete only when no problem was recorded.
  */
 async function prepareAlternatives(
   fixes: readonly ISarifFix[],
-  primaryPath: string | undefined,
   pointer: string,
   runInfo: IRunInfo,
   state: IPreparationState,
 ): Promise<readonly IPreparedAlternative[]> {
+  // The first fix's file, resolved without reading, whether or not that fix
+  // could be prepared: a one-part alternative names its file only when it
+  // differs, so only then is its path shown and checked.
+  const firstPath = resolveArtifactPath(itemAt(itemAt(fixes, 0).artifactChanges, 0).artifactLocation, runInfo);
+  const primaryPath = firstPath.error ? undefined : firstPath.path;
   const alternatives: IPreparedAlternative[] = [];
   for (const [index, fix] of fixes.entries()) {
     if (index === 0) continue;
     const at = `${pointer}/fixes/${String(index)}`;
     const subject = `Alternative fix (${String(index)})`;
-    const applied = await applyResultFix(fix, at, runInfo, state, false, subject);
-    if (!applied) continue;
-    const { source, edit, description } = applied;
-    // Coordinates never delete a byte-order mark, so a mark leading line 1's
-    // replacement is the file's own, unchanged: it is not shown.
-    const bom = edit.startLine === 1 && source.text.startsWith(BOM) && edit.replacementText.startsWith(BOM) ? BOM.length : 0;
-    const shownText = edit.replacementText.slice(bom).replace(/\r?\n$/, '');
-    const pathProblem = source.path === primaryPath ? null : pathRepresentationProblem(source.path);
-    const problem: Problem | null = pathProblem === null ? shownTextProblem(shownText) : ['alternative-path-unrepresentable', `its file path ${pathProblem}`];
-    if (problem) {
-      state.report.error(problem[0], at, `${subject} cannot be shown exactly: ${problem[1]}.`);
-      continue;
-    }
-    alternatives.push({
-      fix: index,
-      path: source.path,
-      startLine: edit.startLine,
-      endLine: edit.endLine,
-      originalText: edit.originalText,
-      replacementText: edit.replacementText,
-      shownText,
-      description,
-    });
+    const alternative = await prepareAlternative(fix, index, subject, primaryPath, at, runInfo, state);
+    if (alternative !== null) alternatives.push(alternative);
   }
   return alternatives;
 }
 
+/** One alternative's parts, or null after recording its first problem at `at`. */
+async function prepareAlternative(
+  fix: ISarifFix,
+  index: number,
+  subject: string,
+  primaryPath: string | undefined,
+  at: string,
+  runInfo: IRunInfo,
+  state: IPreparationState,
+): Promise<IPreparedAlternative | null> {
+  const fail = (code: string, message: string): null => {
+    state.report.error(code, at, message);
+    return null;
+  };
+  const replacements = fix.artifactChanges.flatMap((change) => change.replacements);
+  if (replacements.some((r) => r.insertedContent !== undefined && r.insertedContent.binary !== undefined)) {
+    return fail('fix-binary-unsupported', `${subject} inserts binary content, which cannot be shown as text.`);
+  }
+  const runProblem = fixRunProblem(runInfo, state.context);
+  if (runProblem) return fail(runProblem[0], runProblem[1]);
+  const parts: IAlternativePart[] = [];
+  for (const change of fix.artifactChanges) {
+    const source = await readLocatedSource(change.artifactLocation, at, runInfo, state);
+    if (!source) return null;
+    for (const replacement of change.replacements) {
+      const applied = applyExactly(source.text, replacement, runInfo, state);
+      if (applied.problem) return fail(applied.problem[0], applied.problem[1]);
+      const { edit } = applied;
+      const clash = parts.find((p) => p.path === source.path && p.startLine <= edit.endLine && edit.startLine <= p.endLine);
+      if (clash) {
+        const lines = edit.startLine === edit.endLine ? `line ${String(edit.startLine)}` : `lines ${String(edit.startLine)}-${String(edit.endLine)}`;
+        return fail('alternative-overlapping-replacements',
+          `${subject} changes ${lines} of ${source.path} in more than one of its replacements, so its parts cannot be shown as separate whole-line changes.`);
+      }
+      // Coordinates never delete a byte-order mark, so a mark leading line
+      // 1's replacement is the file's own, unchanged: it is not shown.
+      const bom = edit.startLine === 1 && source.text.startsWith(BOM) && edit.replacementText.startsWith(BOM) ? BOM.length : 0;
+      const text = edit.replacementText.slice(bom);
+      const named = fix.artifactChanges.length > 1 || change.replacements.length > 1 || source.path !== primaryPath;
+      const pathProblem = named ? pathRepresentationProblem(source.path) : null;
+      const problem: Problem | null = pathProblem === null ? shownTextProblem(text) : ['alternative-path-unrepresentable', `the file path ${pathProblem}`];
+      if (problem) return fail(problem[0], `${subject} cannot be shown exactly: ${problem[1]}.`);
+      parts.push({
+        path: source.path,
+        startLine: edit.startLine,
+        endLine: edit.endLine,
+        originalText: edit.originalText,
+        replacementText: edit.replacementText,
+        shownText: text.replace(/\r?\n$/, '').replace(/\r\n/g, '\n'),
+        crlf: text.includes('\r\n'),
+      });
+    }
+  }
+  const description = fix.description ? resolveMessage(fix.description, undefined, runInfo.driver, at, state).markdown : undefined;
+  return { fix: index, parts, description };
+}
+
 /**
- * Why an alternative's replacement lines cannot be shown exactly in a code
- * block, as [code, reason], or null. Lines are shown, not their terminators.
- * A line that could open a suggestion block is refused as producer Markdown
- * is: only a validated first fix may create a native suggestion.
+ * Why an alternative's replacement lines cannot be shown exactly as a code
+ * block plus a stated line-ending style, as [code, reason], or null. The
+ * block shows the lines with LF breaks; CRLF is stated beside it, so the
+ * lines must use one style. A line that could open a suggestion block is
+ * refused as producer Markdown is: only a validated first fix may create a
+ * native suggestion.
  */
 function shownTextProblem(text: string): Problem | null {
   const lineAt = (index: number): string => `replacement line ${String(text.slice(0, index).split('\n').length)}`;
@@ -2772,6 +2841,7 @@ function shownTextProblem(text: string): Problem | null {
   if (invisible) return unrepresentable(`${lineAt(invisible.index)} contains ${codePointName(invisible[0])}, which a code block does not show`);
   const bareCr = /\r(?!\n)/.exec(text);
   if (bareCr) return unrepresentable(`${lineAt(bareCr.index)} contains a carriage return that does not end a line`);
+  if (text.includes('\r\n') && /(?<!\r)\n/.test(text)) return unrepresentable('it mixes CRLF and LF line endings, and only one style can be stated');
   const fence = producerFenceProblem(text);
   if (fence && fence[0] === 'producer-suggestion-fence') {
     return ['alternative-suggestion-fence', 'a line of its content could open a suggestion block, and only a validated first fix may create a native suggestion'];
@@ -2860,8 +2930,10 @@ function evidenceRecord(item: IPreparedItem): IEvidenceRecord {
     ...(item.alternatives.length > 0 ? {
       alternatives: item.alternatives.map((a) => ({
         fix: a.fix,
-        path: a.path,
-        replacement: { startLine: a.startLine, endLine: a.endLine, originalText: a.originalText, replacementText: a.replacementText },
+        changes: a.parts.map((p) => ({
+          path: p.path,
+          replacement: { startLine: p.startLine, endLine: p.endLine, originalText: p.originalText, replacementText: p.replacementText },
+        })),
       })),
     } : {}),
   };
@@ -3618,15 +3690,33 @@ function renderItem(item: IPreparedItem): string {
 
 /**
  * One listed alternative (see the module's rendering grammar): its number,
- * its description, and its whole-line change of the reviewed file, naming
- * the file only when it is not the first fix's.
+ * its description, and its whole-line changes of reviewed files. A one-part
+ * alternative names its file only when it is not the first fix's; each part
+ * of a several-part alternative is labelled with its file.
  */
 function renderAlternative(alternative: IPreparedAlternative, number: number, primaryPath: string | undefined): string {
-  const { startLine, endLine, path: filePath, replacementText, shownText, description } = alternative;
-  const lines = startLine === endLine ? `line ${String(startLine)}` : `lines ${String(startLine)}-${String(endLine)}`;
-  const where = filePath === primaryPath ? lines : `${lines} of ${codeSpan(filePath)}`;
-  const change = replacementText === '' ? `Delete ${where}.` : `Replace ${where} with:\n\n${fenced(shownText)}`;
-  return `(${String(number)}) ${description === undefined ? '' : `${description}\n\n`}${change}`;
+  const { parts, description } = alternative;
+  const lead = `(${String(number)}) ${description === undefined ? '' : `${description}\n\n`}`;
+  const [only] = parts;
+  if (parts.length === 1 && only !== undefined) {
+    const lines = partLines(only);
+    const where = only.path === primaryPath ? lines : `${lines} of ${codeSpan(only.path)}`;
+    return `${lead}${only.replacementText === '' ? `Delete ${where}.` : `Replace ${where} with${partBlock(only)}`}`;
+  }
+  const files = new Set(parts.map((p) => p.path)).size;
+  const heading = files > 1 ? `Changes ${String(files)} files together:` : `Makes ${String(parts.length)} replacements together:`;
+  const labelled = parts.map((p) => `${codeSpan(p.path)} — ${p.replacementText === '' ? `delete ${partLines(p)}.` : `replace ${partLines(p)} with${partBlock(p)}`}`);
+  return `${lead}${heading}${labelled.map((part) => `\n\n${part}`).join('')}`;
+}
+
+/** "line N" or "lines N-M" of a part's reviewed file. */
+function partLines(part: IAlternativePart): string {
+  return part.startLine === part.endLine ? `line ${String(part.startLine)}` : `lines ${String(part.startLine)}-${String(part.endLine)}`;
+}
+
+/** The end of "replace … with": the stated line-ending style, if CRLF, and the fenced lines. */
+function partBlock(part: IAlternativePart): string {
+  return `${part.crlf ? ' (CRLF line endings)' : ''}:\n\n${fenced(part.shownText)}`;
 }
 
 function renderAttribution({ tool, version, component, ruleId }: IAttribution): string {
