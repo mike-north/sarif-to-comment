@@ -133,6 +133,7 @@ export interface IGroupedFinding {
 // @public
 export interface IGroupedSarifFixesOutcome {
     readonly changes: number;
+    readonly extended: boolean;
     readonly findings: readonly IGroupedFinding[];
     readonly group: string;
     readonly sarif: ISarifLog;

@@ -52,7 +52,7 @@ readonly string\[\]
 
 </td><td>
 
-The findings whose changes must be accepted together: at least two`selector`<!-- -->s from [inspectSarif()](./sarif-to-comment.inspectsarif.md)<!-- -->, each naming a different finding of the document as inspected. A finding's change is its primary (first) fix, or its proposed whole-file operation; further fixes are alternatives and never join a group.
+The findings whose changes must be accepted together: `selector`<!-- -->s from[inspectSarif()](./sarif-to-comment.inspectsarif.md)<!-- -->, each naming a different finding of the document as inspected. A finding's change is its primary (first) fix, or its proposed whole-file operation; further fixes are alternatives and never join a group. A new group needs findings with at least two distinct changes; one finding can extend an existing group.
 
 
 </td></tr>
@@ -73,7 +73,7 @@ string
 
 </td><td>
 
-The group's name, shown in the suggestion pull request's title: 1-100 characters with no control or invisible formatting characters and no leading or trailing whitespace. It must not be in use in the document.
+The group's name, shown in the suggestion pull request's title: 1-100 characters with no control or invisible formatting characters and no leading or trailing whitespace. A name already in use in the document extends that group.
 
 
 </td></tr>

@@ -23,10 +23,13 @@
  *   operation. Further fixes are alternatives and never join a group.
  * - A group holds at least two distinct changes (identical changes count
  *   once). A member without a change is refused.
- * - A finding belongs to at most one group, and a group is created whole: a
- *   name the document already uses is refused, so groups are never extended
- *   or joined. Ungrouping never leaves a group with fewer than two distinct
- *   changes; the caller names the rest of the group to dissolve it.
+ * - A finding belongs to at most one group, and groups are never joined: a
+ *   finding already in another group is refused. A name the document already
+ *   uses extends that group (the owner's principle: refuse only when the
+ *   tool cannot proceed safely), and its existing members count toward the
+ *   two distinct changes. Ungrouping never leaves a group with fewer than two
+ *   distinct changes, because such a group can never be published; the
+ *   refusal names the rest of the group, to dissolve it instead.
  * - Nothing is inferred: only the named findings change.
  *
  * Distinctness is judged structurally here (the replacement or operation as
@@ -55,17 +58,19 @@ import type { IStaleSarifSelectorOutcome } from './sarif-authoring.cjs';
  */
 export interface IGroupSarifFixesOptions {
   /**
-   * The findings whose changes must be accepted together: at least two
-   * `selector`s from {@link inspectSarif}, each naming a different finding
-   * of the document as inspected. A finding's change is its primary (first)
-   * fix, or its proposed whole-file operation; further fixes are
-   * alternatives and never join a group.
+   * The findings whose changes must be accepted together: `selector`s from
+   * {@link inspectSarif}, each naming a different finding of the document as
+   * inspected. A finding's change is its primary (first) fix, or its
+   * proposed whole-file operation; further fixes are alternatives and never
+   * join a group. A new group needs findings with at least two distinct
+   * changes; one finding can extend an existing group.
    */
   readonly findings: readonly string[];
   /**
    * The group's name, shown in the suggestion pull request's title: 1-100
    * characters with no control or invisible formatting characters and no
-   * leading or trailing whitespace. It must not be in use in the document.
+   * leading or trailing whitespace. A name already in use in the document
+   * extends that group.
    */
   readonly group: string;
 }
@@ -116,15 +121,18 @@ export interface IGroupedSarifFixesOutcome {
   readonly sarif: ISarifLog;
   /** The group's name. */
   readonly group: string;
-  /** The members, in document order. */
+  /** Whether the group already existed in the document and was extended. */
+  readonly extended: boolean;
+  /** The findings named in this call, in document order. */
   readonly findings: readonly IGroupedFinding[];
-  /** How many distinct changes the group holds; identical changes count once. */
+  /** How many distinct changes the whole group now holds; identical changes count once. */
   readonly changes: number;
 }
 
 /**
- * The request breaks a grouping rule, such as a finding that is already in a
- * group or a group of fewer than two distinct changes. Nothing was changed.
+ * The request breaks a grouping rule, such as a finding that is already in
+ * another group or a group of fewer than two distinct changes. Nothing was
+ * changed.
  *
  * @public
  */
@@ -288,12 +296,7 @@ function checkOptions(options: unknown, operation: Operation): { readonly select
     if (!allowed.includes(key)) throw misuse(operation, `options has unknown key ${JSON.stringify(key)}`);
   }
   const findings = captured['findings'];
-  const minimum = operation === 'groupSarifFixes' ? 2 : 1;
-  if (!Array.isArray(findings) || findings.length < minimum) {
-    throw misuse(operation, operation === 'groupSarifFixes'
-      ? 'options.findings must list at least two finding selectors (a single fix with several changes is already accepted whole)'
-      : 'options.findings must list at least one finding selector');
-  }
+  if (!Array.isArray(findings) || findings.length === 0) throw misuse(operation, 'options.findings must list at least one finding selector');
   const selectors: IParsedSelector[] = [];
   const given: string[] = [];
   for (const value of findings) {
@@ -437,18 +440,19 @@ function fewChanges(count: number): string {
  *
  * Take the selectors from {@link inspectSarif}. Only a finding's primary
  * (first) fix, or its proposed whole-file operation, is a member; further
- * fixes are alternatives and never grouped. The request is refused, with
- * nothing changed, when a finding is already in a group, has no change, or
- * the group would hold fewer than two distinct changes, or when the name is
- * already in use. The input is copied and never changed; after grouping,
- * inspect the new document for its selectors.
+ * fixes are alternatives and never grouped. A name already in use extends
+ * that group, so one finding may be added to it; groups are never joined.
+ * The request is refused, with nothing changed, when a finding is already in
+ * another group or has no change, or when the group would hold fewer than
+ * two distinct changes. The input is copied and never changed; after
+ * grouping, inspect the new document for its selectors.
  *
  * @param sarif - A SARIF log as a parsed JSON object.
  * @param options - The findings and the group's name.
  * @returns `grouped` with the new document, `refused` if a rule is broken,
  * `stale` if a selector does not fit the document as it is now, or `invalid`
  * if the input is not schema-valid SARIF.
- * @throws `TypeError` for fewer than two findings, a selector that is not of
+ * @throws `TypeError` for no findings, a selector that is not of
  * the form inspection gives, a finding named twice, an invalid group name,
  * unknown options, or non-JSON input.
  *
@@ -502,7 +506,7 @@ function groupSarifFixesWithUntypedInput(sarif: unknown, options: unknown): Grou
     const existing = declaredGroup(member.result);
     if (owned.state === 'invalid') {
       problems.push({ message: `\`${member.ref}\` has a \`properties.sarifToComment\` that is not an object, so its group cannot be recorded.`, pointer: member.ref });
-    } else if (existing !== null) {
+    } else if (existing !== null && existing.value !== group) {
       problems.push({
         message: `\`${member.ref}\` is already in suggestion group ${JSON.stringify(existing.value)}; a finding belongs to at most one group. Ungroup it first to move it.`,
         pointer: member.ref,
@@ -518,15 +522,14 @@ function groupSarifFixesWithUntypedInput(sarif: unknown, options: unknown): Grou
     }
     for (const key of own) keys.add(key);
   }
+  // A name already in use extends that group: its other members' changes count too.
   const selectedRefs = new Set(selection.findings.map((f) => f.ref));
-  for (const { ref, result } of findingsOf(selection.log)) {
-    if (selectedRefs.has(ref) || declaredGroup(result)?.value !== group) continue;
-    problems.push({
-      message: `Suggestion group ${JSON.stringify(group)} already exists in this document (\`${ref}\`); a group is created whole and never extended or joined. `
-        + 'Choose another name, or ungroup the existing group first.',
-      pointer: ref,
-    });
-    break;
+  let extended = false;
+  for (const { ref, runIndex, result } of findingsOf(selection.log)) {
+    if (declaredGroup(result)?.value !== group) continue;
+    extended = true;
+    if (selectedRefs.has(ref) || !isEditable(result)) continue;
+    for (const key of changeKeysOf(result, runIndex)) keys.add(key);
   }
   if (keys.size < 2) {
     problems.push({
@@ -547,6 +550,7 @@ function groupSarifFixesWithUntypedInput(sarif: unknown, options: unknown): Grou
     status: 'grouped',
     sarif: selection.log,
     group,
+    extended,
     findings: selection.findings.map(({ ref, runIndex, resultIndex, tool }, i) => ({ ref, runIndex, resultIndex, tool, changes: counts[i] ?? 0 })),
     changes: keys.size,
   };
@@ -563,8 +567,9 @@ function groupSarifFixesWithUntypedInput(sarif: unknown, options: unknown): Grou
  *
  * Take the selectors from {@link inspectSarif}. The request is refused, with
  * nothing changed, when a finding is in no group, or when it would leave a
- * group with fewer than two distinct changes: to dissolve a group, name all
- * of its findings (the refusal lists the rest). The input is copied and never
+ * group with fewer than two distinct changes, which publication would always
+ * refuse: to dissolve a group, name all of its findings (the refusal lists
+ * the rest, with their current selectors). The input is copied and never
  * changed; afterwards, inspect the new document for its selectors.
  *
  * @param sarif - A SARIF log as a parsed JSON object.

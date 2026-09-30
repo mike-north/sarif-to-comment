@@ -4,7 +4,7 @@
 
 ## IGroupedSarifFixesOutcome.findings property
 
-The members, in document order.
+The findings named in this call, in document order.
 
 **Signature:**
 

@@ -4,7 +4,7 @@
 
 ## IGroupSarifFixesOptions.findings property
 
-The findings whose changes must be accepted together: at least two`selector`<!-- -->s from [inspectSarif()](./sarif-to-comment.inspectsarif.md)<!-- -->, each naming a different finding of the document as inspected. A finding's change is its primary (first) fix, or its proposed whole-file operation; further fixes are alternatives and never join a group.
+The findings whose changes must be accepted together: `selector`<!-- -->s from[inspectSarif()](./sarif-to-comment.inspectsarif.md)<!-- -->, each naming a different finding of the document as inspected. A finding's change is its primary (first) fix, or its proposed whole-file operation; further fixes are alternatives and never join a group. A new group needs findings with at least two distinct changes; one finding can extend an existing group.
 
 **Signature:**
 

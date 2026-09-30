@@ -4,7 +4,7 @@
 
 ## IRefusedSuggestionGroupOutcome interface
 
-The request breaks a grouping rule, such as a finding that is already in a group or a group of fewer than two distinct changes. Nothing was changed.
+The request breaks a grouping rule, such as a finding that is already in another group or a group of fewer than two distinct changes. Nothing was changed.
 
 **Signature:**
 

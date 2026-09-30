@@ -78,5 +78,5 @@ The findings to ungroup.
 
 Removes `properties.sarifToComment.suggestionGroup` from each named finding; their fixes are then published independently again. An owned namespace or property bag left empty is removed too, so ungrouping a whole group restores the document as it was before grouping.
 
-Take the selectors from [inspectSarif()](./sarif-to-comment.inspectsarif.md)<!-- -->. The request is refused, with nothing changed, when a finding is in no group, or when it would leave a group with fewer than two distinct changes: to dissolve a group, name all of its findings (the refusal lists the rest). The input is copied and never changed; afterwards, inspect the new document for its selectors.
+Take the selectors from [inspectSarif()](./sarif-to-comment.inspectsarif.md)<!-- -->. The request is refused, with nothing changed, when a finding is in no group, or when it would leave a group with fewer than two distinct changes, which publication would always refuse: to dissolve a group, name all of its findings (the refusal lists the rest, with their current selectors). The input is copied and never changed; afterwards, inspect the new document for its selectors.
 

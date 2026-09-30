@@ -191,7 +191,7 @@ Usage:
   sarif-to-comment init --output FILE [options]
   sarif-to-comment add-comment --sarif FILE --file PATH --line N (--message TEXT | --message-file FILE|-) [options]
   sarif-to-comment remove-comment --sarif FILE --finding SELECTOR [options]
-  sarif-to-comment group-fixes --sarif FILE --finding SELECTOR --finding SELECTOR [...] --group NAME [options]
+  sarif-to-comment group-fixes --sarif FILE --finding SELECTOR [...] --group NAME [options]
   sarif-to-comment ungroup-fixes --sarif FILE --finding SELECTOR [...] [options]
   sarif-to-comment inspect --sarif FILE [options]
   sarif-to-comment add-staged-changes --sarif IN --output OUT --worktree DIR --repo OWNER/REPO --commit FULLSHA [options]
@@ -322,11 +322,13 @@ be read or replaced.
   'group-fixes': md`sarif-to-comment group-fixes — Group fixes of several findings to be accepted together.
 
 Usage:
-  sarif-to-comment group-fixes --sarif FILE --finding SELECTOR --finding SELECTOR [...]
-                               --group NAME [--output FILE] [--format human|json]
+  sarif-to-comment group-fixes --sarif FILE --finding SELECTOR [...] --group NAME
+                               [--output FILE] [--format human|json]
 
 Records that the changes of the selected findings must be accepted together:
-each finding gets the same properties.sarifToComment.suggestionGroup. A
+each finding gets the same properties.sarifToComment.suggestionGroup. A NAME
+already in use extends that group, so a single finding may be added; groups
+are never joined. A
 finding's change is its primary (first) fix, or its proposed whole-file
 operation; further fixes are alternatives and are never grouped. Publishing
 with --allow-suggestion-prs proposes the group as one suggestion pull request;
@@ -336,15 +338,16 @@ with several changes is already accepted whole and needs no group.
 Take each SELECTOR from inspect: "Selector:" under each finding, or "selector"
 in JSON. Selectors belong to the file exactly as inspected, so inspect again
 after any change. Refused, with nothing changed: a stale selector, a finding
-already in a group or without a change, a name already in use, or fewer than
-two distinct changes.
+already in another group or without a change, or a group of fewer than two
+distinct changes.
 
 The SARIF file is updated in place (atomically) unless --output names a new
 file.
 
 Options:
   --sarif FILE                   SARIF file to read (and update in place).
-  --finding SELECTOR             A finding's selector from inspect; give at least two.
+  --finding SELECTOR             A finding's selector from inspect; repeat for more.
+                                 A new group needs at least two distinct changes.
   --group NAME                   The group's name, shown in the suggestion pull
                                  request's title: 1-100 characters, no control
                                  or invisible characters, no surrounding spaces.
@@ -366,8 +369,8 @@ Usage:
 
 Removes properties.sarifToComment.suggestionGroup from each selected finding,
 so its fix is published on its own again. A group is never left with fewer
-than two distinct changes: to dissolve a group, select all of its findings
-(a refusal lists the rest).
+than two distinct changes, which publication would always refuse: to
+dissolve a group, select all of its findings (a refusal lists the rest).
 
 Take each SELECTOR from inspect, as for group-fixes. The SARIF file is updated
 in place (atomically) unless --output names a new file.
@@ -1140,9 +1143,6 @@ function groupingOutput(values: ReadonlyMap<string, string>, sarifPath: string, 
 function groupFixes(argv: readonly string[], { cwd }: IHandlerContext): IOutcome {
   const { values, lists } = parseOptions(argv, { values: ['--sarif', '--group', '--output'], repeatable: ['--finding'], required: ['--sarif', '--finding', '--group'] });
   const findings = selectorFlags(lists);
-  if (findings.length < 2) {
-    throw new UsageError('group-fixes needs at least two --finding selectors (a single fix with several changes is already accepted whole)');
-  }
   const group = requiredValue(values, '--group');
   if (!isSuggestionGroupName(group)) {
     throw new UsageError('--group must be 1-100 characters without control or invisible formatting characters or surrounding whitespace');
@@ -1155,11 +1155,14 @@ function groupFixes(argv: readonly string[], { cwd }: IHandlerContext): IOutcome
     return {
       accepted: {
         sarif: outcome.sarif,
-        fields: { group: outcome.group, findings: outcome.findings, changes: outcome.changes },
+        fields: { group: outcome.group, extended: outcome.extended, findings: outcome.findings, changes: outcome.changes },
         summary: ({ sarifPath: file, output: written }) => {
           const what = plural(outcome.findings.length, 'finding');
-          const grouping = `as suggestion group ${JSON.stringify(outcome.group)}: ${String(outcome.changes)} distinct changes to accept together.`;
-          return written === undefined ? `Grouped ${what} in ${file} ${grouping}` : `Grouped ${what} ${grouping} Wrote ${written}; ${file} was not changed.`;
+          const name = JSON.stringify(outcome.group);
+          const total = `${String(outcome.changes)} distinct changes to accept together.`;
+          const verb = outcome.extended ? `Added ${what}` : `Grouped ${what}`;
+          const where = outcome.extended ? `to suggestion group ${name}: ${total}` : `as suggestion group ${name}: ${total}`;
+          return written === undefined ? `${verb} in ${file} ${where}` : `${verb} ${where} Wrote ${written}; ${file} was not changed.`;
         },
         members: outcome.findings.map((f) => `  ${f.ref} (tool "${f.tool}"): ${plural(f.changes, 'change')}`),
         notes: ['Publishing with --allow-suggestion-prs proposes the group as one suggestion pull request; without it, publication refuses the group.'],

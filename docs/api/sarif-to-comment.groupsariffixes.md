@@ -72,13 +72,13 @@ The findings and the group's name.
 
 ## Exceptions
 
-`TypeError` for fewer than two findings, a selector that is not of the form inspection gives, a finding named twice, an invalid group name, unknown options, or non-JSON input.
+`TypeError` for no findings, a selector that is not of the form inspection gives, a finding named twice, an invalid group name, unknown options, or non-JSON input.
 
 ## Remarks
 
 SARIF already applies the changes of one fix together; it cannot join fixes of different findings, or an edit with a whole-file creation or deletion. This operation declares such a group by giving each named finding the same `properties.sarifToComment.suggestionGroup`<!-- -->. With suggestion pull requests allowed, publication proposes the group as one suggestion pull request; without them, it refuses the document, naming the setting, and never splits the group.
 
-Take the selectors from [inspectSarif()](./sarif-to-comment.inspectsarif.md)<!-- -->. Only a finding's primary (first) fix, or its proposed whole-file operation, is a member; further fixes are alternatives and never grouped. The request is refused, with nothing changed, when a finding is already in a group, has no change, or the group would hold fewer than two distinct changes, or when the name is already in use. The input is copied and never changed; after grouping, inspect the new document for its selectors.
+Take the selectors from [inspectSarif()](./sarif-to-comment.inspectsarif.md)<!-- -->. Only a finding's primary (first) fix, or its proposed whole-file operation, is a member; further fixes are alternatives and never grouped. A name already in use extends that group, so one finding may be added to it; groups are never joined. The request is refused, with nothing changed, when a finding is already in another group or has no change, or when the group would hold fewer than two distinct changes. The input is copied and never changed; after grouping, inspect the new document for its selectors.
 
 ## Example
 

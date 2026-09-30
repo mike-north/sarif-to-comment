@@ -4,7 +4,7 @@
 
 ## IGroupedSarifFixesOutcome.changes property
 
-How many distinct changes the group holds; identical changes count once.
+How many distinct changes the whole group now holds; identical changes count once.
 
 **Signature:**
 

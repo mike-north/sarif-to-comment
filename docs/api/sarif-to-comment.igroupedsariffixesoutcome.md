@@ -52,7 +52,28 @@ number
 
 </td><td>
 
-How many distinct changes the group holds; identical changes count once.
+How many distinct changes the whole group now holds; identical changes count once.
+
+
+</td></tr>
+<tr><td>
+
+[extended](./sarif-to-comment.igroupedsariffixesoutcome.extended.md)
+
+
+</td><td>
+
+`readonly`
+
+
+</td><td>
+
+boolean
+
+
+</td><td>
+
+Whether the group already existed in the document and was extended.
 
 
 </td></tr>
@@ -73,7 +94,7 @@ readonly [IGroupedFinding](./sarif-to-comment.igroupedfinding.md)<!-- -->\[\]
 
 </td><td>
 
-The members, in document order.
+The findings named in this call, in document order.
 
 
 </td></tr>

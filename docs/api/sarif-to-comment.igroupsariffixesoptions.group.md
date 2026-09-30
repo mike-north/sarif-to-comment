@@ -4,7 +4,7 @@
 
 ## IGroupSarifFixesOptions.group property
 
-The group's name, shown in the suggestion pull request's title: 1-100 characters with no control or invisible formatting characters and no leading or trailing whitespace. It must not be in use in the document.
+The group's name, shown in the suggestion pull request's title: 1-100 characters with no control or invisible formatting characters and no leading or trailing whitespace. A name already in use in the document extends that group.
 
 **Signature:**
 
