@@ -254,7 +254,7 @@ npx --no-install sarif-to-comment publish --sarif review.staged.sarif \
 - `init` refuses to overwrite an existing file. `add-comment` updates its file in place.
 - `add-staged-changes` never changes its input, so you can correct `review.sarif` and run it again. If the output file already exists, it's first renamed to `<UTC time>.old.review.staged.sarif`. When it fails, it writes no output and exits with status 2.
 - `inspect` shows every finding in full, with its locations and fixes. Only long fix previews are shortened, always with a `(truncated: …)` note. Log-level properties and inline external properties are shown verbatim too; results embedded in inline external properties are counted separately and are not presented as findings, and external property files are never fetched. Inspecting doesn't check whether the file can be published; `publish` does that.
-- Add `--format json` to any command for one JSON document on standard output, including for errors. It carries the same information as the human output, and the exit status is the same. Agents should prefer it.
+- Add `--format json` (or `--format toon`, the same document in a more compact notation) to any command for one document on standard output, including for errors. It carries the same information as the human output, and the exit status is the same. Agents should prefer it. Every document ends with `diagnostics`: its errors, warnings and notes, each with a stable `code` listed in [Diagnostics](./diagnostics.md). In human output, the diagnostics appear on standard error.
 
 ### Library
 

@@ -138,14 +138,14 @@ The primary result goes to stdout, and diagnostics go to stderr: each diagnostic
 
 Each block is:
 
-1. A severity badge (`✖ error`, `▲ warning`, `ℹ note`), the title in bold, and the code, dimmed, in brackets.
+1. A severity badge (`✖ error`, `▲ warning`, `ℹ note`), the title in bold, and the code, dimmed, in brackets. This header is one line and is never wrapped.
 2. Where it is: `path:line` (or `path:start-end`), the JSON Pointer, and the subject, joined by ` · `. Omitted when there is none.
 3. The message, indented and wrapped to the terminal's width. Lines inside a fenced code block are never wrapped, and a word longer than the width is never broken.
 4. Each remedy on its own `→` line.
 
 Blocks are separated by a blank line. The summary line counts each severity present, for example `1 error, 2 warnings`. When there are no diagnostics, nothing is written to stderr.
 
-**Streams.** Human output keeps the CLI's conventions: the primary result (what was created, written, inspected or published, and what happened to each file) goes to stdout, and diagnostics go to stderr. A refusal writes only its file notes, such as ``… was not changed.``, to stdout. `validate`, `publish` and `close-suggestion-prs` print their Markdown explanation on stdout without the problem and warning lists, which appear as diagnostic blocks on stderr instead. The `markdown` fields and the JSON `message` still carry the complete Markdown.
+**Streams.** Human output keeps the CLI's conventions: the primary result (what was created, written, inspected, checked, published or closed, and what happened to each file) goes to stdout, and diagnostics go to stderr. A refusal or an operational error writes only its file notes, such as ``… was not changed.``, to stdout. `inspect` no longer lists its warnings in its text, and `add-staged-changes` no longer prints `Warning:` lines: both are diagnostics on stderr. `validate`, `publish` and `close-suggestion-prs` still print their complete Markdown report on stdout, exactly the library's `markdown` and the JSON `message`, because that report is the result (it carries the review link, the state path and the retry guidance); their diagnostics are also on stderr, so stderr alone always lists every error, warning and note.
 
 **Color.** Badges are red (error), yellow (warning) and blue (note); the location line is cyan; the `→` is green; the summary counts take their severity's color. Whether color is used is decided for stderr, in this order:
 
@@ -407,3 +407,5 @@ One entry per code: its severity, its title, what it means and its typical remed
 1. **A version marker in each document.** The schema is versioned by its file name and `$id`, and CLI documents carry no version field. A `diagnosticsVersion` key could be appended later if consumers need to detect the version from output alone.
 2. **Severity of an uncertain delivery.** `delivery-unconfirmed` is a warning: the review may exist. Its exit status (3) already distinguishes it from success.
 3. **Notes.** Only two conditions are notes (`suggestion-branch-moved`, `suggestion-pr-not-conforming`). Other informational facts stay in the primary result.
+4. **Repetition in the human output of `validate`, `publish` and `close-suggestion-prs`.** Their Markdown report on stdout lists the same problems and warnings that stderr shows as blocks. Printing a report without those lists would need a second Markdown rendering of each outcome; it is kept as one rendering until the owner decides.
+5. **Human errors of the flag-only publisher.** Its usage and operational errors were a `sarif-to-comment: …` line on stderr; they are now diagnostic blocks, like every other command's. Its stdout and exit statuses are unchanged.

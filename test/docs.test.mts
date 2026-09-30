@@ -129,9 +129,10 @@ describe('getting-started guide', () => {
         /^https:\/\//.test(target) ||
         target.startsWith('#') ||
         /^\.\/api\/[^/]+\.md$/.test(target) ||
+        target === './diagnostics.md' ||
         target === '../README.md';
       assert.ok(ok, `unexpected link ${target}`);
-      if (target.startsWith('./api/')) assert.ok(fs.existsSync(path.join(ROOT, 'docs', target)), target);
+      if (target.startsWith('./')) assert.ok(fs.existsSync(path.join(ROOT, 'docs', target)), target);
     }
   });
 });

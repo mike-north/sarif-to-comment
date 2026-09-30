@@ -93,7 +93,8 @@
  * generated once per statePath and never regenerated. It is hidden in normal
  * rendering and is not a secret.
  *
- * Outcome (private; not a public diagnostic schema, D13):
+ * Outcome (private to the package; publishSarifReview presents it, with its
+ * public diagnostics):
  *   { status: 'published', via: 'created'|'recovered'|'receipt',
  *     review: { id, htmlUrl }, marker, statePath, receiptPersisted: boolean,
  *     cause? }   // cause present only when the receipt could not be persisted
