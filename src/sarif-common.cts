@@ -537,8 +537,8 @@ export function namesRepository(uri: string, { owner, repo }: IRepositoryIdentit
  * (`properties.sarifToComment.suggestionGroup`): 1-100 UTF-16 code units of
  * valid Unicode, with no control or invisible formatting character and no
  * leading or trailing whitespace, so the name can be shown exactly in a pull
- * request title. This is the publisher's rule
- * (docs/companion-suggestion-pr-contract.md §2.3).
+ * request title (docs/companion-suggestion-pr-contract.md §2.3). Publication
+ * and grouping both use this one rule.
  */
 export function isSuggestionGroupName(value: unknown): value is string {
   return typeof value === 'string' && value.length >= 1 && value.length <= MAX_GROUP_NAME && !INVISIBLE_IN_GROUP.test(value)

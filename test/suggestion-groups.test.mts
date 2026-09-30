@@ -15,8 +15,8 @@
  *
  * Every expected document and message is written by hand from the contract
  * (docs/companion-suggestion-pr-contract.md §2.3 and §2.12); none is captured
- * from the implementation. Group names are checked for parity with
- * publication's own reading, behaviourally, never by sharing its code.
+ * from the implementation. Group names are checked behaviourally for parity
+ * with publication's reading, which uses the same shared rule.
  *
  * @see https://github.com/mike-north/sarif-to-comment/issues/29
  * @see docs/companion-suggestion-pr-contract.md

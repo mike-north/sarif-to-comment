@@ -242,6 +242,7 @@ import { classifyPlacement } from './placement.cjs';
 import type { IPlacementSourceRange, PlacementAnchorSide } from './placement.cjs';
 import { applyReplacement as productionApplyReplacement } from './replacements.cjs';
 import { formatSuggestionMarker } from './suggestion-marker.cjs';
+import { isSuggestionGroupName } from './sarif-common.cjs';
 import type {
   ColumnKind, IAppliedReplacement, IReplacementRegion, IReplacementRequest, ReplacementDiagnostic, ReplacementOutcome,
 } from './replacements.cjs';
@@ -1564,7 +1565,7 @@ function parseOwned(
   }
   const group = owned['suggestionGroup'];
   if (group !== undefined && allowedKeys.has('suggestionGroup')) {
-    if (typeof group === 'string' && isSuggestionGroupName(group)) {
+    if (isSuggestionGroupName(group)) {
       outcome.suggestionGroup = group;
     } else {
       state.report.error('suggestion-group-invalid', pointer,
@@ -1572,16 +1573,6 @@ function parseOwned(
     }
   }
   return outcome;
-}
-
-/**
- * Whether a caller's suggestion group identifier can be shown exactly in a
- * pull request title: 1-100 UTF-16 code units, none invisible or a control,
- * no surrounding whitespace, and valid Unicode.
- */
-function isSuggestionGroupName(group: string): boolean {
-  return group.length >= 1 && group.length <= 100 && !INVISIBLE_IN_PATH.test(group)
-    && !LONE_SURROGATE.test(group) && !/^\s|\s$/.test(group);
 }
 
 /** Whether a proposedFileChanges entry is an object naming its operation. */
