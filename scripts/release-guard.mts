@@ -36,7 +36,9 @@
  *                        registry is a failure, never "unpublished".
  *   verify-pack PACK_JSON
  *                        publish.yml: the `npm pack --json` result is exactly
- *                        the distribution boundary, named and versioned as
+ *                        the distribution boundary (isDistributable, which
+ *                        mirrors package.json `files`), contains every
+ *                        REQUIRED_FILES entry, and is named and versioned as
  *                        package.json says.
  *   check-version        prepublishOnly backstop for a manual directory
  *                        publish: package.json is stable, under the ceiling
@@ -170,9 +172,16 @@ const NON_RUNTIME_OUTPUTS: readonly string[] = ['dist/public-api.cjs', 'dist/pub
  * Whether a packed path is inside the distribution boundary: the built
  * runtime (flat dist/*.cjs, including the executable), the rolled-up public
  * declarations, vendored schema, README, CHANGELOG, an optional LICENSE, the
- * getting-started guide and the generated API reference. Sources, nested
- * build directories, per-module declarations, source maps, build info and
- * the build-freshness manifest are outside it.
+ * getting-started guide, the diagnostics catalog (docs/diagnostics.md) and
+ * the JSON Schema of the diagnostic shape it documents
+ * (docs/diagnostic.v1.schema.json), and the generated API reference.
+ * Sources, nested build directories, per-module declarations, source maps,
+ * build info, the build-freshness manifest and every other docs/ file are
+ * outside it.
+ *
+ * This mirrors the package.json `files` whitelist: a file added there must be
+ * added here too, or publish.yml's `verify-pack` refuses the release
+ * (test/package.test.mts verifies a real pack of the checkout this way).
  */
 export function isDistributable(file: string): boolean {
   return (
@@ -184,11 +193,17 @@ export function isDistributable(file: string): boolean {
     file === 'dist/sarif-to-comment.d.ts' ||
     /^vendor\/[^/]+$/.test(file) ||
     file === 'docs/getting-started.md' ||
+    file === 'docs/diagnostics.md' ||
+    file === 'docs/diagnostic.v1.schema.json' ||
     /^docs\/api\/[^/]+\.md$/.test(file)
   );
 }
 
-/** Files every release must contain for the library, types, CLI and docs to work. */
+/**
+ * Files every release must contain for the library, types, CLI and docs to
+ * work, including the diagnostics catalog and its JSON Schema, which the
+ * README links on unpkg.
+ */
 export const REQUIRED_FILES: readonly string[] = [
   'package.json',
   'README.md',
@@ -198,6 +213,8 @@ export const REQUIRED_FILES: readonly string[] = [
   'dist/sarif-to-comment.d.ts',
   'vendor/sarif-schema-2.1.0.json',
   'docs/getting-started.md',
+  'docs/diagnostics.md',
+  'docs/diagnostic.v1.schema.json',
   'docs/api/index.md',
 ];
 
