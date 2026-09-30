@@ -1,6 +1,6 @@
 # Second-milestone interface design
 
-> **Historical design record (reconciled September 28, 2026).** Names selected here shipped in 0.2.0. The removal and validation designs marked deferred have since been merged under provisional contracts. For current status, see [Current status and reconciliation](status.md).
+> **Historical design record (reconciled September 28, 2026; updated September 29, 2026).** Names selected here shipped in 0.2.0. The removal and validation designs marked deferred have since been merged under contracts the owner accepted on September 29, 2026. For current status, see [Current status and reconciliation](status.md).
 
 Design proposal · September 28, 2026. The user delegated command and function naming and requested independent scrutiny. This document designs the vocabulary and visible operation boundaries for [the second milestone](second-milestone.md); it is not an implemented API or a complete extraction specification.
 
@@ -60,7 +60,7 @@ Selected staged-operation help sentence: “Add proposed changes from the Git in
 
 ## Deferred: standalone validation versus inspection
 
-This was deferred from the second milestone and has since been implemented. The [readiness assessment contract](readiness-assessment-contract.md) records the outcomes, CLI output and exit statuses, and the decisions still awaiting acceptance.
+This was deferred from the second milestone and has since been implemented. The [readiness assessment contract](readiness-assessment-contract.md) records the outcomes, CLI output and exit statuses, which the owner accepted on September 29, 2026, and the pending-review check the owner added ([#23](https://github.com/mike-north/sarif-to-comment/issues/23), since implemented).
 
 Inspection answers “What have I authored, and what fixes are included?” It does not require the document to be supported for publication. Validation answers “Can this complete artifact be published faithfully to this intended review under the selected policy?” It must use the publisher's readiness rules, including source consistency and host constraints, rather than treating schema validity alone as readiness.
 

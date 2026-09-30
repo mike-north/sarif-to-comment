@@ -1,6 +1,6 @@
 # SARIF to review comments: product brief
 
-> **Historical design record (reconciled September 28, 2026).** "Not implemented" statements are historical; the product has shipped within a bounded profile. For current status, see [Current status and reconciliation](status.md).
+> **Historical design record (reconciled September 28, 2026; updated September 29, 2026).** "Not implemented" statements are historical; the product has shipped within a bounded profile. Its description of suggestion PRs as provisionally enabled by default is superseded: they are explicit opt-in and off by default ([D22](design-decisions.md#d22-gate-suggestion-prs-with-one-caller-setting--settled-direction), owner decision of September 29, 2026). For current status, see [Current status and reconciliation](status.md).
 
 Status: draft synthesis of the design conversation, September 27, 2026. This describes intended outcomes, not implemented behavior. The [decision log](design-decisions.md) contains rationale, scope boundaries, and unresolved details. The [behavioral specification](specification.md) defines requirements and acceptance scenarios.
 

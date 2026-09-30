@@ -12,7 +12,7 @@ The [decision log](design-decisions.md) governs this draft. Decision identifiers
 
 **Status:** No product implementation exists. Requirements describe intended behavior. Acceptance scenarios are specifications for future tests, not claims that tests have passed. The candidate SARIF example has passed schema validation; the browser probes establish only the particular observations recorded in the research document.
 
-**Interpretation:** MUST and MUST NOT identify requirements grounded in settled decisions or their stated consequences. Proposed security requirements are labeled separately. Open questions are not implementation permission to choose a new product policy silently. If this draft conflicts with a settled decision, correct the draft rather than treating it as a decision change.
+**Interpretation:** MUST and MUST NOT identify requirements grounded in settled decisions or their stated consequences. Security requirements are in §9, where each is labeled accepted or proposed. Open questions are not implementation permission to choose a new product policy silently. If this draft conflicts with a settled decision, correct the draft rather than treating it as a decision change.
 
 ## 2. Scope and non-goals
 
@@ -190,7 +190,7 @@ This is a guarantee of validation before publication writes, not a promise of at
 
 ### R13. Preserve the reviewed revision and caller-selected publication mode
 
-> **Status note (reconciled September 28, 2026).** An explicitly submitted comment review has since been implemented (merged, unreleased) under the provisional [submitted-review contract](submitted-review-contract.md), which proposes the omitted-option default (draft) and the `COMMENT` event. The text below remains as historically recorded, pending owner acceptance of that contract. See [status](status.md).
+> **Status note (reconciled September 28, 2026; updated September 29, 2026).** An explicitly submitted comment review has since been implemented (merged, unreleased) under the [submitted-review contract](submitted-review-contract.md), which the owner accepted on September 29, 2026 ([D38](design-decisions.md#d38-submit-a-review-only-on-explicit-request-as-a-comment--owner-accepted)): the omitted option keeps a draft, and submission sends the `COMMENT` event only. That settles the omitted-option default and submitted review event this requirement leaves open. The text below remains as historically recorded. See [status](status.md).
 
 Publication MUST target the explicitly reviewed source revision rather than silently substitute the newest branch head. A newer branch head alone MUST NOT imply invalid input or reset declared approval. Unsupported host placement remains subject to R7. **[D15 and source-freshness clarification; A13]**
 
@@ -260,19 +260,19 @@ The descriptive placeholders above are not literal output text. The actual outpu
 
 **What this proves:** One review contribution can carry a remedy that creates a file; native suggestion support is optional; proofreading state and mechanical representability are separate; neither a blocked link nor a moving branch licenses lost content or silent retargeting.
 
-## 9. Proposed security requirements
+## 9. Security requirements
 
-The user explicitly requested a secure design. The following are proposed constraints for implementation review, derived from the identified input and presentation boundaries. They are not claims of completed security validation. They do not add another human-confirmation gate for file additions.
+The user explicitly requested a secure design. The following constraints are derived from the identified input and presentation boundaries. They were first proposed for implementation review. On September 29, 2026 the owner accepted S1, S2, S3, S5 and S7 as normative requirements ([D39](design-decisions.md#d39-the-security-baseline-s1-s2-s3-s5-and-s7-are-requirements--owner-accepted), [issue #24](https://github.com/mike-north/sarif-to-comment/issues/24)): the product MUST meet them. S4 and S6 govern new-file action links, which are not implemented; they remain proposed, with [#8](https://github.com/mike-north/sarif-to-comment/issues/8). Neither status is a claim of completed security validation: each validation case names the evidence required. These requirements do not add another human-confirmation gate for file additions.
 
-| ID | Proposed requirement | Validation case |
-|---|---|---|
-| S1 | Treat file content as literal data. Do not execute it or interpret it as a template. Generated Markdown fences must contain embedded fence sequences without exposing file content as surrounding markup. | A19: nested fences, HTML examples, template braces, and apparent action links remain literal source. |
-| S2 | Resolve staged content through the intended Git snapshot. An input URI must not itself authorize arbitrary local-file reads, external fetches, or symlink traversal. | A20: artifact names outside the repository and staged symlinks do not cause disclosure of their targets. |
-| S3 | Apply a documented repository-relative path and URI-decoding contract to proposed destinations. Reject traversal, unsupported schemes, absolute destinations, and ambiguous encodings. | A20: adversarial path fixtures are rejected before link generation or content access. |
-| S4 | Derive action host, repository, and branch from validated review context. Encode parameters with a URL library and safely render the link. | A21: document text containing parameter delimiters cannot change the destination or add parameters; fork context uses the intended head repository. |
-| S5 | Keep resource limits explicit and bounded. Exceeding a supported limit must not produce silent content loss. | A16, A22: excessive nesting, oversized artifacts, encoded links, and comment bodies produce the specified fallback or diagnostic. Numerical limits remain open. |
-| S6 | Make content-bearing URL policy explicit. Treat the full document as exposed in that URL; do not use external shorteners or hosting as an automatic fallback. | A22: policy disabling content-bearing links retains the complete review proposal and generates no such link. Default policy remains open. |
-| S7 | Honor upstream approval state without claiming it authenticates a human. Metadata alone is not proof of reviewer identity. | A12: absence is never labeled human approval; externally supplied identity is not described as independently verified. |
+| ID | Status | Requirement | Validation case |
+|---|---|---|---|
+| S1 | Accepted requirement | Treat file content as literal data. Do not execute it or interpret it as a template. Generated Markdown fences must contain embedded fence sequences without exposing file content as surrounding markup. | A19: nested fences, HTML examples, template braces, and apparent action links remain literal source. |
+| S2 | Accepted requirement | Resolve staged content through the intended Git snapshot. An input URI must not itself authorize arbitrary local-file reads, external fetches, or symlink traversal. | A20: artifact names outside the repository and staged symlinks do not cause disclosure of their targets. |
+| S3 | Accepted requirement | Apply a documented repository-relative path and URI-decoding contract to proposed destinations. Reject traversal, unsupported schemes, absolute destinations, and ambiguous encodings. | A20: adversarial path fixtures are rejected before link generation or content access. |
+| S4 | Proposed ([#8](https://github.com/mike-north/sarif-to-comment/issues/8)) | Derive action host, repository, and branch from validated review context. Encode parameters with a URL library and safely render the link. | A21: document text containing parameter delimiters cannot change the destination or add parameters; fork context uses the intended head repository. |
+| S5 | Accepted requirement | Keep resource limits explicit and bounded. Exceeding a supported limit must not produce silent content loss. | A16, A22: excessive nesting, oversized artifacts, encoded links, and comment bodies produce the specified fallback or diagnostic. Numerical limits remain open. |
+| S6 | Proposed ([#8](https://github.com/mike-north/sarif-to-comment/issues/8)) | Make content-bearing URL policy explicit. Treat the full document as exposed in that URL; do not use external shorteners or hosting as an automatic fallback. | A22: policy disabling content-bearing links retains the complete review proposal and generates no such link. Default policy remains open. |
+| S7 | Accepted requirement | Honor upstream approval state without claiming it authenticates a human. Metadata alone is not proof of reviewer identity. | A12: absence is never labeled human approval; externally supplied identity is not described as independently verified. |
 
 These requirements protect mechanical boundaries. They do not prove the proposed documentation safe or appropriate for a downstream agent to execute. This tool publishes review content; downstream execution authority remains separate.
 
@@ -335,7 +335,7 @@ Each scenario is a future test obligation or a named gap. Tests should be writte
 | O7 | File lifecycle details | Preserve history and keep stale success off the normal path. | Timestamp precision/timezone, absent creation time, collision handling, archival/write failures, and old error/report rotation. |
 | O8 | Closed clarification: approval state during SARIF generation | Strict/best effort concern SARIF combination/extraction; approval holds govern publication. | R5 preserves the marker without treating it alone as a generation error; R11 honors it at publication. No additional early approval gate or workflow phase is required. |
 | O9 | Unrepresentable input evidence | Best effort preserves evidence rather than disguising loss. | Location and format for evidence that cannot fit in SARIF; no external diagnostic schema is implied. |
-| O10 | Security profile details | Proposed S1–S7. | Approve path/URI rules, resource limits, action-link content policy, and adversarial fixture coverage. |
+| O10 | Security profile details | S1, S2, S3, S5 and S7 accepted (D39, September 29, 2026); S4 and S6 proposed. | Action-link rules and content policy (S4, S6; [#8](https://github.com/mike-north/sarif-to-comment/issues/8)). Originally: approve path/URI rules, resource limits, action-link content policy, and adversarial fixture coverage. |
 | O11 | Suggestion PR representation and lifecycle | D21 selects backlinks plus label; D22 makes suggestion PRs explicit opt-in and default off (owner decision, September 29, 2026; earlier a provisional enabled default), with native small edits, preferred PRs for file operations, and required PRs for grouped application. D26 permits visible draft suggestion PRs alongside a draft review. | Exact grouping/label conventions, proposal branch ownership and revision handling, permission failures, multi-object recovery, deletion links, and remaining lifecycle/cleanup verification. The default is settled: explicit opt-in, default off (D22). |
 
 These gaps limit implementation readiness, not the value of the settled behavioral contract. Work on a dependent behavior must resolve its relevant gap explicitly. A first specification does not make every candidate a settled requirement.

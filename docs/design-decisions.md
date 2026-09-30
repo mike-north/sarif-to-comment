@@ -2,7 +2,7 @@
 
 > **Status note (reconciled September 28, 2026).** This log remains the authoritative decision record. Its statement that no behavior has been implemented is historical. For current status, see [Current status and reconciliation](status.md).
 
-Updated: September 28, 2026.
+Updated: September 29, 2026 (the owner acceptances and decisions in D34–D44).
 
 This is the working design record for the product-shaping conversation. It records decisions, their reasons, their consequences, and what remains open. It is not an implementation specification. No behavior described here has been implemented or integration-tested in this project.
 
@@ -165,7 +165,7 @@ Use an off-the-shelf JSON Schema validator for structural validation. Product po
 
 ### D16. Pending versus submitted publication is caller-configurable — settled
 
-> **Status note (reconciled September 28, 2026).** An explicitly submitted comment review has since been implemented (merged, unreleased) under the provisional [submitted-review contract](submitted-review-contract.md), which proposes the omitted-option default (draft) and the `COMMENT` event. The text below remains as historically recorded, pending owner acceptance of that contract. See [status](status.md).
+> **Status note (reconciled September 28, 2026; updated September 29, 2026).** An explicitly submitted comment review has since been implemented (merged, unreleased) under the [submitted-review contract](submitted-review-contract.md). The owner accepted that contract on September 29, 2026 ([D38](#d38-submit-a-review-only-on-explicit-request-as-a-comment--owner-accepted)): the omitted option keeps a draft, and submission sends the `COMMENT` event only. The text below remains as historically recorded. See [status](status.md).
 
 The caller chooses whether publication creates a pending review or submits the review immediately.
 
@@ -382,6 +382,100 @@ Tests, fixture helpers and build, check and release tooling are `.mts` files tha
 **Reason:** Declarations generated from the implementation cannot drift from it, and strict typing makes unchecked boundaries explicit. Consumers must see no difference from 0.2.0: the same public API, CLI behavior and CommonJS, ES module and bundler interop. A standard ES-module-syntax entry would emit an `__esModule` marker that changes the ES module namespace keys and bundler default-import behavior, and the seams were observable runtime behavior of the published package.
 
 **Consequences:** `pnpm run build` is a prerequisite of `pnpm run check`, the tests and publication; there is no `prepack`, so the published tarball is exactly what was checked. Packaged runtime files moved from `src/` and `bin/` to `dist/`; `main`, `types` and `bin` point there, and the `exports` map, which exposes only the package entry and `package.json`, is unchanged. Removing or narrowing the seams, and consolidating duplicated helpers, are separate future decisions. Runtime validation of inputs stays in place even where the types appear to make it unnecessary, because JavaScript callers are unconstrained.
+
+### Owner acceptances of September 29, 2026
+
+On September 29, 2026 the owner accepted the contracts that had been implemented under provisional options, the security baseline and an evidence policy ([issue #24](https://github.com/mike-north/sarif-to-comment/issues/24)), and decided the suggestion pull request convention, force-push handling, grouping and alternative fixes ([#27](https://github.com/mike-north/sarif-to-comment/issues/27), [#28](https://github.com/mike-north/sarif-to-comment/issues/28), [#29](https://github.com/mike-north/sarif-to-comment/issues/29), [#30](https://github.com/mike-north/sarif-to-comment/issues/30)). D34–D44 record those decisions. Each names its source issue and, where one applies, the merged pull request whose behavior it accepts. A contract item that is not named here, or that its contract still lists as awaiting the owner, remains undecided. The companion suggestion PR default decided the same day (explicit opt-in, default off, [#5](https://github.com/mike-north/sarif-to-comment/issues/5)) is recorded in [D22](#d22-gate-suggestion-prs-with-one-caller-setting--settled-direction).
+
+### D34. Remove findings by document-bound selectors — owner-accepted
+
+**Provenance:** [issue #24](https://github.com/mike-north/sarif-to-comment/issues/24), accepting the [finding removal contract](finding-removal-contract.md) as merged in [PR #14](https://github.com/mike-north/sarif-to-comment/pull/14) ([#1](https://github.com/mike-north/sarif-to-comment/issues/1)).
+
+A finding is selected for removal by the selector that inspection shows: its position bound to a digest of the whole document (the contract's option C). Any change to the SARIF document makes every earlier selector stale, so each removal requires a fresh inspection. Nothing is written into the document to make its findings removable.
+
+**Consequences:** A stale or ambiguous selector is refused and never deletes whatever now occupies an old position. Removal stays local authoring (D29, D30). Batch removal and persistent identifiers remain possible later additions, not decisions.
+
+### D35. Readiness assessment reports ready, blocked or incomplete, statelessly — owner-accepted; one check added
+
+**Provenance:** [issue #24](https://github.com/mike-north/sarif-to-comment/issues/24), accepting the [readiness assessment contract](readiness-assessment-contract.md) as merged in [PR #15](https://github.com/mike-north/sarif-to-comment/pull/15) ([#2](https://github.com/mike-north/sarif-to-comment/issues/2)), with one addition, specified in [#23](https://github.com/mike-north/sarif-to-comment/issues/23) and implemented in [PR #35](https://github.com/mike-north/sarif-to-comment/pull/35).
+
+Accepted: the `ready`, `blocked` and `incomplete` outcomes; operational failures reported as `incomplete` rather than thrown; `problems` on a `blocked` outcome; exit statuses 0, 2 and 1; stateless operation, with no state path accepted and no file written; and no approval stamp, so publication rechecks everything against the pull request as it is then.
+
+**Addition:** Assessment must also report a known publication obstacle: a pending review on the exact destination pull request owned by the authenticated account. This replaces the contract's earlier proposal not to pre-check pending reviews. It is implemented (merged, unreleased): pending reviews by other accounts and submitted reviews are ignored, and a review list that cannot be read makes the assessment `incomplete` ([contract: Pending review of this account](readiness-assessment-contract.md#pending-review-of-this-account), [live evidence](pending-review-check-e2e-evidence.md)). Publication still meets the condition only as GitHub's refusal of the create request.
+
+### D36. Publish whole-file operations as byte-determined review-body sections — owner-accepted
+
+**Provenance:** [issue #24](https://github.com/mike-north/sarif-to-comment/issues/24), accepting the [file-operation publication contract](file-operation-publication-contract.md) as merged in [PR #16](https://github.com/mike-north/sarif-to-comment/pull/16) ([#4](https://github.com/mike-north/sarif-to-comment/issues/4)).
+
+Accepted: one review-body section per distinct file operation, followed by every finding that carries it; a non-decoding existence check at the reviewed commit, so a deletion of a binary or oversized file still publishes; presentation facts that, with the displayed block, determine the file's exact bytes; and the conservative refusals of content the block could not show exactly.
+
+**Consequences:** No prefill link, deletion link or collapsed presentation is part of this form; each remains a possible later addition under D17 and D18. Each refusal can be relaxed later with live evidence without changing any published output.
+
+### D37. Fence proposed file content one backtick longer than its longest run — owner-accepted, verified live
+
+**Provenance:** [issue #24](https://github.com/mike-north/sarif-to-comment/issues/24) and the completed [rendering experiment](https://github.com/mike-north/sarif-to-comment/issues/22).
+
+A proposed file's content is shown in a backtick fence one longer than the longest backtick run in the content, and at least three, with no info string. In the experiment, GitHub rendered a Markdown file containing triple-backtick examples and a fourteen-backtick line as one exact code block.
+
+**Consequences:** This is how file-operation presentation (D36) meets S1's fence containment for proposed content.
+
+### D38. Submit a review only on explicit request, as a comment — owner-accepted
+
+**Provenance:** [issue #24](https://github.com/mike-north/sarif-to-comment/issues/24), accepting the [submitted-review contract](submitted-review-contract.md) as merged in [PR #17](https://github.com/mike-north/sarif-to-comment/pull/17) ([#7](https://github.com/mike-north/sarif-to-comment/issues/7)).
+
+Accepted: submission is an explicit opt-in (`options.submit` / `--submit`); omitting it leaves a draft review (D26); a submitted review sends GitHub's `COMMENT` event only; and the mode is part of the publication's durable state, so a retry with the other mode is refused.
+
+**Consequences:** This settles the option syntax and submission event that D16 left open. `APPROVE` and `REQUEST_CHANGES` are not offered; a verdict option would be a separate decision.
+
+### D39. The security baseline: S1, S2, S3, S5 and S7 are requirements — owner-accepted
+
+**Provenance:** [issue #24](https://github.com/mike-north/sarif-to-comment/issues/24).
+
+S1 (literal content and fence containment), S2 (staged content through the intended Git snapshot), S3 (the path and URI contract), S5 (explicit, bounded resource limits without silent loss) and S7 (approval state is not identity) are normative requirements in [specification §9](specification.md#9-security-requirements). S4 and S6 concern new-file action links, which are not implemented; they remain proposed, with [#8](https://github.com/mike-north/sarif-to-comment/issues/8).
+
+**Consequences:** Accepting a requirement is not a claim of completed security validation; the validation cases in §9 still name the evidence each requires.
+
+### D40. Evidence manifests are immutable historical attestations — owner-accepted
+
+**Provenance:** [issue #24](https://github.com/mike-north/sarif-to-comment/issues/24).
+
+A historical evidence manifest is kept unchanged and annotated with the commit or artifact it attests to. A later accepted snapshot gets a new manifest. An old manifest is never rewritten to match current files. The [evidence policy](evidence-policy.md) states the rule and indexes each manifest.
+
+**Reason:** The recorded hashes attest to what was reviewed or released at the time. Documents they list are edited later, so a manifest that does not match the current head is expected, not a defect.
+
+### D41. The suggestion pull request convention and options — owner decisions
+
+**Provenance:** [issue #27](https://github.com/mike-north/sarif-to-comment/issues/27), implemented in [PR #31](https://github.com/mike-north/sarif-to-comment/pull/31).
+
+Suggestion pull requests follow a tool-neutral [convention](suggestion-pr-convention.md): the canonical label `suggestion-pr`, or the `label` of a hand-maintained `.github/suggestion-prs.json` on the default branch, resolved identically by publication, readiness assessment and cleanup; branches `suggestion-pr/<pull>/<id>`, created once and never updated, force-pushed or deleted; a hidden marker with `batch`; a neutral title and body with an ordinary reference to the original, no closing keyword, and a brief lifecycle note. The options are `allowSuggestionPullRequests` / `--allow-suggestion-prs`, `pullRequestLabels` / `--pr-labels` and `markSuggestionPullRequestsReady` / `--mark-suggestion-prs-ready`; the per-call label is removed. Every label must already exist, and the tool never creates one. Suggestion pull requests are drafts by default. Support covers the same repository with a default-branch base; forks and other bases are not yet supported. The limits and mechanics are accepted as merged ([companion contract §4](companion-suggestion-pr-contract.md#4-decisions-awaiting-acceptance)). Cleanup resolves the same label, keeps `--label` only as a migration override, acts on any conforming suggestion pull request, closes pull requests only and refuses commas in labels ([cleanup contract §4](suggestion-cleanup-contract.md#4-decisions-awaiting-acceptance)).
+
+**Still open:** the details those contracts and the [convention's open questions](suggestion-pr-convention.md#10-open-questions) list as awaiting the owner.
+
+### D42. Test ancestry when the original's branch has moved — owner decision
+
+**Provenance:** [issue #28](https://github.com/mike-north/sarif-to-comment/issues/28), implemented in [PR #32](https://github.com/mike-north/sarif-to-comment/pull/32), based on the [force-push experiment](force-push-experiment.md).
+
+A branch that only moved forward after the review is not a reason to refuse: suggestion pull requests are proposed on the reviewed commit. After a rewritten history, each suggestion is re-applied onto the head only when everything it changes is byte-identical there, and carries a version 2 marker naming that head; otherwise it is not created, with the reason stated in the review and the outcome. Ordinary feedback publishes as before.
+
+**Still open:** the details of re-application and the handling of a branch rewritten again after planning, as the [companion contract §4](companion-suggestion-pr-contract.md#4-decisions-awaiting-acceptance) and the [convention's open questions](suggestion-pr-convention.md#10-open-questions) list them.
+
+### D43. Group independent fixes by an explicit authoring step — owner decisions
+
+**Provenance:** [issue #29](https://github.com/mike-north/sarif-to-comment/issues/29), implemented in [PR #33](https://github.com/mike-north/sarif-to-comment/pull/33).
+
+Extraction stays deterministic: every separable staged hunk is its own fix. Grouping is a separate authoring step (`group-fixes` / `groupSarifFixes`, `ungroup-fixes` / `ungroupSarifFixes`) that writes the per-result `suggestionGroup` property, renamed from the unreleased `acceptanceGroup`. A SARIF fix with several changes is already a group and needs no property. A group holds at least two distinct changes; a finding belongs to at most one group; groups are never joined, and a name already in use extends its group; only a finding's primary fix is a member; a member without a change is refused; nothing is inferred. With suggestion pull requests disabled, a grouped document is refused naming the setting ([companion contract §2.3, §2.4 and §2.12](companion-suggestion-pr-contract.md#23-groups-a-fix-with-several-changes-and-explicit-groups)).
+
+**Consequences:** This applies D7: groups are supplied, never inferred.
+
+### D44. Publish the first fix and list the others as alternatives — owner decision
+
+**Provenance:** [issue #30](https://github.com/mike-north/sarif-to-comment/issues/30), which supersedes [#9](https://github.com/mike-north/sarif-to-comment/issues/9), implemented in [PR #34](https://github.com/mike-north/sarif-to-comment/pull/34); the [specification's R4 clarification](specification.md#r4-treat-irreconcilable-mechanical-conflicts-as-repair-work).
+
+When a SARIF result carries several fixes, the first is its suggested change: a native suggestion where eligible, otherwise a suggestion pull request when allowed, otherwise the existing review-body presentation. Every further fix is listed in the same comment under "Alternatives to consider:", each in a dynamic fence (D37). The producer's order decides; the tool makes no semantic judgment. Alternatives are never unioned into one patch and are never members of a suggestion group (D43). They count toward the size limits and are never truncated. Extraction from staged changes is unaffected: it produces one fix per hunk.
+
+**Reason:** R4's "MUST NOT choose a semantic winner" governs conflicting edits during generation and combination, not the presentation of alternatives a producer has already ordered. The earlier `fix-alternatives-unsupported` refusal was a limit of the first milestone's supported profile, not an owner decision.
+
+**Consequences:** A single fix with several changes remains one change accepted whole. Without suggestion pull requests it is refused, naming the setting, rather than split: the known limitation #30 allowed to be recorded ([status](status.md#open-questions-for-the-owner), question 5). Live evidence: [alternative fixes](alternative-fixes-e2e-evidence.md).
 
 ## Current concepts
 

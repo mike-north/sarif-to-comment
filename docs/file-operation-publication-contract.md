@@ -1,6 +1,6 @@
 # Publishing whole-file creation and deletion: contract
 
-Proposal awaiting owner acceptance · September 28, 2026. Publication of proposed file creations and deletions is implemented under the conservative options below. The three decisions in [Decisions awaiting acceptance](#decisions-awaiting-acceptance) are provisional until the owner accepts or replaces them.
+Accepted by the owner · September 29, 2026 ([D36](design-decisions.md#d36-publish-whole-file-operations-as-byte-determined-review-body-sections--owner-accepted), [issue #24](https://github.com/mike-north/sarif-to-comment/issues/24)), as merged in [PR #16](https://github.com/mike-north/sarif-to-comment/pull/16). First proposed September 28, 2026. Publication of proposed file creations and deletions is implemented as described below. The owner accepted the three decisions listed under [Accepted decisions](#accepted-decisions), and the dynamic fence of [Content and facts](#content-and-facts-decision-3), which GitHub rendered exactly in the completed [rendering experiment](https://github.com/mike-north/sarif-to-comment/issues/22) ([D37](design-decisions.md#d37-fence-proposed-file-content-one-backtick-longer-than-its-longest-run--owner-accepted-verified-live)).
 
 **Sources.** [R9, R10, R16 and R1/R3/R7/R8/R12/R14](specification.md); [D6, D17, D18, D20, D22, D23](design-decisions.md); the [engineering contract](second-milestone-contract-proposal.md) §2.2, §4.2 and §4.7; the [new-file representation research](new-file-representation-research.md); security requirement S1 (A19).
 
@@ -10,7 +10,7 @@ Proposal awaiting owner acceptance · September 28, 2026. Publication of propose
 - A creation keeps its path, its complete literal content and its explanation. A deletion keeps its delete-file meaning, its file and its explanation. Deleting a file is never presented as emptying it. Creating an empty file is a creation with `""`. Emptying an existing file is an edit, which travels as an ordinary SARIF fix (R9, D6, contract §4.2).
 - Feedback on a created file refers to a line of the proposed content, never to an invented line of the reviewed snapshot. Feedback on a deleted file refers to the file as it exists at the reviewed commit. A line never narrows a deletion (R9, D20; A25, A26).
 - The complete proposal must stand in the ordinary review without any link. It is never truncated, split, uploaded or hosted elsewhere. When no faithful representation fits, the whole review is refused before anything is written (R10, R12, D17, D18).
-- With suggestion pull requests unavailable (they are not yet implemented, #5), file operations use the ordinary review (R16's disabled column). No prefill link and no deletion link are promised.
+- With suggestion pull requests not enabled (they are explicit opt-in and off by default, D22, #5; see the [companion suggestion PR contract](companion-suggestion-pr-contract.md)), file operations use the ordinary review (R16's disabled column). No prefill link and no deletion link are promised.
 
 ## 2. Presentation (decision 1)
 
@@ -49,6 +49,8 @@ ITEMS
 ### Content and facts (decision 3)
 
 `CONTENT` is the file's text with a leading byte-order mark removed and exactly one final line terminator removed. `FENCE` is a run of backticks one longer than the longest backtick run in `CONTENT`, and at least three. It is at the start of its line and has no info string. A line inside the block can therefore never close it (GFM fenced code blocks). HTML, template braces, `@mentions`, issue references and links inside the content stay literal code.
+
+**Rendering evidence.** In the completed [rendering experiment](https://github.com/mike-north/sarif-to-comment/issues/22) of September 29, 2026, GitHub rendered a Markdown file containing a triple-backtick example and a fourteen-backtick line, inside a fifteen-backtick fence, as one code block whose text matched the file exactly. The owner accepted this fence on that evidence ([D37](design-decisions.md#d37-fence-proposed-file-content-one-backtick-longer-than-its-longest-run--owner-accepted-verified-live)).
 
 `FACTS` make the displayed block and the facts together determine the file's exact bytes. They are joined by ` · `:
 
@@ -121,7 +123,9 @@ The pull request `acme/widgets#7` is reviewed at commit `2222222…`. The result
 5. **Refused content.** Content containing a bare CR blocks the whole review with `file-operation-content-unrepresentable`, naming the line.
 6. **Two findings, one proposal.** Two findings in different runs carry the same creation. The content appears once, followed by both findings with their own attribution.
 
-## Decisions awaiting acceptance
+## Accepted decisions
+
+The owner accepted these three decisions on September 29, 2026, as merged ([D36](design-decisions.md#d36-publish-whole-file-operations-as-byte-determined-review-body-sections--owner-accepted), [issue #24](https://github.com/mike-north/sarif-to-comment/issues/24)): the presentation, the non-decoding existence check, and the byte-determined facts with their conservative refusals. The alternatives are kept below as the reasons for each choice.
 
 1. **One body section per distinct operation.** Alternatives: (b) render the proposal with each finding, which duplicates large content and cannot be inline for a created file anyway; (c) separate the findings from the proposal, which breaks the association R9 requires. Adopted: (a). No prefill link, no deletion link and no `<details>` collapsing. A prefill link has no measured support bound (O5), and collapsing adds HTML-block interactions not yet verified live. Both are additive later.
 2. **A non-decoding existence check at the GitHub boundary.** Alternative: refuse deletions of binary or oversized files with a diagnostic. That would narrow D6's accepted requirement ("any content is allowed" for a deletion, contract §4.2), so it was rejected.
