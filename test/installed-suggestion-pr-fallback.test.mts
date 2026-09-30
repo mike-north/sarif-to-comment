@@ -57,7 +57,14 @@ describe('the installed package falls back, or refuses a group, after a rewritte
       return ['--sarif', file, '--repo', `${OWNER}/${REPO}`, '--pull', String(PULL), '--commit', REVIEWED, '--allow-suggestion-prs'];
     };
 
+    // validate first: once published, the review is this account's pending review.
     const fallbackWorld = makeWorld(DROPPED);
+    const human = run(fallbackWorld, ['validate', ...flags(fallbackWorld, ['delete', 'remark'])]);
+    assert.equal(human.status, 0, human.stdout + human.stderr);
+    assert.ok(human.stdout.startsWith('## Ready to publish\n\n**Ready to publish with 1 warning:** '), human.stdout);
+    assert.ok(human.stderr.startsWith('▲ warning  A change is handled as if suggestion pull requests were not allowed  [suggestion-pr-fallback]\n'), human.stderr);
+    assert.ok(human.stderr.endsWith('\n1 warning\n'), human.stderr);
+
     const published = run(fallbackWorld, ['publish', ...flags(fallbackWorld, ['delete', 'remark']), '--state', fallbackWorld.statePath, '--format', 'json']);
     assert.equal(published.status, 0, published.stdout + published.stderr);
     const doc = asRecord(parseJson(published.stdout));
@@ -69,12 +76,6 @@ describe('the installed package falls back, or refuses a group, after a rewritte
     assert.equal(warning['severity'], 'warning');
     assert.equal(warning['message'], FALLBACK_MESSAGE);
     assert.deepEqual(fallbackWorld.host.pulls(), []);
-
-    const human = run(fallbackWorld, ['validate', ...flags(fallbackWorld, ['delete', 'remark'])]);
-    assert.equal(human.status, 0, human.stdout + human.stderr);
-    assert.ok(human.stdout.startsWith('## Ready to publish\n\n**Ready to publish with 1 warning:** '), human.stdout);
-    assert.ok(human.stderr.startsWith('▲ warning  A change is handled as if suggestion pull requests were not allowed  [suggestion-pr-fallback]\n'), human.stderr);
-    assert.ok(human.stderr.endsWith('\n1 warning\n'), human.stderr);
 
     const refusedWorld = makeWorld(REWRITTEN);
     const refused = run(refusedWorld, ['publish', ...flags(refusedWorld, ['reword', 'remark']), '--state', refusedWorld.statePath, '--format', 'json']);

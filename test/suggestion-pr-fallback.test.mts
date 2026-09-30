@@ -512,3 +512,19 @@ describe('CLI (#37): the same outcome and warnings in every format', () => {
     assertNothingWritten(world);
   });
 });
+
+describe('a fallback is held to the limits of publication without suggestion pull requests, not to those of a suggestion pull request (#37)', () => {
+  test('a creation over the suggestion file limit that cannot be re-applied is judged exactly as without suggestion pull requests', async () => {
+    const big = documentWith(['create']);
+    const run = asRecord(asArray(big['runs'])[0]);
+    const [page] = asArray(run['artifacts']);
+    asRecord(asRecord(page)['contents'])['text'] = `${'x'.repeat(1_000_001)}\n`;
+    const allowed = await publishDoc(makeWorld(DROPPED), big);
+    const disallowed = await call('publishSarifReview', makeWorld(DROPPED), big, false);
+    const codes = (outcome: Json): unknown[] => diagnosticsOf(outcome).map((d) => asRecord(d)['code']);
+    assert.equal(status(allowed), status(disallowed), markdown(allowed));
+    assert.deepEqual(codes(allowed).filter((c) => c !== 'suggestion-pr-fallback'), codes(disallowed));
+    assert.equal(codes(allowed).includes('suggestion-file-too-large'), false, 'no suggestion pull request carries the file');
+    assert.ok(codes(allowed).includes('suggestion-pr-fallback'));
+  });
+});

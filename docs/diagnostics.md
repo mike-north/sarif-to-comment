@@ -168,7 +168,7 @@ The library's `markdown` fields and the JSON `message` are Markdown rendered fro
 
 ## Renamed codes
 
-These internal codes were unclear. They were renamed before their first release as public codes; every other code keeps the name it had in Markdown.
+These internal codes were unclear. They were renamed before their first release as public codes; every other code keeps the name it had in Markdown. `suggestion-pr-not-reapplied` became `suggestion-pr-fallback` when a suggestion pull request that cannot be re-applied stopped being skipped and started falling back as if suggestion pull requests were not allowed ([issue #37](https://github.com/mike-north/sarif-to-comment/issues/37)); a group in that situation is refused as `suggestion-group-not-reapplied`.
 
 | Before | After |
 |---|---|
@@ -178,6 +178,7 @@ These internal codes were unclear. They were renamed before their first release 
 | `repository-mismatch` | `provenance-repository-mismatch` |
 | `provenance-conflict` | `provenance-revision-conflict` |
 | `suggestion-historical-unsupported` | `suggestion-reviewed-commit-not-head` |
+| `suggestion-pr-not-reapplied` | `suggestion-pr-fallback` |
 
 ## Code catalog
 
@@ -360,7 +361,8 @@ One entry per code: its severity, its title, what it means and its typical remed
 | `suggestion-file-too-large` | error | A proposed file is too large for a suggestion pull request | A suggestion pull request carries a bounded number of bytes per file. | Reduce the proposed file, or propose it outside the review. |
 | `suggestion-body-too-large` | error | A suggestion pull request's description would be too long | Nothing is truncated or split. | Shorten the findings' messages, or split the group. |
 | `too-many-suggestion-prs` | error | The review would create too many suggestion pull requests | The number of suggestion pull requests one review creates is bounded. | Publish fewer proposals in one review, or group related changes. |
-| `suggestion-pr-not-reapplied` | warning | A suggestion pull request is not created after a rewritten history | The branch history was rewritten after the reviewed commit, and something the suggestion changes is no longer byte-identical at the head. The review states the reason. | Review the pull request's new head, and publish the suggestion from there. |
+| `suggestion-pr-fallback` | warning | A change is handled as if suggestion pull requests were not allowed | Suggestion pull requests are allowed, but this change is not proposed as one, so it is published exactly as it would be without them. Today this happens after a rewritten history, to a whole-file creation or deletion that cannot be re-applied onto the head: the review body proposes it. The message names the change and the reason. Presenting a small edit as a native suggestion is intended, not a fallback. | To propose the change as a suggestion pull request, review the pull request's current head again and publish that review. |
+| `suggestion-group-not-reapplied` | error | A group cannot be re-applied after a rewritten history | Suggestion pull requests are allowed, but an explicit group or a fix with several changes cannot be re-applied onto the rewritten head, and without a suggestion pull request its changes cannot be kept together, so the whole review is refused before anything is written. The message names the group or fix and the reason. For a fix, the remedies are to review the head again or split the fix into separate findings. | Review the pull request's current head again, and publish that review.<br>Or remove the group (`ungroup-fixes`), so that its changes are published on their own. |
 | `suggestion-pr-fork-unsupported` | error | Suggestion pull requests are not supported for this pull request's head | The head branch is in a fork, or its repository was deleted. | Publish without suggestion pull requests. |
 | `suggestion-pr-base-unsupported` | error | Suggestion pull requests need a pull request into the default branch | The pull request's base is not the repository's default branch. | Publish without suggestion pull requests. |
 | `suggestion-pr-permission-missing` | error | The account cannot push to the repository | Creating proposal branches needs push access. | Use a token of an account with push access, or publish without suggestion pull requests. |

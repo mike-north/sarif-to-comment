@@ -691,6 +691,52 @@ export function blockedReviewReport(prepared: { readonly diagnostics: readonly u
   return ['## Review blocked', '', `Nothing was published and no publication state was written. ${problems}`].join('\n');
 }
 
+/**
+ * Whether a headline reports warnings of something that happened
+ * (`published`) or that publication would do (`ready`).
+ */
+export type WarningsHeadlineTense = 'published' | 'ready';
+
+/**
+ * How a headline states the warnings of a code whose nature it names
+ * specifically: a sentence for `count` of them. Any other code is stated by
+ * its catalog title.
+ */
+const HEADLINE_SENTENCES: Readonly<Record<string, (count: number, tense: WarningsHeadlineTense) => string>> = {
+  'suggestion-pr-fallback': (count, tense) => {
+    const [pulls, were, change, is] = count === 1
+      ? ['suggestion pull request', tense === 'published' ? 'was' : 'would', 'its change', tense === 'published' ? 'is' : 'would be']
+      : ['suggestion pull requests', tense === 'published' ? 'were' : 'would', 'their changes', tense === 'published' ? 'are' : 'would be'];
+    const created = tense === 'published' ? `${were} not created` : `${were} not be created`;
+    return `${String(count)} ${pulls} ${created}; ${change} ${is} shown in the review.`;
+  },
+};
+
+/**
+ * The line a successful outcome states its warnings in, directly under its
+ * heading (issue #37): their count, then the nature of each code in the
+ * order first found, for example `**Published with 1 warning:** 1 suggestion
+ * pull request was not created; its change is shown in the review.` Absent
+ * when there is no warning; errors and notes are never counted.
+ */
+export function warningsHeadline(diagnostics: readonly IDiagnostic[], tense: WarningsHeadlineTense): string | undefined {
+  const warnings = diagnostics.filter((d) => d.severity === 'warning');
+  if (warnings.length === 0) return undefined;
+  const byCode = new Map<string, { count: number; readonly title: string }>();
+  for (const w of warnings) {
+    const seen = byCode.get(w.code);
+    if (seen === undefined) byCode.set(w.code, { count: 1, title: w.title });
+    else seen.count += 1;
+  }
+  const sentences = [...byCode].map(([code, { count, title }]) => {
+    const sentence = Object.hasOwn(HEADLINE_SENTENCES, code) ? HEADLINE_SENTENCES[code] : undefined;
+    if (sentence !== undefined) return sentence(count, tense);
+    return count === 1 ? `${title}.` : `${title} (${String(count)} times).`;
+  });
+  const lead = tense === 'published' ? 'Published' : 'Ready to publish';
+  return `**${lead} with ${String(warnings.length)} warning${warnings.length === 1 ? '' : 's'}:** ${sentences.join(' ')}`;
+}
+
 /** The explanation of a blocked review, shown identically by publication and assessment. */
 export function blockedReviewMarkdown(prepared: { readonly markdown: string }): string {
   return ['## Review blocked', '', 'Nothing was published and no publication state was written.', '', prepared.markdown.trim()].join(

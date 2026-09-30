@@ -295,9 +295,13 @@ export function documentWith(parts: readonly DocumentPart[], { keepUnreferencedC
   return document;
 }
 
-/** One finding whose single fix replaces lines 6 and 10 of docs/sample.md together, with no group property. */
+/**
+ * One finding whose single fix replaces lines 6 and 10 of docs/sample.md
+ * together, with no group property, and no artifact contents left over as
+ * context.
+ */
 export function jointFixDocument(): Json {
-  const document = reviewDocument();
+  const document = documentWith([]);
   const run = asRecord(asArray(document['runs'])[0]);
   run['results'] = [{
     message: { text: LINE6_MESSAGE },

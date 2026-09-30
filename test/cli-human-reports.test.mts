@@ -84,6 +84,16 @@ const READY_STDOUT = [
   '',
 ].join('\n');
 
+/**
+ * READY_STDOUT for WARNED: the headline under the heading states the warning's
+ * count and nature, by its catalog title (issue #37, "Warnings must never be
+ * mysterious"); the warning itself is on stderr only.
+ */
+const WARNED_READY_STDOUT = READY_STDOUT.replace(
+  '## Ready to publish\n\n',
+  '## Ready to publish\n\n**Ready to publish with 1 warning:** Taxonomy classifications are not shown.\n\n',
+);
+
 const BLOCKED_STDOUT = ['## Review blocked', '', `${NOTHING_WRITTEN} 1 problem must be resolved before publication.`, ''].join('\n');
 
 const HOLD_STDERR = [
@@ -114,10 +124,10 @@ describe('validate: stdout is the outcome, stderr the diagnostics', () => {
     assert.equal(result.stderr, '');
   });
 
-  test('ready with a warning: the same report without a warnings list; the warning on stderr (exit 0)', () => {
+  test('ready with a warning: the same report with its headline and without a warnings list; the warning on stderr (exit 0)', () => {
     const result = run(world(), 'validate', WARNED);
     assert.equal(result.status, 0);
-    assert.equal(result.stdout, READY_STDOUT);
+    assert.equal(result.stdout, WARNED_READY_STDOUT);
     assert.equal(result.stderr, TAXA_STDERR);
   });
 
@@ -136,12 +146,14 @@ describe('validate: stdout is the outcome, stderr the diagnostics', () => {
 });
 
 describe('publish: stdout is the outcome, stderr the diagnostics', () => {
-  function published(w: IWorld): string {
+  /** The published report; `headline` is the line a warning adds under the heading (issue #37). */
+  function published(w: IWorld, headline?: string): string {
     const review = w.remote.reviews()[0];
     assert.ok(review !== undefined, 'a review was created');
     return [
       '## Draft review published',
       '',
+      ...(headline === undefined ? [] : [headline, '']),
       `Created the draft [review ${String(review.id)}](${review.htmlUrl}) on acme/gizmos#7 at commit \`${HEAD}\`. It stays a draft until someone submits it on GitHub.`,
       '',
     ].join('\n');
@@ -155,11 +167,11 @@ describe('publish: stdout is the outcome, stderr the diagnostics', () => {
     assert.equal(result.stderr, '');
   });
 
-  test('published with a warning: the same outcome text, the warning only on stderr (exit 0)', () => {
+  test('published with a warning: the same outcome text with its headline, the warning only on stderr (exit 0)', () => {
     const w = world();
     const result = run(w, 'publish', WARNED);
     assert.equal(result.status, 0);
-    assert.equal(result.stdout, published(w));
+    assert.equal(result.stdout, published(w, '**Published with 1 warning:** Taxonomy classifications are not shown.'));
     assert.equal(result.stderr, TAXA_STDERR);
   });
 

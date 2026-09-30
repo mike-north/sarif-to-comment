@@ -687,10 +687,18 @@ export const DIAGNOSTIC_CATALOG = {
     title: 'The review would create too many suggestion pull requests',
     remedies: ['Publish fewer proposals in one review, or group related changes.'],
   },
-  'suggestion-pr-not-reapplied': {
+  'suggestion-pr-fallback': {
     severity: 'warning',
-    title: 'A suggestion pull request is not created after a rewritten history',
-    remedies: ['Review the pull request\'s new head, and publish the suggestion from there.'],
+    title: 'A change is handled as if suggestion pull requests were not allowed',
+    remedies: ['To propose the change as a suggestion pull request, review the pull request\'s current head again and publish that review.'],
+  },
+  'suggestion-group-not-reapplied': {
+    severity: 'error',
+    title: 'A group cannot be re-applied after a rewritten history',
+    remedies: [
+      'Review the pull request\'s current head again, and publish that review.',
+      'Or remove the group (`ungroup-fixes`), so that its changes are published on their own.',
+    ],
   },
   'suggestion-pr-fork-unsupported': {
     severity: 'error',

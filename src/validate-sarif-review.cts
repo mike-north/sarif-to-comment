@@ -84,6 +84,7 @@ import {
   messageChain,
   prepareForDestination,
   redact,
+  warningsHeadline,
   withoutCredential,
 } from './review-preflight.cjs';
 import type { ICapturedReview, IContextClient, IDestinationReady, IReadySuggestionPullRequests, IReported, IReviewInputSpec } from './review-preflight.cjs';
@@ -241,9 +242,11 @@ function readyMarkdown(prepared: IDestinationReady, captured: ICapturedReview, s
     `Publication would also create ${created} ${code(target.headRef)}, labeled ${labelList(target.labels)}.${reappliedSentence(target, captured, count)}`,
     '',
   ];
+  const headline = warningsHeadline(prepared.warnings, 'ready');
   return [
     '## Ready to publish',
     '',
+    ...(headline === undefined ? [] : [headline, '']),
     `The complete document can be published faithfully to ${destinationLabel(captured)} at commit ${code(captured.reviewedCommit)}${as}.`,
     '',
     ...suggestions,
