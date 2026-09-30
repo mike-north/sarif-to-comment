@@ -218,11 +218,11 @@ Recovery MUST NOT overwrite human edits or restore human-deleted review content 
 
 ### R15. Give the external repair loop enough evidence
 
-Diagnostics MUST be Markdown suitable for humans, agents, and editor rendering. They MUST explain the failed contract, identify the relevant evidence and input, and state a mechanically checkable completion condition where one exists. The report MUST distinguish which input the next run will consume. **[D8, D13; A4–A6]**
+Diagnostics MUST be structured, with a severity, a stable code, a title, a Markdown message and, where they apply, a location, subject and remedies, and MUST be rendered from that one model for each audience: JSON and TOON for agents, a terminal view for people, and Markdown suitable for humans, agents, and editor rendering. They MUST explain the failed contract, identify the relevant evidence and input, and state a mechanically checkable completion condition where one exists. The report MUST distinguish which input the next run will consume. **[D8, D45; A4–A6]**
 
-An internal diagnostic model may be structured. The initial external contract is not a frozen machine-readable diagnostic schema, and editing the report is not an input-repair protocol.
+The diagnostic shape is a versioned public schema, and its codes are catalogued in [Diagnostics](diagnostics.md) (D45, superseding D13's avoidance of a machine-readable schema). Editing the report is still not an input-repair protocol.
 
-**Illustrative diagnostic; field labels are not a public schema:**
+**Illustrative diagnostic explanation (its Markdown message); the public fields are in [Diagnostics](diagnostics.md):**
 
 > **Referenced source line does not exist**
 >
@@ -287,7 +287,7 @@ Each scenario is a future test obligation or a named gap. Tests should be writte
 | A3 | Working-tree content differs from the index | Extraction follows the index. Independently applying supported replacements yields the staged target under the proposed invariant, once O2/O3 are fixed. | R2; D2 |
 | A4 | Schema-valid existing-file location beyond end of reviewed file | Source exception, explicit repair target, no publication writes; no automatic relocation. | R3, R15; D3, D8, D15 |
 | A5 | Two irreconcilable supplied replacements | Strict withholds attempted SARIF; best effort preserves both representable proposals with diagnostics; neither publishes. | R3–R5; D7–D9 |
-| A6 | Malformed SARIF, including a case with unreliable item boundaries | No fabricated valid items; diagnostic retains available evidence; success path absent on failure. Exact evidence container is O9. | R5, R6, R15; D9, D10, D13 |
+| A6 | Malformed SARIF, including a case with unreliable item boundaries | No fabricated valid items; diagnostic retains available evidence; success path absent on failure. Exact evidence container is O9. | R5, R6, R15; D9, D10, D45 |
 | A7 | User's missing-documentation scenario | One contribution, full proposed page and destination retained, no fabricated source line or second critique. | R9; D6 |
 | A8 | Intentional deletion, then an accidental notes-file addition | Deletion remains distinct from emptying; addition is not mechanically rejected solely for being new; no special confirmation gate. | R9; D6 |
 | A9 | Verified source outside host inline eligibility | Apply configured treatment with exact-revision association, or report unsupported treatment; do not silently choose a fallback. | R7; D3 |
@@ -334,7 +334,7 @@ Each scenario is a future test obligation or a named gap. Tests should be writte
 | O6 | Publication lifecycle details | Draft by default, explicit immediate submission; whole-review validation before writes; persisted identity. | Submission event, pending-marker preservation, retries, concurrency, delayed visibility, and partial remote operation recovery. |
 | O7 | File lifecycle details | Preserve history and keep stale success off the normal path. | Timestamp precision/timezone, absent creation time, collision handling, archival/write failures, and old error/report rotation. |
 | O8 | Closed clarification: approval state during SARIF generation | Strict/best effort concern SARIF combination/extraction; approval holds govern publication. | R5 preserves the marker without treating it alone as a generation error; R11 honors it at publication. No additional early approval gate or workflow phase is required. |
-| O9 | Unrepresentable input evidence | Best effort preserves evidence rather than disguising loss. | Location and format for evidence that cannot fit in SARIF; no external diagnostic schema is implied. |
+| O9 | Unrepresentable input evidence | Best effort preserves evidence rather than disguising loss. | Location and format for evidence that cannot fit in SARIF; the diagnostic schema (D45) does not define it. |
 | O10 | Security profile details | S1, S2, S3, S5 and S7 accepted (D39, September 29, 2026); S4 and S6 proposed. | Action-link rules and content policy (S4, S6; [#8](https://github.com/mike-north/sarif-to-comment/issues/8)). Originally: approve path/URI rules, resource limits, action-link content policy, and adversarial fixture coverage. |
 | O11 | Suggestion PR representation and lifecycle | D21 selects backlinks plus label; D22 makes suggestion PRs explicit opt-in and default off (owner decision, September 29, 2026; earlier a provisional enabled default), with native small edits, preferred PRs for file operations, and required PRs for grouped application. D26 permits visible draft suggestion PRs alongside a draft review. | Exact grouping/label conventions, proposal branch ownership and revision handling, permission failures, multi-object recovery, deletion links, and remaining lifecycle/cleanup verification. The default is settled: explicit opt-in, default off (D22). |
 
