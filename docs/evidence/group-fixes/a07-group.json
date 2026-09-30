@@ -1,0 +1,26 @@
+{
+  "command": "group-fixes",
+  "status": "grouped",
+  "sarif": {
+    "path": "<work>/a.staged.sarif",
+    "written": true
+  },
+  "group": "checklist-link",
+  "findings": [
+    {
+      "ref": "/runs/0/results/1",
+      "runIndex": 0,
+      "resultIndex": 1,
+      "tool": "Review agent",
+      "changes": 1
+    },
+    {
+      "ref": "/runs/0/results/2",
+      "runIndex": 0,
+      "resultIndex": 2,
+      "tool": "Review agent",
+      "changes": 1
+    }
+  ],
+  "changes": 2
+}

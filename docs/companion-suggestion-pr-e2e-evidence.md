@@ -2,6 +2,8 @@
 
 Recorded September 29, 2026 in the private fixture repository `mike-north/doc-linter`, against the implementation of the [companion suggestion PR contract](companion-suggestion-pr-contract.md) ([#5](https://github.com/mike-north/sarif-to-comment/issues/5)). The built package ran from the working tree (`node dist/sarif-to-comment.cjs`, and for the recovery case a Node script importing the built modules). Nothing was published to npm, nothing was merged, and the repository's `main` branch was not touched. Sanitized outputs are in [`evidence/companion-suggestion-pr/`](evidence/companion-suggestion-pr/); raw logs stayed in the maintainer's uncommitted working-log directory, written `<working-logs>` below.
 
+> These runs predate [#29](https://github.com/mike-north/sarif-to-comment/issues/29): the group property they show, `acceptanceGroup`, and its problem codes `acceptance-group-*` were renamed to `suggestionGroup` and `suggestion-group-*` before any release. The recorded outputs are kept as they were; see the [grouping evidence](group-fixes-e2e-evidence.md) for the current names.
+
 ## Fixtures
 
 | Object | Identity |

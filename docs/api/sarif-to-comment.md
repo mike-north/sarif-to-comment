@@ -8,9 +8,11 @@ Author, inspect and extend SARIF 2.1.0, and publish it as one GitHub draft pull 
 
 ## Remarks
 
-Seven operations work on ordinary in-memory SARIF values, and one cleans up after publication:
+Nine operations work on ordinary in-memory SARIF values, and one cleans up after publication:
 
 - [createSarifDocument()](./sarif-to-comment.createsarifdocument.md) and [addSarifComment()](./sarif-to-comment.addsarifcomment.md) optionally author  SARIF for your own findings, on lines or line ranges, and  [removeSarifComment()](./sarif-to-comment.removesarifcomment.md) removes a finding selected through inspection,  so a finding can be corrected by removing it and adding it again.
+
+- [groupSarifFixes()](./sarif-to-comment.groupsariffixes.md) declares that fixes of several findings must be  accepted together, published as one suggestion pull request, and  [ungroupSarifFixes()](./sarif-to-comment.ungroupsariffixes.md) undoes it.
 
 - [inspectSarif()](./sarif-to-comment.inspectsarif.md) shows every finding, location and fix in any SARIF.
 
@@ -24,7 +26,7 @@ Seven operations work on ordinary in-memory SARIF values, and one cleans up afte
 
 Authoring is optional: SARIF from any producer can be inspected, extended and published directly, and no operation depends on how a document was made. There is no builder, session or private format; each operation that changes a document returns a new one and leaves its input untouched.
 
-The `sarif-to-comment` command-line interface provides the same operations for files (`init`<!-- -->, `add-comment`<!-- -->, `remove-comment`<!-- -->, `inspect`<!-- -->,`add-staged-changes`<!-- -->, `validate`<!-- -->, `publish`<!-- -->), and `close-suggestion-prs`<!-- -->. These declarations describe the package's CommonJS runtime entry; they are generated from its TypeScript implementation, checked by API Extractor and compiled against CommonJS and ES module consumers by the package tests.
+The `sarif-to-comment` command-line interface provides the same operations for files (`init`<!-- -->, `add-comment`<!-- -->, `remove-comment`<!-- -->, `group-fixes`<!-- -->,`ungroup-fixes`<!-- -->, `inspect`<!-- -->, `add-staged-changes`<!-- -->, `validate`<!-- -->, `publish`<!-- -->), and `close-suggestion-prs`<!-- -->. These declarations describe the package's CommonJS runtime entry; they are generated from its TypeScript implementation, checked by API Extractor and compiled against CommonJS and ES module consumers by the package tests.
 
 ## Functions
 
@@ -85,6 +87,17 @@ Creates a SARIF document with one empty run, ready for[addSarifComment()](./sari
 </td></tr>
 <tr><td>
 
+[groupSarifFixes(sarif, options)](./sarif-to-comment.groupsariffixes.md)
+
+
+</td><td>
+
+Groups the fixes of several findings so that they are accepted together.
+
+
+</td></tr>
+<tr><td>
+
 [inspectSarif(sarif, options)](./sarif-to-comment.inspectsarif.md)
 
 
@@ -113,6 +126,17 @@ Publishes a ready SARIF document as one GitHub review — a draft unless`options
 </td><td>
 
 Removes one finding, with the fixes attached to it, from a copy of a SARIF document.
+
+
+</td></tr>
+<tr><td>
+
+[ungroupSarifFixes(sarif, options)](./sarif-to-comment.ungroupsariffixes.md)
+
+
+</td><td>
+
+Takes findings out of their suggestion groups.
 
 
 </td></tr>
@@ -271,6 +295,39 @@ A staged change cannot be represented faithfully (for example a mode change, a b
 </td><td>
 
 A GitHub repository.
+
+
+</td></tr>
+<tr><td>
+
+[IGroupedFinding](./sarif-to-comment.igroupedfinding.md)
+
+
+</td><td>
+
+A finding [groupSarifFixes()](./sarif-to-comment.groupsariffixes.md) added to the group.
+
+
+</td></tr>
+<tr><td>
+
+[IGroupedSarifFixesOutcome](./sarif-to-comment.igroupedsariffixesoutcome.md)
+
+
+</td><td>
+
+The findings were grouped in a new copy of the document.
+
+
+</td></tr>
+<tr><td>
+
+[IGroupSarifFixesOptions](./sarif-to-comment.igroupsariffixesoptions.md)
+
+
+</td><td>
+
+Options for [groupSarifFixes()](./sarif-to-comment.groupsariffixes.md)<!-- -->. Unknown fields are refused.
 
 
 </td></tr>
@@ -551,6 +608,17 @@ Publication of this document would proceed to its single create-review request. 
 </td></tr>
 <tr><td>
 
+[IRefusedSuggestionGroupOutcome](./sarif-to-comment.irefusedsuggestiongroupoutcome.md)
+
+
+</td><td>
+
+The request breaks a grouping rule, such as a finding that is already in another group or a group of fewer than two distinct changes. Nothing was changed.
+
+
+</td></tr>
+<tr><td>
+
 [IRejectedOutcome](./sarif-to-comment.irejectedoutcome.md)
 
 
@@ -677,7 +745,7 @@ One staged edit region and the findings that carry it.
 
 </td><td>
 
-The selector does not select a finding in this document as it is now, usually because the document changed after it was inspected. Nothing was removed.
+A selector does not select a finding in this document as it is now, usually because the document changed after it was inspected. Nothing was changed: [removeSarifComment()](./sarif-to-comment.removesarifcomment.md) removed nothing, and[groupSarifFixes()](./sarif-to-comment.groupsariffixes.md) and [ungroupSarifFixes()](./sarif-to-comment.ungroupsariffixes.md) grouped or ungrouped nothing.
 
 
 </td></tr>
@@ -689,6 +757,39 @@ The selector does not select a finding in this document as it is now, usually be
 </td><td>
 
 Delivery could not be confirmed. Retry later with the same state path; it only checks GitHub and never sends the review again. Do not delete the state file.
+
+
+</td></tr>
+<tr><td>
+
+[IUngroupedFinding](./sarif-to-comment.iungroupedfinding.md)
+
+
+</td><td>
+
+A finding [ungroupSarifFixes()](./sarif-to-comment.ungroupsariffixes.md) took out of its group.
+
+
+</td></tr>
+<tr><td>
+
+[IUngroupedSarifFixesOutcome](./sarif-to-comment.iungroupedsariffixesoutcome.md)
+
+
+</td><td>
+
+The findings were taken out of their groups in a new copy of the document.
+
+
+</td></tr>
+<tr><td>
+
+[IUngroupSarifFixesOptions](./sarif-to-comment.iungroupsariffixesoptions.md)
+
+
+</td><td>
+
+Options for [ungroupSarifFixes()](./sarif-to-comment.ungroupsariffixes.md)<!-- -->. Unknown fields are refused.
 
 
 </td></tr>
@@ -755,6 +856,17 @@ Whether cleanup established everything it set out to:
 </td></tr>
 <tr><td>
 
+[GroupSarifFixesOutcome](./sarif-to-comment.groupsariffixesoutcome.md)
+
+
+</td><td>
+
+Every outcome of [groupSarifFixes()](./sarif-to-comment.groupsariffixes.md)<!-- -->, discriminated by `status`<!-- -->.
+
+
+</td></tr>
+<tr><td>
+
 [InspectSarifOutcome](./sarif-to-comment.inspectsarifoutcome.md)
 
 
@@ -807,6 +919,17 @@ Every outcome of [removeSarifComment()](./sarif-to-comment.removesarifcomment.md
 What cleanup did with one pull request:
 
 - `closed`<!-- -->: it was closed now. - `would-close`<!-- -->: a dry run would close it. - `already-closed`<!-- -->: it is no longer open. - `left-open`<!-- -->: its original is still open. - `unverified`<!-- -->: its original could not be verified, so it was left open. - `permission-limited`<!-- -->: GitHub refused to let this account close it. - `failed`<!-- -->: reading or closing it failed; running cleanup again is safe. - `not-ours`<!-- -->: it does not conform to the suggestion pull request  convention (no, several or a changed marker, another repository or  original, a fork, or another branch), so it was not touched. - `unlabeled`<!-- -->: it does not carry the label, so it was not touched.
+
+
+</td></tr>
+<tr><td>
+
+[UngroupSarifFixesOutcome](./sarif-to-comment.ungroupsariffixesoutcome.md)
+
+
+</td><td>
+
+Every outcome of [ungroupSarifFixes()](./sarif-to-comment.ungroupsariffixes.md)<!-- -->, discriminated by `status`<!-- -->.
 
 
 </td></tr>

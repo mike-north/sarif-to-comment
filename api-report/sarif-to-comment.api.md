@@ -26,6 +26,12 @@ export type CloseSuggestionPullRequestsStatus = 'complete' | 'permission-limited
 export function createSarifDocument(options?: ICreateSarifDocumentOptions): ISarifLog;
 
 // @public
+export function groupSarifFixes(sarif: object, options: IGroupSarifFixesOptions): GroupSarifFixesOutcome;
+
+// @public
+export type GroupSarifFixesOutcome = IGroupedSarifFixesOutcome | IRefusedSuggestionGroupOutcome | IStaleSarifSelectorOutcome | IInvalidSarifOutcome;
+
+// @public
 export interface IAddedFinding {
     readonly ref: string;
     readonly resultIndex: number;
@@ -116,6 +122,31 @@ export interface IGitHubRepository {
 }
 
 // @public
+export interface IGroupedFinding {
+    readonly changes: number;
+    readonly ref: string;
+    readonly resultIndex: number;
+    readonly runIndex: number;
+    readonly tool: string;
+}
+
+// @public
+export interface IGroupedSarifFixesOutcome {
+    readonly changes: number;
+    readonly extended: boolean;
+    readonly findings: readonly IGroupedFinding[];
+    readonly group: string;
+    readonly sarif: ISarifLog;
+    readonly status: 'grouped';
+}
+
+// @public
+export interface IGroupSarifFixesOptions {
+    readonly findings: readonly string[];
+    readonly group: string;
+}
+
+// @public
 export interface IIncompleteAssessment {
     readonly markdown: string;
     readonly status: 'incomplete';
@@ -178,6 +209,7 @@ export interface IInspectionFinding {
     readonly ruleId?: string | undefined;
     readonly runIndex: number;
     readonly selector: string;
+    readonly suggestionGroup?: string | undefined;
 }
 
 // @public
@@ -352,6 +384,13 @@ export interface IReadyAssessment {
 }
 
 // @public
+export interface IRefusedSuggestionGroupOutcome {
+    readonly markdown: string;
+    readonly problems: readonly IProblem[];
+    readonly status: 'refused';
+}
+
+// @public
 export interface IRejectedOutcome {
     readonly markdown: string;
     readonly statePath: string;
@@ -470,6 +509,27 @@ export interface IUncertainOutcome {
 }
 
 // @public
+export interface IUngroupedFinding {
+    readonly group: string;
+    readonly ref: string;
+    readonly resultIndex: number;
+    readonly runIndex: number;
+    readonly tool: string;
+}
+
+// @public
+export interface IUngroupedSarifFixesOutcome {
+    readonly findings: readonly IUngroupedFinding[];
+    readonly sarif: ISarifLog;
+    readonly status: 'ungrouped';
+}
+
+// @public
+export interface IUngroupSarifFixesOptions {
+    readonly findings: readonly string[];
+}
+
+// @public
 export interface IValidateSarifReviewInput {
     readonly destination: IPullRequestDestination;
     readonly oldSourceCommit?: string | undefined;
@@ -497,6 +557,12 @@ export type RemoveSarifCommentOutcome = IRemovedSarifCommentOutcome | IStaleSari
 
 // @public
 export type SuggestionCleanupResult = 'closed' | 'would-close' | 'already-closed' | 'left-open' | 'unverified' | 'permission-limited' | 'failed' | 'not-ours' | 'unlabeled';
+
+// @public
+export function ungroupSarifFixes(sarif: object, options: IUngroupSarifFixesOptions): UngroupSarifFixesOutcome;
+
+// @public
+export type UngroupSarifFixesOutcome = IUngroupedSarifFixesOutcome | IRefusedSuggestionGroupOutcome | IStaleSarifSelectorOutcome | IInvalidSarifOutcome;
 
 // @public
 export function validateSarifReview(input: IValidateSarifReviewInput): Promise<ValidateSarifReviewOutcome>;

@@ -3,13 +3,17 @@
  * pull request review.
  *
  * @remarks
- * Seven operations work on ordinary in-memory SARIF values, and one cleans
+ * Nine operations work on ordinary in-memory SARIF values, and one cleans
  * up after publication:
  *
  * - {@link createSarifDocument} and {@link addSarifComment} optionally author
  *   SARIF for your own findings, on lines or line ranges, and
  *   {@link removeSarifComment} removes a finding selected through inspection,
  *   so a finding can be corrected by removing it and adding it again.
+ *
+ * - {@link groupSarifFixes} declares that fixes of several findings must be
+ *   accepted together, published as one suggestion pull request, and
+ *   {@link ungroupSarifFixes} undoes it.
  *
  * - {@link inspectSarif} shows every finding, location and fix in any SARIF.
  *
@@ -31,8 +35,9 @@
  * changes a document returns a new one and leaves its input untouched.
  *
  * The `sarif-to-comment` command-line interface provides the same operations
- * for files (`init`, `add-comment`, `remove-comment`, `inspect`,
- * `add-staged-changes`, `validate`, `publish`), and `close-suggestion-prs`.
+ * for files (`init`, `add-comment`, `remove-comment`, `group-fixes`,
+ * `ungroup-fixes`, `inspect`, `add-staged-changes`, `validate`, `publish`),
+ * and `close-suggestion-prs`.
  * These declarations describe the package's CommonJS runtime
  * entry; they are generated from its TypeScript implementation, checked by API
  * Extractor and compiled against CommonJS and ES module consumers by the
@@ -43,7 +48,7 @@
 
 // The declaration entry (API Extractor's mainEntryPointFilePath is its
 // emitted declaration, dist/public-api.d.cts): exactly the public API, as ES
-// named exports of the eight operations and every public type, each carrying
+// named exports of the ten operations and every public type, each carrying
 // its public documentation where it is implemented. The runtime entry is
 // src/index.cts, which proves at compile time that it exports exactly these
 // values; this module's own compiled JavaScript is never shipped or loaded.
@@ -98,6 +103,19 @@ export type {
   IStaleSarifSelectorOutcome,
   RemoveSarifCommentOutcome,
 } from './sarif-authoring.cjs';
+
+export { groupSarifFixes, ungroupSarifFixes } from './suggestion-groups.cjs';
+export type {
+  IGroupSarifFixesOptions,
+  IUngroupSarifFixesOptions,
+  IGroupedFinding,
+  IGroupedSarifFixesOutcome,
+  IRefusedSuggestionGroupOutcome,
+  GroupSarifFixesOutcome,
+  IUngroupedFinding,
+  IUngroupedSarifFixesOutcome,
+  UngroupSarifFixesOutcome,
+} from './suggestion-groups.cjs';
 
 export { inspectSarif } from './sarif-inspection.cjs';
 export type {

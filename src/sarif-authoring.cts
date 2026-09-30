@@ -209,16 +209,18 @@ export interface IRemovedSarifCommentOutcome {
 }
 
 /**
- * The selector does not select a finding in this document as it is now,
+ * A selector does not select a finding in this document as it is now,
  * usually because the document changed after it was inspected. Nothing was
- * removed.
+ * changed: {@link removeSarifComment} removed nothing, and
+ * {@link groupSarifFixes} and {@link ungroupSarifFixes} grouped or ungrouped
+ * nothing.
  *
  * @public
  */
 export interface IStaleSarifSelectorOutcome {
   /** Discriminant: the selector was refused. */
   readonly status: 'stale';
-  /** The selector, as given. */
+  /** The selector, as given (the first that does not fit, when several were given). */
   readonly selector: string;
   /** Why, with the position the selector names as its pointer. */
   readonly problems: readonly IProblem[];

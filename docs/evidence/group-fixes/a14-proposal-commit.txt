@@ -1,0 +1,12 @@
+commit d898243c217ad1fe4f443600bbca5629398aa9e3
+parents ea29b3d4966ca71eabdcc422607ffe4dfd7d7177
+subject Suggestion for #60: checklist-link (2 changes)
+ docs/experiments/sarif-issue29/a-checklist.md | 4 ++++
+ docs/experiments/sarif-issue29/a-guide.md     | 2 +-
+ 2 files changed, 5 insertions(+), 1 deletion(-)
+docs/experiments/sarif-issue29/a-guide.md: branch blob deb989f5e9d74e5ceccebd40b863d3d2a2073614; expected (reviewed file with only line 7 replaced; the line-5 typo stays a native suggestion) deb989f5e9d74e5ceccebd40b863d3d2a2073614
+ Teh client retries once on a timeout.
+ 
+-See the checklist before you ship.
++See [the checklist](a-checklist.md) before you ship.
+docs/experiments/sarif-issue29/a-checklist.md: branch bytes equal the staged file

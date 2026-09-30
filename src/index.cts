@@ -1,7 +1,7 @@
 /**
  * Public library entry point.
  *
- * Seven operations on ordinary in-memory SARIF 2.1.0 values (no files,
+ * Nine operations on ordinary in-memory SARIF 2.1.0 values (no files,
  * builders, sessions or private formats), and one on the suggestion pull
  * requests publication creates; the CLI (src/cli.cts) is a file transport
  * over exactly these functions:
@@ -9,6 +9,9 @@
  *   createSarifDocument(options?)          optional authoring: a new document
  *   addSarifComment(sarif, comment)        optional authoring: one finding
  *   removeSarifComment(sarif, selector)    optional authoring: remove one finding
+ *   groupSarifFixes(sarif, options)        optional authoring: group fixes of
+ *                                          several findings for joint acceptance
+ *   ungroupSarifFixes(sarif, options)      optional authoring: undo a grouping
  *   inspectSarif(sarif, options?)          read-only view of any SARIF
  *   addStagedChangesToSarif(input)         staged Git changes as SARIF fixes
  *   publishSarifReview(input, internals?)  one GitHub draft review
@@ -21,7 +24,7 @@
  * Authoring is optional and freestanding: SARIF from any producer can be
  * inspected, extended and published without it, and nothing downstream
  * depends on how a document was made. Each operation is implemented in its
- * own module (src/sarif-authoring.cts, src/sarif-inspection.cts,
+ * own module (src/sarif-authoring.cts, src/suggestion-groups.cts, src/sarif-inspection.cts,
  * src/staged-changes.cts, src/publish-sarif-review.cts,
  * src/validate-sarif-review.cts, src/close-suggestion-pull-requests.cts) and
  * re-exported here
@@ -37,6 +40,7 @@
  */
 
 import authoring = require('./sarif-authoring.cjs');
+import grouping = require('./suggestion-groups.cjs');
 import inspection = require('./sarif-inspection.cjs');
 import staged = require('./staged-changes.cjs');
 import publication = require('./publish-sarif-review.cjs');
@@ -52,6 +56,8 @@ const addStagedChangesToSarif = staged.addStagedChangesToSarif;
 const publishSarifReview = publication.publishSarifReview;
 const validateSarifReview = assessment.validateSarifReview;
 const closeSuggestionPullRequests = cleanup.closeSuggestionPullRequests;
+const groupSarifFixes = grouping.groupSarifFixes;
+const ungroupSarifFixes = grouping.ungroupSarifFixes;
 
 /** True exactly when X and Y are the same type (the standard exact-equality idiom). */
 // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- the exact-type-equality idiom needs each T once per side; that is what makes the comparison exact
@@ -73,6 +79,8 @@ export = {
   removeSarifComment,
   validateSarifReview,
   closeSuggestionPullRequests,
+  groupSarifFixes,
+  ungroupSarifFixes,
 } satisfies Identical<
   {
     createSarifDocument: typeof createSarifDocument;
@@ -83,6 +91,8 @@ export = {
     removeSarifComment: typeof removeSarifComment;
     validateSarifReview: typeof validateSarifReview;
     closeSuggestionPullRequests: typeof closeSuggestionPullRequests;
+    groupSarifFixes: typeof groupSarifFixes;
+    ungroupSarifFixes: typeof ungroupSarifFixes;
   },
   typeof PublicApi
 >;

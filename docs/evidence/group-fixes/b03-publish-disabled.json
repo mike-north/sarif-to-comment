@@ -1,0 +1,5 @@
+{
+  "command": "publish",
+  "status": "blocked",
+  "message": "## Review blocked\n\nNothing was published and no publication state was written.\n\n**Review blocked:** 1 problem must be resolved before publication; nothing was published.\n\n- `fix-changes-require-suggestion-prs` at `/runs/0/results/0`: The fix makes 3 changes that apply together (a SARIF fix is accepted whole), which needs a suggestion pull request. Enable suggestion pull requests (options.allowSuggestionPullRequests or --allow-suggestion-prs); a fix is never split into separate suggestions or published in part."
+}

@@ -1,6 +1,6 @@
 # Companion suggestion pull requests: contract
 
-Partly owner-accepted · September 29, 2026. Publication of whole-file operations and explicitly grouped edits as companion suggestion pull requests is implemented under the options below. Suggestion pull requests follow the tool-neutral [suggestion pull request convention](suggestion-pr-convention.md). The default-off setting (§2.1) is the owner's decision on [issue #5](https://github.com/mike-north/sarif-to-comment/issues/5) (recorded in D22 and R16); the options, the convention, labels, draft and ready pull requests, the supported scope and the limits are the owner's decisions on [issue #27](https://github.com/mike-north/sarif-to-comment/issues/27); proposing on a branch that has moved since the review, including after a force-push (§2.5.1), is the owner's decision on [issue #28](https://github.com/mike-north/sarif-to-comment/issues/28). The decisions still listed in [Decisions awaiting acceptance](#4-decisions-awaiting-acceptance) are provisional until the owner accepts or replaces them.
+Partly owner-accepted · September 29, 2026. Publication of whole-file operations and explicitly grouped edits as companion suggestion pull requests is implemented under the options below. Suggestion pull requests follow the tool-neutral [suggestion pull request convention](suggestion-pr-convention.md). The default-off setting (§2.1) is the owner's decision on [issue #5](https://github.com/mike-north/sarif-to-comment/issues/5) (recorded in D22 and R16); the options, the convention, labels, draft and ready pull requests, the supported scope and the limits are the owner's decisions on [issue #27](https://github.com/mike-north/sarif-to-comment/issues/27); proposing on a branch that has moved since the review, including after a force-push (§2.5.1), is the owner's decision on [issue #28](https://github.com/mike-north/sarif-to-comment/issues/28). Groups, including a fix with several changes and the `group-fixes` authoring step (§2.3, §2.12), are the owner's decisions on [issue #29](https://github.com/mike-north/sarif-to-comment/issues/29). The decisions still listed in [Decisions awaiting acceptance](#4-decisions-awaiting-acceptance) are provisional until the owner accepts or replaces them.
 
 **Sources.** [Issue #5](https://github.com/mike-north/sarif-to-comment/issues/5); [issue #27](https://github.com/mike-north/sarif-to-comment/issues/27) and the [suggestion pull request convention](suggestion-pr-convention.md); [issue #28](https://github.com/mike-north/sarif-to-comment/issues/28) and the [force-push experiment](force-push-experiment.md); [specification](specification.md) R16 and open contract O11, with R1, R3, R8, R10, R12, R13 and R14; [decisions](design-decisions.md) D7, D12, D14, D21–D29; the [file-operation publication contract](file-operation-publication-contract.md), which remains the form used when suggestion pull requests are not enabled; the [grouped-suggestion](grouped-suggestion-experiment.md), [lifecycle](companion-pr-lifecycle-experiment.md) and [recovery](publication-recovery-experiment.md) experiments; [status](status.md). Cleanup of suggestion pull requests after their original pull request ends ([issue #6](https://github.com/mike-north/sarif-to-comment/issues/6)) is specified separately, in the [suggestion cleanup contract](suggestion-cleanup-contract.md); §5 states what it relies on.
 
@@ -8,7 +8,7 @@ Partly owner-accepted · September 29, 2026. Publication of whole-file operation
 
 - The caller can allow or disallow suggestion pull requests (R16, D22).
 - Small edits that a native suggestion represents faithfully prefer the native suggestion in either configuration (R16, D22; A27). Enabling suggestion pull requests never routes a native suggestion to a pull request.
-- With suggestion pull requests enabled, a whole-file creation or deletion prefers a suggestion pull request, and an explicitly supplied group of distinct edits requiring acceptance as a unit uses one suggestion pull request containing the whole group (R16, D22; A28, A29, A32).
+- With suggestion pull requests enabled, a whole-file creation or deletion prefers a suggestion pull request, and an explicitly supplied group of distinct edits requiring acceptance as a unit, or a single SARIF fix with several changes, uses one suggestion pull request containing the whole group (R16, D22; A28, A29, A32; #29).
 - With suggestion pull requests disabled, creations and deletions keep their ordinary review presentation ([file-operation contract](file-operation-publication-contract.md)), and a required group is reported as needing suggestion pull requests; it is never split, approximated with independent suggestions or omitted, and the whole-review gate applies (R12, R16, D12, D22; A30, A32).
 - Groups are only ever supplied, never inferred, and alternative remedies are never merged into one patch (D7; §2 of the specification).
 - A suggestion pull request targets the original pull request's branch. It carries an ordinary reference to the original in its own body and the repository's canonical suggestion label. The original's description is never edited, and the reference is never a closing keyword (D21, D24; A31, A33).
@@ -62,22 +62,29 @@ suggestionPullRequests: { markReady: <boolean>, pullRequestLabels: [<extra label
 
 When disabled, the identity document is exactly what it was, so default-off fingerprints, requests and state files are unchanged. Retrying a state path with any different setting is refused as a `state-mismatch` ("belongs to a different original input") before any request. The canonical label is not a caller setting: it is resolved from the repository once, when the publication is planned, and recorded in the plan (§2.9), so a later change to the repository configuration never changes a publication already planned.
 
-### 2.3 Explicit groups in SARIF
+### 2.3 Groups: a fix with several changes, and explicit groups
 
-A result joins an acceptance group through its owned property:
+SARIF groups changes natively only within one fix: a single `fix` with several `artifactChanges` or `replacements` means "apply together". It cannot join fixes of different findings, or an edit with a whole-file creation or deletion. The owner's model ([#29](https://github.com/mike-north/sarif-to-comment/issues/29), September 29, 2026) keeps both:
+
+**A fix with several changes is a group of its own**, with no extra property.
+
+- Its replacements are located in the unmodified file and applied as if in array order, the reading staged extraction already uses; their combined effect is therefore defined only when they are disjoint and no two start at the same position, and otherwise the review is blocked (`fix-replacements-overlap`). Several artifact changes naming one file are that file's replacements.
+- Replacements whose lines overlap become one change of the union of their lines; changes of one file are combined in line order. The change count is the number of such changes.
+- With suggestion pull requests disabled, the finding is refused (`fix-changes-require-suggestion-prs`), naming the setting; the fix is never split into separate suggestions (A30). How such a fix could be presented without suggestion pull requests remains open in [#30](https://github.com/mike-north/sarif-to-comment/issues/30).
+
+**An explicit group** is declared by a per-result owned property:
 
 ```json
-"properties": { "sarifToComment": { "acceptanceGroup": "retry-with-test" } }
+"properties": { "sarifToComment": { "suggestionGroup": "retry-with-test" } }
 ```
 
-- Results whose `acceptanceGroup` values are equal form one group, across every run of the log. The value is an identifier the caller chooses; it is shown only in the suggestion pull request's title. It must be 1–100 characters with no control or invisible formatting characters and no leading or trailing whitespace (`acceptance-group-invalid`).
-- Every member carries exactly one change: one SARIF fix with one artifact change and one replacement (an **edit**), or one `proposedFileChanges` creation or deletion. A member with neither is refused (`acceptance-group-member-without-change`): a group joins changes, and feedback without a change has nothing to join.
-- Members that carry the identical change (same path, range and replacement text; or the same whole-file operation) share it, as identical suggestions and identical proposals already do (R8). A group must hold at least two distinct changes (`acceptance-group-single-change`); a single change is published on its own.
+- It is written by `group-fixes` / `groupSarifFixes` (§2.12), not by hand. Results whose `suggestionGroup` values are equal form one group, across every run of the log. The value is an identifier the caller chooses; it is shown only in the suggestion pull request's title. It must be 1–100 characters with no control or invisible formatting characters and no leading or trailing whitespace (`suggestion-group-invalid`). The property is input-side only; GitHub never sees it.
+- A member's change is its **primary (first) fix**, with every change that fix makes, or its `proposedFileChanges` creation or deletion. Further fixes are alternatives and are never grouped ([#30](https://github.com/mike-north/sarif-to-comment/issues/30)); until #30 is implemented, several fixes on one result remain `fix-alternatives-unsupported`. A member with no change is refused (`suggestion-group-member-without-change`): a group joins changes, and feedback without a change has nothing to join.
+- Members that carry the identical change (same path, range and replacement text; or the same whole-file operation) share it, as identical suggestions and identical proposals already do (R8). A group must hold at least two distinct changes (`suggestion-group-single-change`); a single change is published on its own.
 - Nothing is inferred. Results without the property are never added to a group, and two groups are never joined, even when they touch the same file.
-- Alternatives are not a group. Several fixes on one result remain `fix-alternatives-unsupported`, and a multi-file or multi-replacement SARIF fix remains unsupported; that fix structure belongs to [#9](https://github.com/mike-north/sarif-to-comment/issues/9).
-- With suggestion pull requests disabled, every group is refused with `acceptance-group-requires-suggestion-prs` at its first member, naming the setting. The whole review is blocked; nothing is split or published (A30, A32).
+- With suggestion pull requests disabled, every group is refused with `suggestion-group-requires-suggestion-prs` at its first member, naming the setting. The whole review is blocked; nothing is split or published (A30, A32).
 
-Before this contract, `acceptanceGroup` was an unknown owned key and blocked the review as `owned-property-invalid`. Documents without the key behave exactly as before.
+The property was called `acceptanceGroup` until #29; that name was never released, so it is now an unknown owned key and blocks the review as `owned-property-invalid`. Documents without the key behave exactly as before.
 
 ### 2.4 Presentation-form selection
 
@@ -85,10 +92,11 @@ Before this contract, `acceptanceGroup` was an unknown owned key and blocked the
 | --- | --- | --- |
 | Edit eligible for a native suggestion, not in a group | Native suggestion (unchanged) | Native suggestion (unchanged) |
 | Standalone whole-file creation or deletion | Review-body section ([file-operation contract](file-operation-publication-contract.md)) | One suggestion pull request per distinct operation; findings carrying the identical operation share it |
-| Explicit group | Blocked: `acceptance-group-requires-suggestion-prs` | One suggestion pull request containing every change of the group |
-| Edit that no native suggestion can represent, not in a group | Blocked as today (for example `suggestion-not-inline`) | Blocked as today; an edit uses a pull request only as part of an explicit group |
+| A fix with several changes, not in a group | Blocked: `fix-changes-require-suggestion-prs` | One suggestion pull request per distinct fix; findings carrying the identical fix share it |
+| Explicit group | Blocked: `suggestion-group-requires-suggestion-prs` | One suggestion pull request containing every change of the group |
+| Edit that no native suggestion can represent, not in a group | Blocked as today (for example `suggestion-not-inline`) | Blocked as today; a single edit uses a pull request only as part of an explicit group |
 
-A group edit is applied to the reviewed file exactly as a native suggestion's replacement would be (the replacement module's exact edit), but it does not need native-suggestion eligibility: it is committed, not rendered. The existing association rule still applies: a located member's own lines must lie within its replacement's lines (`fix-association-unsupported`), so feedback is never moved.
+A group edit, and every change of a fix with several changes, is applied to the reviewed file exactly as a native suggestion's replacement would be (the replacement module's exact edit), but it does not need native-suggestion eligibility: it is committed, not rendered. The existing association rule still applies: a located member's own lines must lie within its replacement's lines (one of them, for a fix with several changes; `fix-association-unsupported`), so feedback is never moved.
 
 **Conflicts.** Each presentation unit (one inline comment, one suggestion pull request, one body section) must be acceptable independently of the others. The whole review is blocked when two units propose different changes to the same lines (`overlapping-replacements`), or when a path is created or deleted in one unit and changed in any way by another (`file-operation-conflict`). Within one group, non-overlapping edits of one file are combined in line order; overlapping different edits are refused.
 
@@ -297,15 +305,41 @@ with the reasons of §2.5.1 grouped by file, in the order the change list first 
 
 **Outcomes.** A published outcome gains `suggestions: [{ number, url, branch }]`, present only when suggestion pull requests were created; its Markdown lists them after ``Suggestion pull requests (drafts into `HEADREF`, labeled LABELS):`` or ``Suggestion pull requests (ready for review, into `HEADREF`, labeled LABELS):``, where LABELS lists every applied label as code spans joined like `` `a` ``, `` `a` and `b` ``, `` `a`, `b` and `c` ``. Re-applied suggestions add ``, re-applied onto commit `H` `` before the colon, on every call that reports the publication. The `suggestion-pr-not-reapplied` warnings appear in the outcome of the call that planned the publication, as every preparation warning does; the review body keeps the reasons permanently. Uncertain and refused outcomes list what is already established. Everything else is unchanged.
 
+### 2.12 Authoring groups: `group-fixes` and `ungroup-fixes`
+
+Owner decisions of September 29, 2026 ([#29](https://github.com/mike-north/sarif-to-comment/issues/29)). Grouping is an authoring step separate from extraction, performed by a person or an agent, never inferred.
+
+```ts
+groupSarifFixes(sarif, { findings: string[], group: string }): GroupSarifFixesOutcome
+ungroupSarifFixes(sarif, { findings: string[] }): UngroupSarifFixesOutcome
+```
+
+```text
+sarif-to-comment group-fixes --sarif FILE --finding SELECTOR [...] --group NAME [--output FILE] [--format human|json]
+sarif-to-comment ungroup-fixes --sarif FILE --finding SELECTOR [...] [--output FILE] [--format human|json]
+```
+
+- **Immutable.** Both functions capture their input and return a new document sharing no objects with it. The CLI edits `--sarif` in place with the ownership marker, re-read check and atomic rename of `add-comment`, or writes `--output`, which must be a new file (an existing one is refused, exit 1) and leaves `--sarif` unchanged.
+- **Selection.** Findings are named by the inspection selectors of the [finding-removal contract](finding-removal-contract.md) §2. Checks, in order: the options (a `TypeError`, CLI usage error, exit 1, for no findings, a selector not of the selector form, the same selector twice, an invalid group name, or an unknown option); the schema (`invalid`); every selector against the document as it is now (`stale`, reporting the first that does not fit: a changed document, or a position with no finding); then the rules (`refused`, listing every problem). `stale`, `invalid` and `refused` exit 2 and change nothing.
+- **Extending.** A name already used in the document extends that group: the named findings join it, one finding is enough, and the existing members' changes count toward the two distinct changes. Naming a finding already in that group leaves it as it is. This follows the owner's principle to refuse only when the tool cannot proceed safely; extending changes nothing that joining two groups would, so groups are still never joined.
+- **Grouping rules.** Refused: a finding already in another group (a finding belongs to at most one, and groups are never joined); a finding whose `properties.sarifToComment` is not an object; a finding without a change (no fix and no proposed file operation); a group, new or extended, that would hold fewer than two distinct changes. A change is a replacement of the primary fix or a proposed file operation, compared as written (identical ones count once); publication checks distinctness again against the reviewed files (§2.3).
+- **What grouping writes.** `properties.sarifToComment.suggestionGroup: NAME` on each finding, creating the property bag and namespace when absent; nothing else changes.
+- **Ungrouping** removes the key from each finding, and then an owned namespace or property bag left empty, so ungrouping a whole group restores the document as it was. Refused: a finding in no group; leaving a group with fewer than two distinct changes (the refusal names the remaining findings and their current selectors, to include them). That refusal stays because the tool cannot proceed safely there: such a group could never be published (`suggestion-group-single-change`), and silently ungrouping the rest would be inference.
+- **Outcomes.** `grouped`: `{ sarif, group, extended, findings: [{ ref, runIndex, resultIndex, tool, changes }], changes }` (`extended` says whether the group already existed; `findings` are those named in the call, in document order; `changes` per finding counts its primary fix's replacements and its proposed operations; the group's `changes` counts the whole group's distinct ones). `ungrouped`: `{ sarif, findings: [{ ref, runIndex, resultIndex, tool, group }] }`. `refused`: `{ problems, markdown }`, the Markdown beginning `**Cannot group the fixes:**` or `**Cannot ungroup the fixes:**`. `stale` is the removal contract's outcome.
+- **CLI receipts.** `{ command, status, sarif: { path, written }, [output: { path, written }], ... }` with the library's fields; refusals carry `problems`. Human output says whether findings were grouped or added to an existing group, names each with its change count, what publication does with the group, and that selectors must be taken again.
+- **Inspection** shows `suggestionGroup` after the finding's facts (`Finding … — tool · suggestionGroup: NAME`, and the `suggestionGroup` field of the JSON view), when the value is a string; any other value stays visible in the finding's other content.
+
 ## 3. Worked example
 
 Pull request `octo/widgets#7`, head branch `feature/retry`, base `main` (the default branch), reviewed at its head `2222222…`. The repository has no `.github/suggestion-prs.json`, so the canonical label is `suggestion-pr`. One run bound to that commit holds:
 
-1. "Retry once on timeout." with a fix replacing line 3 of `src/client.ts`, in group `retry-with-test`;
-2. "Cover the retry." creating `test/client.test.ts`, in group `retry-with-test`;
-3. "Typo." with a native-suggestion-eligible fix on line 1 of `README.md`, in no group.
+1. "Retry once on timeout." with a fix replacing line 3 of `src/client.ts`;
+2. "Cover the retry." creating `test/client.test.ts`;
+3. "Typo." with a native-suggestion-eligible fix on line 1 of `README.md`.
 
-Disabled: blocked, `acceptance-group-requires-suggestion-prs` at `/runs/0/results/0`. Enabled (`--allow-suggestion-prs --pr-labels team-a`), with the labels `suggestion-pr` and `team-a` present and push permission: one draft pull request from `suggestion-pr/7/<id>` into `feature/retry`, titled `Suggestion for #7: retry-with-test (2 changes)`, whose single commit edits line 3 of `src/client.ts` and adds `test/client.test.ts`, labeled `suggestion-pr` and `team-a`, with the draft lifecycle note; then one draft review whose inline comment on `README.md` carries the native suggestion and whose body section links the pull request, lists both changes and presents both findings. With `--mark-suggestion-prs-ready` as well, the pull request is created ready for review and its body carries the ready lifecycle note. If `team-a` did not exist, the review would be blocked before any write, and `validate` would say the same.
+An agent inspects the document and runs `group-fixes --finding <selector of 1> --finding <selector of 2> --group retry-with-test`, which gives results 1 and 2 `suggestionGroup: "retry-with-test"`; result 3 stays in no group.
+
+Disabled: blocked, `suggestion-group-requires-suggestion-prs` at `/runs/0/results/0`. Enabled (`--allow-suggestion-prs --pr-labels team-a`), with the labels `suggestion-pr` and `team-a` present and push permission: one draft pull request from `suggestion-pr/7/<id>` into `feature/retry`, titled `Suggestion for #7: retry-with-test (2 changes)`, whose single commit edits line 3 of `src/client.ts` and adds `test/client.test.ts`, labeled `suggestion-pr` and `team-a`, with the draft lifecycle note; then one draft review whose inline comment on `README.md` carries the native suggestion and whose body section links the pull request, lists both changes and presents both findings. With `--mark-suggestion-prs-ready` as well, the pull request is created ready for review and its body carries the ready lifecycle note. If `team-a` did not exist, the review would be blocked before any write, and `validate` would say the same.
 
 ## 4. Decisions awaiting acceptance
 
@@ -313,19 +347,19 @@ Decided by the owner, and no longer awaiting acceptance:
 
 - **Off by default, explicit opt-in** (§2.1): [#5](https://github.com/mike-north/sarif-to-comment/issues/5). The earlier provisional D22 default ("enabled when omitted") is superseded.
 - **The convention, options, labels and lifecycle** ([#27](https://github.com/mike-north/sarif-to-comment/issues/27)): the tool-neutral [convention](suggestion-pr-convention.md) (label `suggestion-pr`, the optional default-branch configuration file, branch `suggestion-pr/<pull>/<id>`, the marker with `batch`, neutral title and body with no closing keywords); the option names `allowSuggestionPullRequests` / `--allow-suggestion-prs`, `pullRequestLabels` / `--pr-labels`, `markSuggestionPullRequestsReady` / `--mark-suggestion-prs-ready`, and the removal of the per-call label; all of them in the publication identity; every label must already exist, the tool never creates one, and a missing label blocks before any write; drafts by default; branches created once and never updated, force-pushed or deleted; native suggestions first; same repository with a default-branch base, with forks and other bases not yet supported; and the limits and mechanics as merged (at most 10 suggestion pull requests per review, bodies of at most 60,000 characters, created files of at most 1 MB, per-step state persisted before each attempt, recovery by unique branch plus exact marker, a refused step stops publication, a retry never overwrites human pushes).
+- **Groups** ([#29](https://github.com/mike-north/sarif-to-comment/issues/29)): extraction stays deterministic (every separable staged hunk is its own fix); grouping is a separate authoring step (§2.12); a fix with several changes is already a group and becomes one suggestion pull request with no property; the per-result `suggestionGroup` property, renamed from the unreleased `acceptanceGroup`, joins what SARIF cannot; at least two distinct changes; a finding in at most one group, and groups never joined, while a name already in use extends its group (refuse only when the tool cannot proceed safely); only the primary fix is a member; a member without a change is refused; nothing is inferred; `inspect` shows each finding's group; disallowed suggestion pull requests refuse a grouped document naming the setting (§2.3, §2.4).
 - **A branch that moved forward after the review is not a reason to refuse** (#27), and **a rewritten history is handled by testing ancestry** ([#28](https://github.com/mike-north/sarif-to-comment/issues/28)): an advanced branch proceeds on the reviewed commit; after a rewrite, each suggestion is re-applied onto the head only when everything it changes is byte-identical there, and is otherwise not created, with its reason stated in the review and the outcome; ordinary feedback publishes as before (§2.5, §2.5.1).
 
 Still awaiting the owner:
 
-1. **Group representation** `properties.sarifToComment.acceptanceGroup` (§2.3), with members holding one change each, at least two distinct changes, and no feedback-only members. Alternatives: a multi-file SARIF fix (a fix structure left to #9), or a run-level group table (indirection without benefit).
-2. **Head-branch target and reviewed-commit parent** (§2.5), and not chasing a head that moves after validation. Alternative: basing on the current head (would propose against unreviewed code).
-3. **Presentation details** (§2.11): the exact lifecycle note and the review-body section. The owner asked for a brief lifecycle note in each body; its wording is this contract's.
-4. **Refusal wording** for the unsupported cases (§2.5), in particular why an original into a non-default base is not yet supported (the stacked-pull-request retargeting path is unbuilt and unverified).
-5. **Details of the options** (§2.2): the CLI trims spaces around `--pr-labels` names; extra labels are deduplicated keeping the first spelling; the identity document's shape.
-6. **Details of the configuration read** (§2.7): through Git objects, with a symbolic link, directory or submodule, and a file over 1,000,000 bytes, treated as invalid; unknown members ignored ([convention open questions](suggestion-pr-convention.md#10-open-questions)).
-7. **One request for all labels**, and one labels step and state file per suggestion (§2.9).
-8. **Details of re-application** (§2.5.1, §2.11): ranges compared at the same line numbers, never relocated; a deletion compared by Git blob and mode; the reason and presentation wording; the plan's version 2 with `reappliedOnto`; and counting only the suggestion pull requests that would be created against the limit of 10.
-9. **A branch rewritten again after planning** (§2.10): a retry keeps the plan (the remaining suggestion pull requests are still created on the planned base) and only warns in its outcome. Alternatives: stop the remaining steps, or re-plan them, which would break the rule that a retry never re-decides.
+1. **Head-branch target and reviewed-commit parent** (§2.5), and not chasing a head that moves after validation. Alternative: basing on the current head (would propose against unreviewed code).
+2. **Presentation details** (§2.11): the exact lifecycle note and the review-body section. The owner asked for a brief lifecycle note in each body; its wording is this contract's.
+3. **Refusal wording** for the unsupported cases (§2.5), in particular why an original into a non-default base is not yet supported (the stacked-pull-request retargeting path is unbuilt and unverified).
+4. **Details of the options** (§2.2): the CLI trims spaces around `--pr-labels` names; extra labels are deduplicated keeping the first spelling; the identity document's shape.
+5. **Details of the configuration read** (§2.7): through Git objects, with a symbolic link, directory or submodule, and a file over 1,000,000 bytes, treated as invalid; unknown members ignored ([convention open questions](suggestion-pr-convention.md#10-open-questions)).
+6. **One request for all labels**, and one labels step and state file per suggestion (§2.9).
+7. **Details of re-application** (§2.5.1, §2.11): ranges compared at the same line numbers, never relocated; a deletion compared by Git blob and mode; the reason and presentation wording; the plan's version 2 with `reappliedOnto`; and counting only the suggestion pull requests that would be created against the limit of 10.
+8. **A branch rewritten again after planning** (§2.10): a retry keeps the plan (the remaining suggestion pull requests are still created on the planned base) and only warns in its outcome. Alternatives: stop the remaining steps, or re-plan them, which would break the rule that a retry never re-decides.
 
 ## 5. What cleanup (#6) can rely on
 

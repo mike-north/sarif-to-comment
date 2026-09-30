@@ -1,0 +1,81 @@
+SARIF inspection: 1 run(s), 3 finding(s), 2 fix(es), 1 file proposal(s), 0 truncated preview(s).
+Run 0 (/runs/0): Review agent (source: declared; columnKind: utf16CodeUnits)
+  declared source: https://github.com/mike-north/doc-linter at ea29b3d4966ca71eabdcc422607ffe4dfd7d7177
+  Other run content:
+    {
+      "tool": {
+        "driver": {
+          "name": "Review agent"
+        }
+      },
+      "artifacts": [
+        {
+          "location": {
+            "uri": "docs/experiments/sarif-issue29/a-checklist.md"
+          },
+          "contents": {
+            "text": "# Retry checklist\n\n- The request is idempotent.\n- The timeout is shorter than the caller's deadline.\n"
+          },
+          "encoding": "utf-8"
+        }
+      ]
+    }
+
+Finding /runs/0/results/0 — Review agent
+Selector: /runs/0/results/0@5891ce5ea2e98d75
+Message:
+Typo: Teh.
+Locations:
+  docs/experiments/sarif-issue29/a-guide.md:5
+Fix 1 of 1 (/runs/0/results/0/fixes/0)
+  Change docs/experiments/sarif-issue29/a-guide.md
+    Replace region {"startLine":5,"startColumn":1,"endLine":6,"endColumn":1} with:
+      | The client retries once on a timeout.
+
+Finding /runs/0/results/1 — Review agent · suggestionGroup: checklist-link
+Selector: /runs/0/results/1@5891ce5ea2e98d75
+Message:
+Link the checklist this page refers to.
+Locations:
+  docs/experiments/sarif-issue29/a-guide.md:7
+Fix 1 of 1 (/runs/0/results/1/fixes/0)
+  Change docs/experiments/sarif-issue29/a-guide.md
+    Replace region {"startLine":7,"startColumn":1,"endLine":7,"endColumn":36} with:
+      | See [the checklist](a-checklist.md) before you ship.
+Other finding evidence:
+  {
+    "properties": {
+      "sarifToComment": {
+        "suggestionGroup": "checklist-link"
+      }
+    }
+  }
+
+Finding /runs/0/results/2 — Review agent · suggestionGroup: checklist-link
+Selector: /runs/0/results/2@5891ce5ea2e98d75
+Message:
+Add the checklist the link points to; the link and the page only make sense together.
+Locations:
+  docs/experiments/sarif-issue29/a-checklist.md:1
+File proposal (/runs/0/results/2/properties/sarifToComment/proposedFileChanges/0): create docs/experiments/sarif-issue29/a-checklist.md [artifact 0] (mode 100644)
+    | # Retry checklist
+    | 
+    | - The request is idempotent.
+    | - The timeout is shorter than the caller's deadline.
+Other finding evidence:
+  {
+    "properties": {
+      "sarifToComment": {
+        "proposedFileChanges": [
+          {
+            "operation": "create",
+            "artifactIndex": 0,
+            "fileMode": "100644"
+          }
+        ],
+        "suggestionGroup": "checklist-link"
+      }
+    }
+  }
+
+This inspection only describes the SARIF; it does not check whether it can be published.

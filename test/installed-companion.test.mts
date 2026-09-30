@@ -6,9 +6,12 @@
  * `import … from 'sarif-to-comment'`.
  *
  * A real local Git repository stages a code edit and a new test file. The
- * reviewer comments on both, adds the staged changes as SARIF, groups the two
- * findings for joint acceptance (docs/companion-suggestion-pr-contract.md
- * §2.3), and publishes with suggestion pull requests enabled against a fake
+ * reviewer comments on both, adds the staged changes as SARIF, and then, as
+ * an agent would, inspects the document, picks the findings that carry a
+ * change and groups them for joint acceptance with `group-fixes` /
+ * `groupSarifFixes` (docs/companion-suggestion-pr-contract.md §2.3, §2.12),
+ * never by editing SARIF by hand. It publishes with suggestion pull requests
+ * enabled against a fake
  * GitHub that speaks HTTP to the product's real client (the preload replaces
  * only `fetch`). Without the setting the same document is refused, naming it.
  * The repository names its own canonical label in `.github/suggestion-prs.json`
@@ -113,18 +116,12 @@ function world(label: string): IWorld {
   return { root, dir, head, host: new FakeHttpGitHub(hostDir, TOKEN), env };
 }
 
-/** Adds the acceptance group to every result, as a reviewer does by editing the SARIF. */
-function grouped(sarif: unknown): unknown {
-  const log = asRecord(sarif, 'SARIF');
-  for (const run of asArray(log['runs'])) {
-    for (const result of asArray(asRecord(run)['results'])) {
-      const record = asRecord(result);
-      const properties = record['properties'] === undefined ? {} : asRecord(record['properties']);
-      const owned = properties['sarifToComment'] === undefined ? {} : asRecord(properties['sarifToComment']);
-      record['properties'] = { ...properties, sarifToComment: { ...owned, acceptanceGroup: 'retry-with-test' } };
-    }
-  }
-  return log;
+/** The selectors of the findings an inspection view shows carrying a change: a fix or a file proposal. */
+function selectorsWithChanges(view: unknown): string[] {
+  return asArray(asRecord(view, 'the inspection view')['findings'])
+    .map((finding) => asRecord(finding))
+    .filter((finding) => asArray(finding['fixes']).length > 0 || asArray(finding['fileProposals']).length > 0)
+    .map((finding) => asString(finding['selector']));
 }
 
 /** One labelled pull request into the head branch with both exact files, and one review linking it. */
@@ -156,7 +153,7 @@ function assertPublished(w: IWorld, expected: { readonly draft: boolean; readonl
 describe('the installed package publishes grouped changes as a companion suggestion pull request', () => {
   const skip = packProject().error || false;
 
-  test('CLI: author, add staged changes, group, validate and publish', { skip, timeout: 300_000 }, () => {
+  test('CLI: author, add staged changes, inspect, group, validate and publish', { skip, timeout: 300_000 }, () => {
     const { consumer, bin } = installIntoConsumer();
     const w = world('installed-companion-cli');
     const authored = path.join(w.root, 'review.sarif');
@@ -172,11 +169,18 @@ describe('the installed package publishes grouped changes as a companion suggest
     cli(['add-comment', '--sarif', authored, '--file', 'src/client.ts', '--line', '2', '--message', RETRY_MESSAGE]);
     cli(['add-comment', '--sarif', authored, '--file', 'test/client.test.ts', '--line', '3', '--message', COVER_MESSAGE]);
     cli(['add-staged-changes', '--sarif', authored, '--output', enriched, '--worktree', w.dir, '--repo', repoFlag, '--commit', w.head]);
-    fs.writeFileSync(enriched, JSON.stringify(grouped(readJson(enriched)), null, 2));
+    const selectors = selectorsWithChanges(cli(['inspect', '--sarif', enriched])['view']);
+    assert.equal(selectors.length, 2, 'the code edit and the new test file');
+    const groupedReceipt = cli(['group-fixes', '--sarif', enriched, ...selectors.flatMap((s) => ['--finding', s]), '--group', 'retry-with-test']);
+    assert.equal(groupedReceipt['status'], 'grouped');
+    assert.equal(groupedReceipt['changes'], 2);
+    const view = asRecord(cli(['inspect', '--sarif', enriched])['view']);
+    assert.deepEqual(asArray(view['findings']).map((f) => asRecord(f)['suggestionGroup']), ['retry-with-test', 'retry-with-test']);
 
     const flags = ['--sarif', enriched, '--repo', repoFlag, '--pull', String(DESTINATION.pullNumber), '--commit', w.head];
     const refused = cli(['validate', ...flags], 2);
-    assert.match(asString(refused['message']), /acceptance-group-requires-suggestion-prs/);
+    assert.match(asString(refused['message']), /suggestion-group-requires-suggestion-prs/);
+    assert.match(asString(refused['message']), /--allow-suggestion-prs/);
     const suggestionFlags = ['--allow-suggestion-prs', '--pr-labels', 'team-a', '--mark-suggestion-prs-ready'];
     const ready = cli(['validate', ...flags, ...suggestionFlags]);
     assert.equal(ready['status'], 'ready');
@@ -188,13 +192,13 @@ describe('the installed package publishes grouped changes as a companion suggest
     assertPublished(w, { draft: false, labels: ['uat-suggestion', 'team-a'] });
   });
 
-  test('library: the same workflow in memory through the installed functions', { skip, timeout: 300_000 }, () => {
+  test('library: the same inspect-then-group workflow in memory through the installed functions', { skip, timeout: 300_000 }, () => {
     const { consumer } = installIntoConsumer();
     const w = world('installed-companion-library');
     const js = String.raw;
     const script = js`
       import assert from 'node:assert/strict';
-      import { createSarifDocument, addSarifComment, addStagedChangesToSarif, validateSarifReview, publishSarifReview } from 'sarif-to-comment';
+      import { createSarifDocument, addSarifComment, addStagedChangesToSarif, inspectSarif, groupSarifFixes, validateSarifReview, publishSarifReview } from 'sarif-to-comment';
       const [owner, repo] = ['octo', 'companion-uat'];
       const reviewedCommit = process.env.REVIEW_COMMIT;
       let sarif = createSarifDocument({ tool: { name: 'Review agent' }, source: { owner, repo, commit: reviewedCommit } });
@@ -202,10 +206,13 @@ describe('the installed package publishes grouped changes as a companion suggest
       sarif = addSarifComment(sarif, { file: 'test/client.test.ts', line: 3, message: process.env.COVER_MESSAGE }).sarif;
       const staged = await addStagedChangesToSarif({ sarif, worktree: process.env.WORKTREE, reviewedCommit, repository: { owner, repo } });
       assert.equal(staged.status, 'added', staged.markdown);
-      for (const result of staged.sarif.runs[0].results) {
-        result.properties = { ...(result.properties ?? {}), sarifToComment: { ...(result.properties?.sarifToComment ?? {}), acceptanceGroup: 'retry-with-test' } };
-      }
-      const input = { sarif: staged.sarif, destination: { owner, repo, pullNumber: 45 }, reviewedCommit, token: process.env.GH_TOKEN };
+      const inspected = inspectSarif(staged.sarif);
+      assert.equal(inspected.status, 'inspected');
+      const findings = inspected.view.findings.filter((f) => f.fixes.length > 0 || f.fileProposals.length > 0).map((f) => f.selector);
+      const grouped = groupSarifFixes(staged.sarif, { findings, group: 'retry-with-test' });
+      assert.equal(grouped.status, 'grouped', grouped.markdown);
+      assert.equal(grouped.changes, 2);
+      const input = { sarif: grouped.sarif, destination: { owner, repo, pullNumber: 45 }, reviewedCommit, token: process.env.GH_TOKEN };
       const refused = await validateSarifReview(input);
       assert.equal(refused.status, 'blocked', refused.markdown);
       const options = { allowSuggestionPullRequests: true, pullRequestLabels: ['team-a'] };
@@ -227,5 +234,61 @@ describe('the installed package publishes grouped changes as a companion suggest
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.ok(!result.stdout.includes(TOKEN) && !result.stderr.includes(TOKEN));
     assertPublished(w, { draft: true, labels: ['uat-suggestion', 'team-a'] });
+  });
+});
+
+describe('the installed package publishes a native multi-change fix as one suggestion pull request', () => {
+  const skip = packProject().error || false;
+
+  test('CLI: an upstream fix editing two files is refused without the setting, and is one pull request with it', { skip, timeout: 300_000 }, () => {
+    const { consumer, bin } = installIntoConsumer();
+    const w = world('installed-native-group');
+    const repoFlag = `${DESTINATION.owner}/${DESTINATION.repo}`;
+    const cli = (args: readonly string[], expectedExit = 0): Record<string, unknown> => {
+      const result: SpawnSyncReturns<string> = spawnSync(bin, [...args, '--format', 'json'], { cwd: consumer, env: w.env, encoding: 'utf8', timeout: 120_000 });
+      for (const text of [result.stdout, result.stderr]) assert.ok(!text.includes(TOKEN), 'the token never appears');
+      assert.equal(result.status, expectedExit, result.stdout + result.stderr);
+      return asRecord(parseJson(result.stdout));
+    };
+    // As an upstream producer writes it: one fix whose two artifact changes apply together (SARIF 3.55).
+    const upstream = path.join(w.root, 'upstream.sarif');
+    const replace = (uri: string, line: number, text: string): unknown => ({ artifactLocation: { uri }, replacements: [{ deletedRegion: { startLine: line }, insertedContent: { text } }] });
+    fs.writeFileSync(upstream, JSON.stringify({
+      version: '2.1.0',
+      runs: [{
+        tool: { driver: { name: 'Upstream linter' } },
+        columnKind: 'utf16CodeUnits',
+        versionControlProvenance: [{ repositoryUri: `https://github.com/${repoFlag}`, revisionId: w.head }],
+        results: [{
+          message: { text: RETRY_MESSAGE },
+          locations: [{ physicalLocation: { artifactLocation: { uri: 'src/client.ts' }, region: { startLine: 2 } } }],
+          fixes: [{ artifactChanges: [
+            replace('src/client.ts', 2, '  const response = await request(id).catch(() => request(id));'),
+            replace('README.md', 2, 'More, with retries.'),
+          ] }],
+        }],
+      }],
+    }, null, 2));
+    const written = fs.readFileSync(upstream);
+    const inspected = asArray(asRecord(cli(['inspect', '--sarif', upstream])['view'])['findings']);
+    assert.equal(asArray(asRecord(asArray(asRecord(inspected[0])['fixes'])[0])['changes']).length, 2, 'inspection shows the one fix with both file changes');
+
+    const flags = ['--sarif', upstream, '--repo', repoFlag, '--pull', String(DESTINATION.pullNumber), '--commit', w.head];
+    const refused = cli(['validate', ...flags], 2);
+    assert.match(asString(refused['message']), /fix-changes-require-suggestion-prs/);
+    assert.match(asString(refused['message']), /--allow-suggestion-prs/);
+    const published = cli(['publish', ...flags, '--state', path.join(w.root, 'native-state.json'), '--allow-suggestion-prs']);
+    assert.equal(published['status'], 'published');
+    const pulls = w.host.pulls();
+    assert.equal(pulls.length, 1);
+    const [pull] = pulls;
+    assert.ok(pull);
+    assert.equal(pull.title, 'Suggestion for #45: 2 changes');
+    assert.equal(pull.draft, true);
+    assert.deepEqual(pull.labels, ['uat-suggestion']);
+    assert.deepEqual(w.host.fileOnBranch(pull.head, 'src/client.ts'), Buffer.from(EDITED));
+    assert.deepEqual(w.host.fileOnBranch(pull.head, 'README.md'), Buffer.from('# Widgets\nMore, with retries.\n'));
+    assert.deepEqual(fs.readFileSync(upstream), written, 'publication never edits the SARIF file');
+    assert.equal(asArray(asRecord(readJson(upstream))['runs']).length, 1);
   });
 });

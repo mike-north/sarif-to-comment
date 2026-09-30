@@ -4,7 +4,7 @@
 
 ## IStaleSarifSelectorOutcome.selector property
 
-The selector, as given.
+The selector, as given (the first that does not fit, when several were given).
 
 **Signature:**
 

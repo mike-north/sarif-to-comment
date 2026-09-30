@@ -192,8 +192,8 @@ function reviewDocument(): Json {
         { location: { uri: 'obsolete.txt' } },
       ],
       results: [
-        { message: { text: LINE6_MESSAGE }, locations: at('docs/sample.md', 6), fixes: [lineFix('docs/sample.md', 6, 'Line 6, suggested.')], properties: { sarifToComment: { acceptanceGroup: 'reword' } } },
-        { message: { text: LINE10_MESSAGE }, locations: at('docs/sample.md', 10), fixes: [lineFix('docs/sample.md', 10, 'Line 10, suggested.')], properties: { sarifToComment: { acceptanceGroup: 'reword' } } },
+        { message: { text: LINE6_MESSAGE }, locations: at('docs/sample.md', 6), fixes: [lineFix('docs/sample.md', 6, 'Line 6, suggested.')], properties: { sarifToComment: { suggestionGroup: 'reword' } } },
+        { message: { text: LINE10_MESSAGE }, locations: at('docs/sample.md', 10), fixes: [lineFix('docs/sample.md', 10, 'Line 10, suggested.')], properties: { sarifToComment: { suggestionGroup: 'reword' } } },
         { message: { text: NEW_MESSAGE }, locations: at('docs/new.md', 1), properties: { sarifToComment: { proposedFileChanges: [{ operation: 'create', artifactIndex: 0 }] } } },
         { message: { text: OBSOLETE_MESSAGE }, locations: at('obsolete.txt'), properties: { sarifToComment: { proposedFileChanges: [{ operation: 'delete', artifactIndex: 1 }] } } },
         { message: { text: REMARK } },
@@ -835,13 +835,13 @@ describe('every problem is reported together after a rewritten history too (§2.
     const artifacts = Array.from({ length: 11 }, (_, i) => ({ location: { uri: `docs/p${String(i)}.md` }, contents: { text: `# ${String(i)}\n` }, encoding: 'utf-8' }));
     const results = artifacts.map((_, i) => ({
       message: { text: `Page ${String(i)}.` },
-      properties: { sarifToComment: { proposedFileChanges: [{ operation: 'create', artifactIndex: i }], ...(i === 0 ? { acceptanceGroup: 'solo' } : {}) } },
+      properties: { sarifToComment: { proposedFileChanges: [{ operation: 'create', artifactIndex: i }], ...(i === 0 ? { suggestionGroup: 'solo' } : {}) } },
     }));
     const [run] = asArray(reviewDocument()['runs']);
     return { ...reviewDocument(), runs: [{ ...asRecord(run), artifacts, results }] };
   };
   const problems = [
-    '- `acceptance-group-single-change` at `/runs/0/results/0`: Acceptance group "solo" holds only one distinct change; a group needs at least two changes to accept together. Remove the group, and the change is published on its own.',
+    '- `suggestion-group-single-change` at `/runs/0/results/0`: Suggestion group "solo" holds only one distinct change; a group needs at least two changes to accept together. Remove the group, and the change is published on its own.',
     '- `too-many-suggestion-prs`: The review needs 11 suggestion pull requests; the limit is 10. Nothing is split or dropped.',
   ];
 
@@ -854,6 +854,56 @@ describe('every problem is reported together after a rewritten history too (§2.
       assert.ok(markdown(assessed).includes('**Review blocked:** 2 problems must be resolved'), markdown(assessed));
     });
   }
+});
+
+describe('a fix with several changes (issue #29) after a rewritten history (§2.3, §2.5.1)', () => {
+  /** One finding whose single fix replaces lines 6 and 10 of docs/sample.md together, with no group property. */
+  function jointFixDocument(): Json {
+    const document = reviewDocument();
+    const run = asRecord(asArray(document['runs'])[0]);
+    run['results'] = [{
+      message: { text: LINE6_MESSAGE },
+      locations: [{ physicalLocation: { artifactLocation: { uri: 'docs/sample.md' }, region: { startLine: 6 } } }],
+      fixes: [{ artifactChanges: [{ artifactLocation: { uri: 'docs/sample.md' }, replacements: [
+        { deletedRegion: { startLine: 6 }, insertedContent: { text: 'Line 6, suggested.' } },
+        { deletedRegion: { startLine: 10 }, insertedContent: { text: 'Line 10, suggested.' } },
+      ] }] }],
+    }];
+    return document;
+  }
+  const TITLE = 'Suggestion for #7: edit docs/sample.md';
+
+  test('re-applied onto the amended head as one suggestion pull request, keeping the amendment', async () => {
+    const world = makeWorld(AMENDED);
+    const outcome = await publishWith(world, jointFixDocument());
+    assert.equal(status(outcome), 'published', markdown(outcome));
+    const [pull, ...others] = world.host.pulls();
+    assert.ok(pull && others.length === 0, 'exactly one suggestion pull request');
+    assert.equal(pull.title, TITLE);
+    assert.ok(pull.body.includes(REWORD.changes.join('\n')), pull.body);
+    assert.deepEqual(proposalCommit(world, pull.head).parents, [AMENDED], 'never the discarded reviewed commit');
+    assert.equal(proposalCommit(world, pull.head).message,
+      `${TITLE}\n\nSuggested in a review of ${OWNER}/${REPO} pull request 7 at commit ${REVIEWED}, and re-applied onto commit ${AMENDED} after the pull request's history was rewritten.`);
+    assert.deepEqual(world.host.fileOnBranch(pull.head, 'docs/sample.md'), suggestedSample(SNAPSHOTS[AMENDED]?.['docs/sample.md'] ?? []));
+    const reading = findSuggestionMarker(pull.body);
+    assert.equal(reading.kind, 'marker');
+    assert.equal(reading.fields.reappliedOnto, AMENDED);
+  });
+
+  test('not created when one of its lines changed at the rewritten head; the whole fix is kept together, never split', async () => {
+    const world = makeWorld(REWRITTEN);
+    const outcome = await publishWith(world, jointFixDocument());
+    assert.equal(status(outcome), 'published', markdown(outcome));
+    assert.deepEqual(world.host.pulls(), [], 'line 10 alone is not proposed');
+    const [review] = world.host.reviews();
+    assert.ok(review);
+    assert.deepEqual(review.request.comments, [], 'no native suggestion is substituted');
+    assert.ok(review.request.body.startsWith('**Suggestion pull request not created:** the history of #7 was rewritten after the reviewed commit, and this change cannot be re-applied onto commit '
+      + `${REWRITTEN}, the head of #7, because there:\n\n- \`docs/sample.md\` line 6 differs from the reviewed text\n`), review.request.body);
+    assert.ok(markdown(outcome).includes(`\`suggestion-pr-not-reapplied\` at \`/runs/0/results/0\`: The history of #7 was rewritten after the reviewed commit, so the suggestion pull request \`${TITLE}\``), markdown(outcome));
+    const assessed = await validateWith(makeWorld(REWRITTEN), jointFixDocument());
+    assert.equal(warningsOf(markdown(assessed)), warningsOf(markdown(outcome)));
+  });
 });
 
 describe('CLI + real GitHub client over HTTP', () => {

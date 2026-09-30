@@ -1045,14 +1045,15 @@ describe('native suggestions from standard fixes', () => {
   // SARIF's schema requires distinct fixes (uniqueItems), so the alternatives differ.
   blockedFix('alternative fixes are not silently chosen between',
     [limitFix, fix({ startLine: 3, startColumn: 23, endColumn: 25 }, '30')], 'fix-alternatives-unsupported');
-  blockedFix('a fix changing several files is unsupported', [{ artifactChanges: [
+  // A fix with several changes is accepted whole, which needs a suggestion pull request (issue #29, A30).
+  blockedFix('a fix changing several files needs suggestion pull requests', [{ artifactChanges: [
     limitFix.artifactChanges[0], { ...present(limitFix.artifactChanges[0], 'the change'), artifactLocation: { uri: 'src/util.js' } },
-  ] }], 'fix-multiple-files-unsupported');
-  blockedFix('a fix with several replacements is unsupported', [{ artifactChanges: [{
+  ] }], 'fix-changes-require-suggestion-prs');
+  blockedFix('a fix with several replacements needs suggestion pull requests', [{ artifactChanges: [{
     artifactLocation: { uri: 'src/app.js' },
     replacements: [limitFix.artifactChanges[0]?.replacements[0], {
       deletedRegion: { startLine: 17, startColumn: 3, endColumn: 9 }, insertedContent: { text: 'return (' } }],
-  }] }], 'fix-multiple-replacements-unsupported');
+  }] }], 'fix-changes-require-suggestion-prs');
   blockedFix('a binary replacement is unsupported', [{ artifactChanges: [{
     artifactLocation: { uri: 'src/app.js' },
     replacements: [{ deletedRegion: { startLine: 3 }, insertedContent: { binary: 'AAAA' } }],

@@ -1,0 +1,25 @@
+commit 544e4b342e4f93f4640bf5f53da7feb7f6cd153d
+parents 72b43d6f6f51d2bed9d8af061daf882932bf8fb2
+subject Suggestion for #63: 3 changes
+diff --git a/docs/experiments/sarif-issue29/b-guide.md b/docs/experiments/sarif-issue29/b-guide.md
+index 21f0b13..80cb870 100644
+--- a/docs/experiments/sarif-issue29/b-guide.md
++++ b/docs/experiments/sarif-issue29/b-guide.md
+@@ -1,5 +1,5 @@
+ # Timeouts
+ 
+-Requests time out after 30 seconds.
++Requests time out after 10 seconds.
+ 
+-The retry count is configured in the client.
++The retry count is configured in the client; each attempt waits up to 10 seconds.
+diff --git a/docs/experiments/sarif-issue29/b-reference.md b/docs/experiments/sarif-issue29/b-reference.md
+index 2821bfc..648aa92 100644
+--- a/docs/experiments/sarif-issue29/b-reference.md
++++ b/docs/experiments/sarif-issue29/b-reference.md
+@@ -2,4 +2,4 @@
+ 
+ | Setting | Default |
+ | --- | --- |
+-| timeout | 30 seconds |
++| timeout | 10 seconds |

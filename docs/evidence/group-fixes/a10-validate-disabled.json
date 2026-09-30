@@ -1,0 +1,11 @@
+{
+  "command": "validate",
+  "status": "blocked",
+  "problems": [
+    {
+      "message": "Suggestion group \"checklist-link\" must be accepted as one unit, which needs a suggestion pull request. Enable suggestion pull requests (options.allowSuggestionPullRequests or --allow-suggestion-prs); a group is never split into separate suggestions or published in part.",
+      "pointer": "/runs/0/results/1"
+    }
+  ],
+  "message": "## Review blocked\n\nNothing was published and no publication state was written.\n\n**Review blocked:** 1 problem must be resolved before publication; nothing was published.\n\n- `suggestion-group-requires-suggestion-prs` at `/runs/0/results/1`: Suggestion group \"checklist-link\" must be accepted as one unit, which needs a suggestion pull request. Enable suggestion pull requests (options.allowSuggestionPullRequests or --allow-suggestion-prs); a group is never split into separate suggestions or published in part."
+}
