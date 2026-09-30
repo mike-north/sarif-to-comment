@@ -40,9 +40,10 @@
  *   source reader, existence check and tree read. With suggestion pull
  *   requests enabled (docs/companion-suggestion-pr-contract.md §2.8), the
  *   client's readSuggestionTarget is read before preparation (its head branch
- *   is named in the suggestion texts); when the head is not the reviewed
- *   commit and the pull request is one suggestion pull requests support, the
- *   client's compareCommits tests ancestry (§2.5): a reviewed commit that is
+ *   is named in the suggestion texts); when preparation finds suggestion
+ *   units, the head is not the reviewed commit and the pull request is one
+ *   suggestion pull requests support, the client's compareCommits tests
+ *   ancestry, lazily (§2.5, §2.8): a reviewed commit that is
  *   not an ancestor of the head makes preparation re-apply each suggestion
  *   onto the head or not create it (§2.5.1). A ready review that needs
  *   suggestion pull requests is then checked against the repository — same
@@ -518,16 +519,22 @@ export async function prepareForDestination(captured: ICapturedReview, client: I
 
   const settings = captured.suggestionPullRequests;
   let target: ISuggestionTarget | undefined;
-  let rewrittenHead: string | undefined;
   if (settings !== undefined) {
     if (client.readSuggestionTarget === undefined) throw new Error('This GitHub client cannot publish suggestion pull requests.');
     target = await client.readSuggestionTarget(captured.destination);
-    rewrittenHead = await rewrittenHeadOf(target, captured, client);
   }
+  // Ancestry is read lazily, only when preparation finds suggestion units
+  // (contract §2.8), and at most once.
+  let ancestry: Promise<string | undefined> | undefined;
+  const readTarget = target;
+  const resolveRewrittenHead = (): Promise<string | undefined> => {
+    ancestry ??= readTarget === undefined ? Promise.resolve(undefined) : rewrittenHeadOf(readTarget, captured, client);
+    return ancestry;
+  };
   const options = {
     ...(captured.ignoreApprovalHold === undefined ? {} : { ignoreApprovalHold: captured.ignoreApprovalHold }),
     ...(target === undefined || settings === undefined ? {} : {
-      suggestionPullRequests: { headRef: target.headRef, ready: settings.markReady, ...(rewrittenHead === undefined ? {} : { rewrittenHead }) },
+      suggestionPullRequests: { headRef: target.headRef, ready: settings.markReady, resolveRewrittenHead },
     }),
   };
   const prepareInput = {
@@ -545,6 +552,7 @@ export async function prepareForDestination(captured: ICapturedReview, client: I
     throw new Error('Review preparation returned an unexpected outcome; nothing was published.');
   }
   if (prepared.suggestions === undefined || target === undefined || settings === undefined) return prepared;
+  const rewrittenHead = ancestry === undefined ? undefined : await ancestry;
   return checkSuggestionTarget(prepared, target, settings, captured, client, rewrittenHead);
 }
 

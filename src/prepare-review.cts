@@ -40,7 +40,7 @@
  *                    { kind: 'absent' } | { kind: 'not-a-file', entry, path }
  *                    // trusted tree read at the same boundary: what stands
  *                    // at a path, never downloading a blob. Required with,
- *                    // and called only for, suggestionPullRequests.rewrittenHead.
+ *                    // and called only for, a head resolveRewrittenHead names.
  *                    // There, a readSource error whose `code` is
  *                    // 'undecodable-source' or 'source-too-large' (an edited
  *                    // file that is not source at the head) makes that
@@ -55,15 +55,18 @@
  *                    // operational and propagates unchanged.
  *   options?: {
  *     ignoreApprovalHold?: boolean,   // bypasses only an approval hold
- *     suggestionPullRequests?: { headRef, ready, rewrittenHead? },
+ *     suggestionPullRequests?: { headRef, ready, resolveRewrittenHead? },
  *                                     // enabled: whole-file proposals and
  *                                     // explicit groups become suggestion
  *                                     // pull requests into the named head
  *                                     // branch, drafts unless `ready` (it
  *                                     // words their lifecycle note).
- *                                     // `rewrittenHead`: the pull request's
- *                                     // head when the reviewed commit is not
- *                                     // its ancestor; each suggestion is then
+ *                                     // `resolveRewrittenHead`: async, called
+ *                                     // at most once and only when the review
+ *                                     // has suggestion units; answers the pull
+ *                                     // request's head when the reviewed
+ *                                     // commit is not its ancestor, otherwise
+ *                                     // undefined. Each suggestion is then
  *                                     // re-applied onto it only when
  *                                     // everything it changes is identical
  *                                     // there, and is otherwise not created,
@@ -93,7 +96,7 @@
  *     warnings: Diagnostic[], markdown: string,
  *     suggestions?: { companions, sections } }  // only when suggestion pull
  *       // requests are created: each companion's exact changes (re-applied
- *       // onto rewrittenHead when given), title, commit message and rendered
+ *       // onto the rewritten head when there is one), title, commit message and rendered
  *       // parts, and the body's sections (text, or a companion index
  *       // rendered once its number is known); review.body is then the body
  *       // at its largest possible size, for the limits
@@ -471,11 +474,14 @@ interface ISuggestionPullRequestsOption {
   readonly headRef: string;
   readonly ready: boolean;
   /**
-   * The pull request's head when the reviewed commit is not its ancestor (the
-   * history was rewritten): suggestions are re-applied onto it, or not
-   * created (docs/companion-suggestion-pr-contract.md §2.5.1).
+   * Answers the pull request's head when the reviewed commit is not its
+   * ancestor (the history was rewritten), otherwise undefined: suggestions
+   * are then re-applied onto it, or not created
+   * (docs/companion-suggestion-pr-contract.md §2.5.1). Called at most once,
+   * and only when the review has suggestion units, so a review that creates
+   * none never depends on it (§2.8). A rejection is operational.
    */
-  readonly rewrittenHead?: string;
+  readonly resolveRewrittenHead?: () => Promise<string | undefined>;
 }
 
 /** Caller options; every limit defaults to PRODUCT_LIMITS. */
@@ -1234,12 +1240,9 @@ function validateCallerInput(input: unknown): asserts input is IPrepareReviewInp
     ) {
       fail('`options.suggestionPullRequests` must be { headRef, ready } naming the pull request\'s head branch and whether they are created ready for review.');
     }
-    const rewrittenHead = isPlainObject(suggestions) ? suggestions['rewrittenHead'] : undefined;
-    if (rewrittenHead !== undefined) {
-      if (!isFullCommit(rewrittenHead) || rewrittenHead === context['reviewedCommit']) {
-        fail('`options.suggestionPullRequests.rewrittenHead` must be a full commit other than the reviewed commit.');
-      }
-      if (typeof input['readEntry'] !== 'function') fail('`readEntry` must be a function (commit, path) => Promise<entry> when suggestions may be re-applied.');
+    const resolve = isPlainObject(suggestions) ? suggestions['resolveRewrittenHead'] : undefined;
+    if (resolve !== undefined && typeof resolve !== 'function') {
+      fail('`options.suggestionPullRequests.resolveRewrittenHead` must be a function () => Promise<commit | undefined>.');
     }
   }
 }
@@ -2865,21 +2868,17 @@ async function assembleWithSuggestions(items: readonly IPreparedItem[], state: I
         + 'Remove the group, and the change is published on its own.');
     }
   }
-  // Without a rewritten history every unit is created, so the limit is known
-  // now and reported with every other problem; otherwise it counts only the
-  // units that are re-applied, below.
-  if (enabled !== undefined && enabled.rewrittenHead === undefined && units.length > MAX_SUGGESTION_PULL_REQUESTS) {
-    report.error('too-many-suggestion-prs', undefined, tooManySuggestions(units.length));
-  }
-
   const comments: PreparedComment[] = commentItems.map((entry) => {
     const body = entry.items.map(renderItem).join(SEPARATOR);
     return { ...entry.coordinates, body: entry.suggestion ? `${body}\n\n\`\`\`suggestion\n${entry.suggestion.payload}\`\`\`` : body };
   });
   const blockedAssembly: IUnitAssembly = { review: { commitId: context.reviewedCommit, body: '', comments }, evidence, sectionCount: sections.length };
-  if (enabled === undefined || report.errors.length > 0) return blockedAssembly;
+  if (enabled === undefined) return blockedAssembly;
 
-  const head = enabled.rewrittenHead;
+  // Ancestry is resolved only now that suggestion units exist (§2.8), even
+  // when another problem already blocks, so that the limit below counts what
+  // would be created and is reported with every other problem.
+  const head = units.length === 0 ? undefined : await rewrittenHeadOf(enabled, context, state);
   const target: ISuggestionContext = {
     owner: context.owner, repo: context.repo, pullNumber: context.pullNumber, reviewedCommit: context.reviewedCommit, headRef: enabled.headRef,
     ready: enabled.ready, ...(head === undefined ? {} : { reappliedOnto: head }),
@@ -2889,10 +2888,8 @@ async function assembleWithSuggestions(items: readonly IPreparedItem[], state: I
   const decisions: UnitDecision[] = [];
   for (const unit of units) decisions.push(head === undefined ? { kind: 'created', headTexts: new Map() } : await reapplication(unit, head, state));
   const created = units.flatMap((_, i) => (itemAt(decisions, i).kind === 'created' ? [i] : []));
-  if (created.length > MAX_SUGGESTION_PULL_REQUESTS) {
-    report.error('too-many-suggestion-prs', undefined, tooManySuggestions(created.length));
-    return blockedAssembly;
-  }
+  if (created.length > MAX_SUGGESTION_PULL_REQUESTS) report.error('too-many-suggestion-prs', undefined, tooManySuggestions(created.length));
+  if (report.errors.length > 0) return blockedAssembly;
 
   /** Each created unit's companion index, in unit order. */
   const companionOf = new Map(created.map((unitIndex, companionIndex) => [unitIndex, companionIndex]));
@@ -2949,6 +2946,22 @@ async function assembleWithSuggestions(items: readonly IPreparedItem[], state: I
     sectionCount: sections.length,
     suggestions,
   };
+}
+
+/**
+ * The rewritten head suggestions are re-applied onto (contract §2.5.1), from
+ * the caller's resolver, checked: a full commit other than the reviewed one,
+ * with a tree read to compare against. Undefined when there is none.
+ */
+async function rewrittenHeadOf(enabled: ISuggestionPullRequestsOption, context: IPreparationContext, state: IPreparationState): Promise<string | undefined> {
+  if (enabled.resolveRewrittenHead === undefined) return undefined;
+  const head: unknown = await enabled.resolveRewrittenHead();
+  if (head === undefined) return undefined;
+  if (!isFullCommit(head) || head === context.reviewedCommit) {
+    throw new TypeError('`resolveRewrittenHead` must answer a full commit other than the reviewed commit, or undefined.');
+  }
+  if (state.readEntry === null) throw new TypeError('`readEntry` is required to re-apply suggestions onto a rewritten head.');
+  return head;
 }
 
 /**
