@@ -605,10 +605,17 @@ describe('not yet supported: forks and non-default bases name the missing capabi
     assert.equal(onlyPull(world).base, HEAD_REF);
   });
 
-  test('a reviewed commit that is no longer the head names the missing check', async () => {
-    await assertBlockedEverywhere(makeWorld(), [
-      problem('suggestion-pr-historical-unsupported', `The reviewed commit ${BASE} is no longer the pull request's head ${HEAD}. Proposing a suggestion on top of later commits needs a check that the reviewed commit is still part of the branch, which is not yet supported. Review the current head, or publish without suggestion pull requests.`),
-    ], ALLOW, BASE);
+  test('a reviewed commit the branch has moved past is proposed on, not refused (issue #28; convention §5.1)', async () => {
+    const world = makeWorld();
+    const assessed = await validate(world, ALLOW, BASE);
+    assert.equal(status(assessed), 'ready', markdown(assessed));
+    const outcome = await publish(world, ALLOW, BASE);
+    assert.equal(status(outcome), 'published', markdown(outcome));
+    const pull = onlyPull(world);
+    assert.match(pull.body, new RegExp(`^Suggested in a review of #7 at commit ${BASE}\\.\\n\\nMerging this pull request`));
+    assert.match(pull.body, new RegExp(`\\n<!-- suggestion-pr \\{"version":1,"original":\\{"owner":"octo","repo":"widgets","pullNumber":7\\},"reviewedCommit":"${BASE}","id":"${UUID}","batch":"${UUID}"\\} -->$`));
+    const commits = Object.values(world.host.companion().commits);
+    assert.deepEqual(commits.map((c) => c.parents), [[BASE]], 'the proposal is based on the reviewed commit');
   });
 
   test('everything is reported together, in a fixed order', async () => {

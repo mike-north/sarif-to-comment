@@ -1848,6 +1848,75 @@ describe('fileExists', () => {
   });
 });
 
+/**
+ * readEntry (docs/companion-suggestion-pr-contract.md §2.5.1; issue #28): what
+ * stands at a path in a commit, from Git trees alone, so that re-applying a
+ * suggestion on a rewritten head can compare files without downloading them.
+ */
+describe('readEntry (issue #28)', () => {
+  async function prepared(): Promise<{ host: FakeHost; readEntry: IFetchedContext['readEntry'] }> {
+    const host = pullScenario();
+    const { readEntry } = await contextFor(host);
+    host.requests.length = 0;
+    return { host, readEntry };
+  }
+
+  test('a regular file: its blob and mode, from its commit and each tree on the path, never its blob', async () => {
+    const { host, readEntry } = await prepared();
+    const filePath = 'docs/guide notes/Überblick.md';
+    assert.deepEqual(await readEntry(HEAD, filePath), { kind: 'file', blob: fileBlob(host, HEAD, filePath), mode: '100644' });
+    assert.deepEqual(host.urls(), [
+      commitUrl(HEAD),
+      treeUrl(treeAt(host, HEAD, '').sha),
+      treeUrl(treeAt(host, HEAD, 'docs').sha),
+      treeUrl(treeAt(host, HEAD, 'docs/guide notes').sha),
+    ]);
+    assertHttpDiscipline(host);
+  });
+
+  test('an executable file keeps its mode; a file that is not UTF-8 is not decoded', async () => {
+    const { host, readEntry } = await prepared();
+    assert.deepEqual(await readEntry(HEAD, 'bin/run.sh'), { kind: 'file', blob: fileBlob(host, HEAD, 'bin/run.sh'), mode: '100755' });
+    assert.deepEqual(await readEntry(HEAD, 'src/latin1.txt'), { kind: 'file', blob: fileBlob(host, HEAD, 'src/latin1.txt'), mode: '100644' });
+    assert.deepEqual(host.urls().filter((u) => u.includes('/git/blobs/')), []);
+  });
+
+  test('a path absent from a complete tree, or below a regular file, is absent', async () => {
+    const { readEntry } = await prepared();
+    for (const filePath of ['src/missing.js', 'nowhere/missing.js', 'src/app.js/child', 'src/old.js']) {
+      assert.deepEqual(await readEntry(HEAD, filePath), { kind: 'absent' }, filePath);
+    }
+  });
+
+  for (const [label, filePath, expected] of [
+    ['a symbolic link', 'links/app-link.js', { kind: 'not-a-file', entry: 'a symbolic link', path: 'links/app-link.js' }],
+    ['the symbolic link on the way to a path (never followed)', 'linkdir/app.js', { kind: 'not-a-file', entry: 'a symbolic link', path: 'linkdir' }],
+    ['a submodule', 'vendor/lib', { kind: 'not-a-file', entry: 'a submodule', path: 'vendor/lib' }],
+    ['a directory', 'src', { kind: 'not-a-file', entry: 'a directory', path: 'src' }],
+  ] as const) {
+    test(`names ${label} and where it stands, rather than failing`, async () => {
+      const { readEntry } = await prepared();
+      assert.deepEqual(await readEntry(HEAD, filePath), expected);
+    });
+  }
+
+  test('a missing commit (HTTP 404) is an operational failure, never absence', async () => {
+    const host = pullScenario();
+    const { readEntry } = await contextFor(host);
+    replaceRoute(host, commitUrl(HEAD), () => jsonResponse(404, NOT_FOUND));
+    await rejectsWith(readEntry(HEAD, 'src/app.js'), 'http-status');
+  });
+
+  test('refuses malformed paths or commits before any request', async () => {
+    const { host, readEntry } = await prepared();
+    for (const bad of ['', '/src/app.js', '../etc/passwd', 'src//app.js']) {
+      await assert.rejects(readEntry(HEAD, bad), TypeError, JSON.stringify(bad));
+    }
+    await assert.rejects(readEntry(HEAD.slice(0, 7), 'src/app.js'), TypeError);
+    assert.equal(host.requests.length, 0);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Runtime shape of the adapter's values
 //

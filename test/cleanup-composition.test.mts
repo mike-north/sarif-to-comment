@@ -421,6 +421,22 @@ describe('recognition and verification (§2.5–§2.8)', () => {
     assert.deepEqual(results(outcome), [[40, 37, 'closed']]);
   });
 
+  test('a suggestion re-applied after a rewritten history (a version 2 marker, convention §7; issue #28) is closed like any other', async () => {
+    const reapplied = `<!-- suggestion-pr {"version":2,"original":{"owner":"${OWNER}","repo":"${REPO}","pullNumber":37},"reviewedCommit":"${HEAD}","reappliedOnto":"${BASE}","id":"${idOf(40)}","batch":"${BATCH}"} -->`;
+    const world = makeWorld(ended(suggestion(40, 37, { body: `Suggested in a review of #37 at commit ${HEAD}.\n\nRe-applied.\n\n${reapplied}` })));
+    const outcome = await cleanup(world);
+    assert.deepEqual(results(outcome), [[40, 37, 'closed']]);
+    assert.deepEqual(writes(world), closes(40));
+  });
+
+  test('a version 2 marker without reappliedOnto is not conforming, and is never closed', async () => {
+    const broken = markerLine(40, 37).replace('"version":1', '"version":2');
+    const world = makeWorld(ended(suggestion(40, 37, { body: `Text.\n\n${broken}` })));
+    const outcome = await cleanup(world);
+    assert.deepEqual(results(outcome), [[40, null, 'not-ours']]);
+    assert.deepEqual(writes(world), []);
+  });
+
   test('a CRLF body and text after the marker are still recognized', async () => {
     const world = makeWorld(ended(suggestion(40, 37, { body: `${suggestionBody(40, 37).replace(/\n/g, '\r\n')}\r\n\r\nThanks!` })));
     const outcome = await cleanup(world);
