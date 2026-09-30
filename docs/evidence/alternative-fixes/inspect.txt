@@ -1,0 +1,34 @@
+SARIF inspection: 1 run(s), 1 finding(s), 3 fix(es), 0 file proposal(s), 0 truncated preview(s).
+Run 0 (/runs/0): Alternatives probe 1.0.0 (source: declared; columnKind: utf16CodeUnits)
+  declared source: https://github.com/mike-north/doc-linter at 8f005c8fb491bf13e9bc106b67b2657792be4331
+  Other run content:
+    {
+      "tool": {
+        "driver": {
+          "name": "Alternatives probe",
+          "version": "1.0.0"
+        }
+      }
+    }
+
+Finding /runs/0/results/0 — Alternatives probe 1.0.0 · rule parser-choice
+Selector: /runs/0/results/0@024cb23c9144dfcf
+Message:
+parseA does not validate its input.
+Locations:
+  examples/alternative-fixes/parse.js:2
+Fix 1 of 3 (/runs/0/results/0/fixes/0): Use parseB, which validates its input.
+  Change examples/alternative-fixes/parse.js
+    Replace region {"startLine":2} with:
+      | const options = parseB(input);
+Fix 2 of 3 (/runs/0/results/0/fixes/1): Keep parseA and cache its result.
+  Change examples/alternative-fixes/parse.js
+    Replace region {"startLine":2} with:
+      | const cache = new Map();
+      | const options = cache.get(input) ?? parseA(input);
+Fix 3 of 3 (/runs/0/results/0/fixes/2): Or correct the fence constant parseA relies on.
+  Change examples/alternative-fixes/fence.js
+    Replace region {"startLine":1} with:
+      | const fence = '```'; // a Markdown code fence
+
+This inspection only describes the SARIF; it does not check whether it can be published.

@@ -1,0 +1,5 @@
+inspect (human): 0
+validate --format json: 0 (ready)
+validate refused-input --format json: 2 (blocked)
+publish --format json: 0 (published)
+stderr of every run: empty

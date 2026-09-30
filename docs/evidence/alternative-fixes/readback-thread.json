@@ -1,0 +1,14 @@
+{
+  "threads": [
+    {
+      "firstId": 4140442204,
+      "resolved": false,
+      "replies": 0,
+      "author": "mike-north",
+      "loc": "examples/alternative-fixes/parse.js:2",
+      "snippet": "parseA does not validate its input. **Fix:** Use parseB, which validates its inp",
+      "body": "parseA does not validate its input.\n\n**Fix:** Use parseB, which validates its input.\n\n**Alternatives to consider:**\n\n(1) Keep parseA and cache its result.\n\nReplace line 2 with:\n\n```\nconst cache = new Map();\nconst options = cache.get(input) ?? parseA(input);\n```\n\n(2) Or correct the fence constant parseA relies on.\n\nReplace line 1 of `examples/alternative-fixes/fence.js` with:\n\n````\nconst fence = '```'; // a Markdown code fence\n````\n\n<sub>— Alternatives probe 1.0.0 · rule `parser-choice`</sub>\n\n```suggestion\nconst options = parseB(input);\n```"
+    }
+  ],
+  "missing": []
+}

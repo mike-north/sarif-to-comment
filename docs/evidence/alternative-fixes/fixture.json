@@ -1,0 +1,32 @@
+{
+  "repository": "mike-north/doc-linter",
+  "pullRequest": {
+    "number": 54,
+    "url": "https://github.com/mike-north/doc-linter/pull/54",
+    "draft": true,
+    "head": {
+      "ref": "sarif-issue30-20260929-reviewed",
+      "commit": "8f005c8fb491bf13e9bc106b67b2657792be4331"
+    },
+    "base": {
+      "ref": "sarif-issue30-20260929-base",
+      "commit": "7f25b1269ec31f90f46d15d14cd0b51b03f46409"
+    }
+  },
+  "defaultBranch": {
+    "ref": "main",
+    "commit": "0a7b03fe399255a62118311cbc3e1bd6fe64cb23",
+    "note": "the fixture branches start from it; it was not changed"
+  },
+  "files": {
+    "7f25b1269ec31f90f46d15d14cd0b51b03f46409": {
+      "examples/alternative-fixes/parse.js": "const defaults = { strict: false };\nconst options = parseLegacy(input);\nmodule.exports = { defaults, options };\n",
+      "examples/alternative-fixes/fence.js": "const fence = '``';\n"
+    },
+    "8f005c8fb491bf13e9bc106b67b2657792be4331": {
+      "examples/alternative-fixes/parse.js": "const defaults = { strict: false };\nconst options = parseA(input);\nmodule.exports = { defaults, options };\n",
+      "examples/alternative-fixes/fence.js": "const fence = '``';\n"
+    }
+  },
+  "diff": "the pull request changes line 2 of examples/alternative-fixes/parse.js; fence.js is unchanged and outside the diff"
+}

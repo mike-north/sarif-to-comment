@@ -1,0 +1,16 @@
+{
+  "written": "by hand from the rendering grammar in src/prepare-review.cts before publishing",
+  "repository": "mike-north/doc-linter",
+  "pullNumber": 54,
+  "baseCommit": "7f25b1269ec31f90f46d15d14cd0b51b03f46409",
+  "reviewedCommit": "8f005c8fb491bf13e9bc106b67b2657792be4331",
+  "comments": [
+    {
+      "path": "examples/alternative-fixes/parse.js",
+      "side": "RIGHT",
+      "line": 2,
+      "body": "parseA does not validate its input.\n\n**Fix:** Use parseB, which validates its input.\n\n**Alternatives to consider:**\n\n(1) Keep parseA and cache its result.\n\nReplace line 2 with:\n\n```\nconst cache = new Map();\nconst options = cache.get(input) ?? parseA(input);\n```\n\n(2) Or correct the fence constant parseA relies on.\n\nReplace line 1 of `examples/alternative-fixes/fence.js` with:\n\n````\nconst fence = '```'; // a Markdown code fence\n````\n\n<sub>— Alternatives probe 1.0.0 · rule `parser-choice`</sub>\n\n```suggestion\nconst options = parseB(input);\n```"
+    }
+  ],
+  "reviewBody": ""
+}
