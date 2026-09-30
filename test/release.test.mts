@@ -143,6 +143,8 @@ function packResult(version = '0.1.0', extra: readonly string[] = []): IPackResu
       'vendor/README.md',
       'vendor/sarif-schema-2.1.0.json',
       'docs/getting-started.md',
+      'docs/diagnostics.md',
+      'docs/diagnostic.v1.schema.json',
       'docs/api/index.md',
       'docs/api/sarif-to-comment.md',
       'docs/api/sarif-to-comment.publishsarifreview.md',
@@ -285,6 +287,14 @@ describe('the packed tarball is exactly the distribution boundary', () => {
     assert.deepEqual(guard.checkPackedTarball(packResult(), manifest()), []);
   });
 
+  test('every release must ship the diagnostics catalog and its JSON Schema, which the README and changelog promise', () => {
+    // The files whitelist ships both (test/package.test.mts); the guard must
+    // admit them and refuse a tarball that lacks either.
+    for (const file of ['docs/diagnostics.md', 'docs/diagnostic.v1.schema.json']) {
+      assert.ok(guard.REQUIRED_FILES.includes(file), file);
+    }
+  });
+
   const bad: Readonly<Record<string, (p: IPackResult) => void>> = {
     'a test file': (p) => p.files.push({ path: 'test/publication.test.cjs' }),
     'a log': (p) => p.files.push({ path: 'logs/opus/x.txt' }),
@@ -309,6 +319,9 @@ describe('the packed tarball is exactly the distribution boundary', () => {
     'missing type declarations': (p) => (p.files = p.files.filter((f) => f.path !== 'dist/sarif-to-comment.d.ts')),
     'a missing CLI': (p) => (p.files = p.files.filter((f) => f.path !== 'dist/sarif-to-comment.cjs')),
     'a missing getting-started guide': (p) => (p.files = p.files.filter((f) => f.path !== 'docs/getting-started.md')),
+    'a missing diagnostics catalog': (p) => (p.files = p.files.filter((f) => f.path !== 'docs/diagnostics.md')),
+    'a missing diagnostic JSON Schema': (p) => (p.files = p.files.filter((f) => f.path !== 'docs/diagnostic.v1.schema.json')),
+    'an unpublished diagnostic schema version': (p) => p.files.push({ path: 'docs/diagnostic.v2.schema.json' }),
     'missing API reference': (p) => (p.files = p.files.filter((f) => f.path !== 'docs/api/index.md')),
     'a missing CHANGELOG': (p) => (p.files = p.files.filter((f) => f.path !== 'CHANGELOG.md')),
     'a missing vendored schema': (p) => (p.files = p.files.filter((f) => f.path !== 'vendor/sarif-schema-2.1.0.json')),
@@ -326,6 +339,8 @@ describe('the packed tarball is exactly the distribution boundary', () => {
       'dist/sarif-to-comment.d.ts',
       'vendor/sarif-schema-2.1.0.json',
       'docs/getting-started.md',
+      'docs/diagnostics.md',
+      'docs/diagnostic.v1.schema.json',
       'docs/api/index.md',
     ]) {
       assert.equal(guard.isDistributable(file), true, file);
@@ -347,6 +362,9 @@ describe('the packed tarball is exactly the distribution boundary', () => {
       'bin/sarif-to-comment.cjs',
       'scripts/build.mts',
       'test/x.test.mts',
+      'docs/specification.md',
+      'docs/diagnostic.v2.schema.json',
+      'docs/api/nested/x.md',
     ]) {
       assert.equal(guard.isDistributable(file), false, file);
     }
