@@ -56,11 +56,11 @@ Promise&lt;[ValidateSarifReviewOutcome](./sarif-to-comment.validatesarifreviewou
 
 ## Exceptions
 
-`TypeError` for invalid input, before any network request; an`Error` for a defect in this package (an internal invariant failure), as`publishSarifReview` does. Operational failures (GitHub, network, authentication, source reads) are reported as `incomplete`<!-- -->, never thrown. Neither a result nor a rejection contains the token.
+`TypeError` for invalid input, before any network request; an`Error` for a defect in this package (an internal invariant failure), as`publishSarifReview` does. Operational failures (GitHub, network, authentication, source reads, a review list that cannot be read completely) are reported as `incomplete`<!-- -->, never thrown. Neither a result nor a rejection contains the token.
 
 ## Remarks
 
-Runs the same checks as `publishSarifReview` — the SARIF schema, approval holds, source consistency against the reviewed commit, supported representation, placement and suggestion eligibility, product limits and the authenticated account — reading GitHub but never writing to it, and writing no file. It is optional: publication never requires it, and a`ready` result grants nothing, because publication performs every check again against the pull request as it is then.
+Runs the same checks as `publishSarifReview` — the SARIF schema, approval holds, source consistency against the reviewed commit, supported representation, placement and suggestion eligibility, product limits and the authenticated account — reading GitHub but never writing to it, and writing no file. It also reads the pull request's reviews: a pending review of the authenticated account there is reported as `blocked`<!-- -->, because GitHub refuses to create another review, draft or submitted, while it exists. It is optional: publication never requires it, and a `ready` result grants nothing, because publication performs every check again against the pull request as it is then.
 
 ## Example
 

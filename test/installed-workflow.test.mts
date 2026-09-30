@@ -650,6 +650,74 @@ describe('the installed package runs the complete workflow', () => {
     assertOracleReview(w.host, w);
   });
 
+  test('validate after a draft: the installed CLI and library report the pending review as blocked, and write nothing', { skip, timeout: 300_000 }, () => {
+    // docs/readiness-assessment-contract.md, "Pending review of this account".
+    const { consumer, bin } = installIntoConsumer();
+    const w = world('installed-validate-pending');
+    const ready = path.join(w.root, 'ready.sarif');
+    fs.writeFileSync(ready, JSON.stringify(readyUpstreamSarif()));
+    const destination = ['--repo', w.repoFlag, '--pull', w.pull, '--commit', w.head];
+    const cli = (args: readonly string[]): SpawnSyncReturns<string> => {
+      const result = spawnSync(bin, args, { cwd: consumer, env: w.env, encoding: 'utf8', timeout: 120_000 });
+      for (const text of [result.stdout, result.stderr]) assert.ok(!text.includes(TOKEN), 'the token never appears');
+      return result;
+    };
+
+    const published = cli(['publish', '--sarif', ready, ...destination, '--state', path.join(w.root, 'state.json'), '--format', 'json']);
+    assert.equal(published.status, 0, published.stdout + published.stderr);
+    const draft = present(w.host.reviews()[0], 'the draft review');
+    assert.equal(draft.state, 'PENDING');
+    const requestsBefore = w.host.log().length;
+    const filesBefore = fs.readdirSync(w.root).sort();
+
+    const json = cli(['validate', '--sarif', ready, ...destination, '--format', 'json']);
+    assert.equal(json.status, 2, json.stdout + json.stderr);
+    assert.equal(json.stderr, '');
+    const doc = expectType(
+      parseJson(json.stdout),
+      isShape({ command: isString, status: isString, problems: isArrayOf(isShape({ message: isString })), message: isString }),
+      'the blocked assessment',
+    );
+    assert.equal(doc.status, 'blocked');
+    assert.equal(doc.problems.length, 1);
+    const problem = present(doc.problems[0], 'the pending-review problem');
+    assert.ok(problem.message.includes(`review ${String(draft.id)}`), problem.message);
+    assert.match(problem.message, /already has a pending review/);
+
+    const submitted = cli(['validate', '--sarif', ready, ...destination, '--submit']);
+    assert.equal(submitted.status, 2, submitted.stdout + submitted.stderr);
+    assert.match(submitted.stdout, /^## Review blocked\n/);
+
+    const js = String.raw;
+    const script = js`
+      import { validateSarifReview } from 'sarif-to-comment';
+      import { readFileSync } from 'node:fs';
+      const [owner, repo] = process.env.REVIEW_REPOSITORY.split('/');
+      const outcome = await validateSarifReview({
+        sarif: JSON.parse(readFileSync(process.env.REVIEW_SARIF, 'utf8')),
+        destination: { owner, repo, pullNumber: Number(process.env.REVIEW_PULL) },
+        reviewedCommit: process.env.REVIEW_COMMIT,
+        token: process.env.GH_TOKEN,
+      });
+      process.stdout.write(JSON.stringify(outcome));
+    `;
+    const file = path.join(consumer, 'validate-pending-library.mjs');
+    fs.writeFileSync(file, script);
+    const env = { ...w.env, REVIEW_REPOSITORY: w.repoFlag, REVIEW_COMMIT: w.head, REVIEW_PULL: w.pull, REVIEW_SARIF: ready };
+    const library = spawnSync(process.execPath, [file], { cwd: consumer, env, encoding: 'utf8', timeout: 120_000 });
+    assert.equal(library.status, 0, library.stdout + library.stderr);
+    const outcome = expectType(parseJson(library.stdout), isOutcome, 'the library assessment');
+    assert.equal(outcome.status, 'blocked');
+    assert.equal(outcome.markdown, doc.message, 'the CLI carries the library Markdown');
+
+    const since = w.host.log().slice(requestsBefore);
+    assert.deepEqual([...new Set(since.map((r) => r.method))], ['GET'], 'assessment issued only GET requests');
+    assert.ok(since.some((r) => r.path.endsWith(`/pulls/${w.pull}/reviews`)), 'the review list was read');
+    assert.equal(createPosts(w.host), 1, 'only the earlier publication created a review');
+    assert.equal(w.host.reviews().length, 1);
+    assert.deepEqual(fs.readdirSync(w.root).sort(), filesBefore, 'no file was written');
+  });
+
   test('submitted comment review: the installed CLI (--submit) and library (options.submit) create it once, bound to its state', { skip, timeout: 300_000 }, () => {
     const { consumer, bin } = installIntoConsumer();
     const cliWorld = world('installed-submitted-cli');

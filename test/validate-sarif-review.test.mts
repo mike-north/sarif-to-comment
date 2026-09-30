@@ -394,17 +394,19 @@ describe('ready: the complete artifact can be published, and nothing is written'
     assert.match(outcome.markdown, /nothing was published/i);
     assert.match(outcome.markdown, /no publication state/i);
     assert.match(outcome.markdown, /repeats every check/i, 'ready is not an approval');
-    assert.match(outcome.markdown, /pending review/i, 'names the refusal only the create request reveals');
+    assert.match(outcome.markdown, /no pending review of this account/i, 'says the pending-review check found none');
+    assert.match(outcome.markdown, /GitHub can still refuse the review/i, 'the pull request can change before publication');
     assertNothingWritten(world);
   });
 
-  test('assessment reads the context once and the authenticated user, and never looks for reviews', async () => {
+  test('assessment reads the context once, the authenticated user and the review list, and reads back no review', async () => {
     const world = makeWorld();
     assertShape(await validate(world, assessmentInput(READY)), 'ready');
     assert.equal(world.remote.calls('adapter:fetchContext').length, 1);
     assert.equal(world.remote.calls('getAuthenticatedUser').length, 1, "the publisher's pre-send identity check runs");
-    assert.equal(world.remote.calls('listReviews').length, 0, 'no recovery lookup: assessment has no publication identity');
-    assert.equal(world.remote.calls('listReviewComments').length, 0);
+    // Contract: "Pending review of this account". One page of the destination's reviews, for that check only.
+    assert.deepEqual(world.remote.calls('listReviews').map((c) => c.args), [{ ...DESTINATION, cursor: null }]);
+    assert.equal(world.remote.calls('listReviewComments').length, 0, 'no recovery lookup: assessment has no publication identity');
     assertNothingWritten(world);
   });
 });

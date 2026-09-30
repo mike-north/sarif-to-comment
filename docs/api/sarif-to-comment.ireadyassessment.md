@@ -4,7 +4,7 @@
 
 ## IReadyAssessment interface
 
-Publication of this document would proceed to its single create-review request. Nothing was published and nothing was written.
+Publication of this document would proceed to its single create-review request, and the account had no pending review on the pull request. Nothing was published and nothing was written.
 
 **Signature:**
 
@@ -14,7 +14,7 @@ export interface IReadyAssessment
 
 ## Remarks
 
-This is not an approval and not a delivery promise: publication repeats every check against the pull request as it is then, and GitHub can still refuse the review (for example when the account already has a pending review on the pull request).
+This is not an approval and not a delivery promise: publication repeats every check against the pull request as it is then, and GitHub can still refuse the review (for example when the account starts a pending review on the pull request before publication).
 
 ## Properties
 

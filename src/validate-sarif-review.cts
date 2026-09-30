@@ -10,15 +10,24 @@
  *      publishSarifReview runs it — input capture, the verified review
  *      context, whole-review preparation;
  *   2. the publication core's own pre-send checks (src/publication.cts) — the
- *      prepared review's shape and the authenticated account's numeric id.
- * It computes no publication identity, reads or writes no state, and sends
- * nothing: GitHub is only read, and no file is written.
+ *      prepared review's shape and the authenticated account's numeric id;
+ *   3. the pending-review check: every page of the destination pull request's
+ *      reviews is read, and a PENDING review whose author has the
+ *      authenticated account's numeric id blocks, because GitHub refuses to
+ *      create another review, draft or submitted, while one exists. Other
+ *      accounts' pending reviews and every submitted review are ignored. A
+ *      list that cannot be read completely, or whose data leaves the answer
+ *      undecided, is incomplete. Publication has no such read: it meets the
+ *      same condition as GitHub's refusal of its create request.
+ * It computes no publication identity, reads or writes no state, adopts no
+ * review by its marker, and sends nothing: GitHub is only read, and no file
+ * is written.
  *
  * A `ready` outcome is information, never authority. It carries nothing
  * publication accepts, and publication repeats every check itself against
- * the pull request as it is then. It is also not a delivery promise: GitHub
- * can still refuse the create request (for example, an existing pending
- * review by the same account), which only publication discovers.
+ * the pull request as it is then. It is also not a delivery promise: the pull
+ * request can change before publication (a pending review can be started),
+ * and GitHub can refuse the create request for reasons only the write reveals.
  *
  * ---------------------------------------------------------------------------
  * validateSarifReview(input, internals?) -> Promise<Outcome>
@@ -35,12 +44,14 @@
  * Outcome (status plus Markdown is the contract; internal codes are not, D13):
  *   { status: 'ready', markdown }
  *   { status: 'blocked', problems: [{ message, pointer? }], markdown }
- *       // markdown is publication's own blocked explanation
+ *       // markdown is publication's own blocked explanation; for a pending
+ *       // review of the account, the same presentation naming that review
  *   { status: 'incomplete', markdown }
  *       // an operational failure: anything the GitHub client reports (HTTP,
- *       // network, authentication, source reads), its answer that the account
- *       // has no numeric id, or context for another pull request or commit.
- *       // Never a verdict.
+ *       // network, authentication, source reads, the review list), its
+ *       // answer that the account has no numeric id, context for another
+ *       // pull request or commit, or a review list that is incomplete or
+ *       // undecidable. Never a verdict.
  * Any other failure after capture is a defect in this package or its client
  * boundary (an internal invariant, a client answer outside its contract). It
  * rejects, as publication does, rather than being disguised as a transient
@@ -48,16 +59,18 @@
  * The token never appears in an outcome.
  *
  * internals (private seam, not caller API):
- *   createGitHubClient({ token, fetch }) -> client with fetchContext and
- *     getAuthenticatedUser. Defaults to src/github.cts.
+ *   createGitHubClient({ token, fetch }) -> client with fetchContext,
+ *     getAuthenticatedUser and listReviews. Defaults to src/github.cts.
  */
 
 import { createGitHubClient as defaultCreateGitHubClient } from './github.cjs';
-import type { ICreateGitHubClientOptions } from './github.cjs';
+import type { ICreateGitHubClientOptions, IListReviewsRequest } from './github.cjs';
+import { blockedBy } from './prepare-review.cjs';
 import type { IDiagnostic } from './prepare-review.cjs';
-import { authenticatedUserId, validatePreparedReview } from './publication.cjs';
+import { authenticatedUserId, readAllPages, validatePreparedReview } from './publication.cjs';
 import type { IPublishSarifReviewOptions, IPullRequestDestination } from './publish-sarif-review.cjs';
 import type { IProblem } from './public-types.cjs';
+import { isPlainObject } from './sarif-common.cjs';
 import {
   ReviewContextMismatchError,
   blockedReviewMarkdown,
@@ -107,13 +120,14 @@ export interface IValidateSarifReviewInput {
 
 /**
  * Publication of this document would proceed to its single create-review
- * request. Nothing was published and nothing was written.
+ * request, and the account had no pending review on the pull request.
+ * Nothing was published and nothing was written.
  *
  * @remarks
  * This is not an approval and not a delivery promise: publication repeats
  * every check against the pull request as it is then, and GitHub can still
- * refuse the review (for example when the account already has a pending
- * review on the pull request).
+ * refuse the review (for example when the account starts a pending review on
+ * the pull request before publication).
  *
  * @public
  */
@@ -125,8 +139,9 @@ export interface IReadyAssessment {
 }
 
 /**
- * Publication of this document would be blocked. Nothing was published and
- * nothing was written.
+ * Publication of this document would be blocked, or GitHub would refuse it
+ * because the account already has a pending review on the pull request.
+ * Nothing was published and nothing was written.
  *
  * @public
  */
@@ -135,16 +150,15 @@ export interface IBlockedAssessment {
   readonly status: 'blocked';
   /** Every blocking problem, with a pointer into the SARIF document where it has one. */
   readonly problems: readonly IProblem[];
-  /** The explanation publication itself gives for this document. */
+  /** The explanation publication itself gives for this document, or the pending review that stands in the way. */
   readonly markdown: string;
 }
 
 /**
  * The assessment could not be completed (for example a refused credential, a
- * network failure, a failed source read or a pull request that does not match
- * the request). This is no verdict on the document; publication would refuse
- * at the same point without writing. Nothing was published and nothing was
- * written.
+ * network failure, a failed source read, a pull request that does not match
+ * the request, or a review list that could not be read completely). This is
+ * no verdict on the document. Nothing was published and nothing was written.
  *
  * @public
  */
@@ -165,9 +179,13 @@ export type ValidateSarifReviewOutcome = IReadyAssessment | IBlockedAssessment |
 // ---------------------------------------------------------------------------
 // Private seam
 
-/** What assessment needs from a GitHub client: the preflight's context plus the authenticated user. */
+/**
+ * What assessment needs from a GitHub client: the preflight's context, the
+ * authenticated user, and the pull request's reviews one page at a time.
+ */
 interface IAssessingClient extends IContextClient {
   readonly getAuthenticatedUser: () => Promise<unknown>;
+  readonly listReviews: (request: IListReviewsRequest) => Promise<unknown>;
 }
 
 /**
@@ -219,7 +237,7 @@ function readyMarkdown(prepared: IDestinationReady, captured: ICapturedReview): 
     '',
     NOTHING_WRITTEN,
     '',
-    'This is not an approval: publication repeats every check against the pull request as it is then. GitHub can still refuse the review, for example when this account already has a pending review on the pull request.',
+    'No pending review of this account was found on the pull request. This is not an approval: publication repeats every check against the pull request as it is then. GitHub can still refuse the review, for example if this account starts a pending review on the pull request before publication.',
   ].join('\n');
 }
 
@@ -307,6 +325,7 @@ class OperationalFailures {
           throw this.record(err);
         }
       },
+      listReviews: this.observeCall(client.listReviews),
       ...(client.readSuggestionTarget === undefined ? {} : { readSuggestionTarget: this.observeCall(client.readSuggestionTarget) }),
       ...(client.compareCommits === undefined ? {} : { compareCommits: this.observeCall(client.compareCommits) }),
       ...(client.findLabel === undefined ? {} : { findLabel: this.observeCall(client.findLabel) }),
@@ -344,6 +363,120 @@ class OperationalFailures {
 }
 
 // ---------------------------------------------------------------------------
+// Pending review of this account (contract: "Pending review of this account")
+
+/** GitHub's review state for a review its author has not submitted. */
+const PENDING_STATE = 'PENDING';
+
+/** GitHub's documented states of a submitted review; none of them is pending. */
+const SUBMITTED_STATES: ReadonlySet<unknown> = new Set(['COMMENTED', 'APPROVED', 'CHANGES_REQUESTED', 'DISMISSED']);
+
+/**
+ * GitHub's review list leaves undecided whether this account has a pending
+ * review on the pull request. This is the host's answer, not a defect in this
+ * package, so assessment reports it as incomplete.
+ */
+class UndecidedReviewsError extends Error {}
+
+/** A pending review of the authenticated account, as the host listed it. */
+interface IPendingReview {
+  readonly id: number;
+  readonly htmlUrl: string | undefined;
+}
+
+/** The facts of one listed review that the check depends on. */
+interface IReviewFacts {
+  readonly authorId: unknown;
+  readonly state: unknown;
+  readonly htmlUrl: unknown;
+}
+
+/** What the complete review list says: the account's pending reviews, or why that cannot be decided. */
+type PendingReviewsAnswer = { readonly pending: readonly IPendingReview[] } | { readonly undecided: string };
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
+}
+
+/**
+ * The pending reviews of the account with numeric id `userId` among a
+ * complete review list. Authors are compared only by numeric id; logins are
+ * mutable and never compared. A review listed more than once must be listed
+ * with the same author and state each time, or the list is undecided. A
+ * review that could be the account's pending one but cannot be shown to be
+ * (no numeric author id, or the account's own review in an undocumented
+ * state) makes the list undecided unless the account has an unambiguous
+ * pending review, which blocks either way.
+ */
+function pendingReviewsOf(reviews: readonly unknown[], userId: number, where: string): PendingReviewsAnswer {
+  const undecided = (why: string): PendingReviewsAnswer => ({
+    undecided: `GitHub's review list for ${where} leaves undecided whether this account has a pending review there: ${why}.`,
+  });
+  const byId = new Map<number, IReviewFacts>();
+  for (const review of reviews) {
+    if (!isPlainObject(review) || !isPositiveInteger(review['id'])) return undecided('a listed review has no numeric id');
+    const id = review['id'];
+    const facts: IReviewFacts = { authorId: review['authorId'], state: review['state'], htmlUrl: review['htmlUrl'] };
+    const earlier = byId.get(id);
+    if (earlier === undefined) {
+      byId.set(id, facts);
+    } else if (!Object.is(earlier.authorId, facts.authorId) || !Object.is(earlier.state, facts.state)) {
+      return undecided(`review ${String(id)} is listed more than once with different authors or states`);
+    }
+  }
+  const pending: IPendingReview[] = [];
+  const unknown: string[] = [];
+  for (const [id, { authorId, state, htmlUrl }] of byId) {
+    const submitted = SUBMITTED_STATES.has(state);
+    if (!isPositiveInteger(authorId)) {
+      if (!submitted) unknown.push(`review ${String(id)} has no numeric author id`);
+    } else if (authorId === userId) {
+      if (state === PENDING_STATE) pending.push({ id, htmlUrl: typeof htmlUrl === 'string' && htmlUrl.length > 0 ? htmlUrl : undefined });
+      else if (!submitted) unknown.push(`review ${String(id)} of this account has an unknown state`);
+    }
+  }
+  if (pending.length === 0 && unknown.length > 0) return undecided(unknown.join('; '));
+  return { pending };
+}
+
+/** The blocker for one pending review of the account: which review, why GitHub would refuse, and what to do. */
+function pendingReviewProblem(review: IPendingReview, where: string): IDiagnostic {
+  const named = review.htmlUrl === undefined ? `review ${String(review.id)}` : `review ${String(review.id)} (${review.htmlUrl})`;
+  return {
+    code: 'pending-review-exists',
+    message:
+      `This account already has a pending review on ${where}: ${named}. ` +
+      'GitHub allows one pending review per account on a pull request, so it would refuse this review, as a draft or as a submitted comment review. ' +
+      'Submit or delete that pending review on GitHub, then validate again; this tool never submits, edits or deletes an existing review. ' +
+      "If it is this tool's own earlier publication, retry publish with that publication's state path rather than a new one.",
+  };
+}
+
+/**
+ * Reads every page of the destination's reviews and answers with the
+ * account's pending reviews. An enumeration that cannot be completed, or a
+ * list that leaves the answer undecided, rejects with a failure recorded as
+ * operational: it is never read as ready or blocked.
+ */
+async function pendingReviews(
+  client: IAssessingClient,
+  captured: ICapturedReview,
+  userId: number,
+  operational: OperationalFailures,
+): Promise<readonly IPendingReview[]> {
+  const { owner, repo, pullNumber } = captured.destination;
+  let reviews: unknown[];
+  try {
+    reviews = await readAllPages((cursor) => client.listReviews({ owner, repo, pullNumber, cursor }), 'reviews');
+  } catch (err) {
+    throw operational.record(err);
+  }
+  const answer = pendingReviewsOf(reviews, userId, destinationLabel(captured));
+  if ('undecided' in answer) throw operational.record(new UndecidedReviewsError(answer.undecided));
+  return answer.pending;
+}
+
+// ---------------------------------------------------------------------------
 // Entry point
 
 async function assess(captured: ICapturedReview, createGitHubClient: (options: ICreateGitHubClientOptions) => IAssessingClient): Promise<ValidateSarifReviewOutcome> {
@@ -356,12 +489,19 @@ async function assess(captured: ICapturedReview, createGitHubClient: (options: I
       return { status: 'blocked', problems: prepared.diagnostics.map(problemOf), markdown: blockedReviewMarkdown(prepared) };
     }
     validatePreparedReview({ body: prepared.review.body, comments: prepared.review.comments });
+    let userId: number;
     try {
-      await authenticatedUserId(client);
+      userId = await authenticatedUserId(client);
     } catch (err) {
       // The client's failure, or its answer that the account has no numeric
       // id (not user/PAT authentication): both are the host's, not a defect.
       throw operational.record(err);
+    }
+    const pending = await pendingReviews(client, captured, userId, operational);
+    if (pending.length > 0) {
+      const where = destinationLabel(captured);
+      const blocked = blockedBy(pending.map((review) => pendingReviewProblem(review, where)), prepared.warnings);
+      return { status: 'blocked', problems: blocked.diagnostics.map(problemOf), markdown: blockedReviewMarkdown(blocked) };
     }
     ready = prepared;
   } catch (err) {
@@ -381,9 +521,12 @@ async function assess(captured: ICapturedReview, createGitHubClient: (options: I
  * holds, source consistency against the reviewed commit, supported
  * representation, placement and suggestion eligibility, product limits and
  * the authenticated account — reading GitHub but never writing to it, and
- * writing no file. It is optional: publication never requires it, and a
- * `ready` result grants nothing, because publication performs every check
- * again against the pull request as it is then.
+ * writing no file. It also reads the pull request's reviews: a pending review
+ * of the authenticated account there is reported as `blocked`, because
+ * GitHub refuses to create another review, draft or submitted, while it
+ * exists. It is optional: publication never requires it, and a `ready`
+ * result grants nothing, because publication performs every check again
+ * against the pull request as it is then.
  *
  * @param input - The document, intended pull request, reviewed commit and
  * credential (no state path).
@@ -393,7 +536,8 @@ async function assess(captured: ICapturedReview, createGitHubClient: (options: I
  * @throws `TypeError` for invalid input, before any network request; an
  * `Error` for a defect in this package (an internal invariant failure), as
  * `publishSarifReview` does. Operational failures (GitHub, network,
- * authentication, source reads) are reported as `incomplete`, never thrown.
+ * authentication, source reads, a review list that cannot be read
+ * completely) are reported as `incomplete`, never thrown.
  * Neither a result nor a rejection contains the token.
  *
  * @example

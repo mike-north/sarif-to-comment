@@ -4,7 +4,7 @@
 
 ## IBlockedAssessment.markdown property
 
-The explanation publication itself gives for this document.
+The explanation publication itself gives for this document, or the pending review that stands in the way.
 
 **Signature:**
 
