@@ -136,6 +136,27 @@ describe('wrapping to the terminal width', () => {
     for (const line of lines) assert.doesNotMatch(line, / $/, 'no trailing whitespace');
   });
 
+  test('wide characters count two columns: CJK words wrap by display width', () => {
+    // Each word is four CJK ideographs: 8 columns, although its UTF-16 length is 4.
+    const lines = renderDiagnostics([createDiagnostic('operation-failed', '漢字漢字 漢字漢字 漢字漢字')], { style: PLAIN_STYLE, width: 12 }).split('\n');
+    assert.deepEqual(lines.slice(1, 4), ['  漢字漢字', '  漢字漢字', '  漢字漢字']);
+  });
+
+  test('an emoji with a skin-tone modifier is one two-column grapheme, not four columns', () => {
+    // "  👍🏽👍🏽 👍🏽👍🏽" is 2 + 4 + 1 + 4 = 11 columns; its UTF-16 length is 19.
+    const lines = renderDiagnostics([createDiagnostic('operation-failed', '👍🏽👍🏽 👍🏽👍🏽')], { style: PLAIN_STYLE, width: 11 }).split('\n');
+    assert.equal(lines[1], '  👍🏽👍🏽 👍🏽👍🏽');
+    const narrower = renderDiagnostics([createDiagnostic('operation-failed', '👍🏽👍🏽 👍🏽👍🏽')], { style: PLAIN_STYLE, width: 10 }).split('\n');
+    assert.deepEqual(narrower.slice(1, 3), ['  👍🏽👍🏽', '  👍🏽👍🏽']);
+  });
+
+  test('a combining mark adds no column', () => {
+    // "e" + U+0301 is one column; ten of them make a 10-column word.
+    const word = 'e\u0301'.repeat(10);
+    const lines = renderDiagnostics([createDiagnostic('operation-failed', `${word} ${word}`)], { style: PLAIN_STYLE, width: 23 }).split('\n');
+    assert.equal(lines[1], `  ${word} ${word}`);
+  });
+
   test('without a width nothing is wrapped', () => {
     const long = `${words} ${words}`;
     const lines = renderDiagnostics([createDiagnostic('operation-failed', long)], { style: PLAIN_STYLE }).split('\n');

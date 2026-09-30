@@ -372,3 +372,44 @@ describe('on a terminal', () => {
     assert.equal(json.stderr, '');
   });
 });
+
+// ---------------------------------------------------------------------------
+// A broken installation (a dependency that cannot be loaded)
+
+describe('an optional dependency that cannot be loaded never costs the outcome', () => {
+  const PRELOAD = path.join(import.meta.dirname, 'fixtures', 'diagnostics', 'fail-import.mts');
+  const dir = workDir();
+  write(dir, 'invalid.sarif.json', readJson(path.join(PUBLIC_API, 'invalid.sarif.json')));
+  const broken = (failing: string, argv: readonly string[]): IRun => {
+    const result = spawnSync(process.execPath, ['--import', PRELOAD, BIN, ...argv], {
+      cwd: dir, encoding: 'utf8', timeout: 30_000, env: { PATH: process.env['PATH'], FAIL_IMPORT_PACKAGE: failing },
+    });
+    return { status: result.status, stdout: result.stdout, stderr: result.stderr };
+  };
+
+  test('without chalk, colored output falls back to plain text with a color-unavailable warning, and keeps its exit status', () => {
+    const result = broken('chalk', ['inspect', '--sarif', 'invalid.sarif.json', '--color', 'always']);
+    assert.equal(result.status, 2, 'the refusal keeps its exit status');
+    assert.equal(result.stdout, '');
+    assert.equal(result.stderr.includes(ESC), false, 'plain text');
+    assert.match(result.stderr, /^✖ error {2}The document is not valid SARIF 2\.1\.0 {2}\[sarif-schema-invalid\]\n/);
+    assert.match(result.stderr, /\n▲ warning {2}Color is unavailable {2}\[color-unavailable\]\n[\s\S]*simulated broken installation/);
+    assert.ok(result.stderr.endsWith('\n1 error, 1 warning\n'), result.stderr);
+  });
+
+  test('without chalk, a success without diagnostics prints no warning', () => {
+    const result = broken('chalk', ['init', '--output', 'fresh.sarif.json', '--color', 'always']);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stderr, '');
+  });
+
+  test('without the TOON encoder, --format toon is an operation-failed error before any work (exit 1)', () => {
+    const output = path.join(dir, 'never.sarif.json');
+    const result = broken('@toon-format/toon', ['init', '--output', output, '--format', 'toon']);
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.match(result.stderr, /^✖ error {2}The operation could not be completed {2}\[operation-failed\]\n[\s\S]*TOON[\s\S]*simulated broken installation/);
+    assert.equal(fs.existsSync(output), false, 'nothing was done');
+    assert.equal(broken('@toon-format/toon', ['inspect', '--sarif', 'invalid.sarif.json', '--format', 'json']).status, 2, 'other formats do not need it');
+  });
+});

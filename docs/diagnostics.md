@@ -199,6 +199,7 @@ One entry per code: its severity, its title, what it means and its typical remed
 | `output-archive-failed` | error | The existing output could not be preserved | `add-staged-changes` moves an existing output aside before writing a new one; that failed, so nothing was written. | Check the output directory's permissions, then run the command again. |
 | `message-not-utf8` | error | The message on standard input is not UTF-8 | `add-comment --message-file -` reads the finding's text from standard input, which must be UTF-8. | Provide the message as UTF-8 text. |
 | `operation-failed` | error | The operation could not be completed | The operation stopped for a reason outside the document: for example the network, GitHub, Git, or a publication state file that is corrupt or belongs to other input. The message names the cause. | Resolve the cause the message names, then run the command again. |
+| `color-unavailable` | warning | Color is unavailable | Color was asked for, but the color library (chalk) could not be loaded, so the diagnostics are shown as plain text. The outcome and its exit status are unaffected. | Reinstall the package's dependencies, or use `--color never`. |
 
 ### SARIF documents, authoring and grouping
 
