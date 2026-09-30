@@ -42,7 +42,7 @@ import { findSuggestionMarker } from '../dist/suggestion-marker.cjs';
 import { FakeHttpGitHub } from './fixtures/composition/fake-http-github.mts';
 import type { IHttpHostConfig, IHttpPullFile, IHttpRepository } from './fixtures/composition/fake-http-github.mts';
 import type { IStoredPull } from './fixtures/composition/fake-http-companion.mts';
-import { asRecord, asString, parseJson, readJson } from './support/runtime-types.mts';
+import { asArray, asRecord, asString, parseJson, readJson } from './support/runtime-types.mts';
 
 const CLI = path.join(import.meta.dirname, 'fixtures', 'composition', 'cli-with-fake-http.mts');
 const OWNER = 'octo';
@@ -65,6 +65,12 @@ const REWRITTEN = 'b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2';
 const DROPPED = 'd3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3';
 /** Rewritten with a line inserted above the reviewed lines, and a directory where docs/new.md would go. */
 const MOVED = 'e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4';
+/** An ordinary push on top of the amended head C1′: the branch moved forward from it. */
+const AMENDED_LATER = 'a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2';
+/** Rewritten so that docs/sample.md is no longer UTF-8 text (a 0xFF byte on line 15). */
+const NOT_TEXT = 'f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5';
+/** Rewritten so that docs/sample.md is larger than the 1,000,000-byte source-read limit. */
+const OVERSIZE = 'f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6';
 
 const SHORT = REVIEWED.slice(0, 7);
 const OBSOLETE = ['first\n', 'second\n'];
@@ -84,7 +90,31 @@ const SNAPSHOTS: Readonly<Record<string, Readonly<Record<string, readonly string
   [REWRITTEN]: { 'docs/sample.md': sample({ 5: 'Line 5, reviewed.', 6: 'Line 6, rewritten.', 15: 'Line 15, later.' }), 'obsolete.txt': ['first\n', 'changed\n'] },
   [DROPPED]: { 'docs/sample.md': sample({ 10: 'Line 10, edited.' }), 'docs/new.md': ["# Someone else's page\n"] },
   [MOVED]: { 'docs/sample.md': ['Preface.\n', ...sample(REVIEWED_LINES)], 'obsolete.txt': OBSOLETE, 'docs/new.md/index.md': ['# Index\n'] },
+  [AMENDED_LATER]: { 'docs/sample.md': sample({ ...REVIEWED_LINES, 15: 'Line 15, later.', 20: 'Line 20, even later.' }), 'obsolete.txt': OBSOLETE },
 };
+
+/**
+ * Heads served only by the worlds that use them: a sample that is not UTF-8
+ * (given as raw bytes), and one over the source-read limit (large, so it is
+ * not built into every world).
+ */
+const NOT_TEXT_SAMPLE = Buffer.concat([
+  Buffer.from(sample(REVIEWED_LINES).slice(0, 14).join('')),
+  Buffer.from([0x4c, 0x69, 0x6e, 0x65, 0x20, 0xff, 0x0a]),
+  Buffer.from(sample(REVIEWED_LINES).slice(15).join('')),
+]);
+function specialHead(head: string): Pick<IHttpRepository, 'snapshots' | 'rawFiles'> {
+  if (head === NOT_TEXT) {
+    return {
+      snapshots: { ...SNAPSHOTS, [NOT_TEXT]: { 'obsolete.txt': OBSOLETE } },
+      rawFiles: { [NOT_TEXT]: { 'docs/sample.md': { base64: NOT_TEXT_SAMPLE.toString('base64') } } },
+    };
+  }
+  if (head === OVERSIZE) {
+    return { snapshots: { ...SNAPSHOTS, [OVERSIZE]: { 'docs/sample.md': [...sample(REVIEWED_LINES), `${'x'.repeat(1_000_000)}\n`], 'obsolete.txt': OBSOLETE } } };
+  }
+  return { snapshots: SNAPSHOTS };
+}
 const PARENTS: Readonly<Record<string, readonly string[]>> = {
   [REVIEWED]: [BASE],
   [ADVANCED]: [REVIEWED],
@@ -92,6 +122,9 @@ const PARENTS: Readonly<Record<string, readonly string[]>> = {
   [REWRITTEN]: [BASE],
   [DROPPED]: [BASE],
   [MOVED]: [BASE],
+  [AMENDED_LATER]: [AMENDED],
+  [NOT_TEXT]: [BASE],
+  [OVERSIZE]: [BASE],
 };
 
 /** A pull request file whose patch replaces the whole file (a valid unified diff for any two versions). */
@@ -112,8 +145,9 @@ function pullFile(filename: string, before: readonly string[] | undefined, after
 
 /** The pull request, its head at `head`; every snapshot stays readable (discarded commits stay fetchable). */
 function repositoryAt(head: string): IHttpRepository {
+  const special = specialHead(head);
   const base = SNAPSHOTS[BASE] ?? {};
-  const now = SNAPSHOTS[head] ?? {};
+  const now = special.snapshots[head] ?? {};
   const paths = [...new Set([...Object.keys(base), ...Object.keys(now)])].sort();
   const pullFiles = paths
     .filter((p) => JSON.stringify(base[p]) !== JSON.stringify(now[p]))
@@ -121,7 +155,7 @@ function repositoryAt(head: string): IHttpRepository {
   return {
     destination: { owner: OWNER, repo: REPO, pullNumber: PULL },
     commits: { base: BASE, head },
-    snapshots: SNAPSHOTS,
+    ...special,
     parents: PARENTS,
     pullFiles,
     pull: { headRef: HEAD_REF, baseRef: 'main' },
@@ -188,11 +222,11 @@ function internalsFor(world: IWorld): { readonly createGitHubClient: (options: I
   return { createGitHubClient: (options) => createGitHubClient({ ...options, fetch: world.host.fetch }) };
 }
 
-async function call(name: 'publishSarifReview' | 'validateSarifReview', world: IWorld): Promise<Json> {
+async function call(name: 'publishSarifReview' | 'validateSarifReview', world: IWorld, sarif: Json = reviewDocument()): Promise<Json> {
   const operation: unknown = Reflect.get(library, name);
   if (typeof operation !== 'function') throw new assert.AssertionError({ message: `the package exports ${name}` });
   const input: Json = {
-    sarif: reviewDocument(),
+    sarif,
     destination: { owner: OWNER, repo: REPO, pullNumber: PULL },
     reviewedCommit: REVIEWED,
     token: TOKEN,
@@ -205,6 +239,8 @@ async function call(name: 'publishSarifReview' | 'validateSarifReview', world: I
 
 const publish = (world: IWorld): Promise<Json> => call('publishSarifReview', world);
 const validate = (world: IWorld): Promise<Json> => call('validateSarifReview', world);
+const publishWith = (world: IWorld, sarif: Json): Promise<Json> => call('publishSarifReview', world, sarif);
+const validateWith = (world: IWorld, sarif: Json): Promise<Json> => call('validateSarifReview', world, sarif);
 
 const status = (outcome: Json): string => asString(outcome['status'], 'an outcome status');
 const markdown = (outcome: Json): string => asString(outcome['markdown'], 'outcome markdown');
@@ -347,6 +383,12 @@ const reviewBody = (...sections: readonly (readonly string[])[]): string => sect
 /** §2.5.1: the warning for a suggestion that is not created. */
 function notReapplied(pointer: string, unit: IUnit, head: string, reasons: readonly string[]): string {
   return `- \`suggestion-pr-not-reapplied\` at \`${pointer}\`: The history of #7 was rewritten after the reviewed commit, so the suggestion pull request \`${unit.title}\` would have to be re-applied onto commit \`${head}\`, and it cannot be: ${reasons.join('; ')}. It is not created; its change and findings are presented in the review body.`;
+}
+
+/** Contract §2.10: the retry warning when the branch changed after the suggestions were planned. */
+function changedSincePlanned(base: string, head: string): string {
+  return `**The branch of #7 changed since these suggestions were planned:** they are based on commit \`${base}\`, which is no longer part of it `
+    + `(its head is now \`${head}\`). The suggestion pull requests still to be created are created on that commit, as planned; nothing is re-decided.`;
 }
 
 /** The warnings block of prepared Markdown, as validate and publish both show it. */
@@ -624,7 +666,7 @@ describe('recovery and retry after a re-application (§2.9, §2.10)', () => {
     assert.equal(world.host.reviews().length, 1);
   });
 
-  test('a retry never re-decides: the head rewritten again in between changes nothing already planned', async () => {
+  test('a retry never re-decides: the head rewritten again in between changes nothing already planned, and the outcome says so', async () => {
     const world = makeWorld(AMENDED, { companion: { loseResponse: ['pull'] } });
     world.host.hide({ pulls: 1 });
     assert.equal(status(await publish(world)), 'uncertain');
@@ -634,19 +676,58 @@ describe('recovery and retry after a re-application (§2.9, §2.10)', () => {
     world.host.setConfig({ companion: {} });
     const retried = await publish(world);
     assert.equal(status(retried), 'published', markdown(retried));
-    assert.equal(compareReads(world).length, compares, 'no comparison is read again');
+    assert.deepEqual(compareReads(world).slice(compares), [`${AMENDED}...${DROPPED}`], 'only the planned base against the head, to warn; nothing is re-decided');
     for (const pull of threePulls(world)) assert.deepEqual(proposalCommit(world, pull.head).parents, [AMENDED], 'still re-applied onto the head it was planned on');
     assert.ok(markdown(retried).includes(`re-applied onto commit \`${AMENDED}\`):`), markdown(retried));
+    assert.ok(markdown(retried).includes(changedSincePlanned(AMENDED, DROPPED)), markdown(retried));
   });
 
-  test('a completed publication is reported from its receipts, with no request that writes', async () => {
+  test('a retry after the branch only moved forward from the planned base gives no warning', async () => {
+    const world = makeWorld(AMENDED, { companion: { loseResponse: ['pull'] } });
+    world.host.hide({ pulls: 1 });
+    assert.equal(status(await publish(world)), 'uncertain');
+    world.host.replaceRepository(repositoryAt(AMENDED_LATER));
+    world.host.setConfig({ companion: {} });
+    const retried = await publish(world);
+    assert.equal(status(retried), 'published', markdown(retried));
+    assert.doesNotMatch(markdown(retried), /changed since these suggestions were planned/);
+  });
+
+  test('a plan on the reviewed commit warns too when the branch was rewritten after planning (no re-decision)', async () => {
+    const world = makeWorld(ADVANCED, { companion: { loseResponse: ['pull'] } });
+    world.host.hide({ pulls: 1 });
+    assert.equal(status(await publish(world)), 'uncertain');
+    world.host.replaceRepository(repositoryAt(AMENDED));
+    world.host.setConfig({ companion: {} });
+    const retried = await publish(world);
+    assert.equal(status(retried), 'published', markdown(retried));
+    for (const pull of threePulls(world)) assert.deepEqual(proposalCommit(world, pull.head).parents, [REVIEWED]);
+    assert.ok(markdown(retried).includes(changedSincePlanned(REVIEWED, AMENDED)), markdown(retried));
+  });
+
+  test('an uncertain retry carries the warning as well', async () => {
+    const world = makeWorld(AMENDED, { companion: { loseResponse: ['pull'] } });
+    world.host.hide({ pulls: 1 });
+    assert.equal(status(await publish(world)), 'uncertain');
+    world.host.replaceRepository(repositoryAt(DROPPED));
+    world.host.hide({ pulls: 1 });
+    const retried = await publish(world);
+    assert.equal(status(retried), 'uncertain', markdown(retried));
+    assert.ok(markdown(retried).includes(changedSincePlanned(AMENDED, DROPPED)), markdown(retried));
+  });
+
+  test('a completed publication is reported from its receipts, with no request that writes and no ancestry read', async () => {
     const world = makeWorld(AMENDED);
     assert.equal(status(await publish(world)), 'published');
     const before = writes(world).length;
+    const compares = compareReads(world).length;
+    world.host.replaceRepository(repositoryAt(DROPPED));
     const again = await publish(world);
     assert.equal(status(again), 'published', markdown(again));
     assert.equal(writes(world).length, before);
+    assert.equal(compareReads(world).length, compares, 'nothing is left to create, so the branch is not checked');
     assert.ok(markdown(again).includes(`re-applied onto commit \`${AMENDED}\`):`), markdown(again));
+    assert.doesNotMatch(markdown(again), /changed since these suggestions were planned/);
   });
 
   test('when nothing is re-applied, a lost review response is rediscovered and never resent, as for any review', async () => {
@@ -662,6 +743,83 @@ describe('recovery and retry after a re-application (§2.9, §2.10)', () => {
     assert.equal(world.host.reviews().length, 1);
     assert.deepEqual(world.host.pulls(), []);
   });
+});
+
+
+describe('a head file that cannot be read as source is a reason to skip, never a failure (§2.5.1)', () => {
+  for (const [head, what, reason] of [
+    [NOT_TEXT, 'not UTF-8', '`docs/sample.md` is not UTF-8 text at the head'],
+    [OVERSIZE, 'over the source-read limit', '`docs/sample.md` exceeds the source-read limit'],
+  ] as const) {
+    test(`an edited file that is ${what} at the head skips its suggestion; the others are re-applied`, async () => {
+      const assessed = await validate(makeWorld(head));
+      assert.equal(status(assessed), 'ready', markdown(assessed));
+      const world = makeWorld(head);
+      const outcome = await publish(world);
+      assert.equal(status(outcome), 'published', markdown(outcome));
+      assert.deepEqual(world.host.pulls().map((p) => p.title), [CREATE.title, DELETE.title]);
+      const expected = warningsBlock(notReapplied('/runs/0/results/0', REWORD, head, [reason]));
+      assert.equal(warningsOf(markdown(outcome)), expected);
+      assert.equal(warningsOf(markdown(assessed)), expected);
+      const [review] = world.host.reviews();
+      assert.ok(review);
+      assert.ok(review.request.body.startsWith(skippedSection(REWORD, head, [reason]).join('\n')), review.request.body);
+    });
+  }
+});
+
+describe('the ancestry read is made only when a suggestion pull request could be created (§2.5, §2.8)', () => {
+  const remarkOnly = (): Json => {
+    const doc = reviewDocument();
+    const [run] = asArray(doc['runs']);
+    const results = asArray(asRecord(run)['results']);
+    return { ...doc, runs: [{ ...asRecord(run), results: results.slice(4) }] };
+  };
+
+  test('a review that creates no suggestion pull request never reads it, so its failure cannot refuse the review', async () => {
+    const world = makeWorld(AMENDED, { failAncestryCompare: 404 });
+    const assessed = await validateWith(world, remarkOnly());
+    assert.equal(status(assessed), 'ready', markdown(assessed));
+    const outcome = await publishWith(world, remarkOnly());
+    assert.equal(status(outcome), 'published', markdown(outcome));
+    assert.deepEqual(compareReads(world).filter((c) => !c.startsWith(`${BASE}...`)), [], 'no ancestry read');
+  });
+
+  test('when one is needed, a failed read is operational: validate is incomplete, publish rejects, and nothing is written', async () => {
+    const world = makeWorld(AMENDED, { failAncestryCompare: 404 });
+    const assessed = await validate(world);
+    assert.equal(status(assessed), 'incomplete', markdown(assessed));
+    assert.match(markdown(assessed), /404/);
+    await assert.rejects(publish(world), /404/);
+    assert.deepEqual(writes(world), []);
+    assert.equal(fs.existsSync(world.statePath), false);
+  });
+});
+
+describe('every problem is reported together after a rewritten history too (§2.8)', () => {
+  const pages = (): Json => {
+    const artifacts = Array.from({ length: 11 }, (_, i) => ({ location: { uri: `docs/p${String(i)}.md` }, contents: { text: `# ${String(i)}\n` }, encoding: 'utf-8' }));
+    const results = artifacts.map((_, i) => ({
+      message: { text: `Page ${String(i)}.` },
+      properties: { sarifToComment: { proposedFileChanges: [{ operation: 'create', artifactIndex: i }], ...(i === 0 ? { acceptanceGroup: 'solo' } : {}) } },
+    }));
+    const [run] = asArray(reviewDocument()['runs']);
+    return { ...reviewDocument(), runs: [{ ...asRecord(run), artifacts, results }] };
+  };
+  const problems = [
+    '- `acceptance-group-single-change` at `/runs/0/results/0`: Acceptance group "solo" holds only one distinct change; a group needs at least two changes to accept together. Remove the group, and the change is published on its own.',
+    '- `too-many-suggestion-prs`: The review needs 11 suggestion pull requests; the limit is 10. Nothing is split or dropped.',
+  ];
+
+  for (const head of [REVIEWED, AMENDED]) {
+    test(`the limit is reported with the other problems (${head === REVIEWED ? 'head is the reviewed commit' : 'rewritten history'})`, async () => {
+      const world = makeWorld(head);
+      const assessed = await validateWith(world, pages());
+      assert.equal(status(assessed), 'blocked', markdown(assessed));
+      for (const line of problems) assert.ok(markdown(assessed).includes(line), markdown(assessed));
+      assert.ok(markdown(assessed).includes('**Review blocked:** 2 problems must be resolved'), markdown(assessed));
+    });
+  }
 });
 
 describe('CLI + real GitHub client over HTTP', () => {

@@ -66,6 +66,9 @@
  *                                    attached with another token is refused)
  *   failBlobReads?: boolean          answer 502 to every Git blob read (an
  *                                    operational source-read failure)
+ *   failAncestryCompare?: number     answer this status to every comparison
+ *                                    that is not the pull request's own
+ *                                    base...head (an ancestry read that fails)
  *   failTreeReads?: boolean          answer 502 to every Git tree read (an
  *                                    operational failure of any source read
  *                                    or existence check)
@@ -186,6 +189,7 @@ export interface IHttpHostConfig {
   readonly onlyCredential?: string | undefined;
   readonly failBlobReads?: boolean | undefined;
   readonly failTreeReads?: boolean | undefined;
+  readonly failAncestryCompare?: number | undefined;
   readonly companion?: ICompanionConfig | undefined;
 }
 
@@ -270,6 +274,7 @@ const isHostConfig: Guard<IHttpHostConfig> = isShape({
   onlyCredential: isOptional(isString),
   failBlobReads: isOptional(isBoolean),
   failTreeReads: isOptional(isBoolean),
+  failAncestryCompare: isOptional(isNumber),
   companion: isOptional(isCompanionConfig),
 });
 
@@ -497,6 +502,8 @@ export class FakeHttpGitHub {
       return json({ status: 'ahead', merge_base_commit: { sha: base } });
     }
     if (method === 'GET' && (m = new RegExp(`^${repoPath}/compare/([0-9a-f]{40})\\.\\.\\.([0-9a-f]{40})$`).exec(p))) {
+      const failure = this.config().failAncestryCompare;
+      if (failure !== undefined && captured(m) !== base) return json({ message: 'Not Found' }, failure);
       return this.compare(captured(m), m[2] ?? '', json);
     }
     if (method === 'GET' && (m = new RegExp(`^${repoPath}/git/commits/([0-9a-f]{40})$`).exec(p))) {
