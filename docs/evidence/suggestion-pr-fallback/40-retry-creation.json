@@ -1,0 +1,11 @@
+{
+  "command": "publish",
+  "status": "published",
+  "review": {
+    "id": 5371097240,
+    "url": "https://github.com/mike-north/doc-linter/pull/74#pullrequestreview-5371097240"
+  },
+  "statePath": "<evidence>/state/creation.json",
+  "message": "## Draft review published\n\nThe draft [review 5371097240](https://github.com/mike-north/doc-linter/pull/74#pullrequestreview-5371097240) on mike-north/doc-linter#74 at commit `74c018f61294532241be4f3f378055962c0d65b6` was already published; its completion is recorded at `<evidence>/state/creation.json`. Nothing was sent.",
+  "diagnostics": []
+}

@@ -1,0 +1,11 @@
+## Ready to publish
+
+**Ready to publish with 1 warning:** 1 suggestion pull request would not be created; its change would be shown in the review.
+
+The complete document can be published faithfully to mike-north/doc-linter#74 at commit `74c018f61294532241be4f3f378055962c0d65b6`.
+
+**Review prepared:** 0 inline comment(s) and 2 general section(s) for commit `74c018f61294532241be4f3f378055962c0d65b6`.
+
+Nothing was published and no publication state was written.
+
+No pending review of this account was found on the pull request. This is not an approval: publication repeats every check against the pull request as it is then. GitHub can still refuse the review, for example if this account starts a pending review on the pull request before publication.

@@ -1,0 +1,4 @@
+10-validate-creation toon == json ready suggestion-pr-fallback
+11-validate-deletion toon == json ready suggestion-pr-fallback
+12-validate-group toon == json blocked suggestion-group-not-reapplied
+13-validate-fix toon == json blocked suggestion-group-not-reapplied

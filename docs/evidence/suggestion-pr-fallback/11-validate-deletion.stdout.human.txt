@@ -1,0 +1,13 @@
+## Ready to publish
+
+**Ready to publish with 1 warning:** 1 suggestion pull request would not be created; its change would be shown in the review.
+
+The complete document can be published faithfully to mike-north/doc-linter#75 at commit `a96870958463377e3a1fa9c455099a876961abd3`.
+
+Publication would also create 1 draft suggestion pull request into `exp-fallback-20260930-deletion`, labeled `suggestion-pr`. The history of #75 was rewritten after the reviewed commit, so it is re-applied onto commit `8c35033bf19c1d8c439a0bc287b3fa67f5f0ace2`, where everything it changes is still exactly as reviewed.
+
+**Review prepared:** 0 inline comment(s) and 3 general section(s) for commit `a96870958463377e3a1fa9c455099a876961abd3`.
+
+Nothing was published and no publication state was written.
+
+No pending review of this account was found on the pull request. This is not an approval: publication repeats every check against the pull request as it is then. GitHub can still refuse the review, for example if this account starts a pending review on the pull request before publication.

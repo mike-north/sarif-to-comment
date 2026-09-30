@@ -1,0 +1,32 @@
+{
+  "command": "publish",
+  "status": "published",
+  "review": {
+    "id": 5371100573,
+    "url": "https://github.com/mike-north/doc-linter/pull/75#pullrequestreview-5371100573"
+  },
+  "suggestions": [
+    {
+      "number": 78,
+      "url": "https://github.com/mike-north/doc-linter/pull/78",
+      "branch": "suggestion-pr/75/0acdfa96-3a0c-4ab6-8a75-aa99aeb7cdc5"
+    }
+  ],
+  "statePath": "<evidence>/state/deletion.json",
+  "message": "## Draft review published\n\n**Published with 1 warning:** 1 suggestion pull request was not created; its change is shown in the review.\n\nCreated the draft [review 5371100573](https://github.com/mike-north/doc-linter/pull/75#pullrequestreview-5371100573) on mike-north/doc-linter#75 at commit `a96870958463377e3a1fa9c455099a876961abd3`. It stays a draft until someone submits it on GitHub.\n\n**Review prepared:** 0 inline comment(s) and 3 general section(s) for commit `a96870958463377e3a1fa9c455099a876961abd3`.\n\n**Warnings:**\n\n- `suggestion-pr-fallback` at `/runs/0/results/1`: Suggestion pull requests are allowed, but the deletion of `docs/experiments/fallback/obsolete-deletion.txt` is not proposed as one: the history of #75 was rewritten after the reviewed commit, and it cannot be re-applied onto commit `8c35033bf19c1d8c439a0bc287b3fa67f5f0ace2` because `docs/experiments/fallback/obsolete-deletion.txt` differs from the reviewed file. It is handled as if suggestion pull requests were not allowed: the review body proposes it, with its findings.\n\nSuggestion pull requests (drafts into `exp-fallback-20260930-deletion`, labeled `suggestion-pr`, re-applied onto commit `8c35033bf19c1d8c439a0bc287b3fa67f5f0ace2`):\n\n- [#78](https://github.com/mike-north/doc-linter/pull/78) from `suggestion-pr/75/0acdfa96-3a0c-4ab6-8a75-aa99aeb7cdc5`",
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "code": "suggestion-pr-fallback",
+      "title": "A change is handled as if suggestion pull requests were not allowed",
+      "message": "Suggestion pull requests are allowed, but the deletion of `docs/experiments/fallback/obsolete-deletion.txt` is not proposed as one: the history of #75 was rewritten after the reviewed commit, and it cannot be re-applied onto commit `8c35033bf19c1d8c439a0bc287b3fa67f5f0ace2` because `docs/experiments/fallback/obsolete-deletion.txt` differs from the reviewed file. It is handled as if suggestion pull requests were not allowed: the review body proposes it, with its findings.",
+      "location": {
+        "pointer": "/runs/0/results/1",
+        "path": "docs/experiments/fallback/obsolete-deletion.txt"
+      },
+      "remedies": [
+        "To propose the change as a suggestion pull request, review the pull request's current head again and publish that review."
+      ]
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+# Falling back when a suggestion pull request cannot be re-applied: live GitHub evidence
+
+Recorded September 30, 2026 in the private fixture repository `mike-north/doc-linter`, against the implementation of [issue #37](https://github.com/mike-north/sarif-to-comment/issues/37) ([companion contract §2.5.1](companion-suggestion-pr-contract.md#251-re-application-after-a-rewritten-history), [diagnostics](diagnostics.md)). The built package ran from the working tree (`node dist/sarif-to-comment.cjs`) with the maintainer's personal token. Nothing was published to npm, nothing was merged, and `main` stayed at `0a7b03f`. Sanitized outputs are in [`evidence/suggestion-pr-fallback/`](evidence/suggestion-pr-fallback/), with local paths replaced by `<evidence>`. The exit statuses are in [`exit-statuses.txt`](evidence/suggestion-pr-fallback/exit-statuses.txt), and every JSON run wrote nothing to stderr ([`52`](evidence/suggestion-pr-fallback/52-json-stderr-sizes.txt)).
+
+## Fixtures
+
+Each original is a draft pull request into `main` from a branch holding C0 (adds `docs/experiments/fallback/sample-<v>.md`, 20 lines, and `obsolete-<v>.txt`) and C1 (changes lines 5 and 6). C1 is the reviewed commit. After the pull requests were opened ([`01`](evidence/suggestion-pr-fallback/01-originals.txt)), each C1 was amended and force-pushed, so it is no longer part of its branch ([`00`](evidence/suggestion-pr-fallback/00-reviewed-commits.txt), [`02`](evidence/suggestion-pr-fallback/02-heads-after-rewrite.txt), [`03`](evidence/suggestion-pr-fallback/03-originals-after-rewrite.tsv)):
+
+| Original | Table row | Reviewed commit C1 | The amendment | Head at publication | SARIF |
+| --- | --- | --- | --- | --- | --- |
+| [#74](https://github.com/mike-north/doc-linter/pull/74) | whole-file creation | `74c018f` | adds `new-creation.md`, the file the review proposes to create | `5293cc3` | [creation](evidence/suggestion-pr-fallback/creation.sarif.json): the creation and a remark |
+| [#75](https://github.com/mike-north/doc-linter/pull/75) | whole-file deletion, mixed with a re-appliable creation | `a968709` | changes `obsolete-deletion.txt`, the file the review proposes to delete | `8c35033` | [deletion](evidence/suggestion-pr-fallback/deletion.sarif.json): a creation of `new-deletion.md` (still absent), the deletion, and a remark |
+| [#76](https://github.com/mike-north/doc-linter/pull/76) | explicit group, mixed with a re-appliable creation | `897bc5f` | changes line 6, which the group `reword` edits with line 10 | `f2f401e` | [group](evidence/suggestion-pr-fallback/group.sarif.json): the group, a creation of `new-group.md` (still absent), and a remark |
+| [#77](https://github.com/mike-north/doc-linter/pull/77) | fix with several changes | `4486ab3` | changes line 6, which one fix edits with line 10 | `aa6da3b` | [fix](evidence/suggestion-pr-fallback/fix.sarif.json): the fix and a remark |
+
+All paths are under `docs/experiments/fallback/`.
+
+## Runs
+
+1. **Creation: falls back to the review-body proposal** ([`10` JSON](evidence/suggestion-pr-fallback/10-validate-creation.json), [TOON](evidence/suggestion-pr-fallback/10-validate-creation.toon), [human stdout](evidence/suggestion-pr-fallback/10-validate-creation.stdout.human.txt) and [stderr](evidence/suggestion-pr-fallback/10-validate-creation.stderr.human.txt); publish [stdout](evidence/suggestion-pr-fallback/20-publish-creation.stdout.human.txt) and [stderr](evidence/suggestion-pr-fallback/20-publish-creation.stderr.human.txt)). `validate` is `ready` (exit 0), headed ``**Ready to publish with 1 warning:** 1 suggestion pull request would not be created; its change would be shown in the review.``, with one `suggestion-pr-fallback` warning: ``Suggestion pull requests are allowed, but the creation of `docs/experiments/fallback/new-creation.md` is not proposed as one: the history of #74 was rewritten after the reviewed commit, and it cannot be re-applied onto commit `5293cc3…` because `docs/experiments/fallback/new-creation.md` already exists. It is handled as if suggestion pull requests were not allowed: the review body proposes it, with its findings.`` `publish` (exit 0) prints ``**Published with 1 warning:** 1 suggestion pull request was not created; its change is shown in the review.`` under its heading on stdout, and the warning once, as a block, on stderr. It created draft review 5371097240 and no suggestion pull request.
+2. **Deletion: falls back, while the creation is re-applied** ([`11`](evidence/suggestion-pr-fallback/11-validate-deletion.json), [`21`](evidence/suggestion-pr-fallback/21-publish-deletion.json)). Both report the deletion's warning (``… because `docs/experiments/fallback/obsolete-deletion.txt` differs from the reviewed file …``) and the headline. `validate` says ``Publication would also create 1 draft suggestion pull request … re-applied onto commit `8c35033…` ``. `publish` created draft review 5371100573 and [#78](https://github.com/mike-north/doc-linter/pull/78), the new page, whose single commit has the rewritten head `8c35033` as its parent ([`32`](evidence/suggestion-pr-fallback/32-proposal-commit.txt), [`30`](evidence/suggestion-pr-fallback/30-suggestion-pull-requests.jsonl): a draft labeled `suggestion-pr`, version 2 marker, one file, `MERGEABLE`).
+3. **Group: the whole review is refused** ([`12`](evidence/suggestion-pr-fallback/12-validate-group.json), [human stderr](evidence/suggestion-pr-fallback/12-validate-group.stderr.human.txt), [`22`](evidence/suggestion-pr-fallback/22-publish-group.json)). `validate` and `publish` are `blocked` (exit 2) with one `suggestion-group-not-reapplied` error: ``Suggestion pull requests are allowed, but suggestion group "reword" cannot become one: the history of #76 was rewritten after the reviewed commit, and its 2 changes cannot be re-applied onto commit `f2f401e…` because `docs/experiments/fallback/sample-group.md` line 6 differs from the reviewed text. Without a suggestion pull request, a group cannot be published: its changes are accepted together or not at all, and are never split or published in part.``, with the remedies "Review the pull request's current head again, and publish that review." and "Or remove the group (`ungroup-fixes`), so that its changes are published on their own." The creation, which could have been re-applied, is not created either.
+4. **Fix with several changes: the whole review is refused** ([`13`](evidence/suggestion-pr-fallback/13-validate-fix.json), [human stderr](evidence/suggestion-pr-fallback/13-validate-fix.stderr.human.txt), [`23`](evidence/suggestion-pr-fallback/23-publish-fix.json)). The same error names ``the fix with 2 changes`` and ends ``a fix with several changes cannot be published: …``; its second remedy is "Or split the fix into separate findings, one change each, so that its changes are published on their own."
+5. **The reviews** ([`33`](evidence/suggestion-pr-fallback/33-reviews.jsonl)). #74's pending review at C1 proposes the new file exactly as a review without suggestion pull requests does (`**Proposed new file:**`, file details, content, the finding), then the remark. #75's links #78 with the re-application paragraph, then proposes the deletion (`**Proposed file deletion:** …`), then the remark. #76 and #77 have no review.
+6. **Nothing is written on refusal, and retries are answered from the receipts** ([`50`](evidence/suggestion-pr-fallback/50-refs-after.txt), [`51`](evidence/suggestion-pr-fallback/51-state-files.txt), [`40`](evidence/suggestion-pr-fallback/40-retry-creation.json), [`41`](evidence/suggestion-pr-fallback/41-retry-deletion.json)). The only suggestion branch of #74–#77 is #78's; `main` is still `0a7b03f`; no state file exists for #76 or #77. The retries of #74 and #75 report `… was already published …` and send nothing.
+7. **TOON is the JSON document** ([`60`](evidence/suggestion-pr-fallback/60-toon-decodes-to-json.txt)): each `--format toon` output decodes to the matching `--format json` output, including `diagnostics`.
+
+## What this covers
+
+| #37 acceptance item | Live | Tests |
+| --- | --- | --- |
+| A creation or deletion that cannot be re-applied publishes the review-body proposal with a structured fallback warning | Runs 1, 2, 5 | `test/suggestion-pr-fallback.test.mts` (each reason; the body equals the body without suggestion pull requests) |
+| A group or a fix with several changes refuses the whole review, naming the reason and the ways forward; nothing written; `validate` blocked | Runs 3, 4, 6 | the same file, including heads that are not UTF-8 or over the source-read limit |
+| Mixed: a re-appliable suggestion with a group is refused; with a file operation it publishes | Runs 2 and 3 | the same file |
+| Headline, structured warnings and stderr blocks for `publish` and `validate`, in library, human, JSON and TOON | Runs 1, 2, 7 | the same file; `test/cli-human-reports.test.mts` (a warning of another code) |
+| Installed-package CLI and library | — | `test/installed-suggestion-pr-fallback.test.mts` |
+
+## Live artifacts
+
+All left in place:
+
+- Branches `exp-fallback-20260930-creation` (`5293cc3`, force-pushed from `74c018f`), `exp-fallback-20260930-deletion` (`8c35033`, from `a968709`), `exp-fallback-20260930-group` (`f2f401e`, from `897bc5f`) and `exp-fallback-20260930-fix` (`aa6da3b`, from `4486ab3`), created from `main` for this evidence.
+- Draft originals [#74](https://github.com/mike-north/doc-linter/pull/74), [#75](https://github.com/mike-north/doc-linter/pull/75), [#76](https://github.com/mike-north/doc-linter/pull/76) and [#77](https://github.com/mike-north/doc-linter/pull/77) into `main`, open.
+- Pending draft reviews 5371097240 (#74) and 5371100573 (#75).
+- Suggestion pull request [#78](https://github.com/mike-north/doc-linter/pull/78), an open draft labeled `suggestion-pr`, and its branch `suggestion-pr/75/0acdfa96-3a0c-4ab6-8a75-aa99aeb7cdc5`.
+
+## What this does not show
+
+- The installed package against live GitHub: covered against the fake host by `test/installed-suggestion-pr-fallback.test.mts`.
+- A creation over the suggestion file limit that falls back: covered by the fake host only.

@@ -1,0 +1,20 @@
+{
+  "command": "validate",
+  "status": "ready",
+  "message": "## Ready to publish\n\n**Ready to publish with 1 warning:** 1 suggestion pull request would not be created; its change would be shown in the review.\n\nThe complete document can be published faithfully to mike-north/doc-linter#74 at commit `74c018f61294532241be4f3f378055962c0d65b6`.\n\n**Review prepared:** 0 inline comment(s) and 2 general section(s) for commit `74c018f61294532241be4f3f378055962c0d65b6`.\n\n**Warnings:**\n\n- `suggestion-pr-fallback` at `/runs/0/results/0`: Suggestion pull requests are allowed, but the creation of `docs/experiments/fallback/new-creation.md` is not proposed as one: the history of #74 was rewritten after the reviewed commit, and it cannot be re-applied onto commit `5293cc39b190fb715270e6a534e3657a5c257768` because `docs/experiments/fallback/new-creation.md` already exists. It is handled as if suggestion pull requests were not allowed: the review body proposes it, with its findings.\n\nNothing was published and no publication state was written.\n\nNo pending review of this account was found on the pull request. This is not an approval: publication repeats every check against the pull request as it is then. GitHub can still refuse the review, for example if this account starts a pending review on the pull request before publication.",
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "code": "suggestion-pr-fallback",
+      "title": "A change is handled as if suggestion pull requests were not allowed",
+      "message": "Suggestion pull requests are allowed, but the creation of `docs/experiments/fallback/new-creation.md` is not proposed as one: the history of #74 was rewritten after the reviewed commit, and it cannot be re-applied onto commit `5293cc39b190fb715270e6a534e3657a5c257768` because `docs/experiments/fallback/new-creation.md` already exists. It is handled as if suggestion pull requests were not allowed: the review body proposes it, with its findings.",
+      "location": {
+        "pointer": "/runs/0/results/0",
+        "path": "docs/experiments/fallback/new-creation.md"
+      },
+      "remedies": [
+        "To propose the change as a suggestion pull request, review the pull request's current head again and publish that review."
+      ]
+    }
+  ]
+}

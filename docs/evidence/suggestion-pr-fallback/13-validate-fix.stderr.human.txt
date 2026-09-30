@@ -1,0 +1,7 @@
+✖ error  A group cannot be re-applied after a rewritten history  [suggestion-group-not-reapplied]
+  /runs/0/results/0
+  Suggestion pull requests are allowed, but the fix with 2 changes cannot become one: the history of #77 was rewritten after the reviewed commit, and its 2 changes cannot be re-applied onto commit `aa6da3b585af1df8a4bc4cd440660c5d7bc56698` because `docs/experiments/fallback/sample-fix.md` line 6 differs from the reviewed text. Without a suggestion pull request, a fix with several changes cannot be published: its changes are accepted together or not at all, and are never split or published in part.
+  → Review the pull request's current head again, and publish that review.
+  → Or split the fix into separate findings, one change each, so that its changes are published on their own.
+
+1 error

@@ -1,0 +1,7 @@
+10-validate-creation.stderr.txt: 0 bytes
+11-validate-deletion.stderr.txt: 0 bytes
+12-validate-group.stderr.txt: 0 bytes
+13-validate-fix.stderr.txt: 0 bytes
+21-publish-deletion.stderr.txt: 0 bytes
+22-publish-group.stderr.txt: 0 bytes
+23-publish-fix.stderr.txt: 0 bytes
