@@ -10,9 +10,12 @@
  * docs/companion-suggestion-pr-contract.md (§2.5, §2.5.1, §2.8–§2.11) and
  * docs/suggestion-pr-convention.md (§5.1, §7): which suggestions are created,
  * each proposal commit's parent and exact file bytes, the version 1 and 2
- * markers, the suggestion pull request bodies, the review body, the warnings
- * and the outcome sentences of `validate` and `publish`. Only the random
- * suggestion and publication ids are read back and substituted.
+ * markers, the suggestion pull request bodies, the review body and the
+ * outcome sentences of `validate` and `publish`. Only the random suggestion
+ * and publication ids are read back and substituted. What happens to a
+ * suggestion that cannot be re-applied (issue #37: a fallback as if
+ * suggestion pull requests were not allowed, or the refusal of a group) is
+ * specified in test/suggestion-pr-fallback.test.mts.
  *
  * The scenario mirrors the live experiment (docs/force-push-experiment.md):
  * C0 adds a 20-line file, the reviewed commit C1 changes its lines 5 and 6,
@@ -29,253 +32,20 @@
  */
 
 import * as assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
-import * as os from 'node:os';
-import * as path from 'node:path';
 import { describe, test } from 'node:test';
 
-import { createGitHubClient } from '../dist/github.cjs';
-import library from '../dist/index.cjs';
-import type { ICreateGitHubClientOptions, IGitHubClient } from '../dist/github.cjs';
 import { findSuggestionMarker } from '../dist/suggestion-marker.cjs';
-import { FakeHttpGitHub } from './fixtures/composition/fake-http-github.mts';
-import type { IHttpHostConfig, IHttpPullFile, IHttpRepository } from './fixtures/composition/fake-http-github.mts';
 import type { IStoredPull } from './fixtures/composition/fake-http-companion.mts';
-import { asArray, asRecord, asString, parseJson, readJson } from './support/runtime-types.mts';
+import {
+  ADVANCED, AMENDED, AMENDED_LATER, ATTRIBUTION, BASE, DROPPED, HEAD_REF, LINE10_MESSAGE, LINE6_MESSAGE, MOVED, NEW_MESSAGE, NEW_PAGE,
+  OBSOLETE_MESSAGE, OWNER, PULL, REMARK, REPO, REVIEWED, REVIEWED_LINES, REVIEW_MARKER, REWRITTEN, SHORT, SNAPSHOTS, TOKEN,
+  blob, compareReads, documentWith, idsOf, jointFixDocument, makeWorld, markdown, proposalCommit, publish, publishWith, pullUrl, repositoryAt, reviewDocument, sample, status,
+  validate, validateWith, writes,
+} from './fixtures/rewritten-history/world.mts';
+import type { IWorld, Json } from './fixtures/rewritten-history/world.mts';
+import { asArray, asRecord } from './support/runtime-types.mts';
 
-const CLI = path.join(import.meta.dirname, 'fixtures', 'composition', 'cli-with-fake-http.mts');
-const OWNER = 'octo';
-const REPO = 'widgets';
-const PULL = 7;
-const HEAD_REF = 'feature/retry';
-const TOKEN = 'ghp_FORCE_PUSH_COMPOSITION_0123456789';
-
-/** C0, the pull request's base: adds docs/sample.md. */
-const BASE = 'c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0';
-/** C1, the reviewed commit: changes lines 5 and 6. */
-const REVIEWED = 'c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1';
-/** C2, an ordinary push on top of C1 (line 15): the branch moved forward. */
-const ADVANCED = 'c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2';
-/** C1′, C1 amended to also change line 15: rewritten, but nothing a suggestion touches changed. */
-const AMENDED = 'a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1';
-/** C1″, rewritten: line 6 and obsolete.txt changed, docs/new.md still absent, line 10 unchanged. */
-const REWRITTEN = 'b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2';
-/** Rewritten so that nothing can be re-applied: the change dropped, line 10 edited, docs/new.md added, obsolete.txt deleted. */
-const DROPPED = 'd3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3';
-/** Rewritten with a line inserted above the reviewed lines, and a directory where docs/new.md would go. */
-const MOVED = 'e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4';
-/** An ordinary push on top of the amended head C1′: the branch moved forward from it. */
-const AMENDED_LATER = 'a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2';
-/** Rewritten so that docs/sample.md is no longer UTF-8 text (a 0xFF byte on line 15). */
-const NOT_TEXT = 'f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5';
-/** Rewritten so that docs/sample.md is larger than the 1,000,000-byte source-read limit. */
-const OVERSIZE = 'f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6';
-
-const SHORT = REVIEWED.slice(0, 7);
-const OBSOLETE = ['first\n', 'second\n'];
-const NEW_PAGE = '# New\n';
-
-/** docs/sample.md: 20 lines `Line N.`, with some lines replaced. */
-function sample(replaced: Readonly<Record<number, string>> = {}): string[] {
-  return Array.from({ length: 20 }, (_, i) => `${replaced[i + 1] ?? `Line ${String(i + 1)}.`}\n`);
-}
-
-const REVIEWED_LINES = { 5: 'Line 5, reviewed.', 6: 'Line 6, reviewed.' };
-const SNAPSHOTS: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>> = {
-  [BASE]: { 'docs/sample.md': sample(), 'obsolete.txt': OBSOLETE },
-  [REVIEWED]: { 'docs/sample.md': sample(REVIEWED_LINES), 'obsolete.txt': OBSOLETE },
-  [ADVANCED]: { 'docs/sample.md': sample({ ...REVIEWED_LINES, 15: 'Line 15, later.' }), 'obsolete.txt': OBSOLETE },
-  [AMENDED]: { 'docs/sample.md': sample({ ...REVIEWED_LINES, 15: 'Line 15, later.' }), 'obsolete.txt': OBSOLETE },
-  [REWRITTEN]: { 'docs/sample.md': sample({ 5: 'Line 5, reviewed.', 6: 'Line 6, rewritten.', 15: 'Line 15, later.' }), 'obsolete.txt': ['first\n', 'changed\n'] },
-  [DROPPED]: { 'docs/sample.md': sample({ 10: 'Line 10, edited.' }), 'docs/new.md': ["# Someone else's page\n"] },
-  [MOVED]: { 'docs/sample.md': ['Preface.\n', ...sample(REVIEWED_LINES)], 'obsolete.txt': OBSOLETE, 'docs/new.md/index.md': ['# Index\n'] },
-  [AMENDED_LATER]: { 'docs/sample.md': sample({ ...REVIEWED_LINES, 15: 'Line 15, later.', 20: 'Line 20, even later.' }), 'obsolete.txt': OBSOLETE },
-};
-
-/**
- * Heads served only by the worlds that use them: a sample that is not UTF-8
- * (given as raw bytes), and one over the source-read limit (large, so it is
- * not built into every world).
- */
-const NOT_TEXT_SAMPLE = Buffer.concat([
-  Buffer.from(sample(REVIEWED_LINES).slice(0, 14).join('')),
-  Buffer.from([0x4c, 0x69, 0x6e, 0x65, 0x20, 0xff, 0x0a]),
-  Buffer.from(sample(REVIEWED_LINES).slice(15).join('')),
-]);
-function specialHead(head: string): Pick<IHttpRepository, 'snapshots' | 'rawFiles'> {
-  if (head === NOT_TEXT) {
-    return {
-      snapshots: { ...SNAPSHOTS, [NOT_TEXT]: { 'obsolete.txt': OBSOLETE } },
-      rawFiles: { [NOT_TEXT]: { 'docs/sample.md': { base64: NOT_TEXT_SAMPLE.toString('base64') } } },
-    };
-  }
-  if (head === OVERSIZE) {
-    return { snapshots: { ...SNAPSHOTS, [OVERSIZE]: { 'docs/sample.md': [...sample(REVIEWED_LINES), `${'x'.repeat(1_000_000)}\n`], 'obsolete.txt': OBSOLETE } } };
-  }
-  return { snapshots: SNAPSHOTS };
-}
-const PARENTS: Readonly<Record<string, readonly string[]>> = {
-  [REVIEWED]: [BASE],
-  [ADVANCED]: [REVIEWED],
-  [AMENDED]: [BASE],
-  [REWRITTEN]: [BASE],
-  [DROPPED]: [BASE],
-  [MOVED]: [BASE],
-  [AMENDED_LATER]: [AMENDED],
-  [NOT_TEXT]: [BASE],
-  [OVERSIZE]: [BASE],
-};
-
-/** A pull request file whose patch replaces the whole file (a valid unified diff for any two versions). */
-function pullFile(filename: string, before: readonly string[] | undefined, after: readonly string[] | undefined): IHttpPullFile {
-  const old = before ?? [];
-  const now = after ?? [];
-  const range = (lines: readonly string[]): string => (lines.length === 0 ? '0,0' : `1,${String(lines.length)}`);
-  const lines = [`@@ -${range(old)} +${range(now)} @@\n`, ...old.map((l) => `-${l}`), ...now.map((l) => `+${l}`)];
-  const last = lines.length - 1;
-  return {
-    filename,
-    status: before === undefined ? 'added' : after === undefined ? 'removed' : 'modified',
-    additions: now.length,
-    deletions: old.length,
-    patch: lines.map((l, i) => (i === last ? l.replace(/\n$/, '') : l)),
-  };
-}
-
-/** The pull request, its head at `head`; every snapshot stays readable (discarded commits stay fetchable). */
-function repositoryAt(head: string): IHttpRepository {
-  const special = specialHead(head);
-  const base = SNAPSHOTS[BASE] ?? {};
-  const now = special.snapshots[head] ?? {};
-  const paths = [...new Set([...Object.keys(base), ...Object.keys(now)])].sort();
-  const pullFiles = paths
-    .filter((p) => JSON.stringify(base[p]) !== JSON.stringify(now[p]))
-    .map((p) => pullFile(p, base[p], now[p]));
-  return {
-    destination: { owner: OWNER, repo: REPO, pullNumber: PULL },
-    commits: { base: BASE, head },
-    ...special,
-    parents: PARENTS,
-    pullFiles,
-    pull: { headRef: HEAD_REF, baseRef: 'main' },
-    defaultBranch: 'main',
-    labels: ['suggestion-pr'],
-  };
-}
-
-// ---------------------------------------------------------------------------
-// SARIF: one group of two edits, a creation, a deletion and a plain remark
-
-type Json = Record<string, unknown>;
-
-const LINE6_MESSAGE = 'Say what line 6 means.';
-const LINE10_MESSAGE = 'Line 10 too.';
-const NEW_MESSAGE = 'Add a new page.';
-const OBSOLETE_MESSAGE = 'Obsolete.';
-const REMARK = 'A general remark.';
-
-function lineFix(uri: string, line: number, text: string): Json {
-  return { artifactChanges: [{ artifactLocation: { uri }, replacements: [{ deletedRegion: { startLine: line }, insertedContent: { text } }] }] };
-}
-
-function reviewDocument(): Json {
-  const at = (uri: string, startLine?: number): Json[] => [{ physicalLocation: { artifactLocation: { uri }, ...(startLine === undefined ? {} : { region: { startLine } }) } }];
-  return {
-    version: '2.1.0',
-    runs: [{
-      tool: { driver: { name: 'Review bot', version: '1.0.0' } },
-      columnKind: 'utf16CodeUnits',
-      versionControlProvenance: [{ repositoryUri: `https://github.com/${OWNER}/${REPO}`, revisionId: REVIEWED }],
-      artifacts: [
-        { location: { uri: 'docs/new.md' }, contents: { text: NEW_PAGE }, encoding: 'utf-8' },
-        { location: { uri: 'obsolete.txt' } },
-      ],
-      results: [
-        { message: { text: LINE6_MESSAGE }, locations: at('docs/sample.md', 6), fixes: [lineFix('docs/sample.md', 6, 'Line 6, suggested.')], properties: { sarifToComment: { suggestionGroup: 'reword' } } },
-        { message: { text: LINE10_MESSAGE }, locations: at('docs/sample.md', 10), fixes: [lineFix('docs/sample.md', 10, 'Line 10, suggested.')], properties: { sarifToComment: { suggestionGroup: 'reword' } } },
-        { message: { text: NEW_MESSAGE }, locations: at('docs/new.md', 1), properties: { sarifToComment: { proposedFileChanges: [{ operation: 'create', artifactIndex: 0 }] } } },
-        { message: { text: OBSOLETE_MESSAGE }, locations: at('obsolete.txt'), properties: { sarifToComment: { proposedFileChanges: [{ operation: 'delete', artifactIndex: 1 }] } } },
-        { message: { text: REMARK } },
-      ],
-    }],
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Harness
-
-interface IWorld {
-  readonly root: string;
-  readonly statePath: string;
-  readonly host: FakeHttpGitHub;
-}
-
-function makeWorld(head: string, config: Partial<IHttpHostConfig> = {}): IWorld {
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'force-push-composition-')));
-  FakeHttpGitHub.create(path.join(root, 'host'), config, repositoryAt(head));
-  fs.mkdirSync(path.join(root, 'state'));
-  return { root, statePath: path.join(root, 'state', 'review.json'), host: new FakeHttpGitHub(path.join(root, 'host'), TOKEN) };
-}
-
-function internalsFor(world: IWorld): { readonly createGitHubClient: (options: ICreateGitHubClientOptions) => IGitHubClient } {
-  return { createGitHubClient: (options) => createGitHubClient({ ...options, fetch: world.host.fetch }) };
-}
-
-async function call(name: 'publishSarifReview' | 'validateSarifReview', world: IWorld, sarif: Json = reviewDocument()): Promise<Json> {
-  const operation: unknown = Reflect.get(library, name);
-  if (typeof operation !== 'function') throw new assert.AssertionError({ message: `the package exports ${name}` });
-  const input: Json = {
-    sarif,
-    destination: { owner: OWNER, repo: REPO, pullNumber: PULL },
-    reviewedCommit: REVIEWED,
-    token: TOKEN,
-    options: { allowSuggestionPullRequests: true },
-    ...(name === 'publishSarifReview' ? { statePath: world.statePath } : {}),
-  };
-  const outcome: unknown = await Reflect.apply(operation, undefined, [input, internalsFor(world)]);
-  return asRecord(outcome, `the ${name} outcome`);
-}
-
-const publish = (world: IWorld): Promise<Json> => call('publishSarifReview', world);
-const validate = (world: IWorld): Promise<Json> => call('validateSarifReview', world);
-const publishWith = (world: IWorld, sarif: Json): Promise<Json> => call('publishSarifReview', world, sarif);
-const validateWith = (world: IWorld, sarif: Json): Promise<Json> => call('validateSarifReview', world, sarif);
-
-const status = (outcome: Json): string => asString(outcome['status'], 'an outcome status');
-const markdown = (outcome: Json): string => asString(outcome['markdown'], 'outcome markdown');
-const writes = (world: IWorld): readonly string[] =>
-  world.host.log().filter((r) => r.method === 'POST' && r.path !== '/graphql').map((r) => r.path.replace(`/repos/${OWNER}/${REPO}`, ''));
-const compareReads = (world: IWorld): readonly string[] =>
-  world.host.log().filter((r) => r.method === 'GET' && r.path.includes('/compare/')).map((r) => r.path.replace(`/repos/${OWNER}/${REPO}/compare/`, ''));
-
-const SUGGESTION_MARKER = /\n\n(<!-- suggestion-pr (\{[^\n]*\}) -->)$/;
-const REVIEW_MARKER = /\n\n<!-- sarif-to-comment:review:[0-9a-f-]{36} -->$/;
-
-/** The suggestion and publication ids a created pull request's marker records. */
-function idsOf(pull: IStoredPull): { readonly id: string; readonly batch: string } {
-  const marker = SUGGESTION_MARKER.exec(pull.body);
-  assert.ok(marker, `pull request #${String(pull.number)} ends with a marker`);
-  const parsed = asRecord(parseJson(marker[2] ?? ''), 'the marker JSON');
-  return { id: asString(parsed['id']), batch: asString(parsed['batch']) };
-}
-
-/** The single proposal commit a branch points at: its parent and message. */
-function proposalCommit(world: IWorld, branch: string): { readonly parents: readonly string[]; readonly message: string } {
-  const state = world.host.companion();
-  const sha = state.refs[branch];
-  assert.ok(sha !== undefined, `the branch ${branch} exists`);
-  const commit = state.commits[sha];
-  assert.ok(commit, `the branch ${branch} points at a proposal commit`);
-  return { parents: commit.parents, message: commit.message };
-}
-
-// ---------------------------------------------------------------------------
-// Expected texts (contract §2.11, §2.5.1; convention §7)
-
-const blob = (file: string, anchor = ''): string => `https://github.com/${OWNER}/${REPO}/blob/${REVIEWED}/${file}${anchor}`;
-const pullUrl = (n: number): string => `https://github.com/${OWNER}/${REPO}/pull/${String(n)}`;
-const ATTRIBUTION = '<sub>— Review bot 1.0.0</sub>';
 const DRAFT_NOTE = '**How this suggestion is accepted:** it is a draft pull request into `feature/retry`, the branch of #7. A draft cannot be merged: someone with write access first marks it ready for review. The author of #7 then decides whether to merge it, and #7 carries the change to its base. Once #7 is merged or closed, this pull request can be closed.';
 
 /** One suggestion as §2.11 renders it: its title, change list, merge sentence tail and findings. */
@@ -362,42 +132,14 @@ function createdSection(unit: IUnit, number: number, reappliedOnto?: string): st
   ];
 }
 
-/** §2.11: the section of a suggestion that is not created, with every reason of §2.5.1. */
-function skippedSection(unit: IUnit, head: string, reasons: readonly string[]): string[] {
-  return [
-    `**Suggestion pull request not created:** the history of #7 was rewritten after the reviewed commit, and this change cannot be re-applied onto commit ${head}, the head of #7, because there:`,
-    '',
-    ...reasons.map((r) => `- ${r}`),
-    '',
-    `It would have proposed ${unit.what}`,
-    '',
-    ...unit.changes,
-    '',
-    ...unit.items,
-  ];
-}
-
 /** §2.11: the review body's sections, joined as every review body's sections are. */
 const reviewBody = (...sections: readonly (readonly string[])[]): string => sections.map((s) => s.join('\n')).join('\n\n---\n\n');
-
-/** §2.5.1: the warning for a suggestion that is not created. */
-function notReapplied(pointer: string, unit: IUnit, head: string, reasons: readonly string[]): string {
-  return `- \`suggestion-pr-not-reapplied\` at \`${pointer}\`: The history of #7 was rewritten after the reviewed commit, so the suggestion pull request \`${unit.title}\` would have to be re-applied onto commit \`${head}\`, and it cannot be: ${reasons.join('; ')}. It is not created; its change and findings are presented in the review body.`;
-}
 
 /** Contract §2.10: the retry warning when the branch changed after the suggestions were planned. */
 function changedSincePlanned(base: string, head: string): string {
   return `**The branch of #7 changed since these suggestions were planned:** they are based on commit \`${base}\`, which is no longer part of it `
     + `(its head is now \`${head}\`). The suggestion pull requests still to be created are created on that commit, as planned; nothing is re-decided.`;
 }
-
-/** The warnings block of prepared Markdown, as validate and publish both show it. */
-function warningsOf(text: string): string {
-  const at = text.indexOf('**Warnings:**');
-  assert.ok(at >= 0, `the outcome lists warnings:\n${text}`);
-  return text.slice(at).split('\n\n').slice(0, 2).join('\n\n');
-}
-const warningsBlock = (...lines: readonly string[]): string => ['**Warnings:**', lines.join('\n')].join('\n\n');
 
 const REVIEWED_SAMPLE = sample(REVIEWED_LINES);
 
@@ -551,106 +293,6 @@ describe('rewritten history, and everything the suggestions touch is unchanged: 
   });
 });
 
-describe('rewritten history where some regions changed: those suggestions are not created, with the reason (§2.5.1)', () => {
-  const GROUP_REASON = '`docs/sample.md` line 6 differs from the reviewed text';
-  const DELETE_REASON = '`obsolete.txt` differs from the reviewed file';
-
-  test('only the creation is re-applied; the review presents the others with their reasons, and ordinary feedback still publishes', async () => {
-    const world = makeWorld(REWRITTEN);
-    const outcome = await publish(world);
-    assert.equal(status(outcome), 'published', markdown(outcome));
-    const [pull, ...others] = world.host.pulls();
-    assert.ok(pull && others.length === 0, 'exactly one suggestion pull request');
-    assert.equal(pull.title, CREATE.title);
-    assert.equal(pull.body, pullBody(CREATE, idsOf(pull), REWRITTEN));
-    assert.deepEqual(proposalCommit(world, pull.head).parents, [REWRITTEN]);
-    assert.deepEqual(world.host.fileOnBranch(pull.head, 'docs/new.md'), Buffer.from(NEW_PAGE));
-
-    const [review] = world.host.reviews();
-    assert.ok(review);
-    assert.equal(review.request.body.replace(REVIEW_MARKER, ''), reviewBody(
-      skippedSection(REWORD, REWRITTEN, [GROUP_REASON]),
-      createdSection(CREATE, pull.number, REWRITTEN),
-      skippedSection(DELETE, REWRITTEN, [DELETE_REASON]),
-      REMARK_SECTION,
-    ));
-    assert.deepEqual(outcome['suggestions'], [{ number: pull.number, url: pullUrl(pull.number), branch: pull.head }]);
-    assert.equal(warningsOf(markdown(outcome)), warningsBlock(
-      notReapplied('/runs/0/results/0', REWORD, REWRITTEN, [GROUP_REASON]),
-      notReapplied('/runs/0/results/3', DELETE, REWRITTEN, [DELETE_REASON]),
-    ));
-    assert.ok(markdown(outcome).includes(`Suggestion pull requests (drafts into \`feature/retry\`, labeled \`suggestion-pr\`, re-applied onto commit \`${REWRITTEN}\`):`), markdown(outcome));
-  });
-
-  test('validate reports the same per-suggestion outcomes, and writes nothing', async () => {
-    const published = await publish(makeWorld(REWRITTEN));
-    const world = makeWorld(REWRITTEN);
-    const assessed = await validate(world);
-    assert.equal(status(assessed), 'ready', markdown(assessed));
-    assert.equal(warningsOf(markdown(assessed)), warningsOf(markdown(published)));
-    assert.ok(markdown(assessed).includes(
-      `Publication would also create 1 draft suggestion pull request into \`feature/retry\`, labeled \`suggestion-pr\`. The history of #7 was rewritten after the reviewed commit, so it is re-applied onto commit \`${REWRITTEN}\`, where everything it changes is still exactly as reviewed.`,
-    ), markdown(assessed));
-    assert.deepEqual(writes(world), []);
-  });
-});
-
-describe('rewritten history where nothing can be re-applied (§2.5.1)', () => {
-  const REASONS = {
-    reword: ['`docs/sample.md` line 6 differs from the reviewed text', '`docs/sample.md` line 10 differs from the reviewed text'],
-    create: ['`docs/new.md` already exists'],
-    delete: ['`obsolete.txt` no longer exists'],
-  };
-
-  test('no suggestion pull request is created; the review is published exactly like one without them', async () => {
-    const world = makeWorld(DROPPED);
-    const outcome = await publish(world);
-    assert.equal(status(outcome), 'published', markdown(outcome));
-    assert.deepEqual(world.host.pulls(), []);
-    assert.equal(outcome['suggestions'], undefined);
-    assert.deepEqual(writes(world), [`/pulls/${String(PULL)}/reviews`], 'only the review is written: no branch, pull request or label');
-    const [review] = world.host.reviews();
-    assert.ok(review);
-    assert.equal(review.request.body.replace(REVIEW_MARKER, ''), reviewBody(
-      skippedSection(REWORD, DROPPED, REASONS.reword),
-      skippedSection(CREATE, DROPPED, REASONS.create),
-      skippedSection(DELETE, DROPPED, REASONS.delete),
-      REMARK_SECTION,
-    ));
-    assert.equal(asRecord(readJson(world.statePath))['format'], 'sarif-to-comment.publication-state', 'the version-1 review record');
-    assert.equal(warningsOf(markdown(outcome)), warningsBlock(
-      notReapplied('/runs/0/results/0', REWORD, DROPPED, REASONS.reword),
-      notReapplied('/runs/0/results/2', CREATE, DROPPED, REASONS.create),
-      notReapplied('/runs/0/results/3', DELETE, DROPPED, REASONS.delete),
-    ));
-    assert.doesNotMatch(markdown(outcome), /Suggestion pull requests \(/);
-  });
-
-  test('neither labels nor push permission are needed when nothing would be created', async () => {
-    const world = makeWorld(DROPPED);
-    world.host.replaceRepository({ ...repositoryAt(DROPPED), labels: [], push: false });
-    const assessed = await validate(world);
-    assert.equal(status(assessed), 'ready', markdown(assessed));
-    assert.doesNotMatch(markdown(assessed), /Publication would also create/);
-    assert.equal(warningsOf(markdown(assessed)).split('\n').filter((l) => l.startsWith('- ')).length, 3);
-    assert.equal(status(await publish(world)), 'published');
-  });
-
-  test('a moved region is never relocated, and a directory where a file would be created is named', async () => {
-    const world = makeWorld(MOVED);
-    const outcome = await publish(world);
-    assert.equal(status(outcome), 'published', markdown(outcome));
-    const [pull, ...others] = world.host.pulls();
-    assert.ok(pull && others.length === 0, 'only the deletion, whose file is unchanged, is created');
-    assert.equal(pull.title, DELETE.title);
-    assert.equal(pull.body, pullBody(DELETE, idsOf(pull), MOVED));
-    assert.equal(warningsOf(markdown(outcome)), warningsBlock(
-      notReapplied('/runs/0/results/0', REWORD, MOVED, ['`docs/sample.md` line 6 differs from the reviewed text', '`docs/sample.md` line 10 differs from the reviewed text']),
-      notReapplied('/runs/0/results/2', CREATE, MOVED, ['`docs/new.md` is a directory']),
-    ));
-  });
-});
-
 describe('recovery and retry after a re-application (§2.9, §2.10)', () => {
   test('a lost pull request response is rediscovered by its version 2 marker, never resent', async () => {
     const world = makeWorld(AMENDED, { companion: { loseResponse: ['pull'] } });
@@ -765,41 +407,21 @@ describe('recovery and retry after a re-application (§2.9, §2.10)', () => {
   });
 
   test('when nothing is re-applied, a lost review response is rediscovered and never resent, as for any review', async () => {
+    // Only whole-file proposals, neither of which can be re-applied onto
+    // DROPPED: both fall back to the review body (issue #37), so no
+    // suggestion pull request is created.
     const world = makeWorld(DROPPED, { create: 'lose-response' });
-    const first = await publish(world);
+    const first = await publishWith(world, documentWith(['create', 'delete', 'remark']));
     assert.equal(status(first), 'published', markdown(first));
     assert.ok(markdown(first).includes('was confirmed on GitHub for this publication; nothing was resent.'), markdown(first));
     world.host.setConfig({ create: 'ok' });
     const before = writes(world).length;
-    const retried = await publish(world);
+    const retried = await publishWith(world, documentWith(['create', 'delete', 'remark']));
     assert.equal(status(retried), 'published', markdown(retried));
     assert.equal(writes(world).length, before, 'the retry is answered from the receipt');
     assert.equal(world.host.reviews().length, 1);
     assert.deepEqual(world.host.pulls(), []);
   });
-});
-
-
-describe('a head file that cannot be read as source is a reason to skip, never a failure (§2.5.1)', () => {
-  for (const [head, what, reason] of [
-    [NOT_TEXT, 'not UTF-8', '`docs/sample.md` is not UTF-8 text at the head'],
-    [OVERSIZE, 'over the source-read limit', '`docs/sample.md` exceeds the source-read limit'],
-  ] as const) {
-    test(`an edited file that is ${what} at the head skips its suggestion; the others are re-applied`, async () => {
-      const assessed = await validate(makeWorld(head));
-      assert.equal(status(assessed), 'ready', markdown(assessed));
-      const world = makeWorld(head);
-      const outcome = await publish(world);
-      assert.equal(status(outcome), 'published', markdown(outcome));
-      assert.deepEqual(world.host.pulls().map((p) => p.title), [CREATE.title, DELETE.title]);
-      const expected = warningsBlock(notReapplied('/runs/0/results/0', REWORD, head, [reason]));
-      assert.equal(warningsOf(markdown(outcome)), expected);
-      assert.equal(warningsOf(markdown(assessed)), expected);
-      const [review] = world.host.reviews();
-      assert.ok(review);
-      assert.ok(review.request.body.startsWith(skippedSection(REWORD, head, [reason]).join('\n')), review.request.body);
-    });
-  }
 });
 
 describe('the ancestry read is made only when a suggestion pull request could be created (§2.5, §2.8)', () => {
@@ -857,20 +479,6 @@ describe('every problem is reported together after a rewritten history too (§2.
 });
 
 describe('a fix with several changes (issue #29) after a rewritten history (§2.3, §2.5.1)', () => {
-  /** One finding whose single fix replaces lines 6 and 10 of docs/sample.md together, with no group property. */
-  function jointFixDocument(): Json {
-    const document = reviewDocument();
-    const run = asRecord(asArray(document['runs'])[0]);
-    run['results'] = [{
-      message: { text: LINE6_MESSAGE },
-      locations: [{ physicalLocation: { artifactLocation: { uri: 'docs/sample.md' }, region: { startLine: 6 } } }],
-      fixes: [{ artifactChanges: [{ artifactLocation: { uri: 'docs/sample.md' }, replacements: [
-        { deletedRegion: { startLine: 6 }, insertedContent: { text: 'Line 6, suggested.' } },
-        { deletedRegion: { startLine: 10 }, insertedContent: { text: 'Line 10, suggested.' } },
-      ] }] }],
-    }];
-    return document;
-  }
   const TITLE = 'Suggestion for #7: edit docs/sample.md';
 
   test('re-applied onto the amended head as one suggestion pull request, keeping the amendment', async () => {
@@ -888,54 +496,5 @@ describe('a fix with several changes (issue #29) after a rewritten history (§2.
     const reading = findSuggestionMarker(pull.body);
     assert.equal(reading.kind, 'marker');
     assert.equal(reading.fields.reappliedOnto, AMENDED);
-  });
-
-  test('not created when one of its lines changed at the rewritten head; the whole fix is kept together, never split', async () => {
-    const world = makeWorld(REWRITTEN);
-    const outcome = await publishWith(world, jointFixDocument());
-    assert.equal(status(outcome), 'published', markdown(outcome));
-    assert.deepEqual(world.host.pulls(), [], 'line 10 alone is not proposed');
-    const [review] = world.host.reviews();
-    assert.ok(review);
-    assert.deepEqual(review.request.comments, [], 'no native suggestion is substituted');
-    assert.ok(review.request.body.startsWith('**Suggestion pull request not created:** the history of #7 was rewritten after the reviewed commit, and this change cannot be re-applied onto commit '
-      + `${REWRITTEN}, the head of #7, because there:\n\n- \`docs/sample.md\` line 6 differs from the reviewed text\n`), review.request.body);
-    assert.ok(markdown(outcome).includes(`\`suggestion-pr-not-reapplied\` at \`/runs/0/results/0\`: The history of #7 was rewritten after the reviewed commit, so the suggestion pull request \`${TITLE}\``), markdown(outcome));
-    const assessed = await validateWith(makeWorld(REWRITTEN), jointFixDocument());
-    assert.equal(warningsOf(markdown(assessed)), warningsOf(markdown(outcome)));
-  });
-});
-
-describe('CLI + real GitHub client over HTTP', () => {
-  function cli(world: IWorld, args: readonly string[]): { status: number | null; stdout: string; stderr: string } {
-    const result = spawnSync(process.execPath, [CLI, ...args], {
-      cwd: world.root, encoding: 'utf8', timeout: 60_000, env: { PATH: process.env['PATH'], GH_TOKEN: TOKEN, FAKE_HTTP_GITHUB_DIR: world.host.dir },
-    });
-    for (const text of [result.stdout, result.stderr]) assert.equal(text.includes(TOKEN), false, 'the token never appears');
-    return { status: result.status, stdout: result.stdout, stderr: result.stderr };
-  }
-
-  test('validate and publish report the same per-suggestion outcomes (exit 0)', () => {
-    const world = makeWorld(REWRITTEN);
-    const file = path.join(world.root, 'review.sarif');
-    fs.writeFileSync(file, JSON.stringify(reviewDocument()));
-    const target = ['--sarif', file, '--repo', `${OWNER}/${REPO}`, '--pull', String(PULL), '--commit', REVIEWED, '--allow-suggestion-prs'];
-    const checked = cli(world, ['validate', ...target]);
-    assert.equal(checked.status, 0, checked.stdout + checked.stderr);
-    const published = cli(world, ['publish', ...target, '--state', world.statePath]);
-    assert.equal(published.status, 0, published.stdout + published.stderr);
-    // Human form: the warnings are diagnostics on stderr, once each, with the messages the Markdown lists.
-    for (const [pointer, unit, reasons] of [
-      ['/runs/0/results/0', REWORD, ['`docs/sample.md` line 6 differs from the reviewed text']],
-      ['/runs/0/results/3', DELETE, ['`obsolete.txt` differs from the reviewed file']],
-    ] as const) {
-      const message = notReapplied(pointer, unit, REWRITTEN, reasons).replace(/^- `suggestion-pr-not-reapplied` at `[^`]+`: /, '');
-      for (const run of [checked, published]) {
-        assert.ok(run.stderr.includes(`[suggestion-pr-not-reapplied]\n  ${pointer}\n  ${message}\n`), run.stderr);
-        assert.equal(run.stdout.includes(message), false, 'not repeated on stdout');
-      }
-    }
-    for (const run of [checked, published]) assert.ok(run.stderr.endsWith('\n2 warnings\n'), run.stderr);
-    assert.equal(world.host.pulls().length, 1);
   });
 });
