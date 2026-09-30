@@ -316,8 +316,9 @@ Suggestion pull requests follow a tool-neutral **suggestion pull request convent
 When an original pull request merges or is closed, its suggestion pull requests that nobody merged are left open. `close-suggestion-prs` (`closeSuggestionPullRequests`) closes them, on demand:
 
 ```sh
-sarif-to-comment close-suggestion-prs --repo acme/widgets --dry-run   # what would be closed
-sarif-to-comment close-suggestion-prs --repo acme/widgets             # close them
+sarif-to-comment close-suggestion-prs --repo acme/widgets --dry-run      # what would be closed
+sarif-to-comment close-suggestion-prs --repo acme/widgets                # close the ones you opened
+sarif-to-comment close-suggestion-prs --repo acme/widgets --owner all    # close anyone's
 sarif-to-comment close-suggestion-prs --repo acme/widgets --original 42
 ```
 
@@ -331,22 +332,26 @@ const cleanup = await closeSuggestionPullRequests({
 for (const s of cleanup.suggestions) console.log(`#${s.number}: ${s.result}`);
 ```
 
-- **What it checks.** By default, every open pull request carrying the repository's canonical label, resolved exactly as publication resolves it (`suggestion-pr`, or the `label` of `.github/suggestion-prs.json` on the default branch; an invalid file stops cleanup before anything is closed), page by page. With `--original N` (`originalPullNumber`), only the pull requests that reference pull request N. A pull request is a suggestion only if it conforms to the convention: its description carries the hidden marker exactly in the convention's form, and it comes from its own `suggestion-pr/…` branch. Suggestions made by any tool following the convention are handled the same way; titles are never read.
-- **Migrating labels.** `--label NAME` (`label`) checks another label instead of the canonical one, for suggestions left under a previously configured label.
+- **What it checks.** By default, the open pull requests of the repository's `suggestion-pr/…` branches, found with one paginated query, so the cost grows with suggestion branches, not with the size of the repository. Each must carry the repository's canonical label, resolved exactly as publication resolves it (`suggestion-pr`, or the `label` of `.github/suggestion-prs.json` on the default branch; an invalid file stops cleanup before anything is closed). With `--original N` (`originalPullNumber`), only the pull requests that reference pull request N. A pull request is a suggestion only if it conforms to the convention: its description carries the hidden marker exactly in the convention's form, and it comes from its own `suggestion-pr/…` branch. Suggestions made by any tool following the convention are handled the same way; titles are never read.
+- **Whose suggestions.** `--owner me` (`owner: 'me'`, the default) closes only the suggestion pull requests the token's account opened. `--owner all` closes any conforming one. It is about who opened the *suggestion* pull request, not the original. A conforming suggestion someone else opened is reported `other-owner` and left open.
+- **Migrating labels.** `--label NAME` (`label`) checks the open pull requests carrying another label instead, for suggestions left under a previously configured label; the repository configuration is then not read.
+- **Bounded.** A sweep counts its candidates in one request before checking any: suggestion branches, or pull requests with the `--label`. More than 500 stops it with an error diagnostic naming the count and the limit, and nothing is checked (`--max-candidates N`, `maxCandidates`, changes the limit; `--original` narrows the run). A `--label` sweep whose first 20 pull requests show no suggestion marker and no `suggestion-pr/` branch stops too, with a warning that the label looks wrong; `--force` (`force: true`) checks them anyway. A mistyped or overly broad label costs one request.
 - **When it closes.** Only after the original named by the marker has been read and found **merged or closed**. An original GitHub reports does not exist (HTTP 404) is `not-found`; one that can't be read for another reason (no access, a network or server error) is `unverified`. Neither is ever treated as ended. With `--original N` for a pull request that does not exist, for example a mistyped number, nothing can reference it: cleanup is `complete` with an `original-pull-request-not-found` warning, and running it again gives the same answer. The suggestion itself is then read again and closed only if it is still open, still carries the same marker and the label, and comes from its own branch in the same repository.
 - **What it changes.** It closes pull requests, nothing else. Branches are never deleted; nothing is edited, labeled, commented on or reopened, and the original is never touched. Everything is read before the first close. `--dry-run` (`dryRun`) reads and verifies everything and closes nothing.
-- **Permissions.** Each close is attempted with your token. Pull requests GitHub doesn't let you close are reported as `permission-limited`, separately from failures; someone allowed to close them can run cleanup for the rest.
+- **Permissions.** Each close is attempted with your token. Pull requests GitHub doesn't let you close (HTTP 403 or 404) are reported as `permission-limited`, separately from failures; someone allowed to close them can run cleanup for the rest.
 - **Running it again is safe.** Closed suggestions are no longer listed (with `--original`, they are reported `already-closed`).
 
-Each pull request checked gets one `result`: `closed`, `would-close` (dry run), `already-closed`, `left-open` (the original is still open), `unverified`, `permission-limited`, `failed`, `not-ours` (not a conforming suggestion pull request: no recognizable marker, another repository or original, an original that does not exist, or another branch; never touched) or `unlabeled`.
+Each pull request checked gets one `result`: `closed`, `would-close` (dry run), `already-closed`, `left-open` (the original is still open), `unverified`, `permission-limited`, `failed`, `not-conforming` (not a conforming suggestion pull request: no recognizable marker, another repository or original, an original that does not exist, or another branch; never touched), `other-owner` (someone else opened it; left open) or `unlabeled`. The outcome also reports `owner` (the scope used) and `counts`: `candidates` (what the sweep counted), `checked`, `labeled` and `conforming`.
 
 | Library `status` | CLI exit | Meaning |
 | --- | --- | --- |
 | `complete` | 0 | Every pull request checked has its final result (a dry run too, and an `--original` that does not exist). |
 | `permission-limited` | 2 | Everything else is done; some eligible suggestions could not be closed with this token. |
+| `label-not-suggestion-prs` | 2 | The `--label` sweep stopped: its first pull requests show no suggestion pull request. Nothing was checked; check the label, or use `--force`. |
 | `incomplete` | 3 | An original could not be verified or an action failed. Run it again later. |
+| `too-many-candidates` | 1 | The sweep stopped: more candidates than the limit. Nothing was checked. |
 
-Invalid input rejects with a `TypeError`; an invalid or unreadable label configuration, a repository that can't be read (for example a mistyped `--repo`, also with `--label`), and a failure while listing, reject with an `Error`; all before anything is closed (CLI exit 1). With `--format json`, the CLI prints `{ command, status, dryRun, originals, suggestions, message, diagnostics }`. Labels containing a comma are refused everywhere, because GitHub's label filter would read them as several labels. The full contract is in the source repository (`docs/suggestion-cleanup-contract.md`).
+Invalid input (including an `owner` other than `me` or `all`, or a `maxCandidates` that is not a positive whole number) rejects with a `TypeError`; an invalid or unreadable label configuration, a repository that can't be read (for example a mistyped `--repo` with `--label` and `--original`), and a failure while listing or while reading the account, reject with an `Error`; all before anything is closed (CLI exit 1). A sweep stopped by its limit or its early exit is not a rejection: it resolves with `too-many-candidates` or `label-not-suggestion-prs` and a diagnostic, having checked and closed nothing. With `--format json`, the CLI prints `{ command, status, dryRun, owner, originals, suggestions, counts, message, diagnostics }`. Labels containing a comma are refused everywhere, because GitHub's label filter would read them as several labels. The full contract is in the source repository (`docs/suggestion-cleanup-contract.md`).
 
 ## Supported SARIF (first-milestone profile)
 
