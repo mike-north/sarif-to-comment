@@ -172,7 +172,7 @@ The CLI prints the same Markdown the library returns. Add `--source-root file://
 
 ## Check readiness without publishing
 
-`validate` (`validateSarifReview` in the library) runs every check `publish` runs against the pull request, then stops. It reads GitHub but never writes to it, and it takes no state path and writes no file. It is optional, and it grants nothing: `publish` repeats every check against the pull request as it is then.
+`validate` (`validateSarifReview` in the library) runs every check `publish` runs against the pull request, then stops. It also reports a pending review of your account on the pull request, which GitHub would not let you add another review beside. It reads GitHub but never writes to it, and it takes no state path and writes no file. It is optional, and it grants nothing: `publish` repeats every check against the pull request as it is then.
 
 <!-- verified-example: validate -->
 ```sh
@@ -186,7 +186,7 @@ status=$?
 
 case $status in
   0) echo "Ready: publish would create the review." ;;
-  2) echo "Blocked: fix the SARIF file; the message lists every problem." ;;
+  2) echo "Blocked: the message lists every problem to resolve before publishing." ;;
   *) echo "Not assessed (exit $status): no verdict; see the message above." ;;
 esac
 exit $status
@@ -194,9 +194,9 @@ exit $status
 
 | Library `status` | CLI exit | Meaning |
 | --- | --- | --- |
-| `ready` | 0 | Publication would proceed to its single create request. GitHub can still refuse the review, for example when your account already has a pending review on the pull request. |
-| `blocked` | 2 | Publication would be blocked. `problems` lists each problem with a pointer into the SARIF; the Markdown is exactly what `publish` would print. |
-| `incomplete` | 1 | The check could not be completed, for example because of a refused credential, a network failure or a failed source read. This is not a verdict. |
+| `ready` | 0 | Publication would proceed to its single create request, and your account has no pending review on the pull request. The pull request can still change before you publish. |
+| `blocked` | 2 | Publication would be blocked, or your account already has a pending review on the pull request. `problems` lists each problem, with a pointer into the SARIF when it is in the document; for a document problem the Markdown is exactly what `publish` would print. |
+| `incomplete` | 1 | The check could not be completed, for example because of a refused credential, a network failure, a failed source read or a review list that couldn't be read completely. This is not a verdict. |
 
 ## Write a review yourself
 

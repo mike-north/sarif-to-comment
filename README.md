@@ -188,15 +188,16 @@ npx sarif-to-comment ungroup-fixes --sarif review.staged.sarif --finding '/runs/
 
 `validate` (`validateSarifReview`) is optional. It answers one question: can this complete document be published faithfully to this pull request, at this reviewed commit? It runs the publisher's own checks, in the publisher's own code: the schema, approval holds, source consistency, supported representation, placement, product limits, and the authenticated account. It then stops before publishing.
 
-- **Read-only.** It reads the pull request, its source and the authenticated user from GitHub. It never writes to GitHub, takes no state path, and writes no file.
-- **Not an approval.** A `ready` result carries nothing that `publish` accepts. `publish` repeats every check against the pull request as it is then, so a branch that moved in between is caught by `publish` itself. GitHub can also still refuse the review, for example when your account already has a pending review on the pull request, which only `publish` discovers.
+- **Pending review of yours.** It also reads the pull request's reviews. If your account already has a pending review there, the result is `blocked`, naming that review, because GitHub would refuse another review, draft or submitted (see [One pending review per account](#one-pending-review-per-account)). Other accounts' pending reviews and submitted reviews don't matter. If the review list can't be read completely, the result is `incomplete`.
+- **Read-only.** It reads the pull request, its source, the authenticated user and the pull request's reviews from GitHub. It never writes to GitHub, takes no state path, and writes no file.
+- **Not an approval.** A `ready` result carries nothing that `publish` accepts. `publish` repeats every check against the pull request as it is then, so a branch that moved in between is caught by `publish` itself. GitHub can also still refuse the review, for example if a pending review of yours is started before you publish.
 - **Input.** The same as `publishSarifReview` without `statePath`, which is refused. The CLI takes the `publish` flags without `--state`. With `options.submit` (`--submit`) the checks are identical, and a ready result says a submitted comment review would be created.
 
 | Library `status` | CLI exit | Meaning |
 | --- | --- | --- |
-| `ready` | 0 | Publication would proceed to its single create request. |
-| `blocked` | 2 | Publication would be blocked. `problems` lists each problem, with a JSON Pointer where it has one, and `markdown` is exactly what `publish` would say. |
-| `incomplete` | 1 | The check could not be completed, for example because of a refused credential, a network failure, a failed source read, or a pull request that does not match. This is not a verdict. |
+| `ready` | 0 | Publication would proceed to its single create request, and your account has no pending review on the pull request. |
+| `blocked` | 2 | Publication would be blocked, or GitHub would refuse it because your account has a pending review on the pull request. `problems` lists each problem, with a JSON Pointer where it has one. For a document problem, `markdown` is exactly what `publish` would say. |
+| `incomplete` | 1 | The check could not be completed, for example because of a refused credential, a network failure, a failed source read, a pull request that does not match, or a review list that couldn't be read completely. This is not a verdict. |
 
 Invalid input rejects with a `TypeError` before any request, as it does for `publishSarifReview`. With `--format json`, the CLI prints `{ command, status, problems?, message }`.
 
@@ -241,7 +242,7 @@ By default the review is a **draft** (pending): only your account sees it until 
 
 ## One pending review per account
 
-GitHub lets an account hold only **one pending (draft) review per pull request**, and refuses a second one with HTTP 422. It refuses a submitted review (`--submit`) the same way while your draft is pending. If your account already has a draft on the pull request — made by a person or by an earlier run — publication is `rejected`. The tool never submits, edits or deletes an existing draft to make room. A person has to submit or delete it on GitHub, and then you publish again with a new state path.
+GitHub lets an account hold only **one pending (draft) review per pull request**, and refuses a second one with HTTP 422. It refuses a submitted review (`--submit`) the same way while your draft is pending. If your account already has a draft on the pull request — made by a person or by an earlier run — publication is `rejected`. `validate` reports such a draft as `blocked` before you publish. The tool never submits, edits or deletes an existing draft to make room. A person has to submit or delete it on GitHub, and then you publish again with a new state path.
 
 A refused request is recorded in the state file. Later runs with that path report the refusal without contacting GitHub, and never resend it.
 

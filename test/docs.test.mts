@@ -247,7 +247,7 @@ describe('the verified readiness example runs against the installed package', ()
     fs.writeFileSync(path.join(consumer, 'results.sarif'), JSON.stringify({ version: '2.1.0', runs: [{}] }));
     const blocked = spawnSync('bash', [script], { cwd: consumer, env, encoding: 'utf8', timeout: 120_000 });
     assert.equal(blocked.status, 2, blocked.stdout + blocked.stderr);
-    assert.match(blocked.stdout, /Blocked: fix the SARIF file/);
+    assert.match(blocked.stdout, /Blocked: the message lists every problem to resolve before publishing\./);
     assert.deepEqual(host.reviews(), [], 'nothing was published');
   });
 });
