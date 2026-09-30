@@ -1,0 +1,113 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Review bot",
+          "version": "1.0.0"
+        }
+      },
+      "columnKind": "utf16CodeUnits",
+      "versionControlProvenance": [
+        {
+          "repositoryUri": "https://github.com/mike-north/doc-linter",
+          "revisionId": "0a75e4675630f506983735a9dcfa386e6c0259a9"
+        }
+      ],
+      "results": [
+        {
+          "message": {
+            "text": "Say what line 6 means."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "docs/experiments/fallback/sample-base.md"
+                },
+                "region": {
+                  "startLine": 6
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "docs/experiments/fallback/sample-base.md"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 6
+                      },
+                      "insertedContent": {
+                        "text": "Line 6, suggested."
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "sarifToComment": {
+              "suggestionGroup": "reword"
+            }
+          }
+        },
+        {
+          "message": {
+            "text": "Line 10 too."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "docs/experiments/fallback/sample-base.md"
+                },
+                "region": {
+                  "startLine": 10
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "docs/experiments/fallback/sample-base.md"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 10
+                      },
+                      "insertedContent": {
+                        "text": "Line 10, suggested."
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "sarifToComment": {
+              "suggestionGroup": "reword"
+            }
+          }
+        },
+        {
+          "message": {
+            "text": "A general remark."
+          }
+        }
+      ]
+    }
+  ]
+}

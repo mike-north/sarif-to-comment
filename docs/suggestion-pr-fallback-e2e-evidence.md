@@ -1,4 +1,4 @@
-# Falling back when a suggestion pull request cannot be re-applied: live GitHub evidence
+# Falling back when a suggestion pull request cannot be made: live GitHub evidence
 
 Recorded September 30, 2026 in the private fixture repository `mike-north/doc-linter`, against the implementation of [issue #37](https://github.com/mike-north/sarif-to-comment/issues/37) ([companion contract §2.5.1](companion-suggestion-pr-contract.md#251-re-application-after-a-rewritten-history), [diagnostics](diagnostics.md)). The built package ran from the working tree (`node dist/sarif-to-comment.cjs`) with the maintainer's personal token. Nothing was published to npm, nothing was merged, and `main` stayed at `0a7b03f`. Sanitized outputs are in [`evidence/suggestion-pr-fallback/`](evidence/suggestion-pr-fallback/), with local paths replaced by `<evidence>`. The exit statuses are in [`exit-statuses.txt`](evidence/suggestion-pr-fallback/exit-statuses.txt), and every JSON run wrote nothing to stderr ([`52`](evidence/suggestion-pr-fallback/52-json-stderr-sizes.txt)).
 
@@ -15,6 +15,8 @@ Each original is a draft pull request into `main` from a branch holding C0 (adds
 
 All paths are under `docs/experiments/fallback/`.
 
+> Note (September 30, 2026): runs 1–7 were recorded before the owner widened the fallback to every case where a suggestion pull request cannot be made. Their refusal code, `suggestion-group-not-reapplied` titled "A group cannot be re-applied after a rewritten history", is now `suggestion-group-pr-unavailable` titled "A group's suggestion pull request cannot be made"; the messages and remedies are unchanged. The files are kept as recorded. Run 8 was recorded after the change.
+
 ## Runs
 
 1. **Creation: falls back to the review-body proposal** ([`10` JSON](evidence/suggestion-pr-fallback/10-validate-creation.json), [TOON](evidence/suggestion-pr-fallback/10-validate-creation.toon), [human stdout](evidence/suggestion-pr-fallback/10-validate-creation.stdout.human.txt) and [stderr](evidence/suggestion-pr-fallback/10-validate-creation.stderr.human.txt); publish [stdout](evidence/suggestion-pr-fallback/20-publish-creation.stdout.human.txt) and [stderr](evidence/suggestion-pr-fallback/20-publish-creation.stderr.human.txt)). `validate` is `ready` (exit 0), headed ``**Ready to publish with 1 warning:** 1 suggestion pull request would not be created; its change would be shown in the review.``, with one `suggestion-pr-fallback` warning: ``Suggestion pull requests are allowed, but the creation of `docs/experiments/fallback/new-creation.md` is not proposed as one: the history of #74 was rewritten after the reviewed commit, and it cannot be re-applied onto commit `5293cc3…` because `docs/experiments/fallback/new-creation.md` already exists. It is handled as if suggestion pull requests were not allowed: the review body proposes it, with its findings.`` `publish` (exit 0) prints ``**Published with 1 warning:** 1 suggestion pull request was not created; its change is shown in the review.`` under its heading on stdout, and the warning once, as a block, on stderr. It created draft review 5371097240 and no suggestion pull request.
@@ -25,6 +27,8 @@ All paths are under `docs/experiments/fallback/`.
 6. **Nothing is written on refusal, and retries are answered from the receipts** ([`50`](evidence/suggestion-pr-fallback/50-refs-after.txt), [`51`](evidence/suggestion-pr-fallback/51-state-files.txt), [`40`](evidence/suggestion-pr-fallback/40-retry-creation.json), [`41`](evidence/suggestion-pr-fallback/41-retry-deletion.json)). The only suggestion branch of #74–#77 is #78's; `main` is still `0a7b03f`; no state file exists for #76 or #77. The retries of #74 and #75 report `… was already published …` and send nothing.
 7. **TOON is the JSON document** ([`60`](evidence/suggestion-pr-fallback/60-toon-decodes-to-json.txt)): each `--format toon` output decodes to the matching `--format json` output, including `diagnostics`.
 
+8. **A base that is not the default branch** ([#79](https://github.com/mike-north/doc-linter/pull/79), a draft from `exp-fallback-20260930-base` into `exp-fallback-20260930-release`, reviewed at its head `0a75e46`, no rewrite; [`70-base-*`](evidence/suggestion-pr-fallback/70-base-00-reviewed-commit.txt)). With a creation and a deletion ([SARIF](evidence/suggestion-pr-fallback/70-base-base-files.sarif.json)), `validate` is `ready` ([JSON](evidence/suggestion-pr-fallback/70-base-10-validate-base-files.json), [TOON](evidence/suggestion-pr-fallback/70-base-10-validate-base-files.toon), [human](evidence/suggestion-pr-fallback/70-base-10-validate-base-files.stdout.human.txt)) and `publish` created draft review 5371460927 ([stdout](evidence/suggestion-pr-fallback/70-base-20-publish-base-files.stdout.human.txt), [stderr](evidence/suggestion-pr-fallback/70-base-20-publish-base-files.stderr.human.txt)), headed ``**Published with 2 warnings:** 2 suggestion pull requests were not created; their changes are shown in the review.``, each warning reading ``… is not proposed as one: the pull request merges into `exp-fallback-20260930-release`, which is not the default branch `main` of mike-north/doc-linter, and suggestion pull requests are not yet supported for such a pull request. …`` with no remedy; the review proposes the new file and the deletion in its body ([`33`](evidence/suggestion-pr-fallback/70-base-33-review.json)). With a group ([SARIF](evidence/suggestion-pr-fallback/70-base-base-group.sarif.json)), `validate` and `publish` are `blocked` (exit 2; [stderr](evidence/suggestion-pr-fallback/70-base-11-validate-base-group.stderr.human.txt), [JSON](evidence/suggestion-pr-fallback/70-base-21-publish-base-group.json)) with `suggestion-group-pr-unavailable` and the single remedy "Remove the group (`ungroup-fixes`), so that its changes are published on their own."; no state file was written for it ([`51`](evidence/suggestion-pr-fallback/70-base-51-state-files.txt)). No suggestion branch of #79 exists and `main` is unchanged ([`50`](evidence/suggestion-pr-fallback/70-base-50-refs-after.txt)). Before this decision, both documents were refused as `suggestion-pr-base-unsupported`.
+
 ## What this covers
 
 | #37 acceptance item | Live | Tests |
@@ -34,6 +38,7 @@ All paths are under `docs/experiments/fallback/`.
 | Mixed: a re-appliable suggestion with a group is refused; with a file operation it publishes | Runs 2 and 3 | the same file |
 | Headline, structured warnings and stderr blocks for `publish` and `validate`, in library, human, JSON and TOON | Runs 1, 2, 7 | the same file; `test/cli-human-reports.test.mts` (a warning of another code) |
 | Installed-package CLI and library | — | `test/installed-suggestion-pr-fallback.test.mts` |
+| Wherever a suggestion pull request cannot be made: a fork, a deleted head repository, another base, a created file over 1,000,000 bytes, a description over 60,000 characters (creation, deletion and group) | Run 8 (another base) | `test/suggestion-pr-fallback.test.mts`, `test/suggestion-pr-convention.test.mts`, `test/companion-composition.test.mts` |
 
 ## Live artifacts
 
@@ -43,8 +48,10 @@ All left in place:
 - Draft originals [#74](https://github.com/mike-north/doc-linter/pull/74), [#75](https://github.com/mike-north/doc-linter/pull/75), [#76](https://github.com/mike-north/doc-linter/pull/76) and [#77](https://github.com/mike-north/doc-linter/pull/77) into `main`, open.
 - Pending draft reviews 5371097240 (#74) and 5371100573 (#75).
 - Suggestion pull request [#78](https://github.com/mike-north/doc-linter/pull/78), an open draft labeled `suggestion-pr`, and its branch `suggestion-pr/75/0acdfa96-3a0c-4ab6-8a75-aa99aeb7cdc5`.
+- For run 8: branches `exp-fallback-20260930-release` (at `main`'s `0a7b03f`) and `exp-fallback-20260930-base` (`0a75e46`), draft [#79](https://github.com/mike-north/doc-linter/pull/79) into the former, open, and its pending draft review 5371460927.
 
 ## What this does not show
 
 - The installed package against live GitHub: covered against the fake host by `test/installed-suggestion-pr-fallback.test.mts`.
+- A fork, a deleted head repository, and the file and description limits, live: covered by the fake host only (the fixture repository has no fork).
 - A creation over the suggestion file limit that falls back: covered by the fake host only.
