@@ -770,6 +770,11 @@ export const DIAGNOSTIC_CATALOG = {
     title: 'An original pull request could not be verified',
     remedies: ['Run cleanup again later.'],
   },
+  'original-pull-request-not-found': {
+    severity: 'warning',
+    title: 'The original pull request was not found',
+    remedies: ['Check the pull request number.'],
+  },
   'suggestion-pr-close-not-permitted': {
     severity: 'warning',
     title: 'GitHub did not allow this account to close a suggestion pull request',

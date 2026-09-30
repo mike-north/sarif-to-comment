@@ -4,10 +4,10 @@
 
 ## OriginalPullRequestState type
 
-An original pull request's state: `unverified` when it could not be read, which is never treated as ended.
+An original pull request's state. `not-found` when GitHub answered that the repository has no pull request with its number that this account can read (HTTP 404): a definitive answer, which running cleanup again does not change. `unverified` when it could not be read for any other reason, which running cleanup again may change. Neither is ever treated as ended.
 
 **Signature:**
 
 ```typescript
-export type OriginalPullRequestState = 'open' | 'merged' | 'closed' | 'unverified';
+export type OriginalPullRequestState = 'open' | 'merged' | 'closed' | 'not-found' | 'unverified';
 ```

@@ -409,6 +409,7 @@ One entry per code: its severity, its title, what it means and its typical remed
 | Code | Severity | Title | Meaning | Typical remedies |
 |---|---|---|---|---|
 | `original-pull-request-unverified` | warning | An original pull request could not be verified | Its state could not be read, so its suggestion pull requests were left open. It is never treated as ended. | Run cleanup again later. |
+| `original-pull-request-not-found` | warning | The original pull request was not found | GitHub answered 404 for the original pull request cleanup was asked to check (`originalPullNumber`, `--original`): the repository has no pull request with that number that this account can read, so nothing can reference it. Cleanup is complete; running it again gives the same answer. | Check the pull request number. |
 | `suggestion-pr-close-not-permitted` | warning | GitHub did not allow this account to close a suggestion pull request | Everything else is done; the pull request is eligible but still open. | Someone allowed to close it can run cleanup again. |
 | `suggestion-pr-cleanup-failed` | error | Reading or closing a suggestion pull request failed | Cleanup could not finish for this pull request; running it again is safe. | Run cleanup again later. |
 | `suggestion-pr-not-conforming` | note | A pull request does not follow the suggestion pull request convention | It was not touched: its marker, repository, original, fork or branch does not conform. | — |

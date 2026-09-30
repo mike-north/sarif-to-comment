@@ -67,7 +67,7 @@ The command's name is its intent, as with `publish` and `validate`: it closes el
 
 **Sweep (the default).** Every page of `GET /repos/{owner}/{repo}/issues?labels={label}&state=open`, where `label` is the canonical label or the override (§2.2.1),, following validated `Link: rel="next"` pagination (at most 100 pages of 100). Entries without a `pull_request` object are issues and are ignored. A pull request listed twice (pages can shift while being read) counts once. The issues listing is used because it filters by label on the host; the search API is not used (index lag, a 1,000-result cap and a separate rate limit).
 
-**Targeted (`originalPullNumber`).** The original is resolved first (§2.7). If it cannot be verified, discovery stops there: nothing could be closed, and the outcome reports the original as `unverified`. Otherwise one paginated GraphQL traversal reads the original's `timelineItems(itemTypes: [CROSS_REFERENCED_EVENT])` and follows each event's `source` to a `PullRequest` (number, URL, repository, state, body and labels), as D21 describes. Sources that are issues, and sources in another repository, are ignored (D25); a foreign source is left out before its state or labels are read or checked, so an inaccessible or malformed foreign repository can never stop discovery. A source listed more than once counts once. A source's labels are read through this repository's REST labels listing when it has more than 100. This is the backlink lookup of D21 and D28 with the client the tool already has; no local record of earlier publications is consulted.
+**Targeted (`originalPullNumber`).** The original is resolved first (§2.7). If it cannot be verified, discovery stops there: nothing could be closed, and the outcome reports the original as `unverified`. If GitHub answers that it does not exist (`not-found`), discovery stops there too: nothing can reference a pull request that does not exist, so cleanup is `complete`, with an `original-pull-request-not-found` warning (a mistyped number is a definitive answer, never a reason to run again). Otherwise one paginated GraphQL traversal reads the original's `timelineItems(itemTypes: [CROSS_REFERENCED_EVENT])` and follows each event's `source` to a `PullRequest` (number, URL, repository, state, body and labels), as D21 describes. Sources that are issues, and sources in another repository, are ignored (D25); a foreign source is left out before its state or labels are read or checked, so an inaccessible or malformed foreign repository can never stop discovery. A source listed more than once counts once. A source's labels are read through this repository's REST labels listing when it has more than 100. This is the backlink lookup of D21 and D28 with the client the tool already has; no local record of earlier publications is consulted.
 
 Any failure to list (HTTP, network, malformed answer, pagination) is operational: the call rejects (CLI: exit 1) and nothing has been closed.
 
@@ -95,8 +95,9 @@ Each candidate pull request gets exactly one `result`, decided in this order:
 | 6 | Targeted mode: the candidate is already closed or merged | `already-closed` | no |
 | 7 | Targeted mode: the candidate lacks the label (compared case-insensitively) | `unlabeled` | no |
 | 8 | Its original is open (drafts included) | `left-open` | no |
-| 9 | Its original could not be verified (§2.7) | `unverified` | no |
-| 10 | Its original merged or closed: the suggestion is re-read and verified (§2.8) | see §2.8 | only if verified |
+| 9 | Its original does not exist (§2.7): the marker names a number that is not a pull request of this repository | `not-ours` | no |
+| 10 | Its original could not be verified (§2.7) | `unverified` | no |
+| 11 | Its original merged or closed: the suggestion is re-read and verified (§2.8) | see §2.8 | only if verified |
 
 Originals are resolved once each, however many suggestions reference them. The base branch is never checked: after a merged original's head branch is deleted, GitHub retargets its dependent pull requests ([lifecycle experiment](companion-pr-lifecycle-experiment.md)), so a suggestion may legitimately target another branch by the time it is cleaned up.
 
@@ -109,9 +110,10 @@ Originals are resolved once each, however many suggestions reference them. The b
 | `state: open` | `open` |
 | `state: closed`, `merged: true` | `merged` |
 | `state: closed`, `merged: false` | `closed` |
-| 404, 403, 401, 5xx, a network failure, a redirect, a malformed or inconsistent answer | `unverified`, with the reason |
+| 404 | `not-found`: the repository has no pull request `n` that this account can read |
+| 403, 401, 5xx, a network failure, a redirect, a malformed or inconsistent answer | `unverified`, with the reason |
 
-An inaccessible original is not a closed original: `unverified` never leads to a close.
+An inaccessible original is not a closed original: neither `not-found` nor `unverified` ever leads to a close. They differ in what running cleanup again can change. A 404 is GitHub's definitive answer about the number (cleanup has already read this repository, or, with a label override, the account cannot read it at all), so it is the same on every run; every other failure may pass.
 
 ### 2.8 Verifying a suggestion before it is closed
 
@@ -149,13 +151,13 @@ The library resolves (it does not reject) once discovery has completed:
 { status, dryRun, originals: [{ number, state, reason? }], suggestions: [{ number, url, original, result, reason? }], markdown }
 ```
 
-- `originals` lists each original resolved, ascending; `state` is `open`, `merged`, `closed` or `unverified`.
+- `originals` lists each original resolved, ascending; `state` is `open`, `merged`, `closed`, `not-found` or `unverified`.
 - `suggestions` lists each reported candidate, ascending; `original` is the number its marker names, or `null` when it has no usable marker. `result` is one of `closed`, `would-close`, `already-closed`, `left-open`, `unverified`, `permission-limited`, `failed`, `not-ours`, `unlabeled`. `reason` explains `unverified`, `permission-limited`, `failed` and `not-ours`. Under the convention, `not-ours` means "not a conforming suggestion pull request", whichever tool made it (§4, open question 8).
 - `status`:
   - `incomplete` when any suggestion is `failed` or `unverified`, or a targeted original is `unverified`: something could not be established; running again is safe;
   - otherwise `permission-limited` when any suggestion is `permission-limited`: someone with the right to close them can finish;
   - otherwise `complete`, including a dry run and a run with nothing to do.
-- `markdown` says what was checked, each original's state, each suggestion's result, that no branch is deleted, and, when relevant, that a rerun is safe or who can close the rest. Its form is shown in §3: a title naming the status (`complete`, `: dry run`, `limited by permissions`, `incomplete`), the scope (``Checked the open pull requests labeled `LABEL` in OWNER/REPO (SOURCE).`` for a sweep, ``Checked the pull requests that reference #N in OWNER/REPO; the suggestion label is `LABEL` (SOURCE).`` when targeted, where SOURCE is `the default suggestion label`, ``the suggestion label set in `.github/suggestion-prs.json` on `BRANCH` `` or `a label given in place of the repository's suggestion label`), `Original pull requests:` with one line per original (`open`, `merged`, `closed without merging`, `could not be verified (<reason>)`), `Suggestion pull requests:` with one line per result (`closed`; `would be closed`; `already closed`; `left open, because the original is still open`; `left open, because the original could not be verified`; `left open, not permitted to close it: <reason>`; `not closed, the close failed: <reason>` or `not closed, it could not be read again before closing: <reason>`; `skipped, not a conforming suggestion pull request: <reason>`; ``skipped, it does not carry the label `<label>` ``), then the dry-run, rerun and permission notes that apply, and last `Closing never deletes a branch: each proposal branch is left in place.`
+- `markdown` says what was checked, each original's state, each suggestion's result, that no branch is deleted, and, when relevant, that a rerun is safe or who can close the rest. Its form is shown in §3: a title naming the status (`complete`, `: dry run`, `limited by permissions`, `incomplete`), the scope (``Checked the open pull requests labeled `LABEL` in OWNER/REPO (SOURCE).`` for a sweep, ``Checked the pull requests that reference #N in OWNER/REPO; the suggestion label is `LABEL` (SOURCE).`` when targeted, where SOURCE is `the default suggestion label`, ``the suggestion label set in `.github/suggestion-prs.json` on `BRANCH` `` or `a label given in place of the repository's suggestion label`), `Original pull requests:` with one line per original (`open`, `merged`, `closed without merging`, `not found (OWNER/REPO has no pull request #N that this account can read)`, `could not be verified (<reason>)`), `Suggestion pull requests:` with one line per result (`closed`; `would be closed`; `already closed`; `left open, because the original is still open`; `left open, because the original could not be verified`; `left open, not permitted to close it: <reason>`; `not closed, the close failed: <reason>` or `not closed, it could not be read again before closing: <reason>`; `skipped, not a conforming suggestion pull request: <reason>`; ``skipped, it does not carry the label `<label>` ``), then the dry-run, rerun and permission notes that apply, and last `Closing never deletes a branch: each proposal branch is left in place.`
 
 It rejects with a `TypeError` for invalid input, and with an `Error` for an operational failure during discovery (before any write). Neither contains the token.
 
@@ -163,7 +165,7 @@ It rejects with a `TypeError` for invalid input, and with an `Error` for an oper
 
 | Exit status | Meaning |
 | --- | --- |
-| 0 | `complete` (also a dry run with nothing unverified) |
+| 0 | `complete` (also a dry run with nothing unverified, and a targeted original that does not exist) |
 | 2 | `permission-limited`: every other eligible suggestion was closed |
 | 3 | `incomplete`: a failed close or an unverified original; rerun later |
 | 1 | usage error, missing token, or an operational failure before any write |
@@ -230,7 +232,7 @@ Open questions this contract raises for the owner:
 | --- | --- | --- |
 | Open, merged, closed-unmerged and inaccessible originals (A36) | `test/cleanup-composition.test.mts` | open and closed-unmerged with suggestions; merged, closed and missing originals probed read-only |
 | Pagination, duplicate references, title changes (A31) | `test/cleanup-composition.test.mts`, `test/github-cleanup.test.mts` | single page only |
-| Permission-limited apart from failed; no completion inferred from a failed lookup | `test/cleanup-composition.test.mts`, `test/github-cleanup.test.mts` | missing original `unverified` (exit 3) |
+| Permission-limited apart from failed; no completion inferred from a failed lookup; a missing original is definitive (`not-found`), never retried | `test/cleanup-composition.test.mts`, `test/github-cleanup.test.mts` | missing original probed read-only (reported `unverified`, exit 3, before a 404 was made definitive) |
 | Already-closed suggestions tolerated | `test/cleanup-composition.test.mts` | sweep and targeted reruns |
 | Targeted discovery, dry run | `test/cleanup-composition.test.mts` | targeted and dry runs |
 | Commas refused in labels | `test/cleanup-composition.test.mts`, `test/companion-composition.test.mts`, `test/github-cleanup.test.mts` | |

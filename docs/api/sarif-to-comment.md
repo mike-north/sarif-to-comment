@@ -918,7 +918,7 @@ Every outcome of [inspectSarif()](./sarif-to-comment.inspectsarif.md)<!-- -->, d
 
 </td><td>
 
-An original pull request's state: `unverified` when it could not be read, which is never treated as ended.
+An original pull request's state. `not-found` when GitHub answered that the repository has no pull request with its number that this account can read (HTTP 404): a definitive answer, which running cleanup again does not change. `unverified` when it could not be read for any other reason, which running cleanup again may change. Neither is ever treated as ended.
 
 
 </td></tr>
@@ -953,7 +953,7 @@ Every outcome of [removeSarifComment()](./sarif-to-comment.removesarifcomment.md
 
 What cleanup did with one pull request:
 
-- `closed`<!-- -->: it was closed now. - `would-close`<!-- -->: a dry run would close it. - `already-closed`<!-- -->: it is no longer open. - `left-open`<!-- -->: its original is still open. - `unverified`<!-- -->: its original could not be verified, so it was left open. - `permission-limited`<!-- -->: GitHub refused to let this account close it. - `failed`<!-- -->: reading or closing it failed; running cleanup again is safe. - `not-ours`<!-- -->: it does not conform to the suggestion pull request  convention (no, several or a changed marker, another repository or  original, a fork, or another branch), so it was not touched. - `unlabeled`<!-- -->: it does not carry the label, so it was not touched.
+- `closed`<!-- -->: it was closed now. - `would-close`<!-- -->: a dry run would close it. - `already-closed`<!-- -->: it is no longer open. - `left-open`<!-- -->: its original is still open. - `unverified`<!-- -->: its original could not be verified, so it was left open. - `permission-limited`<!-- -->: GitHub refused to let this account close it. - `failed`<!-- -->: reading or closing it failed; running cleanup again is safe. - `not-ours`<!-- -->: it does not conform to the suggestion pull request  convention (no, several or a changed marker, another repository or  original, an original that is not a pull request of the repository, a  fork, or another branch), so it was not touched. - `unlabeled`<!-- -->: it does not carry the label, so it was not touched.
 
 
 </td></tr>

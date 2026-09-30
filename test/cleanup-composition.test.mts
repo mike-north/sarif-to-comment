@@ -38,6 +38,7 @@ import type { ICreateGitHubClientOptions, IGitHubClient } from '../dist/github.c
 import { FakeHttpGitHub } from './fixtures/composition/fake-http-github.mts';
 import type { IHttpHostConfig, IHttpRepository } from './fixtures/composition/fake-http-github.mts';
 import type { ICompanionConfig, IStoredPull } from './fixtures/composition/fake-http-companion.mts';
+import { assertDiagnostics } from './support/diagnostics.mts';
 import { asArray, asRecord, asString, parseJson } from './support/runtime-types.mts';
 
 const CLI = path.join(import.meta.dirname, 'fixtures', 'composition', 'cli-with-fake-http.mts');
@@ -306,8 +307,10 @@ describe('original states (A36)', () => {
     assert.deepEqual(writes(world), []);
   });
 
+  // Contract §2.7: a 404 is a definitive answer (the repository, which was
+  // just listed, has no such pull request), so it is `not-found`, below;
+  // every other failed lookup is `unverified`.
   const inaccessible: readonly (readonly [string, ICompanionConfig, RegExp])[] = [
-    ['answers 404', { pullReads: { '37': 'not-found' } }, /HTTP 404/],
     ['answers 403', { pullReads: { '37': 'forbidden' } }, /HTTP 403/],
     ['answers 502', { pullReads: { '37': 'server-error' } }, /HTTP 502/],
     ['answers with an unknown state', { pullReads: { '37': 'malformed' } }, /state/],
@@ -331,6 +334,25 @@ describe('original states (A36)', () => {
       assert.ok(text.includes('Running the cleanup again is safe'), text);
     });
   }
+
+  test('regression (#43): a marker naming a pull request that does not exist (404) is not-ours, and the cleanup is complete rather than retried forever', async () => {
+    const world = makeWorld([original(36, 'open'), suggestion(38, 36), suggestion(40, 37)], { pullReads: { '37': 'not-found' } });
+    const outcome = await cleanup(world);
+    assert.equal(outcome['status'], 'complete');
+    assert.deepEqual(originals(outcome), [[36, 'open'], [37, 'not-found']]);
+    assert.deepEqual(asArray(outcome['originals']).map((o) => Object.keys(asRecord(o))), [['number', 'state'], ['number', 'state']], 'a not-found original has no reason');
+    assert.deepEqual(results(outcome), [[38, 36, 'left-open'], [40, 37, 'not-ours']]);
+    assert.equal(entry(outcome, 40)['reason'], 'its marker names #37, which is not a pull request in octo/widgets');
+    assert.deepEqual(writes(world), []);
+    assert.equal(stateOf(world, 40).state, 'open');
+    const text = markdown(outcome);
+    assert.ok(text.startsWith('## Suggestion pull request cleanup complete\n'), text);
+    assert.ok(text.includes('- #37: not found (octo/widgets has no pull request #37 that this account can read)\n'), text);
+    assert.ok(text.includes('- #40 (for #37): skipped, not a conforming suggestion pull request: its marker names #37, which is not a pull request in octo/widgets\n'), text);
+    assert.equal(text.includes('Running the cleanup again is safe'), false, text);
+    // The suggestion's note says it; the original needs no warning of its own.
+    assertDiagnostics(outcome['diagnostics'], [{ code: 'suggestion-pr-not-conforming', subject: 'octo/widgets#40' }]);
+  });
 });
 
 describe('pagination and duplicate references (A31)', () => {
@@ -636,6 +658,40 @@ describe('targeted discovery from one original (§2.4, D21)', () => {
     assert.deepEqual(writes(world), []);
   });
 
+  test('regression (#43): an original that does not exist (a typo in the number) is a definitive, complete outcome with a warning, never an endless retry', async () => {
+    const world = makeWorld([original(37, 'closed'), suggestion(40, 37)]);
+    const outcome = await cleanup(world, { originalPullNumber: 99 });
+    assert.equal(outcome['status'], 'complete');
+    assert.deepEqual(outcome['originals'], [{ number: 99, state: 'not-found' }]);
+    assert.deepEqual(outcome['suggestions'], []);
+    assert.equal(world.host.log().some((r) => r.path === '/graphql'), false, 'no backlink query: nothing can reference it');
+    assert.deepEqual(writes(world), []);
+    assert.equal(
+      markdown(outcome),
+      [
+        '## Suggestion pull request cleanup complete',
+        '',
+        'Checked the pull requests that reference #99 in octo/widgets; the suggestion label is `suggestion-pr` (the default suggestion label).',
+        '',
+        'Original pull requests:',
+        '',
+        '- #99: not found (octo/widgets has no pull request #99 that this account can read)',
+        '',
+        'No suggestion pull requests were found.',
+        '',
+        'Closing never deletes a branch: each proposal branch is left in place.',
+      ].join('\n'),
+    );
+    assertDiagnostics(outcome['diagnostics'], [{
+      code: 'original-pull-request-not-found',
+      subject: 'octo/widgets#99',
+      message: /^octo\/widgets has no pull request #99 that this account can read, so no suggestion pull request can reference it\.$/,
+    }]);
+    // The same answer every time: running it again changes nothing.
+    const again = await cleanup(world, { originalPullNumber: 99 });
+    assert.deepEqual(again, outcome);
+  });
+
   test('an original that cannot be verified: discovery stops there, incomplete', async () => {
     const world = makeWorld([original(37, 'closed'), suggestion(40, 37)], { pullReads: { '37': 'forbidden' } });
     const outcome = await cleanup(world, { originalPullNumber: 37 });
@@ -750,7 +806,7 @@ describe('CLI + real GitHub client over HTTP', () => {
   test('exit 2 when only permission limits remain, 3 when incomplete', () => {
     const limited = makeWorld(worked(), { closes: { '40': 'forbidden' } });
     assert.equal(cli(limited, ['close-suggestion-prs', '--repo', `${OWNER}/${REPO}`]).status, 2);
-    const incomplete = makeWorld(worked(), { pullReads: { '37': 'not-found' } });
+    const incomplete = makeWorld(worked(), { pullReads: { '37': 'server-error' } });
     const result = cli(incomplete, ['close-suggestion-prs', '--repo', `${OWNER}/${REPO}`, '--format', 'json']);
     assert.equal(result.status, 3, result.stdout);
     assert.equal(asRecord(parseJson(result.stdout))['status'], 'incomplete');
@@ -800,6 +856,37 @@ describe('CLI + real GitHub client over HTTP', () => {
     assert.match(result.stderr, /HTTP 502/);
     assert.match(result.stdout, /Nothing was closed/);
     assert.match(result.stderr, /\[operation-failed\]/);
+    assert.deepEqual(writes(world), []);
+  });
+
+  test('regression (#43): --original naming a pull request that does not exist exits 0 with a warning, every time', () => {
+    const world = makeWorld(worked());
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const result = cli(world, ['close-suggestion-prs', '--repo', `${OWNER}/${REPO}`, '--original', '99']);
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.equal(
+        result.stdout,
+        [
+          '## Suggestion pull request cleanup complete',
+          '',
+          'Checked the pull requests that reference #99 in octo/widgets; the suggestion label is `suggestion-pr` (the default suggestion label).',
+          '',
+          'No suggestion pull requests were found.',
+          '',
+          'Closing never deletes a branch: each proposal branch is left in place.',
+          '',
+        ].join('\n'),
+      );
+      assert.match(result.stderr, /\[original-pull-request-not-found\]/);
+      assert.match(result.stderr, /octo\/widgets has no pull request #99 that this account can read/);
+      assert.match(result.stderr, /→ Check the pull request number\./);
+      assert.equal(result.stderr.includes('again later'), false, 'no retry is suggested');
+    }
+    const json = cli(world, ['close-suggestion-prs', '--repo', `${OWNER}/${REPO}`, '--original', '99', '--format', 'json']);
+    assert.equal(json.status, 0);
+    const doc = asRecord(parseJson(json.stdout));
+    assert.equal(doc['status'], 'complete');
+    assert.deepEqual(doc['originals'], [{ number: 99, state: 'not-found' }]);
     assert.deepEqual(writes(world), []);
   });
 

@@ -581,7 +581,7 @@ export interface IValidateSarifReviewInput {
 }
 
 // @public
-export type OriginalPullRequestState = 'open' | 'merged' | 'closed' | 'unverified';
+export type OriginalPullRequestState = 'open' | 'merged' | 'closed' | 'not-found' | 'unverified';
 
 // @public
 export function publishSarifReview(input: IPublishSarifReviewInput): Promise<PublishSarifReviewOutcome>;
