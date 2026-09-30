@@ -2,7 +2,7 @@
 
 > **Status note (reconciled September 28, 2026).** This log remains the authoritative decision record. Its statement that no behavior has been implemented is historical. For current status, see [Current status and reconciliation](status.md).
 
-Updated: September 29, 2026 (the owner acceptances and decisions in D34–D44).
+Updated: September 30, 2026 (the owner decision in D45, which supersedes D13). Earlier: September 29, 2026 (the owner acceptances and decisions in D34–D44).
 
 This is the working design record for the product-shaping conversation. It records decisions, their reasons, their consequences, and what remains open. It is not an implementation specification. No behavior described here has been implemented or integration-tested in this project.
 
@@ -140,6 +140,8 @@ Converge on a publishable artifact in its entirety before making GitHub writes. 
 **Consequences:** Whole-review preflight is required. Upstream authors can deliberately revise the artifact, but the publisher does not select a subset on their behalf. This is a readiness boundary, not a claim that multiple remote API operations are transactional; publication recovery remains necessary.
 
 ### D13. Diagnostics are Markdown; repair interfaces remain the ordinary inputs — settled
+
+> **Superseded by [D45](#d45-model-diagnostics-once-and-render-them-per-audience--owner-decision)** (owner decision of September 30, 2026). The text below is kept as it was decided.
 
 Start with an editor-friendly Markdown exception report. An internal structured diagnostic model is acceptable, but do not freeze an external machine-readable exception schema at this stage.
 
@@ -476,6 +478,20 @@ When a SARIF result carries several fixes, the first is its suggested change: a 
 **Reason:** R4's "MUST NOT choose a semantic winner" governs conflicting edits during generation and combination, not the presentation of alternatives a producer has already ordered. The earlier `fix-alternatives-unsupported` refusal was a limit of the first milestone's supported profile, not an owner decision.
 
 **Consequences:** A single fix with several changes remains one change accepted whole. Without suggestion pull requests it is refused, naming the setting, rather than split: the known limitation #30 allowed to be recorded ([status](status.md#open-questions-for-the-owner), question 5). Live evidence: [alternative fixes](alternative-fixes-e2e-evidence.md).
+
+### Owner decision of September 30, 2026
+
+### D45. Model diagnostics once and render them per audience — owner decision
+
+**Provenance:** [issue #38](https://github.com/mike-north/sarif-to-comment/issues/38), the owner's decision of September 30, 2026. It supersedes [D13](#d13-diagnostics-are-markdown-repair-interfaces-remain-the-ordinary-inputs--settled).
+
+Errors, warnings and notes are modelled once, as structured diagnostics with a severity, a stable kebab-case code, a one-line title, a Markdown message, and an optional location, subject and remedies. Every library outcome and every CLI document carries them in `diagnostics`, always present and ordered errors, then warnings, then notes. They are rendered per audience: `--format json` carries them verbatim under a versioned JSON Schema, `--format toon` encodes the same document as TOON for agents, the default `--format human` shows each as a colored block on stderr (chalk; `--color auto|always|never`, `NO_COLOR` and `FORCE_COLOR`), and the `markdown` fields and GitHub text are Markdown rendered from the same diagnostics. Codes are public once released and are catalogued, with severity, meaning and typical remedies, in [Diagnostics](diagnostics.md).
+
+**Reason:** Agents need structured, stable facts rather than Markdown to parse, and people need a readable terminal view; one model keeps every rendering consistent.
+
+**Consequences:** `problems` arrays and receipt warnings keep their fields and gain the diagnostic fields additively; `markdown` fields remain. Exit statuses and behavior are unchanged. Six unclear internal codes were renamed before their first release as public codes. R15's Markdown requirement is now one rendering among several.
+
+**Owner decisions of the same day:** in human output, the diagnostic blocks on stderr are the single rendering of problems and warnings: `validate`, `publish` and `close-suggestion-prs` keep their outcome text on stdout without repeating them, while the library's `markdown` and the JSON and TOON `message` remain the full report. Color is decided by `--color`, then `FORCE_COLOR`, then `NO_COLOR`, then the terminal, keeping Node's rule that `FORCE_COLOR` overrides `NO_COLOR`.
 
 ## Current concepts
 

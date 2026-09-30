@@ -823,7 +823,7 @@ describe('cleanup under the convention (cleanup contract §2.2.1, §2.5, §2.8)'
     const refused = cli(world, ['close-suggestion-prs', '--repo', `${OWNER}/${REPO}`]);
     assert.equal(refused.status, 1, refused.stdout + refused.stderr);
     assert.ok(refused.stderr.includes(cleanupRefusal('its `label` is not a string')), refused.stderr);
-    assert.match(refused.stderr, /Nothing was closed\./);
+    assert.match(refused.stdout, /Nothing was closed\./);
     const swept = cli(world, ['close-suggestion-prs', '--repo', `${OWNER}/${REPO}`, '--label', 'old-label', '--format', 'json']);
     assert.equal(swept.status, 0, swept.stdout + swept.stderr);
     assert.deepEqual(asArray(asRecord(parseJson(swept.stdout))['suggestions']).map((s) => asRecord(s)['result']), ['closed']);

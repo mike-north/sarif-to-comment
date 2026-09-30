@@ -37,6 +37,27 @@ Description
 </th></tr></thead>
 <tbody><tr><td>
 
+[diagnostics](./sarif-to-comment.iblockedoutcome.diagnostics.md)
+
+
+</td><td>
+
+`readonly`
+
+
+</td><td>
+
+readonly [IDiagnostic](./sarif-to-comment.idiagnostic.md)<!-- -->\[\]
+
+
+</td><td>
+
+Every blocking problem, then preparation's warnings.
+
+
+</td></tr>
+<tr><td>
+
 [markdown](./sarif-to-comment.iblockedoutcome.markdown.md)
 
 

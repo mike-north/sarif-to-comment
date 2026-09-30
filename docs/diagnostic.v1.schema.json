@@ -1,0 +1,67 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://unpkg.com/sarif-to-comment/docs/diagnostic.v1.schema.json",
+  "title": "sarif-to-comment diagnostic, version 1",
+  "description": "A diagnostic of sarif-to-comment, as every library outcome and CLI JSON or TOON document carries it in `diagnostics`, and a problem as `problems` arrays carry it. Version 1 is fixed: a change to the fields is a new schema file. Codes are listed in docs/diagnostics.md.",
+  "$ref": "#/definitions/diagnostic",
+  "definitions": {
+    "severity": {
+      "description": "error: the operation did not do what was asked. warning: it did, or may have, and something needs attention. note: information only.",
+      "enum": ["error", "warning", "note"]
+    },
+    "code": {
+      "description": "A stable, kebab-case code from the catalog.",
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    "location": {
+      "description": "Where the diagnostic is: a JSON Pointer into the SARIF document, and/or a repository-relative path with one-based lines.",
+      "type": "object",
+      "properties": {
+        "pointer": { "type": "string" },
+        "path": { "type": "string", "minLength": 1 },
+        "startLine": { "type": "integer", "minimum": 1 },
+        "endLine": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false,
+      "minProperties": 1
+    },
+    "remedies": {
+      "description": "Concrete next steps, in order.",
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "minItems": 1
+    },
+    "diagnostic": {
+      "type": "object",
+      "properties": {
+        "severity": { "$ref": "#/definitions/severity" },
+        "code": { "$ref": "#/definitions/code" },
+        "title": { "description": "One plain-text line, the same for every diagnostic of the code.", "type": "string", "minLength": 1, "pattern": "^[^\\n]+$" },
+        "message": { "description": "The full explanation, as Markdown.", "type": "string", "minLength": 1 },
+        "location": { "$ref": "#/definitions/location" },
+        "subject": { "description": "What the diagnostic concerns when that is not a location.", "type": "string", "minLength": 1 },
+        "remedies": { "$ref": "#/definitions/remedies" }
+      },
+      "required": ["severity", "code", "title", "message"],
+      "additionalProperties": false
+    },
+    "problem": {
+      "description": "A diagnostic as a problems array carries it: the diagnostic fields plus the flat pointer and path 0.2.x problems always had.",
+      "type": "object",
+      "properties": {
+        "message": { "type": "string", "minLength": 1 },
+        "pointer": { "type": "string" },
+        "path": { "type": "string", "minLength": 1 },
+        "severity": { "$ref": "#/definitions/severity" },
+        "code": { "$ref": "#/definitions/code" },
+        "title": { "type": "string", "minLength": 1, "pattern": "^[^\\n]+$" },
+        "location": { "$ref": "#/definitions/location" },
+        "subject": { "type": "string", "minLength": 1 },
+        "remedies": { "$ref": "#/definitions/remedies" }
+      },
+      "required": ["message", "severity", "code", "title"],
+      "additionalProperties": false
+    }
+  }
+}

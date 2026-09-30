@@ -44,6 +44,7 @@ import { FakeGitHubRemote } from './fixtures/publication/fake-github.mts';
 import { REPOSITORY, createFakeClientFactory, readSource, setAdapterConfig, trustedContext } from './fixtures/public-api/fake-adapter.mts';
 import type { ContextMode } from './fixtures/public-api/fake-adapter.mts';
 import { asArray, asRecord, asString, readJson } from './support/runtime-types.mts';
+import { isSchemaProblem } from './support/diagnostics.mts';
 
 // ---------------------------------------------------------------------------
 // Fixtures (hand-authored from the fixture repository and the specification)
@@ -318,12 +319,17 @@ function assertNothingWritten(world: IWorld): void {
 /** The exact public field order per status (contract: Library). */
 function assertShape(outcome: IAssessment, status: 'ready' | 'blocked' | 'incomplete', raw?: unknown): void {
   assert.equal(outcome.status, status, `expected ${status}, got ${outcome.status}:\n${outcome.markdown}`);
-  const keys = { ready: ['status', 'markdown'], blocked: ['status', 'problems', 'markdown'], incomplete: ['status', 'markdown'] }[status];
+  // docs/diagnostics.md: `diagnostics` is appended after the 0.2.x fields.
+  const keys = { ready: ['status', 'markdown', 'diagnostics'], blocked: ['status', 'problems', 'markdown', 'diagnostics'], incomplete: ['status', 'markdown', 'diagnostics'] }[status];
   if (raw !== undefined) assert.deepEqual(Object.keys(asRecord(raw, 'the outcome')), keys, 'outcome fields in documented order');
   assert.ok(outcome.markdown.length > 0);
   assert.equal(outcome.markdown.includes(TOKEN), false, 'the token never reaches the Markdown');
-  for (const problem of outcome.problems ?? []) {
-    assert.deepEqual(Object.keys(problem).filter((k) => k !== 'message' && k !== 'pointer'), [], 'problems carry no internal codes (D13)');
+  // D45 supersedes D13: each problem is a version 1 problem, its diagnostic
+  // fields appended after `message` and `pointer`.
+  const rawProblems = raw === undefined ? [] : asArray(asRecord(raw, 'the outcome')['problems'] ?? [], 'problems');
+  for (const problem of rawProblems) {
+    assert.ok(isSchemaProblem(problem), `a version 1 problem: ${JSON.stringify(problem)}`);
+    assert.deepEqual(Object.keys(asRecord(problem)).slice(0, 1), ['message']);
   }
 }
 
@@ -578,7 +584,7 @@ describe('no approval stamp: publication checks everything again', () => {
   test('a ready outcome carries nothing publication accepts', async () => {
     const world = makeWorld();
     const raw = await validateRaw(world, assessmentInput(READY));
-    assert.deepEqual(Object.keys(asRecord(raw, 'the ready outcome')), ['status', 'markdown'], 'no stamp, fingerprint or identifier');
+    assert.deepEqual(Object.keys(asRecord(raw, 'the ready outcome')), ['status', 'markdown', 'diagnostics'], 'no stamp, fingerprint or identifier');
     const input = { ...assessmentInput(READY), statePath: world.statePath, readiness: raw };
     await assert.rejects(
       library.publishSarifReview(

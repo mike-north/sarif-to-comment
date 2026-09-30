@@ -87,6 +87,8 @@ interface IAssessment {
   readonly markdown: string;
   readonly problems?: readonly IProblemView[];
   readonly keys: readonly string[];
+  /** The outcome as returned, for comparisons of whole fields. */
+  readonly raw: Readonly<Record<string, unknown>>;
 }
 
 function asAssessment(value: unknown): IAssessment {
@@ -105,6 +107,7 @@ function asAssessment(value: unknown): IAssessment {
     markdown: asString(record['markdown'], 'markdown'),
     ...(problems === undefined ? {} : { problems }),
     keys: Object.keys(record),
+    raw: record,
   };
 }
 
@@ -135,12 +138,12 @@ function assertNamesPendingReview(outcome: IAssessment, review: { readonly id: n
   assert.match(outcome.markdown, /^## Review blocked\n\nNothing was published and no publication state was written\./);
   for (const p of problems) assert.ok(outcome.markdown.includes(p.message), 'every problem appears in the Markdown');
   assert.equal(outcome.markdown.includes(TOKEN), false, 'the token never appears');
-  assert.deepEqual(outcome.keys, ['status', 'problems', 'markdown'], 'the documented blocked fields, in order');
+  assert.deepEqual(outcome.keys, ['status', 'problems', 'markdown', 'diagnostics'], 'the documented blocked fields, in order');
 }
 
 function assertIncomplete(outcome: IAssessment, mentions: RegExp): void {
   assert.equal(outcome.status, 'incomplete', outcome.markdown);
-  assert.deepEqual(outcome.keys, ['status', 'markdown']);
+  assert.deepEqual(outcome.keys, ['status', 'markdown', 'diagnostics']);
   assert.match(outcome.markdown, /^## Readiness could not be assessed\n/);
   assert.match(outcome.markdown, mentions, 'the cause is named');
   assert.match(outcome.markdown, /not a verdict/i);
@@ -149,7 +152,7 @@ function assertIncomplete(outcome: IAssessment, mentions: RegExp): void {
 
 function assertReady(outcome: IAssessment): void {
   assert.equal(outcome.status, 'ready', outcome.markdown);
-  assert.deepEqual(outcome.keys, ['status', 'markdown']);
+  assert.deepEqual(outcome.keys, ['status', 'markdown', 'diagnostics']);
 }
 
 // ---------------------------------------------------------------------------
@@ -774,16 +777,19 @@ describe('the real CLI over HTTP: human and JSON output, exit status 2', () => {
     assert.equal(json.status, 2, json.stdout + json.stderr);
     assert.equal(json.stderr, '');
     const doc = asRecord(parseJson(json.stdout), 'the JSON document');
-    assert.deepEqual(Object.keys(doc), ['command', 'status', 'problems', 'message']);
+    assert.deepEqual(Object.keys(doc), ['command', 'status', 'problems', 'message', 'diagnostics']);
     assert.equal(doc['command'], 'validate');
     assert.equal(doc['status'], 'blocked');
-    assert.deepEqual(doc['problems'], libraryOutcome.problems, 'the CLI carries the library problems');
+    assert.deepEqual(doc['problems'], libraryOutcome.raw['problems'], 'the CLI carries the library problems');
     assert.equal(doc['message'], libraryOutcome.markdown, 'the CLI carries the library Markdown');
+
+    assert.deepEqual(doc['diagnostics'], libraryOutcome.raw['diagnostics'], 'the CLI carries the library diagnostics');
 
     const human = cli(world, []);
     assert.equal(human.status, 2, human.stdout + human.stderr);
-    assert.equal(human.stderr, '');
-    assert.equal(human.stdout, `${libraryOutcome.markdown}\n`);
+    assert.match(human.stderr, /^✖ error {2}The account already has a pending review on the pull request {2}\[pending-review-exists\]\n {2}octo\/calc#12\n/);
+    // docs/diagnostics.md "Streams": the report without the problem, which is rendered once, on stderr.
+    assert.equal(human.stdout, '## Review blocked\n\nNothing was published and no publication state was written. 1 problem must be resolved before publication.\n');
 
     assert.equal(posts(), postsBefore, 'the CLI wrote nothing to GitHub');
     assert.equal(world.host.reviews().length, 1);
@@ -795,7 +801,7 @@ describe('the real CLI over HTTP: human and JSON output, exit status 2', () => {
     const json = cli(world, ['--format', 'json']);
     assert.equal(json.status, 0, json.stdout + json.stderr);
     const doc = asRecord(parseJson(json.stdout), 'the JSON document');
-    assert.deepEqual(Object.keys(doc), ['command', 'status', 'message']);
+    assert.deepEqual(Object.keys(doc), ['command', 'status', 'message', 'diagnostics']);
     assert.equal(doc['status'], 'ready');
     assert.ok(world.host.log().some((r) => r.method === 'GET' && r.path === REVIEWS_PATH), 'the review list was read');
   });

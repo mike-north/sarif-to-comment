@@ -37,6 +37,27 @@ Description
 </th></tr></thead>
 <tbody><tr><td>
 
+[diagnostics](./sarif-to-comment.iuncertainoutcome.diagnostics.md)
+
+
+</td><td>
+
+`readonly`
+
+
+</td><td>
+
+readonly [IDiagnostic](./sarif-to-comment.idiagnostic.md)<!-- -->\[\]
+
+
+</td><td>
+
+A `delivery-unconfirmed` warning, and any note about the branch.
+
+
+</td></tr>
+<tr><td>
+
 [markdown](./sarif-to-comment.iuncertainoutcome.markdown.md)
 
 

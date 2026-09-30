@@ -254,27 +254,27 @@ function inspectDeep(err: unknown): string {
   return util.inspect(err, { depth: null, showHidden: true });
 }
 
-/** Exact public shape per status: no internal codes, evidence or diagnostics. */
+/** Exact public shape per status: no evidence or internal state; `diagnostics` last (docs/diagnostics.md). */
 function assertPublicShape<S extends PublishSarifReviewOutcome['status']>(
   outcome: PublishSarifReviewOutcome,
   status: S,
 ): asserts outcome is Extract<PublishSarifReviewOutcome, { status: S }> {
   assert.equal(outcome.status, status, `expected ${status}, got ${JSON.stringify(outcome)}`);
   const keys = {
-    published: ['markdown', 'review', 'statePath', 'status'],
-    blocked: ['markdown', 'status'],
-    uncertain: ['markdown', 'statePath', 'status'],
-    rejected: ['markdown', 'statePath', 'status'],
+    published: ['diagnostics', 'markdown', 'review', 'statePath', 'status'],
+    blocked: ['diagnostics', 'markdown', 'status'],
+    uncertain: ['diagnostics', 'markdown', 'statePath', 'status'],
+    rejected: ['diagnostics', 'markdown', 'statePath', 'status'],
   }[status];
   assert.deepEqual(Object.keys(outcome).sort(), keys);
   // Field order is the documented outcome order (src/publish-sarif-review.cts module doc,
-  // contract §3.5): status first, markdown last. It is what JSON.stringify of
+  // contract §3.5): status first, markdown last of the 0.2.x fields, then diagnostics. It is what JSON.stringify of
   // an outcome shows a caller, so it must not drift.
   const ordered = {
-    published: ['status', 'review', 'statePath', 'markdown'],
-    blocked: ['status', 'markdown'],
-    uncertain: ['status', 'statePath', 'markdown'],
-    rejected: ['status', 'statePath', 'markdown'],
+    published: ['status', 'review', 'statePath', 'markdown', 'diagnostics'],
+    blocked: ['status', 'markdown', 'diagnostics'],
+    uncertain: ['status', 'statePath', 'markdown', 'diagnostics'],
+    rejected: ['status', 'statePath', 'markdown', 'diagnostics'],
   }[status];
   assert.deepEqual(Object.keys(outcome), ordered, 'outcome fields in documented order');
   assert.equal(typeof outcome.markdown, 'string');

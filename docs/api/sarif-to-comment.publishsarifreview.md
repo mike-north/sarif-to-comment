@@ -52,7 +52,7 @@ The document, destination, reviewed commit, state path and credential.
 
 Promise&lt;[PublishSarifReviewOutcome](./sarif-to-comment.publishsarifreviewoutcome.md)<!-- -->&gt;
 
-The outcome. `status` plus `markdown` is the stable contract; internal diagnostic codes are not part of it.
+The outcome. `status`<!-- -->, `markdown` and `diagnostics` are the stable contract; each diagnostic's `code` is listed in the package's`docs/diagnostics.md`<!-- -->.
 
 ## Exceptions
 

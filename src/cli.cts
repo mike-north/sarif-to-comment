@@ -28,14 +28,19 @@
  * flag-only publisher, which keeps its exact behavior, output, credentials and
  * exit statuses. Anything else is a usage error.
  *
- * Output format (`--format human|json`, default human, never inferred from a
- * terminal) is resolved before anything else. An invalid, missing or repeated
- * `--format` is a human usage error on stderr with nothing on stdout. Once
- * JSON is selected, every handled outcome — including help, usage errors and
- * operational errors — is exactly one JSON document on stdout and nothing is
- * written to stderr. The envelope is `{ command, status, ... }` where
- * `command` is null only when no command was identified. Human mode writes
- * outcomes to stdout and usage/operational errors to stderr.
+ * Output format (`--format human|json|toon`, default human, never inferred
+ * from a terminal) and `--color auto|always|never` are resolved before
+ * anything else, wherever they appear. An invalid, missing or repeated value
+ * is a human usage error on stderr with nothing on stdout. Once JSON or TOON
+ * is selected, every handled outcome — including help, usage errors and
+ * operational errors — is exactly one document on stdout and nothing is
+ * written to stderr; TOON is the JSON document encoded as TOON. The envelope
+ * is `{ command, status, ..., diagnostics }` where `command` is null only when
+ * no command was identified and `diagnostics` is always last
+ * (docs/diagnostics.md). Human mode writes the primary result (what was
+ * created, written, inspected, checked, published or closed, and what
+ * happened to each file) to stdout and the diagnostics, as colored blocks
+ * when color is on, to stderr.
  *
  * Exit statuses: 0 success or help; 1 usage error or operational error; 2 the
  * content was refused (`invalid` / `failed` / `stale` / `refused`). `publish` keeps the publisher's
@@ -56,9 +61,9 @@ import * as path from 'node:path';
 
 import * as files from './artifact-files.cjs';
 import type { IArchivedOutput, IJsonFile, ReleaseOwnership } from './artifact-files.cjs';
-import { closeSuggestionPullRequestsWithInternals } from './close-suggestion-pull-requests.cjs';
+import { closeSuggestionPullRequestsReported } from './close-suggestion-pull-requests.cjs';
 import type { CloseSuggestionPullRequestsStatus, ICloseSuggestionPullRequestsInternals } from './close-suggestion-pull-requests.cjs';
-import { publishSarifReviewWithInternals } from './publish-sarif-review.cjs';
+import { publishSarifReviewReported } from './publish-sarif-review.cjs';
 import type { ISarifSourceBinding } from './public-types.cjs';
 import { parseFindingSelector } from './finding-selectors.cjs';
 import { createSarifDocument, addSarifCommentWithUntypedInput, removeSarifCommentWithUntypedInput } from './sarif-authoring.cjs';
@@ -70,7 +75,11 @@ import { LABEL_RULE, isLabelName } from './suggestion-pr-convention.cjs';
 import type { IInspectSarifOptions } from './sarif-inspection.cjs';
 import { addStagedChangesToSarifWithUntypedInput } from './staged-changes.cjs';
 import type { IStagedChangesReceipt } from './staged-changes.cjs';
-import { validateSarifReviewWithInternals } from './validate-sarif-review.cjs';
+import { validateSarifReviewReported } from './validate-sarif-review.cjs';
+import { createDiagnostic, orderDiagnostics } from './diagnostics.cjs';
+import type { IDiagnostic } from './diagnostics.cjs';
+import { PLAIN_STYLE, loadColorStyle, renderDiagnostics, shouldUseColor } from './diagnostic-rendering.cjs';
+import type { ColorChoice } from './diagnostic-rendering.cjs';
 import type { IValidateSarifReviewInternals } from './validate-sarif-review.cjs';
 
 const md = String.raw;
@@ -180,8 +189,10 @@ const CREDENTIALS = md`Credentials (validate, publish and close-suggestion-prs o
   not supported. There is no token flag.
 `;
 
-const FORMAT_OPTION = md`  --format human|json            Output format (default human). JSON prints one
-                                 document on stdout for every outcome.
+const FORMAT_OPTION = md`  --format human|json|toon       Output format (default human). JSON and TOON
+                                 print one document on stdout for every outcome.
+  --color auto|always|never      Color diagnostics (default auto: only on a
+                                 terminal; NO_COLOR and FORCE_COLOR apply).
 `;
 
 /** Help text: the top-level usage and each command's. */
@@ -239,7 +250,7 @@ Exit status:
 
 Usage:
   sarif-to-comment init --output FILE [--tool-name NAME [--tool-version V]]
-                        [--repo OWNER/REPO --commit FULLSHA] [--format human|json]
+                        [--repo OWNER/REPO --commit FULLSHA] [--format human|json|toon]
 
 Options:
   --output FILE                  New SARIF file; an existing file is refused.
@@ -260,7 +271,7 @@ Usage:
                                [--rule-id ID] [--level none|note|warning|error]
                                [--run N | --new-run-tool NAME [--new-run-tool-version V]
                                           [--repo OWNER/REPO --commit FULLSHA]]
-                               [--format human|json]
+                               [--format human|json|toon]
 
 The SARIF file is updated in place (atomically). Line numbers are one-based and
 refer to the reviewed revision of the file (or to the proposed content of a
@@ -293,7 +304,7 @@ the file could not be read or replaced.
   'remove-comment': md`sarif-to-comment remove-comment — Remove a finding and its attached fixes from the SARIF document.
 
 Usage:
-  sarif-to-comment remove-comment --sarif FILE --finding SELECTOR [--format human|json]
+  sarif-to-comment remove-comment --sarif FILE --finding SELECTOR [--format human|json|toon]
 
 Removes the whole finding, with every fix and proposed file operation attached
 to it. Every other finding and fix stays as it is, including identical ones.
@@ -324,7 +335,7 @@ be read or replaced.
 
 Usage:
   sarif-to-comment group-fixes --sarif FILE --finding SELECTOR [...] --group NAME
-                               [--output FILE] [--format human|json]
+                               [--output FILE] [--format human|json|toon]
 
 Records that the changes of the selected findings must be accepted together:
 each finding gets the same properties.sarifToComment.suggestionGroup. A NAME
@@ -366,7 +377,7 @@ usage error or a file could not be read or written.
 
 Usage:
   sarif-to-comment ungroup-fixes --sarif FILE --finding SELECTOR [...]
-                                 [--output FILE] [--format human|json]
+                                 [--output FILE] [--format human|json|toon]
 
 Removes properties.sarifToComment.suggestionGroup from each selected finding,
 so its fix is published on its own again. A group is never left with fewer
@@ -393,7 +404,7 @@ usage error or a file could not be read or written.
 
 Usage:
   sarif-to-comment inspect --sarif FILE [--preview-lines N|all] [--preview-chars N|all]
-                           [--source-root ABSOLUTE_FILE_URI] [--format human|json]
+                           [--source-root ABSOLUTE_FILE_URI] [--format human|json|toon]
 
 Shows every finding with its full text, locations, fixes and suggestion group,
 and the selector remove-comment, group-fixes and ungroup-fixes take. Only fix previews are shortened, and visibly so. The file
@@ -415,7 +426,7 @@ Exit status: 0 inspected; 2 not valid SARIF; 1 usage error or unreadable file.
 Usage:
   sarif-to-comment add-staged-changes --sarif IN --output OUT --worktree DIR
                                       --repo OWNER/REPO --commit FULLSHA
-                                      [--source-root ABSOLUTE_FILE_URI] [--format human|json]
+                                      [--source-root ABSOLUTE_FILE_URI] [--format human|json|toon]
 
 Reads what is staged in DIR's Git index (never unstaged working-tree content),
 compares it with the reviewed commit, and writes a copy of IN to OUT in which
@@ -447,7 +458,7 @@ Usage:
                             [--source-root ABSOLUTE_FILE_URI] [--old-source-commit FULLSHA]
                             [--ignore-approval-hold] [--submit]
                             [--allow-suggestion-prs [--pr-labels A,B,C] [--mark-suggestion-prs-ready]]
-                            [--format human|json]
+                            [--format human|json|toon]
 
 Runs every check publish runs, reading the pull request and its source from
 GitHub, and stops before publishing: nothing is written to GitHub and no file
@@ -476,7 +487,7 @@ Usage:
                            [--old-source-commit FULLSHA] [--ignore-approval-hold]
                            [--submit] [--allow-suggestion-prs [--pr-labels A,B,C]
                            [--mark-suggestion-prs-ready]]
-                           [--format human|json]
+                           [--format human|json|toon]
 
 The same operation as the original form without a command.
 
@@ -493,7 +504,7 @@ Exit status:
 
 Usage:
   sarif-to-comment close-suggestion-prs --repo OWNER/REPO [--label NAME] [--original N]
-                                        [--dry-run] [--format human|json]
+                                        [--dry-run] [--format human|json|toon]
 
 Closes open suggestion pull requests (made by publish --allow-suggestion-prs,
 or by any tool following the suggestion pull request convention) whose
@@ -536,7 +547,7 @@ Exit status:
 class UsageError extends Error {}
 
 /** An output format; human is the default and is never inferred from a terminal. */
-type OutputFormat = 'human' | 'json';
+type OutputFormat = 'human' | 'json' | 'toon';
 
 /** Parsed options: each value option's value, each repeatable option's values in order, and the boolean flags given. */
 interface IParsedOptions {
@@ -567,34 +578,52 @@ function argAt(argv: readonly string[], index: number): string {
   return arg;
 }
 
+/** The options every invocation takes, resolved before anything else. */
+interface IGlobalOptions {
+  readonly format: OutputFormat;
+  readonly color: ColorChoice;
+  /** The arguments without them. */
+  readonly argv: string[];
+}
+
 /**
- * Removes the `--format` option from argv and resolves it. Throws UsageError
+ * Removes one value-typed global option from argv and resolves it: its value
+ * must be one of `allowed`, and it may be given once. Throws UsageError
  * (always reported in human form) when it is repeated, valueless or unknown.
  */
-function resolveFormat(argv: readonly string[]): { readonly format: OutputFormat; readonly argv: string[] } {
+function takeGlobalOption<T extends string>(argv: readonly string[], name: string, allowed: readonly T[]): { readonly value: T | undefined; readonly argv: string[] } {
+  const choices = `${allowed.slice(0, -1).join(', ')} or ${String(allowed.at(-1))}`;
   const rest: string[] = [];
-  let format: OutputFormat | undefined;
+  let value: T | undefined;
   let seen = false;
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argAt(argv, i);
-    let value: string;
-    if (arg === '--format') {
+    let given: string;
+    if (arg === name) {
       const next = argv[i + 1];
-      if (next === undefined || next.startsWith('--')) throw new UsageError('--format requires a value: human or json');
-      value = next;
+      if (next === undefined || next.startsWith('--')) throw new UsageError(`${name} requires a value: ${choices}`);
+      given = next;
       i += 1;
-    } else if (arg.startsWith('--format=')) {
-      value = arg.slice('--format='.length);
+    } else if (arg.startsWith(`${name}=`)) {
+      given = arg.slice(name.length + 1);
     } else {
       rest.push(arg);
       continue;
     }
-    if (seen) throw new UsageError('--format was given more than once');
+    if (seen) throw new UsageError(`${name} was given more than once`);
     seen = true;
-    if (value !== 'human' && value !== 'json') throw new UsageError(`--format must be human or json, not ${JSON.stringify(value)}`);
-    format = value;
+    const match = allowed.find((choice) => choice === given);
+    if (match === undefined) throw new UsageError(`${name} must be ${choices}, not ${JSON.stringify(given)}`);
+    value = match;
   }
-  return { format: format ?? 'human', argv: rest };
+  return { value, argv: rest };
+}
+
+/** Removes and resolves `--format` and `--color`; throws UsageError. */
+function resolveGlobalOptions(argv: readonly string[]): IGlobalOptions {
+  const format = takeGlobalOption<OutputFormat>(argv, '--format', ['human', 'json', 'toon']);
+  const color = takeGlobalOption<ColorChoice>(format.argv, '--color', ['auto', 'always', 'never']);
+  return { format: format.value ?? 'human', color: color.value ?? 'auto', argv: color.argv };
 }
 
 /**
@@ -776,9 +805,11 @@ function serialize(sarif: unknown): string {
 // ---------------------------------------------------------------------------
 // Outcomes
 //
-// Every handler returns an Outcome: { exit, doc, out?, err? }. `doc` is the
-// JSON document (always complete, so both formats carry the same facts); `out`
-// and `err` are the human renderings for stdout and stderr.
+// Every handler returns an Outcome: { exit, doc, out?, diagnostics? }. `doc`
+// is the JSON document without its diagnostics (always complete, so every
+// format carries the same facts); `out` is the human primary result for
+// stdout; `diagnostics` (none when omitted) are appended to the document and
+// rendered on stderr in human mode.
 // ---------------------------------------------------------------------------
 
 /** The JSON document of an outcome: `{ command, status, ... }`. */
@@ -788,34 +819,52 @@ type OutcomeDocument = Readonly<Record<string, unknown>>;
 interface IOutcome {
   readonly exit: number;
   readonly doc: OutcomeDocument;
-  readonly out?: string;
-  readonly err?: string;
+  readonly out?: string | undefined;
+  readonly diagnostics?: readonly IDiagnostic[] | undefined;
 }
 
 /** An artifact receipt: the fields naming files written, archived or deliberately not written. */
 type ArtifactReceipt = Readonly<Record<string, unknown>>;
 
-/** An operational failure after arguments were accepted, with its artifact receipt fields. */
-function errorOutcome(command: CliCommand, message: string, receipt: ArtifactReceipt = {}, humanNotes: readonly string[] = []): IOutcome {
-  const notes = humanNotes.length === 0 ? '' : `\n${humanNotes.join('\n')}`;
-  return { exit: EXIT.error, doc: { command, status: 'error', message, ...receipt }, err: `sarif-to-comment: ${message}${notes}\n` };
+/**
+ * An operational failure after arguments were accepted, with its artifact
+ * receipt fields. The document's `message` is the failure's message; the
+ * human notes say what happened to the files, on stdout.
+ */
+function errorOutcome(command: CliCommand, failure: IDiagnostic, receipt: ArtifactReceipt = {}, humanNotes: readonly string[] = []): IOutcome {
+  return { exit: EXIT.error, doc: { command, status: 'error', message: failure.message, ...receipt }, out: notesText(humanNotes), diagnostics: [failure] };
+}
+
+/** A file problem as its diagnostic, about the file. */
+function artifactFailure(err: files.ArtifactError): IDiagnostic {
+  return createDiagnostic(err.code, err.message, { subject: err.file });
+}
+
+/** A failure outside the document (Git, GitHub, the network, publication state) as its diagnostic. */
+function operationFailure(message: string): IDiagnostic {
+  return createDiagnostic('operation-failed', message);
+}
+
+/** The failure of a GitHub-reading command without a credential. */
+function tokenMissing(): IDiagnostic {
+  return createDiagnostic('github-token-missing', 'no GitHub token: set GH_TOKEN (or GITHUB_TOKEN) to a personal access token or user token.');
 }
 
 /** A usage error; `usage` is the command's help (or the top-level help). */
 function usageOutcome(command: CliCommand | null, message: string, legacy = false): IOutcome {
-  const hint = legacy || command === null ? 'sarif-to-comment --help' : `sarif-to-comment ${command} --help`;
+  const subject = legacy || command === null ? undefined : command;
+  const hint = subject === undefined ? 'sarif-to-comment --help' : `sarif-to-comment ${subject} --help`;
   return {
     exit: EXIT.usage,
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- every command has help text; the top-level fallback is kept as the durable guard it always was
     doc: { command, status: 'usage-error', message, usage: USAGE[command ?? 'top'] ?? USAGE.top },
-    err: `sarif-to-comment: ${message}\nRun ${hint} for usage.\n`,
+    diagnostics: [createDiagnostic('usage-error', message, { subject, remedies: [`Run \`${hint}\` for usage.`] })],
   };
 }
 
-/** Human text for refused content: the library's Markdown and what happened to files. */
-function refusedText(markdown: string, notes: readonly string[]): string {
-  const text = markdown.endsWith('\n') ? markdown : `${markdown}\n`;
-  return notes.length === 0 ? text : `${text}\n${notes.join('\n')}\n`;
+/** Human lines saying what happened to files, for stdout; nothing when there are none. */
+function notesText(notes: readonly string[]): string | undefined {
+  return notes.length === 0 ? undefined : `${notes.join('\n')}\n`;
 }
 
 /** A one-based line or inclusive range, written like inspection output (`2` or `5-6`). */
@@ -861,7 +910,7 @@ function init(argv: readonly string[], { cwd }: IHandlerContext): IOutcome {
     files.createExclusive(output, serialize(sarif));
   } catch (err) {
     if (!(err instanceof files.ArtifactError)) throw err;
-    return errorOutcome('init', err.message, { output: { path: output, written: false } });
+    return errorOutcome('init', artifactFailure(err), { output: { path: output, written: false } });
   }
   const run = createdRun(sarif.runs[0]);
   const binding = run.versionControlProvenance?.[0];
@@ -990,8 +1039,8 @@ async function addComment(argv: readonly string[], { cwd, stdin }: IHandlerConte
       message = files.readTextFile(path.resolve(cwd, String(messageFile)), 'message file').text;
     }
   } catch (err) {
-    if (err instanceof files.ArtifactError) return errorOutcome('add-comment', err.message, notWritten);
-    if (err instanceof TypeError) return errorOutcome('add-comment', 'standard input is not valid UTF-8; the message must be UTF-8 encoded.', notWritten);
+    if (err instanceof files.ArtifactError) return errorOutcome('add-comment', artifactFailure(err), notWritten);
+    if (err instanceof TypeError) return errorOutcome('add-comment', createDiagnostic('message-not-utf8', 'standard input is not valid UTF-8; the message must be UTF-8 encoded.'), notWritten);
     throw err;
   }
   if (message === '') throw new UsageError('the message must not be empty');
@@ -1023,7 +1072,8 @@ async function addComment(argv: readonly string[], { cwd, stdin }: IHandlerConte
         outcome: {
           exit: EXIT.refused,
           doc: { command: 'add-comment', status: 'invalid', ...notWritten, problems: outcome.problems },
-          out: refusedText(outcome.markdown, [`${sarifPath} was not changed.`]),
+          out: notesText([`${sarifPath} was not changed.`]),
+          diagnostics: outcome.diagnostics,
         },
       };
     }
@@ -1066,7 +1116,8 @@ function removeComment(argv: readonly string[], { cwd }: IHandlerContext): IOutc
         outcome: {
           exit: EXIT.refused,
           doc: { command, status: outcome.status, ...notWritten, problems: outcome.problems },
-          out: refusedText(outcome.markdown, [`${sarifPath} was not changed.`]),
+          out: notesText([`${sarifPath} was not changed.`]),
+          diagnostics: outcome.diagnostics,
         },
       };
     }
@@ -1107,7 +1158,13 @@ interface IGroupingSuccess {
 /** What a grouping command's library call decided: success, or a refusal with its status. */
 type GroupingDecision =
   | { readonly accepted: IGroupingSuccess }
-  | { readonly accepted?: undefined; readonly status: string; readonly problems: readonly unknown[]; readonly markdown: string };
+  | {
+      readonly accepted?: undefined;
+      readonly status: string;
+      readonly problems: readonly unknown[];
+      readonly markdown: string;
+      readonly diagnostics: readonly IDiagnostic[];
+    };
 
 /** "1 change" / "2 changes". */
 const plural = (count: number, noun: string): string => `${String(count)} ${noun}${count === 1 ? '' : 's'}`;
@@ -1219,7 +1276,8 @@ function runGrouping(command: GroupingCommand, sarifPath: string, output: string
   const refusal = (decision: Exclude<GroupingDecision, { readonly accepted: IGroupingSuccess }>, receipt: ArtifactReceipt, notes: readonly string[]): IOutcome => ({
     exit: EXIT.refused,
     doc: { command, status: decision.status, ...receipt, problems: decision.problems },
-    out: refusedText(decision.markdown, notes),
+    out: notesText(notes),
+    diagnostics: decision.diagnostics,
   });
   const success = (accepted: IGroupingSuccess, receipt: ArtifactReceipt): IOutcome => ({
     exit: EXIT.ok,
@@ -1242,7 +1300,7 @@ function runGrouping(command: GroupingCommand, sarifPath: string, output: string
   try {
     release = files.acquireOwnership(output);
   } catch (err) {
-    if (err instanceof files.ArtifactError) return errorOutcome(command, err.message, notWritten, notes);
+    if (err instanceof files.ArtifactError) return errorOutcome(command, artifactFailure(err), notWritten, notes);
     throw err;
   }
   try {
@@ -1250,7 +1308,7 @@ function runGrouping(command: GroupingCommand, sarifPath: string, output: string
     try {
       read = files.readJsonFile(sarifPath, 'SARIF file');
     } catch (err) {
-      if (err instanceof files.ArtifactError) return errorOutcome(command, err.message, notWritten, notes);
+      if (err instanceof files.ArtifactError) return errorOutcome(command, artifactFailure(err), notWritten, notes);
       throw err;
     }
     const decision = decide(read.value);
@@ -1258,7 +1316,7 @@ function runGrouping(command: GroupingCommand, sarifPath: string, output: string
     try {
       files.createExclusive(output, serialize(decision.accepted.sarif));
     } catch (err) {
-      if (err instanceof files.ArtifactError) return errorOutcome(command, err.message, notWritten, notes);
+      if (err instanceof files.ArtifactError) return errorOutcome(command, artifactFailure(err), notWritten, notes);
       throw err;
     }
     return success(decision.accepted, { sarif: { path: sarifPath, written: false }, output: { path: output, written: true } });
@@ -1296,13 +1354,13 @@ function editInPlace(command: 'add-comment' | 'remove-comment' | GroupingCommand
   try {
     target = fs.realpathSync(sarifPath);
   } catch (err) {
-    return errorOutcome(command, `cannot read SARIF file ${sarifPath}: ${String(messageProperty(err))}`, notWritten);
+    return errorOutcome(command, createDiagnostic('file-unreadable', `cannot read SARIF file ${sarifPath}: ${String(messageProperty(err))}`, { subject: sarifPath }), notWritten);
   }
   let release: ReleaseOwnership;
   try {
     release = files.acquireOwnership(target);
   } catch (err) {
-    if (err instanceof files.ArtifactError) return errorOutcome(command, err.message, notWritten);
+    if (err instanceof files.ArtifactError) return errorOutcome(command, artifactFailure(err), notWritten);
     throw err;
   }
   try {
@@ -1310,7 +1368,7 @@ function editInPlace(command: 'add-comment' | 'remove-comment' | GroupingCommand
     try {
       read = files.readJsonFile(target, 'SARIF file');
     } catch (err) {
-      if (err instanceof files.ArtifactError) return errorOutcome(command, err.message, notWritten);
+      if (err instanceof files.ArtifactError) return errorOutcome(command, artifactFailure(err), notWritten);
       throw err;
     }
     const { outcome, replacement } = edit(read.value);
@@ -1318,7 +1376,7 @@ function editInPlace(command: 'add-comment' | 'remove-comment' | GroupingCommand
     try {
       files.replaceIfUnchanged(target, read.bytes, replacement);
     } catch (err) {
-      if (err instanceof files.ArtifactError) return errorOutcome(command, err.message, notWritten);
+      if (err instanceof files.ArtifactError) return errorOutcome(command, artifactFailure(err), notWritten);
       throw err;
     }
     return outcome;
@@ -1350,7 +1408,7 @@ function inspect(argv: readonly string[], { cwd }: IHandlerContext): IOutcome {
   try {
     read = files.readJsonFile(sarifPath, 'SARIF file');
   } catch (err) {
-    if (err instanceof files.ArtifactError) return errorOutcome('inspect', err.message);
+    if (err instanceof files.ArtifactError) return errorOutcome('inspect', artifactFailure(err));
     throw err;
   }
   let outcome;
@@ -1364,7 +1422,8 @@ function inspect(argv: readonly string[], { cwd }: IHandlerContext): IOutcome {
     return {
       exit: EXIT.refused,
       doc: { command: 'inspect', status: 'invalid', problems: outcome.problems },
-      out: refusedText(outcome.markdown, []),
+      out: notesText([]),
+          diagnostics: outcome.diagnostics,
     };
   }
   const text = renderInspectionText(outcome.view);
@@ -1372,6 +1431,7 @@ function inspect(argv: readonly string[], { cwd }: IHandlerContext): IOutcome {
     exit: EXIT.ok,
     doc: { command: 'inspect', status: 'inspected', view: outcome.view },
     out: text.endsWith('\n') ? text : `${text}\n`,
+    diagnostics: outcome.diagnostics,
   };
 }
 
@@ -1379,7 +1439,7 @@ function inspect(argv: readonly string[], { cwd }: IHandlerContext): IOutcome {
 // add-staged-changes
 // ---------------------------------------------------------------------------
 
-/** Human lines describing an extraction receipt. */
+/** Human lines describing an extraction receipt (its warnings are diagnostics, shown on their own). */
 function stagedReceiptText(receipt: IStagedChangesReceipt): string[] {
   const lines: string[] = [];
   if (receipt.changes.length === 0) lines.push('No staged changes: the SARIF content is unchanged.');
@@ -1403,7 +1463,6 @@ function stagedReceiptText(receipt: IStagedChangesReceipt): string[] {
   }
   if (receipt.boundRuns.length > 0) lines.push(`Runs bound to ${receipt.reviewedCommit}: ${receipt.boundRuns.join(', ')}`);
   if (receipt.addedRun !== null) lines.push(`Changes no finding explains are in run ${String(receipt.addedRun)}.`);
-  for (const warning of receipt.warnings) lines.push(`Warning: ${warning.message}`);
   return lines;
 }
 
@@ -1445,7 +1504,7 @@ async function addStagedChanges(argv: readonly string[], { cwd }: IHandlerContex
     release = files.acquireOwnership(output);
   } catch (err) {
     if (err instanceof files.ArtifactError) {
-      return errorOutcome(command, err.message, { output: { path: output, written: false }, archived: null });
+      return errorOutcome(command, artifactFailure(err), { output: { path: output, written: false }, archived: null });
     }
     throw err;
   }
@@ -1456,14 +1515,14 @@ async function addStagedChanges(argv: readonly string[], { cwd }: IHandlerContex
     try {
       archived = files.archiveExisting(output);
     } catch (err) {
-      if (err instanceof files.ArtifactError) return errorOutcome(command, err.message, receiptFields(), notes());
+      if (err instanceof files.ArtifactError) return errorOutcome(command, artifactFailure(err), receiptFields(), notes());
       throw err;
     }
     let read: IJsonFile;
     try {
       read = files.readJsonFile(input, 'SARIF file');
     } catch (err) {
-      if (err instanceof files.ArtifactError) return errorOutcome(command, err.message, receiptFields(), notes());
+      if (err instanceof files.ArtifactError) return errorOutcome(command, artifactFailure(err), receiptFields(), notes());
       throw err;
     }
     const request = {
@@ -1477,25 +1536,27 @@ async function addStagedChanges(argv: readonly string[], { cwd }: IHandlerContex
     try {
       outcome = await addStagedChangesToSarifWithUntypedInput(request);
     } catch (err) {
-      return errorOutcome(command, describeError(err), receiptFields(), notes());
+      return errorOutcome(command, operationFailure(describeError(err)), receiptFields(), notes());
     }
     if (outcome.status === 'invalid' || outcome.status === 'failed') {
       return {
         exit: EXIT.refused,
         doc: { command, status: outcome.status, ...receiptFields(), problems: outcome.problems },
-        out: refusedText(outcome.markdown, notes()),
+        out: notesText(notes()),
+          diagnostics: outcome.diagnostics,
       };
     }
     try {
       files.createExclusive(output, serialize(outcome.sarif));
     } catch (err) {
-      if (err instanceof files.ArtifactError) return errorOutcome(command, err.message, receiptFields(), notes());
+      if (err instanceof files.ArtifactError) return errorOutcome(command, artifactFailure(err), receiptFields(), notes());
       throw err;
     }
     return {
       exit: EXIT.ok,
       doc: { command, status: 'added', output: { path: output, written: true }, archived, receipt: outcome.receipt },
       out: `${[`Wrote ${output}.`, ...archiveNote(archived), ...stagedReceiptText(outcome.receipt)].join('\n')}\n`,
+      diagnostics: outcome.diagnostics,
     };
   } finally {
     release();
@@ -1608,7 +1669,7 @@ type ReviewInputs = { readonly token: string; readonly sarif: unknown } | { read
 function reviewInputs(command: 'validate' | 'publish', sarifPath: string, env: CliEnvironment): ReviewInputs {
   const token = tokenFrom(env);
   if (token === undefined) {
-    return { error: errorOutcome(command, 'no GitHub token: set GH_TOKEN (or GITHUB_TOKEN) to a personal access token or user token.') };
+    return { error: errorOutcome(command, tokenMissing()) };
   }
   try {
     return { token, sarif: files.readJsonFile(sarifPath, 'SARIF file').value };
@@ -1618,25 +1679,27 @@ function reviewInputs(command: 'validate' | 'publish', sarifPath: string, env: C
     const message = err.message.includes('is not valid UTF-8')
       ? `SARIF file ${sarifPath} is not valid UTF-8; nothing was ${command === 'publish' ? 'published' : 'checked'}. SARIF files must be UTF-8 encoded JSON.`
       : err.message;
-    return { error: errorOutcome(command, message) };
+    return { error: errorOutcome(command, createDiagnostic(err.code, message, { subject: err.file })) };
   }
 }
 
 /**
  * Readiness assessment. Every library outcome (ready, blocked, incomplete)
- * is shown on stdout in human form, as publish shows its outcomes; the
- * library's rejection for invalid input is an operational error. Nothing is
- * written anywhere.
+ * is shown in human form as publish shows its outcomes: the report on
+ * stdout, its problems and warnings as diagnostics on stderr, once; the JSON
+ * `message` is the library's full Markdown. The library's rejection for
+ * invalid input is an operational error. Nothing is written anywhere.
  */
 async function validate(argv: readonly string[], { env }: IHandlerContext, internals: CliInternals | undefined): Promise<IOutcome> {
   const request = validateRequest(argv);
   const inputs = reviewInputs('validate', request.sarifPath, env);
   if ('error' in inputs) return inputs.error;
   let outcome;
+  let report: string;
   try {
-    outcome = await validateSarifReviewWithInternals({ ...request.input, sarif: inputs.sarif, token: inputs.token }, internals);
+    ({ outcome, report } = await validateSarifReviewReported({ ...request.input, sarif: inputs.sarif, token: inputs.token }, internals));
   } catch (err) {
-    return errorOutcome('validate', describeError(err));
+    return errorOutcome('validate', operationFailure(describeError(err)));
   }
   const doc = {
     command: 'validate',
@@ -1647,14 +1710,16 @@ async function validate(argv: readonly string[], { env }: IHandlerContext, inter
   return {
     exit: VALIDATE_EXIT[outcome.status],
     doc,
-    out: outcome.markdown.endsWith('\n') ? outcome.markdown : `${outcome.markdown}\n`,
+    out: `${report}\n`,
+    diagnostics: outcome.diagnostics,
   };
 }
 
 /**
- * Publication. Human output is exactly the flag-only publisher's: the
- * library's Markdown on stdout, errors on stderr. The SARIF path is used as
- * given, as it always has been.
+ * Publication, for this command and the flag-only publisher alike: the
+ * report on stdout, its problems and warnings as diagnostics on stderr,
+ * once; the JSON `message` is the library's full Markdown. The SARIF path is
+ * used as given, as it always has been.
  */
 async function publish(argv: readonly string[], { env }: IHandlerContext, internals: CliInternals | undefined): Promise<IOutcome> {
   const request = publishRequest(argv);
@@ -1662,10 +1727,11 @@ async function publish(argv: readonly string[], { env }: IHandlerContext, intern
   if ('error' in inputs) return inputs.error;
   const { sarif, token } = inputs;
   let outcome;
+  let report: string;
   try {
-    outcome = await publishSarifReviewWithInternals({ ...request.input, sarif, token }, internals);
+    ({ outcome, report } = await publishSarifReviewReported({ ...request.input, sarif, token }, internals));
   } catch (err) {
-    return errorOutcome('publish', describeError(err));
+    return errorOutcome('publish', operationFailure(describeError(err)));
   }
   const doc = {
     command: 'publish',
@@ -1681,7 +1747,8 @@ async function publish(argv: readonly string[], { env }: IHandlerContext, intern
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- every publication status has an exit status; the operational-error fallback is kept as the durable guard it always was
     exit: PUBLISH_EXIT[outcome.status] ?? EXIT.error,
     doc,
-    out: outcome.markdown.endsWith('\n') ? outcome.markdown : `${outcome.markdown}\n`,
+    out: `${report}\n`,
+    diagnostics: outcome.diagnostics,
   };
 }
 
@@ -1690,9 +1757,10 @@ async function publish(argv: readonly string[], { env }: IHandlerContext, intern
 // ---------------------------------------------------------------------------
 
 /**
- * Suggestion pull request cleanup. The outcome's Markdown is shown on stdout
- * for every status; a rejection (invalid input, or a failure before anything
- * was closed) is an operational error.
+ * Suggestion pull request cleanup. The report is shown on stdout for every
+ * status, with what could not be done as diagnostics on stderr, once; the
+ * JSON `message` is the library's full Markdown. A rejection (invalid input,
+ * or a failure before anything was closed) is an operational error.
  */
 async function closeSuggestionPrs(argv: readonly string[], { env }: IHandlerContext, internals: CliInternals | undefined): Promise<IOutcome> {
   const command = 'close-suggestion-prs';
@@ -1703,7 +1771,7 @@ async function closeSuggestionPrs(argv: readonly string[], { env }: IHandlerCont
   const originalPullNumber = positiveFlag(values, '--original');
   const token = tokenFrom(env);
   if (token === undefined) {
-    return errorOutcome(command, 'no GitHub token: set GH_TOKEN (or GITHUB_TOKEN) to a personal access token or user token.');
+    return errorOutcome(command, tokenMissing());
   }
   const input = {
     repository,
@@ -1713,10 +1781,11 @@ async function closeSuggestionPrs(argv: readonly string[], { env }: IHandlerCont
     ...(flags.has('--dry-run') ? { dryRun: true } : {}),
   };
   let outcome;
+  let report: string;
   try {
-    outcome = await closeSuggestionPullRequestsWithInternals(input, internals);
+    ({ outcome, report } = await closeSuggestionPullRequestsReported(input, internals));
   } catch (err) {
-    return errorOutcome(command, describeError(err), {}, ['Nothing was closed.']);
+    return errorOutcome(command, operationFailure(describeError(err)), {}, ['Nothing was closed.']);
   }
   const doc = {
     command,
@@ -1726,7 +1795,7 @@ async function closeSuggestionPrs(argv: readonly string[], { env }: IHandlerCont
     suggestions: outcome.suggestions,
     message: outcome.markdown,
   };
-  return { exit: CLEANUP_EXIT[outcome.status], doc, out: `${outcome.markdown}\n` };
+  return { exit: CLEANUP_EXIT[outcome.status], doc, out: `${report}\n`, diagnostics: outcome.diagnostics };
 }
 
 // ---------------------------------------------------------------------------
@@ -1758,9 +1827,60 @@ function isCommand(arg: string): arg is CliCommand {
   return COMMANDS.some((command) => command === arg);
 }
 
-/** Something the CLI writes its output to (the process's stdout or stderr, or a test's capture). */
+/**
+ * Something the CLI writes its output to (the process's stdout or stderr, or
+ * a test's capture). A terminal says so with `isTTY` and gives its width in
+ * `columns`, as Node's tty.WriteStream does; human diagnostics use both.
+ */
 interface IOutputStream {
   write(text: string): unknown;
+  readonly isTTY?: boolean | undefined;
+  readonly columns?: number | undefined;
+}
+
+/**
+ * Writes human diagnostics to stderr: colored when color is on
+ * (docs/diagnostics.md, "Color"), wrapped to the width of a terminal, plain
+ * and unwrapped otherwise. Nothing is written when there are none. If the
+ * color library cannot be loaded (a broken installation), the diagnostics
+ * are written plain with a `color-unavailable` warning: color is
+ * presentation, so it never costs the outcome or its exit status.
+ */
+async function writeDiagnostics(
+  diagnostics: readonly IDiagnostic[],
+  stderr: IOutputStream,
+  env: CliEnvironment,
+  color: ColorChoice,
+  safe: (text: string) => string,
+): Promise<void> {
+  if (diagnostics.length === 0) return;
+  const isTTY = stderr.isTTY === true;
+  let style = PLAIN_STYLE;
+  let shown = diagnostics;
+  if (shouldUseColor(color, env, isTTY)) {
+    try {
+      style = await loadColorStyle();
+    } catch (err) {
+      const unavailable = createDiagnostic('color-unavailable', `The color library could not be loaded (${describeError(err)}), so diagnostics are shown as plain text.`);
+      shown = orderDiagnostics([...diagnostics, unavailable]);
+    }
+  }
+  const width = isTTY && typeof stderr.columns === 'number' && stderr.columns > 0 ? stderr.columns : undefined;
+  stderr.write(safe(renderDiagnostics(shown, { style, width })));
+}
+
+/** Encodes a JSON document as TOON text with a final newline. */
+type ToonEncoder = (document: OutcomeDocument) => string;
+
+/**
+ * The TOON encoder (docs/diagnostics.md, "--format toon"). It is loaded
+ * before any work is done, so an installation that cannot load it fails
+ * before anything is read or written, never after an outcome.
+ */
+async function loadToonEncoder(): Promise<ToonEncoder> {
+  const { encode } = await import('@toon-format/toon');
+  // A JSON round trip first, so TOON carries exactly what the JSON document does.
+  return (document) => `${encode(JSON.parse(JSON.stringify(document)))}\n`;
 }
 
 /**
@@ -1793,13 +1913,30 @@ async function main(
   const safe = (text: string): string => (token === undefined ? text : text.split(token).join('[redacted]'));
 
   let format: OutputFormat;
+  let color: ColorChoice;
   let args: string[];
   try {
-    ({ format, argv: args } = resolveFormat(argv));
+    ({ format, color, argv: args } = resolveGlobalOptions(argv));
   } catch (err) {
     if (!(err instanceof UsageError)) throw err;
-    stderr.write(safe(`sarif-to-comment: ${err.message}\nRun sarif-to-comment --help for usage.\n`));
+    // The format (or the color) is unknown, so this is always human output.
+    const failure = createDiagnostic('usage-error', err.message, { remedies: ['Run `sarif-to-comment --help` for usage.'] });
+    await writeDiagnostics([failure], stderr, env, 'auto', safe);
     return EXIT.usage;
+  }
+
+  let toon: ToonEncoder | undefined;
+  if (format === 'toon') {
+    try {
+      toon = await loadToonEncoder();
+    } catch (err) {
+      // Without the encoder no TOON document can be printed; this is reported
+      // in human form, before any command has done anything.
+      const failure = createDiagnostic('operation-failed',
+        `The TOON encoder could not be loaded (${describeError(err)}), so nothing was done. Use --format json, or reinstall the package's dependencies.`);
+      await writeDiagnostics([failure], stderr, env, color, safe);
+      return EXIT.error;
+    }
   }
 
   const first = args[0];
@@ -1823,11 +1960,15 @@ async function main(
     }
   }
 
+  const diagnostics = orderDiagnostics(outcome.diagnostics ?? []);
+  const document: OutcomeDocument = { ...outcome.doc, diagnostics };
   if (format === 'json') {
-    stdout.write(safe(`${JSON.stringify(outcome.doc, null, 2)}\n`));
+    stdout.write(safe(`${JSON.stringify(document, null, 2)}\n`));
+  } else if (toon !== undefined) {
+    stdout.write(safe(toon(document)));
   } else {
     if (outcome.out !== undefined) stdout.write(safe(outcome.out));
-    if (outcome.err !== undefined) stderr.write(safe(outcome.err));
+    await writeDiagnostics(diagnostics, stderr, env, color, safe);
   }
   return outcome.exit;
 }

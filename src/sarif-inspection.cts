@@ -48,7 +48,8 @@ import type {
   ArtifactPathResolution, IPlainObject, ISarifArtifact, ISarifArtifactLocation, ISarifMessage, ISarifReportingDescriptor,
   ISarifResult, ISarifRun, ISarifTool, ISarifToolComponent,
 } from './sarif-common.cjs';
-import type { IInvalidSarifOutcome } from './public-types.cjs';
+import { createDiagnostic, diagnosticOf } from './diagnostics.cjs';
+import type { IDiagnostic, IInvalidSarifOutcome } from './public-types.cjs';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -319,11 +320,12 @@ export interface IInspectionRun {
 }
 
 /**
- * Something inspection could not interpret, such as an unresolvable path.
+ * Something inspection could not interpret, such as an unresolvable path: a
+ * warning diagnostic that also carries its pointer directly.
  *
  * @public
  */
-export interface IInspectionDiagnostic {
+export interface IInspectionDiagnostic extends IDiagnostic {
   /** Always `warning`: inspection never refuses valid SARIF. */
   readonly severity: 'warning';
   /** What could not be interpreted. */
@@ -403,6 +405,8 @@ export interface IInspectedOutcome {
   readonly status: 'inspected';
   /** The view. */
   readonly view: ISarifInspection;
+  /** The view's warnings (`view.diagnostics`) as diagnostics. */
+  readonly diagnostics: readonly IDiagnostic[];
 }
 
 /**
@@ -725,8 +729,30 @@ function newState(limits: IInspectionLimits): IInspectionState {
   return { limits, diagnostics: [], truncatedPreviews: 0 };
 }
 
-function warn(state: IInspectionState, pointer: string, message: string): void {
-  state.diagnostics.push({ severity: 'warning', message, pointer });
+/** The codes of what inspection can fail to interpret (each a warning in the catalog). */
+type InspectionWarningCode =
+  | 'uninterpreted-message'
+  | 'uninterpreted-artifact-location'
+  | 'uninterpreted-file-proposal'
+  | 'uninterpreted-rule-reference'
+  | 'external-results-not-merged'
+  | 'external-property-files-not-loaded';
+
+/**
+ * Records a warning: the fields inspection entries have always had
+ * (severity, message, pointer), then the rest of its diagnostic.
+ */
+function warn(state: IInspectionState, code: InspectionWarningCode, pointer: string, message: string): void {
+  const { code: catalogued, title, location, remedies } = createDiagnostic(code, message, { location: { pointer } });
+  state.diagnostics.push({
+    severity: 'warning',
+    message,
+    pointer,
+    code: catalogued,
+    title,
+    ...(location === undefined ? {} : { location }),
+    ...(remedies === undefined ? {} : { remedies }),
+  });
 }
 
 /** Message properties presented by named message-view fields; others go to its otherContent. */
@@ -755,7 +781,7 @@ function messageView(
   const rest = without(message, NAMED_MESSAGE_KEYS);
   if (Object.keys(rest).length > 0) view.otherContent = rest;
   if (!resolved.resolved) {
-    warn(state, pointer, missingArgument !== undefined
+    warn(state, 'uninterpreted-message', pointer, missingArgument !== undefined
       ? `The message needs argument {${String(missingArgument)}}, which was not supplied; its template is shown unsubstituted.`
       : `Message id \`${String(message.id)}\` is not defined by the rule or its tool component, so its text is unavailable.`);
   }
@@ -766,7 +792,7 @@ function messageView(
 function pathOf(artifactLocation: IArtifactLocationInput, run: IRunInput, pointer: string, state: IInspectionState): ArtifactPathResolution {
   const resolved = resolveArtifactPath(artifactLocation, run, { sourceRootUri: state.limits.sourceRootUri });
   if (resolved.error) {
-    warn(state, pointer, `The artifact reference could not be resolved to a repository path (${resolved.error[0]}): ${resolved.error[1]}`);
+    warn(state, 'uninterpreted-artifact-location', pointer, `The artifact reference could not be resolved to a repository path (${resolved.error[0]}): ${resolved.error[1]}`);
   }
   return resolved;
 }
@@ -888,19 +914,19 @@ function fileProposalViews(result: IResultInput, run: IRunInput, ref: string, st
   const base = `${ref}/properties/sarifToComment/proposedFileChanges`;
   const proposed = owned['proposedFileChanges'];
   if (!Array.isArray(proposed)) {
-    warn(state, base, 'proposedFileChanges is not a list of operations; it is kept verbatim in the finding\'s other content.');
+    warn(state, 'uninterpreted-file-proposal', base, 'proposedFileChanges is not a list of operations; it is kept verbatim in the finding\'s other content.');
     return [];
   }
   const operations: readonly unknown[] = proposed;
   return operations.map((operation, k): IInspectionFileProposal => {
     const pointer = `${base}/${String(k)}`;
     if (!isPlainObject(operation)) {
-      warn(state, pointer, 'This proposed file change is not an object; it is shown verbatim.');
+      warn(state, 'uninterpreted-file-proposal', pointer, 'This proposed file change is not an object; it is shown verbatim.');
       return { ref: pointer, operation: null, path: null, otherContent: { value: operation } };
     }
     const name = operation['operation'];
     if (typeof name !== 'string' || !KNOWN_FILE_OPERATIONS.has(name)) {
-      warn(state, pointer, `Unknown proposed file operation ${JSON.stringify(name)}; it is shown verbatim.`);
+      warn(state, 'uninterpreted-file-proposal', pointer, `Unknown proposed file operation ${JSON.stringify(name)}; it is shown verbatim.`);
     }
     const artifactIndex = operation['artifactIndex'];
     const artifact = typeof artifactIndex === 'number' && Number.isInteger(artifactIndex) ? (run.artifacts || [])[artifactIndex] : undefined;
@@ -909,7 +935,7 @@ function fileProposalViews(result: IResultInput, run: IRunInput, ref: string, st
       path = pathOrNull(pathOf(artifact.location, run, pointer, state));
     } else {
       path = null;
-      warn(state, pointer, 'The proposal names no artifact with a location, so its file is unknown.');
+      warn(state, 'uninterpreted-file-proposal', pointer, 'The proposal names no artifact with a location, so its file is unknown.');
     }
     const view: Mutable<IInspectionFileProposal> = {
       ref: pointer,
@@ -956,7 +982,7 @@ function findingView(
 ): IInspectionFinding {
   const ref = `/runs/${String(runIndex)}/results/${String(resultIndex)}`;
   const reference = resolveRule(result, run);
-  if (reference.error) warn(state, ref, `The rule reference could not be resolved (${reference.error[0]}): ${reference.error[1]}`);
+  if (reference.error) warn(state, 'uninterpreted-rule-reference', ref, `The rule reference could not be resolved (${reference.error[0]}): ${reference.error[1]}`);
   // An unresolved reference names no rule, so its messages read from the driver.
   const finding: IFindingContext = reference.error
     ? { rule: undefined, component: run.tool.driver }
@@ -1015,7 +1041,7 @@ function externalPropertiesViews(log: IInspectableLog, state: IInspectionState):
     const ref = `/inlineExternalProperties/${String(i)}`;
     const results = Array.isArray(content.results) ? content.results.length : 0;
     if (results > 0) {
-      warn(state, ref, `${String(results)} result(s) embedded in inline external properties are shown verbatim: inspection does not merge `
+      warn(state, 'external-results-not-merged', ref, `${String(results)} result(s) embedded in inline external properties are shown verbatim: inspection does not merge `
         + 'embedded external properties into run findings. Any declared runGuid is retained in the verbatim content.');
     }
     return { ref, results, content };
@@ -1110,7 +1136,7 @@ function inspectSarifWithUntypedInput(sarif: unknown, options?: IInspectSarifOpt
   const externalProperties = externalPropertiesViews(captured, state);
   captured.runs.forEach((run, i) => {
     if (run.externalPropertyFileReferences !== undefined) {
-      warn(state, `/runs/${String(i)}/externalPropertyFileReferences`, 'The run references external property files. Inspection never loads '
+      warn(state, 'external-property-files-not-loaded', `/runs/${String(i)}/externalPropertyFileReferences`, 'The run references external property files. Inspection never loads '
         + 'them, so content they hold (possibly results) is not shown; the references themselves are kept in the run\'s other content.');
     }
   });
@@ -1127,14 +1153,15 @@ function inspectSarifWithUntypedInput(sarif: unknown, options?: IInspectSarifOpt
     findings,
     diagnostics: state.diagnostics,
   };
-  return { status: 'inspected', view };
+  return { status: 'inspected', view, diagnostics: view.diagnostics.map(diagnosticOf) };
 }
 
 // ---------------------------------------------------------------------------
 // Human rendering (a projection of the view; no independent traversal)
 //
-// Every piece of evidence in the view appears in the human text; human and
-// JSON output differ only in presentation. Named facts are rendered as
+// Every piece of evidence in the view appears in the human text, except its
+// warnings, which the CLI shows as diagnostics on stderr; human and JSON
+// output differ only in presentation. Named facts are rendered as
 // labelled lines. Evidence without a named field of its own (otherContent,
 // extra reference or provenance fields, message metadata) is rendered as
 // indented JSON under a label. That is the evidence itself, not a key list
@@ -1329,7 +1356,8 @@ function findingLines(finding: IInspectionFinding, view: ISarifInspection): stri
  * its declared source and other content, and every finding with its full
  * message (and alternatives), locations (or "general"), fixes and proposals.
  * Previews carry explicit truncation markers, and all remaining evidence
- * appears as labelled JSON. No readiness is claimed.
+ * appears as labelled JSON. No readiness is claimed. The view's warnings are
+ * not part of this text: they are diagnostics, rendered on their own.
  *
  * @param view - the `view` from inspectSarif
  */
@@ -1344,10 +1372,6 @@ function renderInspectionText(view: ISarifInspection): string {
   }
   for (const run of view.runs) lines.push(...runLines(run));
   for (const finding of view.findings) lines.push(...findingLines(finding, view));
-  if (view.diagnostics.length > 0) {
-    lines.push('', 'Warnings:');
-    for (const d of view.diagnostics) lines.push(`  ${d.pointer}: ${d.message}`);
-  }
   lines.push('', 'This inspection only describes the SARIF; it does not check whether it can be published.');
   return `${lines.join('\n')}\n`;
 }

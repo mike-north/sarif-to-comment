@@ -43,7 +43,7 @@
  *   4. Unless dryRun, one close per eligible suggestion, ascending. A 403 or
  *      404 refusal is permission-limited; any other failure is failed.
  *
- * Outcome: { status, dryRun, originals, suggestions, markdown } (see the
+ * Outcome: { status, dryRun, originals, suggestions, markdown, diagnostics } (see the
  * public types below). Rejects for invalid input, for an invalid or
  * unreadable repository configuration (step 0), for an operational failure
  * during discovery (step 1), and for a defect in this package during steps
@@ -60,7 +60,10 @@
 import { GitHubError, createGitHubClient as defaultCreateGitHubClient } from './github.cjs';
 import type { ICreateGitHubClientOptions, IGitHubClient, IPullRequestSnapshot } from './github.cjs';
 import type { IGitHubRepository } from './public-types.cjs';
+import { createDiagnostic, mapDiagnosticText, orderDiagnostics } from './diagnostics.cjs';
+import type { IDiagnostic } from './diagnostics.cjs';
 import { messageChain, redact, withoutCredential } from './review-preflight.cjs';
+import type { IReported } from './review-preflight.cjs';
 import { OWNER_PATTERN, REPO_PATTERN, isPlainObject } from './sarif-common.cjs';
 import { findSuggestionMarker } from './suggestion-marker.cjs';
 import type { ISuggestionMarkerFields } from './suggestion-marker.cjs';
@@ -208,6 +211,12 @@ export interface ICloseSuggestionPullRequestsOutcome {
   readonly suggestions: readonly ICheckedSuggestionPullRequest[];
   /** What was checked and done, as Markdown, including that no branch is ever deleted. */
   readonly markdown: string;
+  /**
+   * What was left undone or untouched: a failed read or close (error), an
+   * original that could not be verified or a close this account may not make
+   * (warning), and a pull request that does not follow the convention (note).
+   */
+  readonly diagnostics: readonly IDiagnostic[];
 }
 
 // ---------------------------------------------------------------------------
@@ -367,7 +376,7 @@ class Cleanup {
     private readonly client: CleanupClient,
   ) {}
 
-  async run(): Promise<ICloseSuggestionPullRequestsOutcome> {
+  async run(): Promise<IReported<ICloseSuggestionPullRequestsOutcome>> {
     const eligible = await this.discoverAndVerify();
     for (const { candidate, original } of eligible) {
       if (this.captured.dryRun) this.report(candidate, original, 'would-close');
@@ -547,7 +556,7 @@ class Cleanup {
     return redact(text, this.captured.token);
   }
 
-  private outcome(): ICloseSuggestionPullRequestsOutcome {
+  private outcome(): IReported<ICloseSuggestionPullRequestsOutcome> {
     const originals = [...this.originals.values()].sort((a, b) => a.number - b.number);
     const checked = [...this.checked].sort((a, b) => a.number - b.number);
     const incomplete = originals.some((o) => o.state === 'unverified') || checked.some((s) => s.result === 'failed' || s.result === 'unverified');
@@ -564,13 +573,51 @@ class Cleanup {
       ...(c.reason === undefined ? {} : { reason: c.reason }),
     }));
     return {
-      status,
-      dryRun: this.captured.dryRun,
-      originals,
-      suggestions,
-      markdown: this.safe(renderMarkdown(this.captured, this.label, status, originals, checked)),
+      outcome: {
+        status,
+        dryRun: this.captured.dryRun,
+        originals,
+        suggestions,
+        markdown: this.safe(renderMarkdown(this.captured, this.label, status, originals, checked)),
+        diagnostics: cleanupDiagnostics(this.captured, originals, suggestions).map((d) => mapDiagnosticText(d, (text) => this.safe(text))),
+      },
+      report: this.safe(renderMarkdown(this.captured, this.label, status, originals, checked, false)),
     };
   }
+}
+
+/**
+ * The diagnostics of a cleanup, each about one pull request: every original
+ * that could not be verified, and every suggestion pull request that failed,
+ * could not be closed with this account, or does not follow the convention.
+ * Suggestions left open because their original could not be verified are
+ * covered by that original's warning.
+ */
+function cleanupDiagnostics(
+  captured: ICaptured,
+  originals: readonly IOriginalPullRequest[],
+  suggestions: readonly ICheckedSuggestionPullRequest[],
+): IDiagnostic[] {
+  const subject = (n: number): string => `${captured.owner}/${captured.repo}#${String(n)}`;
+  const because = (reason: string | undefined): string => (reason === undefined ? '' : ` (${reason})`);
+  const forOriginal = (original: number | null): string => (original === null ? '' : ` (for #${String(original)})`);
+  const found: IDiagnostic[] = [];
+  for (const o of originals) {
+    if (o.state !== 'unverified') continue;
+    found.push(createDiagnostic('original-pull-request-unverified',
+      `Pull request #${String(o.number)} could not be verified${because(o.reason)}, so its suggestion pull requests were left open.`, { subject: subject(o.number) }));
+  }
+  for (const s of suggestions) {
+    const which = `#${String(s.number)}${forOriginal(s.original)}`;
+    if (s.result === 'failed') {
+      found.push(createDiagnostic('suggestion-pr-cleanup-failed', `Cleanup of ${which} did not finish${because(s.reason)}.`, { subject: subject(s.number) }));
+    } else if (s.result === 'permission-limited') {
+      found.push(createDiagnostic('suggestion-pr-close-not-permitted', `${which} was left open, not permitted to close it${because(s.reason)}.`, { subject: subject(s.number) }));
+    } else if (s.result === 'not-ours') {
+      found.push(createDiagnostic('suggestion-pr-not-conforming', `#${String(s.number)} does not follow the suggestion pull request convention${because(s.reason)}, so it was not touched.`, { subject: subject(s.number) }));
+    }
+  }
+  return orderDiagnostics(found);
 }
 
 /** Candidates in ascending number order, each pull request once (a listing can repeat one). */
@@ -629,22 +676,35 @@ function labelSource(label: ICleanupLabel): string {
   return label.source === 'override' ? "a label given in place of the repository's suggestion label" : labelSourceText(label.source, label.branch);
 }
 
+/** Suggestion results that are diagnostics (see cleanupDiagnostics), which the CLI's human report leaves to stderr. */
+const DIAGNOSED_RESULTS: ReadonlySet<SuggestionCleanupResult> = new Set(['unverified', 'permission-limited', 'failed', 'not-ours']);
+
+/**
+ * The cleanup report. In full for the outcome's `markdown`; with `full`
+ * false, the CLI's human report (IReported), which leaves out the entries
+ * the outcome's diagnostics already say: originals that could not be
+ * verified, and suggestions left open by them, refused, failed or not
+ * conforming.
+ */
 function renderMarkdown(
   captured: ICaptured,
   label: ICleanupLabel,
   status: CloseSuggestionPullRequestsStatus,
-  originals: readonly IOriginalPullRequest[],
-  checked: readonly IChecked[],
+  allOriginals: readonly IOriginalPullRequest[],
+  allChecked: readonly IChecked[],
+  full = true,
 ): string {
+  const originals = full ? allOriginals : allOriginals.filter((o) => o.state !== 'unverified');
+  const checked = full ? allChecked : allChecked.filter((c) => !DIAGNOSED_RESULTS.has(c.result));
   const where = `${captured.owner}/${captured.repo}`;
   const scope = captured.originalPullNumber === undefined
     ? `Checked the open pull requests labeled \`${label.name}\` in ${where} (${labelSource(label)}).`
     : `Checked the pull requests that reference #${String(captured.originalPullNumber)} in ${where}; the suggestion label is \`${label.name}\` (${labelSource(label)}).`;
   const lines = [status === 'complete' && captured.dryRun ? '## Suggestion pull request cleanup: dry run' : TITLES[status], '', scope, ''];
   if (originals.length > 0) lines.push('Original pull requests:', '', ...originals.map(originalLine), '');
-  if (checked.length === 0) {
+  if (allChecked.length === 0) {
     lines.push('No suggestion pull requests were found.', '');
-  } else {
+  } else if (checked.length > 0) {
     lines.push('Suggestion pull requests:', '');
     for (const entry of checked) {
       const forOriginal = entry.original === null ? '' : ` (for #${String(entry.original)})`;
@@ -656,7 +716,7 @@ function renderMarkdown(
   if (status === 'incomplete') {
     lines.push('Some results could not be established. Running the cleanup again is safe: it closes only suggestion pull requests that are still open and eligible.', '');
   }
-  if (checked.some((entry) => entry.result === 'permission-limited')) {
+  if (allChecked.some((entry) => entry.result === 'permission-limited')) {
     lines.push('Someone allowed to close the pull requests left open can finish, for example by running this cleanup with their own token.', '');
   }
   lines.push('Closing never deletes a branch: each proposal branch is left in place.');
@@ -736,6 +796,17 @@ export async function closeSuggestionPullRequestsWithInternals(
   input: unknown,
   internals: ICloseSuggestionPullRequestsInternals = {},
 ): Promise<ICloseSuggestionPullRequestsOutcome> {
+  return (await closeSuggestionPullRequestsReported(input, internals)).outcome;
+}
+
+/**
+ * {@link closeSuggestionPullRequests} with the CLI's human report of the
+ * outcome (see IReported). Internal: the CLI prints the report in human form.
+ */
+export async function closeSuggestionPullRequestsReported(
+  input: unknown,
+  internals: ICloseSuggestionPullRequestsInternals = {},
+): Promise<IReported<ICloseSuggestionPullRequestsOutcome>> {
   const captured = capture(input);
   const createGitHubClient = internals.createGitHubClient || defaultCreateGitHubClient;
   try {

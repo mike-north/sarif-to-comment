@@ -1,0 +1,7 @@
+✖ error  The account already has a pending review on the pull request  [pending-review-exists]
+  mike-north/doc-linter#33
+  This account already has a pending review on mike-north/doc-linter#33: review 5348454897 (https://github.com/mike-north/doc-linter/pull/33#pullrequestreview-5348454897). GitHub allows one pending review per account on a pull request, so it would refuse this review, as a draft or as a submitted comment review. Submit or delete that pending review on GitHub, then validate again; this tool never submits, edits or deletes an existing review. If it is this tool's own earlier publication, retry publish with that publication's state path rather than a new one.
+  → Submit or delete that pending review on GitHub.
+  → If it is this tool's own earlier publication, retry publish with that publication's state path.
+
+1 error

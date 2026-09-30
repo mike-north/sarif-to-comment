@@ -37,7 +37,7 @@ import * as path from 'node:path';
 import { describe, test } from 'node:test';
 
 import { UPSTREAM_SARIF_PATH, createGitWorld } from './fixtures/authoring-workflow/git-world.mts';
-import { PKG, ROOT, installIntoConsumer, npm, packProject, requirePackedProject } from './fixtures/package/installed-package.mts';
+import { PKG, ROOT, installIntoConsumer, installedManifestPath, npm, packProject, requirePackedProject } from './fixtures/package/installed-package.mts';
 import {
   asRecord,
   asString,
@@ -86,6 +86,8 @@ const EXPECTED_FILES_FIELD = [
   '!dist/public-types.cjs',
   'vendor/',
   'docs/getting-started.md',
+  'docs/diagnostics.md',
+  'docs/diagnostic.v1.schema.json',
   'docs/api/',
   'CHANGELOG.md',
   'README.md',
@@ -105,6 +107,8 @@ function distributable(file: string): boolean {
     file === 'dist/sarif-to-comment.d.ts' ||
     /^vendor\/[^/]+$/.test(file) ||
     file === 'docs/getting-started.md' ||
+    file === 'docs/diagnostics.md' ||
+    file === 'docs/diagnostic.v1.schema.json' ||
     /^docs\/api\/[^/]+\.md$/.test(file)
   );
 }
@@ -122,16 +126,17 @@ function shippedRuntimeFiles(): string[] {
 }
 
 /**
- * Every non-builtin package the shipped runtime requires, by package name.
- * Quote-agnostic, because compiled output uses double quotes where the
- * hand-written sources used single quotes; a scan matching one style only
- * would silently come back empty.
+ * Every non-builtin package the shipped runtime loads, by package name:
+ * each `require()` and each dynamic `import()` (ES-module-only dependencies
+ * are loaded with `import()`). Quote-agnostic, because compiled output uses
+ * double quotes where the hand-written sources used single quotes; a scan
+ * matching one style only would silently come back empty.
  */
 function requiredPackages(): Set<string> {
   const names = new Set<string>();
   for (const file of shippedRuntimeFiles()) {
     const text = fs.readFileSync(path.join(ROOT, file), 'utf8');
-    for (const [, , spec = ''] of text.matchAll(/\brequire\(\s*(['"`])([^'"`]+)\1\s*\)/g)) {
+    for (const [, , spec = ''] of text.matchAll(/\b(?:require|import)\(\s*(['"`])([^'"`]+)\1\s*\)/g)) {
       if (spec.startsWith('.') || spec.startsWith('node:')) continue;
       names.add(spec.startsWith('@') ? spec.split('/').slice(0, 2).join('/') : (spec.split('/')[0] ?? spec));
     }
@@ -148,7 +153,7 @@ function runtimeDependencyClosure(required: ReadonlySet<string>): string[] {
   const names = new Set(required);
   for (const name of required) {
     const manifest = expectType(
-      readJson(require.resolve(`${name}/package.json`, { paths: [ROOT] })),
+      readJson(installedManifestPath(name, ROOT)),
       isShape({ peerDependencies: isOptional(isRecordOf(isString)) }),
       `${name}/package.json`,
     );
@@ -253,7 +258,7 @@ describe('manifest', () => {
     // Both directions: an undeclared require breaks consumers, and a declared
     // dependency nothing needs is installed by every consumer for no reason.
     assert.deepEqual(runtimeDependencyClosure(required), declared);
-    assert.deepEqual(declared, ['ajv', 'ajv-draft-04', 'ajv-formats']);
+    assert.deepEqual(declared, ['@toon-format/toon', 'ajv', 'ajv-draft-04', 'ajv-formats', 'chalk']);
     for (const tool of ['@changesets/cli', '@microsoft/api-extractor', '@microsoft/api-documenter', 'typescript']) {
       assert.ok(Object.hasOwn(asRecord(PKG['devDependencies'], 'package.json devDependencies'), tool), `${tool} is a dev dependency`);
     }
@@ -304,6 +309,8 @@ describe('packed distributable', () => {
       'vendor/sarif-schema-2.1.0.json',
       'vendor/README.md',
       'docs/getting-started.md',
+      'docs/diagnostics.md',
+      'docs/diagnostic.v1.schema.json',
       ...apiPages,
       ...runtimeModules,
     ]) {

@@ -37,6 +37,27 @@ Description
 </th></tr></thead>
 <tbody><tr><td>
 
+[diagnostics](./sarif-to-comment.iungroupedsariffixesoutcome.diagnostics.md)
+
+
+</td><td>
+
+`readonly`
+
+
+</td><td>
+
+readonly [IDiagnostic](./sarif-to-comment.idiagnostic.md)<!-- -->\[\]
+
+
+</td><td>
+
+Always empty: ungrouping raises no warnings or notes.
+
+
+</td></tr>
+<tr><td>
+
 [findings](./sarif-to-comment.iungroupedsariffixesoutcome.findings.md)
 
 

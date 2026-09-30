@@ -4,13 +4,14 @@
 
 ## IInspectionDiagnostic interface
 
-Something inspection could not interpret, such as an unresolvable path.
+Something inspection could not interpret, such as an unresolvable path: a warning diagnostic that also carries its pointer directly.
 
 **Signature:**
 
 ```typescript
-export interface IInspectionDiagnostic 
+export interface IInspectionDiagnostic extends IDiagnostic 
 ```
+**Extends:** [IDiagnostic](./sarif-to-comment.idiagnostic.md)
 
 ## Properties
 

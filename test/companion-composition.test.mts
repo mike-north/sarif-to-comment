@@ -1180,7 +1180,7 @@ describe('CLI + real GitHub client over HTTP', () => {
     assert.equal(doc['status'], 'published');
     const { pull, branch } = onlyPull(world);
     assert.deepEqual(doc['suggestions'], [{ number: pull.number, url: pullUrl(pull.number), branch }]);
-    assert.deepEqual(Object.keys(doc), ['command', 'status', 'review', 'suggestions', 'statePath', 'message']);
+    assert.deepEqual(Object.keys(doc), ['command', 'status', 'review', 'suggestions', 'statePath', 'message', 'diagnostics']);
   });
 
   test('the legacy flag-only form accepts the same flags, and --pr-labels adds labels', () => {
@@ -1195,7 +1195,8 @@ describe('CLI + real GitHub client over HTTP', () => {
     const world = makeWorld();
     const result = cli(world, ['publish', '--sarif', sarifFile(world, groupedAdditions()), ...target, '--state', world.statePath]);
     assert.equal(result.status, 2, result.stdout + result.stderr);
-    assert.match(result.stdout, /--allow-suggestion-prs/);
+    assert.match(result.stdout, /^## Review blocked\n/);
+    assert.match(result.stderr, /\[suggestion-group-requires-suggestion-prs\][\s\S]*--allow-suggestion-prs/, 'the problem, naming the flag, is on stderr');
     assert.deepEqual(writes(world), []);
   });
 

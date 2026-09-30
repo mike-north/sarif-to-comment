@@ -37,6 +37,27 @@ Description
 </th></tr></thead>
 <tbody><tr><td>
 
+[diagnostics](./sarif-to-comment.ifailedstagedchangesoutcome.diagnostics.md)
+
+
+</td><td>
+
+`readonly`
+
+
+</td><td>
+
+readonly [IDiagnostic](./sarif-to-comment.idiagnostic.md)<!-- -->\[\]
+
+
+</td><td>
+
+The same problems as diagnostics.
+
+
+</td></tr>
+<tr><td>
+
 [markdown](./sarif-to-comment.ifailedstagedchangesoutcome.markdown.md)
 
 

@@ -52,7 +52,7 @@ The document, intended pull request, reviewed commit and credential (no state pa
 
 Promise&lt;[ValidateSarifReviewOutcome](./sarif-to-comment.validatesarifreviewoutcome.md)<!-- -->&gt;
 
-`ready`<!-- -->, `blocked` with its problems, or `incomplete` when the assessment itself could not be completed. `status` plus `markdown` (and`problems`<!-- -->) is the stable contract.
+`ready`<!-- -->, `blocked` with its problems, or `incomplete` when the assessment itself could not be completed. `status`<!-- -->, `markdown`<!-- -->,`diagnostics` (and `problems`<!-- -->) are the stable contract.
 
 ## Exceptions
 

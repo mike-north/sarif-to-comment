@@ -114,6 +114,7 @@ const isCliDocument = isShape({
   sarif: isUnknown,
   review: isUnknown,
   statePath: isUnknown,
+  diagnostics: isUnknown,
 });
 
 type CliDocument = typeof isCliDocument extends Guard<infer T> ? T : never;
@@ -259,7 +260,7 @@ describe('command dispatch and help', () => {
     const machine = run(['frobnicate', '--format', 'json']);
     assert.equal(machine.status, 1);
     const doc = json(machine);
-    assert.deepEqual(Object.keys(doc).sort(), ['command', 'message', 'status', 'usage']);
+    assert.deepEqual(Object.keys(doc).sort(), ['command', 'diagnostics', 'message', 'status', 'usage']);
     assert.equal(doc.command, null);
     assert.equal(doc.status, 'usage-error');
     assert.match(asString(doc.message), /unknown command frobnicate/);
@@ -281,9 +282,9 @@ describe('JSON documents: the envelope comes first and field order is stable', (
   // JSON output is read by people and diffed by scripts, so it must not
   // drift with a change of implementation language.
   test('help, unknown-command and usage-error documents', () => {
-    assert.deepEqual(Object.keys(json(run(['inspect', '--help', '--format', 'json']))), ['command', 'status', 'usage']);
-    assert.deepEqual(Object.keys(json(run(['frobnicate', '--format', 'json']))), ['command', 'status', 'message', 'usage']);
-    assert.deepEqual(Object.keys(json(run(['init', '--format', 'json']))), ['command', 'status', 'message', 'usage']);
+    assert.deepEqual(Object.keys(json(run(['inspect', '--help', '--format', 'json']))), ['command', 'status', 'usage', 'diagnostics']);
+    assert.deepEqual(Object.keys(json(run(['frobnicate', '--format', 'json']))), ['command', 'status', 'message', 'usage', 'diagnostics']);
+    assert.deepEqual(Object.keys(json(run(['init', '--format', 'json']))), ['command', 'status', 'message', 'usage', 'diagnostics']);
   });
 
   test('init prints exactly the two-space indented receipt and writes the document in contract order', () => {
@@ -294,7 +295,7 @@ describe('JSON documents: the envelope comes first and field order is stable', (
     assert.equal(result.stderr, '');
     assert.equal(
       result.stdout,
-      `{\n  "command": "init",\n  "status": "created",\n  "output": {\n    "path": ${JSON.stringify(output)},\n    "written": true\n  },\n  "runIndex": 0\n}\n`,
+      `{\n  "command": "init",\n  "status": "created",\n  "output": {\n    "path": ${JSON.stringify(output)},\n    "written": true\n  },\n  "runIndex": 0,\n  "diagnostics": []\n}\n`,
     );
     // §3.1 document shape, in its order, as two-space JSON with a final newline.
     const expected = [
@@ -366,7 +367,7 @@ describe('init', () => {
     const dir = tempDir('init');
     const output = path.join(dir, 'review.sarif');
     const doc = json(run(['init', '--output', output, '--format', 'json']));
-    assert.deepEqual(doc, { command: 'init', status: 'created', output: { path: output, written: true }, runIndex: 0 });
+    assert.deepEqual(doc, { command: 'init', status: 'created', output: { path: output, written: true }, runIndex: 0, diagnostics: [] });
     assert.deepEqual(readJson(output), {
       $schema: SCHEMA_URI,
       version: '2.1.0',
@@ -393,6 +394,7 @@ describe('init', () => {
       output: { path: output, written: true },
       runIndex: 0,
       source: { repositoryUri: 'https://github.com/acme/widgets', commit: COMMIT },
+      diagnostics: [],
     });
     assert.deepEqual(readJson(output), {
       $schema: SCHEMA_URI,
@@ -491,6 +493,7 @@ describe('add-comment edits the SARIF file in place', () => {
       status: 'added',
       sarif: { path: file, written: true },
       finding: { ref: '/runs/0/results/0', path: 'src/parse.js', line: 2, endLine: 2, tool: 'Review agent' },
+      diagnostics: [],
     });
     const after = readJson(file);
     assert.deepEqual(at(after, 'runs', 0, 'results'), [
@@ -516,7 +519,7 @@ describe('add-comment edits the SARIF file in place', () => {
     ]));
     assert.equal(doc.status, 'added', JSON.stringify(doc));
     // §3.2: { command, status: "added", sarif: { path, written: true }, finding: { ref, path, line, endLine, tool } }
-    assert.deepEqual(Object.keys(doc), ['command', 'status', 'sarif', 'finding']);
+    assert.deepEqual(Object.keys(doc), ['command', 'status', 'sarif', 'finding', 'diagnostics']);
     assert.deepEqual(Object.keys(asRecord(doc.sarif)), ['path', 'written']);
     assert.deepEqual(Object.keys(asRecord(doc.finding)), ['ref', 'path', 'line', 'endLine', 'tool']);
     const expected = library.addSarifComment(before, comment);
@@ -623,7 +626,10 @@ describe('add-comment edits the SARIF file in place', () => {
 
     const human = run(['add-comment', '--sarif', file, '--file', 'a.txt', '--line', '1', '--message', 'x']);
     assert.equal(human.status, 2);
-    assert.ok(human.stdout.includes(item(asString(at(expected, 'problems', 0, 'message')).split('\n'), 0)), human.stdout);
+    // Human form (docs/diagnostics.md): what happened to the file on stdout, the problems as diagnostics on stderr.
+    assert.equal(human.stdout, `${file} was not changed.\n`);
+    assert.ok(human.stderr.includes(item(asString(at(expected, 'problems', 0, 'message')).split('\n'), 0)), human.stderr);
+    assert.deepEqual(doc.diagnostics, at(expected, 'diagnostics'), 'the CLI reports the library diagnostics');
   });
 
   const commentUsageCases: readonly (readonly [string, readonly string[], string])[] = [
@@ -736,8 +742,9 @@ describe('remove-comment edits the SARIF file in place', () => {
       status: 'removed',
       sarif: { path: file, written: true },
       finding: { ref: '/runs/0/results/0', runIndex: 0, resultIndex: 0, tool: 'Review agent', fixes: 1, fileProposals: 0 },
+      diagnostics: [],
     });
-    assert.deepEqual(Object.keys(doc), ['command', 'status', 'sarif', 'finding']);
+    assert.deepEqual(Object.keys(doc), ['command', 'status', 'sarif', 'finding', 'diagnostics']);
     const after = readJson(file);
     const expected = structuredClone(before);
     asArray(at(expected, 'runs', 0, 'results')).splice(0, 1);
@@ -785,8 +792,8 @@ describe('remove-comment edits the SARIF file in place', () => {
     }
     const human = run(['remove-comment', '--sarif', file, '--finding', first]);
     assert.equal(human.status, 2);
-    assert.match(human.stdout, /inspect/i);
-    assert.ok(human.stdout.includes(`${file} was not changed.`), human.stdout);
+    assert.match(human.stderr, /\[finding-selector-stale\][\s\S]*inspect/i, 'the refusal is a diagnostic on stderr');
+    assert.equal(human.stdout, `${file} was not changed.\n`);
     assert.deepEqual(bytesOf(file), before);
     assert.deepEqual(fs.readdirSync(dir), ['review.sarif']);
   });
@@ -929,7 +936,7 @@ describe('inspect', () => {
     const result = run(['inspect', '--sarif', file, '--preview-lines', '5', '--format', 'json']);
     assert.equal(result.status, 0, result.stderr);
     const doc = json(result);
-    assert.deepEqual(Object.keys(doc).sort(), ['command', 'status', 'view']);
+    assert.deepEqual(Object.keys(doc).sort(), ['command', 'diagnostics', 'status', 'view']);
     assert.equal(doc.command, 'inspect');
     assert.equal(doc.status, 'inspected');
     const expected = library.inspectSarif(sarif, { previewLines: 5 });
@@ -955,7 +962,7 @@ describe('inspect', () => {
     const result = run(['inspect', '--sarif', file, '--format', 'json']);
     assert.equal(result.status, 0, result.stderr);
     const doc = json(result);
-    assert.deepEqual(Object.keys(doc), ['command', 'status', 'view']);
+    assert.deepEqual(Object.keys(doc), ['command', 'status', 'view', 'diagnostics']);
     // Field order of the view itself is pinned against the contract in
     // test/sarif-inspection.test.mts; here the CLI must not reorder it.
     assert.equal(JSON.stringify(doc.view), JSON.stringify(at(library.inspectSarif(sarif), 'view')));
@@ -1136,7 +1143,7 @@ describe('add-staged-changes', () => {
     assert.equal(result.status, 0, result.stdout + result.stderr);
     const doc = json(result);
     // Characterization of 0.2.0: the receipt envelope order.
-    assert.deepEqual(Object.keys(doc), ['command', 'status', 'output', 'archived', 'receipt']);
+    assert.deepEqual(Object.keys(doc), ['command', 'status', 'output', 'archived', 'receipt', 'diagnostics']);
     assert.deepEqual(Object.keys(asRecord(doc.output)), ['path', 'written']);
     const outcome = await library.addStagedChangesToSarif({
       sarif: UPSTREAM,
@@ -1208,7 +1215,8 @@ describe('add-staged-changes', () => {
 
     const human = run(stagedArgs(world, UPSTREAM_SARIF_PATH, output));
     assert.equal(human.status, 2);
-    assert.ok(human.stdout.includes(ORACLE.path));
+    assert.ok(human.stderr.includes(ORACLE.path), 'the problem, naming the path, is a diagnostic on stderr');
+    assert.ok(human.stdout.includes(`${output} was not written.`), 'what happened to the output is on stdout');
   });
 
   test('schema-invalid input: exit 2 invalid, with archive effects reported', () => {
@@ -1402,7 +1410,7 @@ describe('publish', () => {
     assert.equal(result.status, 0, result.stderr);
     const doc = json(result);
     const stored = item(world.remote.reviews(), 0);
-    assert.deepEqual(Object.keys(doc).sort(), ['command', 'message', 'review', 'statePath', 'status']);
+    assert.deepEqual(Object.keys(doc).sort(), ['command', 'diagnostics', 'message', 'review', 'statePath', 'status']);
     assert.equal(doc.command, 'publish');
     assert.equal(doc.status, 'published');
     assert.equal(doc.statePath, world.statePath);
@@ -1420,18 +1428,18 @@ describe('publish', () => {
     const published = publishWorld();
     const doc = json(runPublish(published, ['publish', ...flags(published), '--format', 'json']));
     assert.equal(doc.status, 'published');
-    assert.deepEqual(Object.keys(doc), ['command', 'status', 'review', 'statePath', 'message']);
+    assert.deepEqual(Object.keys(doc), ['command', 'status', 'review', 'statePath', 'message', 'diagnostics']);
     assert.deepEqual(Object.keys(asRecord(doc.review)), ['id', 'url']);
 
     const blocked = publishWorld(INVALID_PUBLICATION);
     const blockedDoc = json(runPublish(blocked, ['publish', ...flags(blocked), '--format', 'json']));
     assert.equal(blockedDoc.status, 'blocked');
-    assert.deepEqual(Object.keys(blockedDoc), ['command', 'status', 'message']);
+    assert.deepEqual(Object.keys(blockedDoc), ['command', 'status', 'message', 'diagnostics']);
 
     const noToken = publishWorld();
     const errorDoc = json(runPublish(noToken, ['publish', ...flags(noToken), '--format', 'json'], {}));
     assert.equal(errorDoc.status, 'error');
-    assert.deepEqual(Object.keys(errorDoc), ['command', 'status', 'message']);
+    assert.deepEqual(Object.keys(errorDoc), ['command', 'status', 'message', 'diagnostics']);
   });
 
   test('the flag-only route accepts --format json too', () => {
@@ -1446,7 +1454,7 @@ describe('publish', () => {
     const result = runPublish(world, ['publish', ...flags(world), '--format', 'json']);
     assert.equal(result.status, 2);
     const doc = json(result);
-    assert.deepEqual(Object.keys(doc).sort(), ['command', 'message', 'status']);
+    assert.deepEqual(Object.keys(doc).sort(), ['command', 'diagnostics', 'message', 'status']);
     assert.equal(doc.status, 'blocked');
     assert.deepEqual(world.remote.writeCalls(), []);
     assert.equal(fs.existsSync(world.statePath), false);
@@ -1542,7 +1550,7 @@ describe('validate', () => {
     const result = runPublish(world, ['validate', ...destinationFlags(world), '--format', 'json']);
     assert.equal(result.status, 0, result.stdout);
     const doc = json(result);
-    assert.deepEqual(Object.keys(doc), ['command', 'status', 'message']);
+    assert.deepEqual(Object.keys(doc), ['command', 'status', 'message', 'diagnostics']);
     assert.equal(doc.command, 'validate');
     assert.equal(doc.status, 'ready');
     assertNothingWritten(world);
@@ -1553,7 +1561,7 @@ describe('validate', () => {
     const result = runPublish(world, ['validate', ...destinationFlags(world), '--format', 'json']);
     assert.equal(result.status, 2, result.stdout);
     const doc = json(result);
-    assert.deepEqual(Object.keys(doc), ['command', 'status', 'problems', 'message']);
+    assert.deepEqual(Object.keys(doc), ['command', 'status', 'problems', 'message', 'diagnostics']);
     assert.equal(doc.status, 'blocked');
     const problems = asArray(doc.problems, 'problems');
     assert.ok(problems.length > 0);
@@ -1569,7 +1577,8 @@ describe('validate', () => {
     assert.equal(validated.status, 2);
     assert.equal(publication.status, 2);
     assert.equal(validated.stdout, publication.stdout, 'the same blocked explanation');
-    assert.equal(validated.stderr, '');
+    assert.equal(validated.stderr, publication.stderr, 'the same diagnostics');
+    assert.match(validated.stderr, /^✖ error {2}The document is not valid SARIF 2\.1\.0 {2}\[sarif-schema-invalid\]\n/);
     assertNothingWritten(assessed);
   });
 
@@ -1588,21 +1597,21 @@ describe('validate', () => {
     const result = runPublish(world, ['validate', ...destinationFlags(world), '--format', 'json']);
     assert.equal(result.status, 1, result.stdout);
     const doc = json(result);
-    assert.deepEqual(Object.keys(doc), ['command', 'status', 'message']);
+    assert.deepEqual(Object.keys(doc), ['command', 'status', 'message', 'diagnostics']);
     assert.equal(doc.status, 'incomplete');
     assert.match(asString(doc.message), /\[redacted\]/);
     assert.match(asString(doc.message), /not a verdict/i);
     assertNothingWritten(world);
   });
 
-  test('a source-read failure in human form: exit 1 with the explanation on stdout', () => {
+  test('a source-read failure in human form: exit 1, what to do on stdout, the cause as a diagnostic on stderr', () => {
     const world = publishWorld();
     setAdapterConfig(world.remote.dir, { context: 'source-read-fails' });
     const result = runPublish(world, ['validate', ...destinationFlags(world)]);
     assert.equal(result.status, 1, result.stdout + result.stderr);
-    assert.match(result.stdout, /502/);
+    assert.doesNotMatch(result.stdout, /502/, 'the cause is rendered once, on stderr');
     assert.match(result.stdout, /not a verdict/i);
-    assert.equal(result.stderr, '');
+    assert.match(result.stderr, /^✖ error {2}Readiness could not be assessed {2}\[assessment-incomplete\]\n[\s\S]*502/);
     assertNothingWritten(world);
   });
 
@@ -1672,7 +1681,7 @@ describe('--submit: an explicitly submitted comment review (docs/submitted-revie
   test('publish --submit in JSON: the same document shape as a draft; exit 0', () => {
     const world = publishWorld();
     const doc = json(runPublish(world, ['publish', ...flags(world), '--submit', '--format', 'json']));
-    assert.deepEqual(Object.keys(doc), ['command', 'status', 'review', 'statePath', 'message']);
+    assert.deepEqual(Object.keys(doc), ['command', 'status', 'review', 'statePath', 'message', 'diagnostics']);
     assert.equal(doc.status, 'published');
     assert.match(asString(doc.message), /^## Review submitted\n/);
   });

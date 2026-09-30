@@ -151,8 +151,9 @@ describe('group-fixes edits the SARIF file in place', () => {
         { ref: '/runs/0/results/1', runIndex: 0, resultIndex: 1, tool: TOOL, changes: 1 },
       ],
       changes: 2,
+      diagnostics: [],
     });
-    assert.deepEqual(Object.keys(doc), ['command', 'status', 'sarif', 'group', 'extended', 'findings', 'changes']);
+    assert.deepEqual(Object.keys(doc), ['command', 'status', 'sarif', 'group', 'extended', 'findings', 'changes', 'diagnostics']);
     const expected = library.groupSarifFixes(before, { findings: selectors, group: 'retry-with-test' });
     assert.equal(expected.status, 'grouped');
     assert.equal(fs.readFileSync(file, 'utf8'), serialized(dig(expected, 'sarif')), 'the CLI writes what the library returns');
@@ -220,6 +221,7 @@ describe('group-fixes edits the SARIF file in place', () => {
         { ref: '/runs/0/results/1', runIndex: 0, resultIndex: 1, tool: TOOL, changes: 1 },
       ],
       changes: 2,
+      diagnostics: [],
     });
     assert.deepEqual(bytesOf(file), before);
     assert.equal(fs.readFileSync(output, 'utf8'), serialized(dig(library.groupSarifFixes(asRecord(readJson(file)), { findings: selectors, group: 'g' }), 'sarif')));
@@ -258,12 +260,21 @@ describe('group-fixes edits the SARIF file in place', () => {
     const doc = json(result);
     const expected = library.groupSarifFixes(asRecord(readJson(file)), { findings: selectors, group: 'g' });
     assert.equal(expected.status, 'refused');
-    assert.deepEqual(doc, { command: 'group-fixes', status: 'refused', sarif: { path: file, written: false }, problems: dig(expected, 'problems') });
+    assert.deepEqual(doc, {
+      command: 'group-fixes',
+      status: 'refused',
+      sarif: { path: file, written: false },
+      problems: dig(expected, 'problems'),
+      diagnostics: dig(expected, 'diagnostics'),
+    });
     assert.deepEqual(bytesOf(file), before);
 
     const human = run(['group-fixes', '--sarif', file, ...findingFlags(selectors), '--group', 'g']);
     assert.equal(human.status, 2);
-    assert.equal(human.stdout, `${asString(dig(expected, 'markdown'))}\n\n${file} was not changed.\n`);
+    // docs/diagnostics.md: what happened to the file on stdout; each problem as a diagnostic on stderr.
+    assert.equal(human.stdout, `${file} was not changed.\n`);
+    assert.match(human.stderr, /^✖ error {2}A grouped finding proposes no change {2}\[suggestion-group-member-without-change\]\n/);
+    assert.ok(human.stderr.endsWith('\n2 errors\n'), human.stderr);
     assert.deepEqual(bytesOf(file), before);
     assert.deepEqual(fs.readdirSync(dir), ['review.sarif']);
   });
@@ -369,6 +380,7 @@ describe('ungroup-fixes', () => {
         { ref: '/runs/0/results/0', runIndex: 0, resultIndex: 0, tool: TOOL, group: 'retry-with-test' },
         { ref: '/runs/0/results/1', runIndex: 0, resultIndex: 1, tool: TOOL, group: 'retry-with-test' },
       ],
+      diagnostics: [],
     });
     assert.equal(fs.readFileSync(file, 'utf8'), original);
     assert.deepEqual(fs.readdirSync(dir), ['review.sarif']);

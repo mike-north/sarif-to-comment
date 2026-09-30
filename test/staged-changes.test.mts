@@ -324,7 +324,7 @@ test('selected path: outcome, receipt and SARIF additions keep their field order
   });
   const outcome = await extract(repo, structuredClone(UPSTREAM));
   assert.equal(outcome.status, 'added', JSON.stringify(problemsOf(outcome)));
-  assert.deepEqual(Object.keys(outcome), ['status', 'sarif', 'receipt']);
+  assert.deepEqual(Object.keys(outcome), ['status', 'sarif', 'receipt', 'diagnostics']);
   assert.deepEqual(Object.keys(outcome.receipt), ['reviewedCommit', 'changes', 'boundRuns', 'addedRun', 'warnings']);
   assert.deepEqual(Object.keys(item(outcome.receipt.changes, 0)), ['path', 'operation', 'replacements']);
   assert.deepEqual(Object.keys(item(replacementsOf(item(outcome.receipt.changes, 0)), 0)), ['startLine', 'endLine', 'associated', 'explainedBy']);
@@ -343,7 +343,7 @@ test('a schema-invalid document is refused with fields in contract order', async
   const repo = fixture({ reviewed: { 'a.txt': 'a\n' }, staged: { 'a.txt': 'b\n' } });
   const outcome = await extract(repo, { version: '2.1.0', runs: [{ results: [] }] });
   assert.equal(outcome.status, 'invalid');
-  assert.deepEqual(Object.keys(outcome), ['status', 'problems', 'markdown']);
+  assert.deepEqual(Object.keys(outcome), ['status', 'problems', 'markdown', 'diagnostics']);
 });
 
 test('selected path output is accepted by the unchanged publisher preparation as two native suggestions', async () => {
@@ -848,6 +848,7 @@ test('no staged changes: the SARIF is returned unchanged with an empty receipt',
     status: 'added',
     sarif: input,
     receipt: { reviewedCommit: repo.reviewedCommit, changes: [], boundRuns: [], addedRun: null, warnings: [] },
+    diagnostics: [],
   });
   assert.notEqual(outcome.sarif, input, 'a fresh value, never the caller object');
 });

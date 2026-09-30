@@ -45,7 +45,8 @@ import { documentDigest, findingSelector, parseFindingSelector } from './finding
 import type { IParsedSelector } from './finding-selectors.cjs';
 import { canonicalJson, captureJson, isPlainObject, isSuggestionGroupName, validateSarif } from './sarif-common.cjs';
 import type { JsonValue } from './sarif-common.cjs';
-import type { IInvalidSarifOutcome, IProblem, ISarifLog } from './public-types.cjs';
+import { createProblem, diagnosticOf } from './diagnostics.cjs';
+import type { IDiagnostic, IInvalidSarifOutcome, IProblem, ISarifLog } from './public-types.cjs';
 import type { IStaleSarifSelectorOutcome } from './sarif-authoring.cjs';
 
 // ---------------------------------------------------------------------------
@@ -127,6 +128,8 @@ export interface IGroupedSarifFixesOutcome {
   readonly findings: readonly IGroupedFinding[];
   /** How many distinct changes the whole group now holds; identical changes count once. */
   readonly changes: number;
+  /** Always empty: grouping raises no warnings or notes. */
+  readonly diagnostics: readonly IDiagnostic[];
 }
 
 /**
@@ -143,6 +146,8 @@ export interface IRefusedSuggestionGroupOutcome {
   readonly problems: readonly IProblem[];
   /** The same explanation as Markdown. */
   readonly markdown: string;
+  /** The same problems as diagnostics. */
+  readonly diagnostics: readonly IDiagnostic[];
 }
 
 /**
@@ -186,6 +191,8 @@ export interface IUngroupedSarifFixesOutcome {
   readonly sarif: ISarifLog;
   /** The findings, in document order. */
   readonly findings: readonly IUngroupedFinding[];
+  /** Always empty: ungrouping raises no warnings or notes. */
+  readonly diagnostics: readonly IDiagnostic[];
 }
 
 /**
@@ -319,12 +326,18 @@ function checkOptions(options: unknown, operation: Operation): { readonly select
 
 /** A `stale` outcome for `selector`, pointing at the position it names. */
 function staleSelector(operation: Operation, selector: string, ref: string, message: string): IStaleSarifSelectorOutcome {
-  return { status: 'stale', selector, problems: [{ message, pointer: ref }], markdown: `${HEADINGS[operation]} ${message}` };
+  const problem = createProblem('finding-selector-stale', { message, pointer: ref });
+  return { status: 'stale', selector, problems: [problem], markdown: `${HEADINGS[operation]} ${message}`, diagnostics: [diagnosticOf(problem)] };
 }
 
 /** A `refused` outcome listing every problem. */
 function refusedOutcome(operation: Operation, problems: readonly IProblem[]): IRefusedSuggestionGroupOutcome {
-  return { status: 'refused', problems, markdown: `${HEADINGS[operation]} nothing was changed.\n\n${problems.map((p) => `- ${p.message}`).join('\n')}` };
+  return {
+    status: 'refused',
+    problems,
+    markdown: `${HEADINGS[operation]} nothing was changed.\n\n${problems.map((p) => `- ${p.message}`).join('\n')}`,
+    diagnostics: problems.map(diagnosticOf),
+  };
 }
 
 /**
@@ -505,20 +518,20 @@ function groupSarifFixesWithUntypedInput(sarif: unknown, options: unknown): Grou
     const owned = ownedOf(member.result);
     const existing = declaredGroup(member.result);
     if (owned.state === 'invalid') {
-      problems.push({ message: `\`${member.ref}\` has a \`properties.sarifToComment\` that is not an object, so its group cannot be recorded.`, pointer: member.ref });
+      problems.push(createProblem('owned-property-invalid', { message: `\`${member.ref}\` has a \`properties.sarifToComment\` that is not an object, so its group cannot be recorded.`, pointer: member.ref }));
     } else if (existing !== null && existing.value !== group) {
-      problems.push({
+      problems.push(createProblem('finding-already-grouped', {
         message: `\`${member.ref}\` is already in suggestion group ${JSON.stringify(existing.value)}; a finding belongs to at most one group. Ungroup it first to move it.`,
         pointer: member.ref,
-      });
+      }));
     }
     const own = changeKeysOf(member.result, member.runIndex);
     counts.push(own.length);
     if (own.length === 0) {
-      problems.push({
+      problems.push(createProblem('suggestion-group-member-without-change', {
         message: `\`${member.ref}\` proposes no change: it has no fix and no proposed file operation, and a group joins changes. Leave it out of the group, or give it its change first.`,
         pointer: member.ref,
-      });
+      }));
     }
     for (const key of own) keys.add(key);
   }
@@ -532,10 +545,10 @@ function groupSarifFixesWithUntypedInput(sarif: unknown, options: unknown): Grou
     for (const key of changeKeysOf(result, runIndex)) keys.add(key);
   }
   if (keys.size < 2) {
-    problems.push({
+    problems.push(createProblem('suggestion-group-single-change', {
       message: `The findings hold ${fewChanges(keys.size)}; a group needs at least two distinct changes to accept together (identical changes count once).`,
       pointer: firstMember,
-    });
+    }));
   }
   if (problems.length > 0) return refusedOutcome(operation, problems);
 
@@ -553,6 +566,7 @@ function groupSarifFixesWithUntypedInput(sarif: unknown, options: unknown): Grou
     extended,
     findings: selection.findings.map(({ ref, runIndex, resultIndex, tool }, i) => ({ ref, runIndex, resultIndex, tool, changes: counts[i] ?? 0 })),
     changes: keys.size,
+    diagnostics: [],
   };
 }
 
@@ -607,7 +621,7 @@ function ungroupSarifFixesWithUntypedInput(sarif: unknown, options: unknown): Un
   for (const member of selection.findings) {
     const declared = declaredGroup(member.result);
     if (declared === null) {
-      problems.push({ message: `\`${member.ref}\` is not in a suggestion group, so there is nothing to ungroup.`, pointer: member.ref });
+      problems.push(createProblem('finding-not-grouped', { message: `\`${member.ref}\` is not in a suggestion group, so there is nothing to ungroup.`, pointer: member.ref }));
       groups.push('');
       continue;
     }
@@ -621,11 +635,11 @@ function ungroupSarifFixesWithUntypedInput(sarif: unknown, options: unknown): Un
     if (rest.length === 0) continue;
     const keys = new Set(rest.flatMap(({ result, runIndex }) => (isEditable(result) ? changeKeysOf(result, runIndex) : [])));
     if (keys.size >= 2) continue;
-    problems.push({
+    problems.push(createProblem('ungroup-leaves-single-change', {
       message: `Suggestion group ${JSON.stringify(name)} would keep ${fewChanges(keys.size)} (${rest.map(({ ref }) => `\`${ref}\``).join(', ')}), and a group needs at least two. `
         + `To dissolve the group, ungroup its other findings too: ${rest.map(({ ref }) => `\`${findingSelector(ref, selection.digest)}\``).join(', ')}.`,
       pointer: rest[0]?.ref,
-    });
+    }));
   }
   if (problems.length > 0) return refusedOutcome(operation, problems);
 
@@ -642,6 +656,7 @@ function ungroupSarifFixesWithUntypedInput(sarif: unknown, options: unknown): Un
     status: 'ungrouped',
     sarif: selection.log,
     findings: selection.findings.map(({ ref, runIndex, resultIndex, tool }, i) => ({ ref, runIndex, resultIndex, tool, group: groups[i] ?? '' })),
+    diagnostics: [],
   };
 }
 

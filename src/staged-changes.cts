@@ -30,8 +30,8 @@
  *   - Strict: any unsupported meaningful change fails the whole operation
  *     with actionable problems and no SARIF; nothing is silently omitted.
  *
- * Outcomes: { status: 'added', sarif, receipt } | { status: 'invalid' |
- * 'failed', problems, markdown }. Malformed input rejects with TypeError;
+ * Outcomes: { status: 'added', sarif, receipt, diagnostics } | { status:
+ * 'invalid' | 'failed', problems, markdown, diagnostics }. Malformed input rejects with TypeError;
  * environment failures (Git, repository, missing commit) reject with Error.
  */
 
@@ -66,7 +66,8 @@ import type {
 } from './sarif-common.cjs';
 import { MODE, blobSizes, diffHunks, openRepository, readBlobs, readIndexSnapshot, readTree } from './staged-git.cjs';
 import type { IDiffHunk, IGitRepository, IIndexEntry, IIndexSnapshot, ITreeEntry } from './staged-git.cjs';
-import type { IGitHubRepository, IInvalidSarifOutcome, IProblem, ISarifLog } from './public-types.cjs';
+import { createProblem, diagnosticOf } from './diagnostics.cjs';
+import type { IDiagnostic, IGitHubRepository, IInvalidSarifOutcome, IProblem, ISarifLog } from './public-types.cjs';
 
 // ---------------------------------------------------------------------------
 // Operation input and outcomes
@@ -178,6 +179,8 @@ export interface IAddedStagedChangesOutcome {
   readonly sarif: ISarifLog;
   /** What was done. */
   readonly receipt: IStagedChangesReceipt;
+  /** The receipt's warnings as diagnostics. */
+  readonly diagnostics: readonly IDiagnostic[];
 }
 
 /**
@@ -195,6 +198,8 @@ export interface IFailedStagedChangesOutcome {
   readonly problems: readonly IProblem[];
   /** The same problems as a human-readable explanation. */
   readonly markdown: string;
+  /** The same problems as diagnostics. */
+  readonly diagnostics: readonly IDiagnostic[];
 }
 
 /**
@@ -924,6 +929,7 @@ function failedOutcome(problems: readonly IProblem[]): IFailedStagedChangesOutco
     status: 'failed',
     problems,
     markdown: problemsMarkdown('Staged changes could not be added; nothing was produced.', problems),
+    diagnostics: problems.map(diagnosticOf),
   };
 }
 
@@ -953,7 +959,7 @@ function modeText(mode: number): string {
  * path order, and problems are the strict refusals of §4.1-§4.2.
  */
 function compareSnapshots(tree: ReadonlyMap<string, ITreeEntry>, index: IIndexSnapshot): ISnapshotComparison {
-  const problems: IProblem[] = [...index.problems];
+  const problems: IProblem[] = index.problems.map((p) => createProblem('staged-split-index', p));
   const staged = new Map<string, IIndexEntry>();
   const conflicted = new Set<string>();
   for (const entry of index.entries) {
@@ -962,16 +968,16 @@ function compareSnapshots(tree: ReadonlyMap<string, ITreeEntry>, index: IIndexSn
     if (entry.stage > 0) {
       if (!conflicted.has(key)) {
         conflicted.add(key);
-        problems.push({ path: shown, message: 'has unmerged (conflicted) index entries. Resolve the conflict and stage the intended content, then retry.' });
+        problems.push(createProblem('staged-conflict', { path: shown, message: 'has unmerged (conflicted) index entries. Resolve the conflict and stage the intended content, then retry.' }));
       }
       continue;
     }
     if (entry.intentToAdd) {
-      problems.push({ path: shown, message: 'is intent-to-add (`git add -N`): its content is not staged. Stage the intended content with `git add`, or remove the intent-to-add entry, then retry.' });
+      problems.push(createProblem('staged-intent-to-add', { path: shown, message: 'is intent-to-add (`git add -N`): its content is not staged. Stage the intended content with `git add`, or remove the intent-to-add entry, then retry.' }));
       continue;
     }
     if (entry.mode === MODE.DIRECTORY) {
-      problems.push({ path: shown, message: 'is a sparse-index directory entry, whose files are not listed in the index. Disable the sparse index (`git sparse-checkout disable` or `index.sparse=false`) and retry.' });
+      problems.push(createProblem('staged-sparse-directory', { path: shown, message: 'is a sparse-index directory entry, whose files are not listed in the index. Disable the sparse index (`git sparse-checkout disable` or `index.sparse=false`) and retry.' }));
       continue;
     }
     staged.set(key, entry);
@@ -986,21 +992,21 @@ function compareSnapshots(tree: ReadonlyMap<string, ITreeEntry>, index: IIndexSn
     const bytes = present(reviewed || next, 'the entry of a changed path').pathBytes;
     const decoded = decodeText(bytes);
     if (decoded === null) {
-      problems.push({ path: bytes.toString('latin1'), message: 'is not a valid UTF-8 path, which SARIF URIs cannot represent faithfully. Rename it or unstage it, then retry.' });
+      problems.push(createProblem('staged-path-not-utf8', { path: bytes.toString('latin1'), message: 'is not a valid UTF-8 path, which SARIF URIs cannot represent faithfully. Rename it or unstage it, then retry.' }));
       continue;
     }
     for (const [side, entry] of [['reviewed', reviewed], ['staged', next]] as const) {
       if (entry && !isRegular(entry.mode)) {
         const kind = MODE_NAMES.get(entry.mode) || `mode ${modeText(entry.mode)} entry`;
-        problems.push({ path: decoded, message: `is a ${kind} in the ${side === 'reviewed' ? 'reviewed commit' : 'index'}. Only regular files can be proposed; unstage this change and retry.` });
+        problems.push(createProblem('staged-not-regular-file', { path: decoded, message: `is a ${kind} in the ${side === 'reviewed' ? 'reviewed commit' : 'index'}. Only regular files can be proposed; unstage this change and retry.` }));
       }
     }
     if ((reviewed && !isRegular(reviewed.mode)) || (next && !isRegular(next.mode))) continue;
     if (reviewed && next && reviewed.mode !== next.mode) {
-      problems.push({
+      problems.push(createProblem('staged-mode-change', {
         path: decoded,
         message: `changes file mode from ${modeText(reviewed.mode)} to ${modeText(next.mode)}, which a SARIF proposal cannot represent. Unstage the mode change (\`git update-index --chmod\`) and retry.`,
-      });
+      }));
       continue;
     }
     // The operation follows from which snapshots hold the path: both (edit),
@@ -1021,7 +1027,7 @@ function compareSnapshots(tree: ReadonlyMap<string, ITreeEntry>, index: IIndexSn
  * as text (an over-limit blob is never read, so only its size is known).
  */
 function refuseOversize(change: { readonly path: string }, length: number, side: string, problems: IProblem[]): null {
-  problems.push({ path: change.path, message: `is ${String(length)} bytes in the ${side}, over the 1,000,000-byte source limit. Unstage it or split the change, then retry.` });
+  problems.push(createProblem('staged-file-too-large', { path: change.path, message: `is ${String(length)} bytes in the ${side}, over the 1,000,000-byte source limit. Unstage it or split the change, then retry.` }));
   return null;
 }
 
@@ -1029,12 +1035,12 @@ function refuseOversize(change: { readonly path: string }, length: number, side:
 function textFor(change: { readonly path: string }, bytes: Buffer, side: string, problems: IProblem[]): string | null {
   if (bytes.length > MAX_SOURCE_BYTES) return refuseOversize(change, bytes.length, side, problems);
   if (bytes.includes(0)) {
-    problems.push({ path: change.path, message: `is binary (it contains NUL bytes) in the ${side}; binary changes cannot be proposed as text. Unstage it and retry.` });
+    problems.push(createProblem('staged-binary', { path: change.path, message: `is binary (it contains NUL bytes) in the ${side}; binary changes cannot be proposed as text. Unstage it and retry.` }));
     return null;
   }
   const text = decodeText(bytes);
   if (text === null) {
-    problems.push({ path: change.path, message: `is not valid UTF-8 in the ${side}; only UTF-8 text changes can be proposed. Unstage it and retry.` });
+    problems.push(createProblem('staged-content-not-utf8', { path: change.path, message: `is not valid UTF-8 in the ${side}; only UTF-8 text changes can be proposed. Unstage it and retry.` }));
   }
   return text;
 }
@@ -1105,7 +1111,7 @@ async function addStagedChangesToSarifWithUntypedInput(input: unknown): Promise<
     const reviewedText = present(change.reviewedText, 'the reviewed text of an edited file');
     const stagedText = present(change.stagedText, 'the staged text of an edited file');
     if (reviewedText.startsWith(BOM) !== stagedText.startsWith(BOM)) {
-      problems.push({ path: change.path, message: `${reviewedText.startsWith(BOM) ? 'loses' : 'gains'} a leading byte-order mark, which SARIF coordinates cannot represent (they exclude it). Stage the file with its original byte-order mark state and retry.` });
+      problems.push(createProblem('staged-bom-change', { path: change.path, message: `${reviewedText.startsWith(BOM) ? 'loses' : 'gains'} a leading byte-order mark, which SARIF coordinates cannot represent (they exclude it). Stage the file with its original byte-order mark state and retry.` }));
       continue;
     }
     change.replacements = replacementsFor(reviewedText, stagedText, await diffHunks(repo, change.reviewed.oid, change.staged.oid));
@@ -1176,7 +1182,7 @@ function incorporate(captured: ICapturedInput, sarif: IStagedSarifLog, changes: 
       if (physical) {
         const resolved = resolveArtifactPath(physical.artifactLocation, run, { sourceRootUri, repository });
         if (resolved.error) {
-          problems.push({ pointer, message: `its location cannot be resolved to a repository path (${resolved.error[1]}), so its association with staged changes cannot be decided. Use a repository-relative URI or pass the producer's source root, then retry.` });
+          problems.push(createProblem('finding-location-unresolved', { pointer, message: `its location cannot be resolved to a repository path (${resolved.error[1]}), so its association with staged changes cannot be decided. Use a repository-relative URI or pass the producer's source root, then retry.` }));
         } else {
           const change = byPath.get(resolved.path);
           if (change !== undefined) findings.push(locatedFinding(result, physical, run, runIndex, pointer, change, problems));
@@ -1237,6 +1243,7 @@ function incorporate(captured: ICapturedInput, sarif: IStagedSarifLog, changes: 
     status: 'added',
     sarif,
     receipt: { reviewedCommit, changes: receiptChanges, boundRuns, addedRun, warnings },
+    diagnostics: warnings.map(diagnosticOf),
   };
 }
 
@@ -1261,18 +1268,18 @@ function locatedFinding(
   const base: ILocatedFinding = { result, run, runIndex, pointer, change, lines: null };
   if (region === undefined) return base;
   if (nonDefaultNewlines(run)) {
-    problems.push({ pointer, path: change.path, message: 'its run declares newline sequences other than CRLF and LF, so its lines cannot be interpreted. Remove the declaration or the finding, then retry.' });
+    problems.push(createProblem('newline-sequences-unsupported', { pointer, path: change.path, message: 'its run declares newline sequences other than CRLF and LF, so its lines cannot be interpreted. Remove the declaration or the finding, then retry.' }));
     return null;
   }
   const text = change.operation === 'create' ? change.stagedText : change.reviewedText;
   const snapshot = change.operation === 'create' ? 'the proposed (staged) file' : 'the reviewed file';
   if (text === null || text === undefined) {
-    problems.push({ pointer, path: change.path, message: `its region cannot be checked because ${snapshot} is not UTF-8 text within the size limit. Remove the region or the finding, then retry.` });
+    problems.push(createProblem('finding-region-unreadable', { pointer, path: change.path, message: `its region cannot be checked because ${snapshot} is not UTF-8 text within the size limit. Remove the region or the finding, then retry.` }));
     return null;
   }
   const lines = regionLines(text, region, run.columnKind);
   if (lines.error !== undefined) {
-    problems.push({ pointer, path: change.path, message: `its region does not denote text in ${snapshot}: ${lines.error}. Correct the finding's location, then retry.` });
+    problems.push(createProblem('source-range-invalid', { pointer, path: change.path, message: `its region does not denote text in ${snapshot}: ${lines.error}. Correct the finding's location, then retry.` }));
     return null;
   }
   return { ...base, lines: [lines.startLine, lines.endLine] };
@@ -1293,7 +1300,7 @@ function collectSupplied(
     (Array.isArray(fix.artifactChanges) ? fix.artifactChanges : []).forEach((artifactChange) => {
       const resolved = resolveArtifactPath(artifactChange.artifactLocation || {}, run, options);
       if (resolved.error) {
-        problems.push({ pointer: `${pointer}/fixes/${String(fixIndex)}`, message: `a supplied fix's file cannot be resolved (${resolved.error[1]}), so it cannot be compared with staged changes. Use a repository-relative URI or pass the producer's source root, then retry.` });
+        problems.push(createProblem('supplied-fix-location-unresolved', { pointer: `${pointer}/fixes/${String(fixIndex)}`, message: `a supplied fix's file cannot be resolved (${resolved.error[1]}), so it cannot be compared with staged changes. Use a repository-relative URI or pass the producer's source root, then retry.` }));
         return;
       }
       const change = byPath.get(resolved.path);
@@ -1349,7 +1356,7 @@ function compareSuppliedFixes(change: IEditChange, suppliedEdits: readonly ISupp
       const content: ISarifArtifactContent = isViewObject(r.insertedContent) ? r.insertedContent : {};
       const span = regionSpan(text, r.deletedRegion, supplied.run.columnKind);
       if (span.error !== undefined) {
-        problems.push({ pointer: supplied.pointer, path: change.path, message: `a supplied fix cannot be located in the reviewed file (${span.error}), so it cannot be compared with the staged change. Correct or remove it, then retry.` });
+        problems.push(createProblem('supplied-fix-unlocatable', { pointer: supplied.pointer, path: change.path, message: `a supplied fix cannot be located in the reviewed file (${span.error}), so it cannot be compared with the staged change. Correct or remove it, then retry.` }));
         unusable = true;
         break;
       }
@@ -1363,7 +1370,7 @@ function compareSuppliedFixes(change: IEditChange, suppliedEdits: readonly ISupp
       const own = component.supplied.map((i) => itemAt(pieces, i));
       const where = touched.map((x) => `${String(x.lines[0])}-${String(x.lines[1])}`).join(', ');
       if (own.some((p) => p.binary)) {
-        problems.push({ pointer: supplied.pointer, path: change.path, message: `a supplied fix inserts binary content where the staged change to lines ${where} edits text, so its effect cannot be established. Correct or remove it, then retry.` });
+        problems.push(createProblem('supplied-fix-binary', { pointer: supplied.pointer, path: change.path, message: `a supplied fix inserts binary content where the staged change to lines ${where} edits text, so its effect cannot be established. Correct or remove it, then retry.` }));
         continue;
       }
       const ordered = [...own].sort((a, b) => a.start - b.start || a.end - b.end);
@@ -1373,13 +1380,13 @@ function compareSuppliedFixes(change: IEditChange, suppliedEdits: readonly ISupp
       });
       if (clash !== -1) {
         const overlap = itemAt(ordered, clash).start < itemAt(ordered, clash - 1).end;
-        problems.push({
+        problems.push(createProblem('fix-replacements-overlap', {
           pointer: supplied.pointer,
           path: change.path,
           message: overlap
             ? `a supplied fix has replacements that overlap in the reviewed file near the staged change to lines ${where}, so their combined effect is not defined. Correct or remove it, then retry.`
             : `a supplied fix has two replacements at the same position near the staged change to lines ${where}, so their relative order is not defined. Correct or remove it, then retry.`,
-        });
+        }));
         continue;
       }
       if (applySpans(text, own) === applySpans(text, touched)) {
@@ -1389,11 +1396,11 @@ function compareSuppliedFixes(change: IEditChange, suppliedEdits: readonly ISupp
       }
     }
     if (differing.length > 0) {
-      problems.push({
+      problems.push(createProblem('staged-fix-conflict', {
         pointer: supplied.pointer,
         path: change.path,
         message: `a supplied fix conflicts with the staged change to lines ${differing.join(' and ')}: applied to the reviewed file, its combined replacements have a different effect than the staged content. No winner is chosen; reconcile the fix or the staged content, then retry.`,
-      });
+      }));
     }
   }
   return explained;
@@ -1475,14 +1482,14 @@ function incorporateEdit(
         const contained = x.changedLines[0] <= f.lines[0] && f.lines[1] <= x.changedLines[1];
         if (!contained) {
           if (overlaps(f.lines, x.changedLines)) {
-            warnings.push({ pointer: f.pointer, path: change.path, message: `This finding (lines ${String(f.lines[0])}-${String(f.lines[1])}) partially overlaps the staged change to lines ${String(x.changedLines[0])}-${String(x.changedLines[1])} and was not associated; neither the change nor the finding was enlarged.` });
+            warnings.push(createProblem('finding-partially-overlaps-change', { pointer: f.pointer, path: change.path, message: `This finding (lines ${String(f.lines[0])}-${String(f.lines[1])}) partially overlaps the staged change to lines ${String(x.changedLines[0])}-${String(x.changedLines[1])} and was not associated; neither the change nor the finding was enlarged.` }));
           }
           continue;
         }
         if (hasFixes(f.result)) continue;
         const region = x.region(f.run.columnKind);
         if (!region) {
-          warnings.push({ pointer: f.pointer, path: change.path, message: 'This finding was not associated because its run declares no columnKind and the staged change needs an end-of-file column that differs between UTF-16 code units and code points. The change is carried by a separate result in a run with an explicit columnKind.' });
+          warnings.push(createProblem('finding-association-needs-column-kind', { pointer: f.pointer, path: change.path, message: 'This finding was not associated because its run declares no columnKind and the staged change needs an end-of-file column that differs between UTF-16 code units and code points. The change is carried by a separate result in a run with an explicit columnKind.' }));
           continue;
         }
         f.result.fixes = [fixFor(change.path, region, x.insertedText)];
@@ -1632,13 +1639,13 @@ function incorporateFileOperation(
   problems: IProblem[],
 ): IStagedChangeReceipt {
   for (const s of suppliedEdits.filter((e) => e.change === change)) {
-    problems.push({ pointer: s.pointer, path: change.path, message: `a supplied text fix edits a file the index ${change.operation === 'create' ? 'creates' : 'deletes'}; the proposals conflict. Reconcile them, then retry.` });
+    problems.push(createProblem('staged-proposal-conflict', { pointer: s.pointer, path: change.path, message: `a supplied text fix edits a file the index ${change.operation === 'create' ? 'creates' : 'deletes'}; the proposals conflict. Reconcile them, then retry.` }));
   }
   const equal: ISuppliedOperation[] = [];
   for (const s of suppliedOps.filter((o) => o.change === change)) {
     const mismatch = proposalMismatch(s, change);
     if (mismatch === null) equal.push(s);
-    else problems.push({ pointer: s.pointer, path: change.path, message: `a supplied file proposal conflicts with the staged ${change.operation}: ${mismatch}. No winner is chosen; reconcile them, then retry.` });
+    else problems.push(createProblem('staged-proposal-conflict', { pointer: s.pointer, path: change.path, message: `a supplied file proposal conflicts with the staged ${change.operation}: ${mismatch}. No winner is chosen; reconcile them, then retry.` }));
   }
   const entry: IFileReceiptDraft = { path: change.path, operation: change.operation, associated: [], explainedBy: 'neutral' };
   if (equal.length > 0) {

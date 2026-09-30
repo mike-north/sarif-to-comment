@@ -41,6 +41,27 @@ Description
 </th></tr></thead>
 <tbody><tr><td>
 
+[diagnostics](./sarif-to-comment.ireadyassessment.diagnostics.md)
+
+
+</td><td>
+
+`readonly`
+
+
+</td><td>
+
+readonly [IDiagnostic](./sarif-to-comment.idiagnostic.md)<!-- -->\[\]
+
+
+</td><td>
+
+Preparation's warnings, if any; a ready assessment has no errors.
+
+
+</td></tr>
+<tr><td>
+
 [markdown](./sarif-to-comment.ireadyassessment.markdown.md)
 
 

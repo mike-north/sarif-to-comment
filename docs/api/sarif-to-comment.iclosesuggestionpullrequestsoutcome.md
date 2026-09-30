@@ -37,6 +37,27 @@ Description
 </th></tr></thead>
 <tbody><tr><td>
 
+[diagnostics](./sarif-to-comment.iclosesuggestionpullrequestsoutcome.diagnostics.md)
+
+
+</td><td>
+
+`readonly`
+
+
+</td><td>
+
+readonly [IDiagnostic](./sarif-to-comment.idiagnostic.md)<!-- -->\[\]
+
+
+</td><td>
+
+What was left undone or untouched: a failed read or close (error), an original that could not be verified or a close this account may not make (warning), and a pull request that does not follow the convention (note).
+
+
+</td></tr>
+<tr><td>
+
 [dryRun](./sarif-to-comment.iclosesuggestionpullrequestsoutcome.dryrun.md)
 
 

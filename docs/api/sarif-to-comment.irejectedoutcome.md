@@ -37,6 +37,27 @@ Description
 </th></tr></thead>
 <tbody><tr><td>
 
+[diagnostics](./sarif-to-comment.irejectedoutcome.diagnostics.md)
+
+
+</td><td>
+
+`readonly`
+
+
+</td><td>
+
+readonly [IDiagnostic](./sarif-to-comment.idiagnostic.md)<!-- -->\[\]
+
+
+</td><td>
+
+A `review-refused` or `suggestion-pr-step-refused` error, and any note about the branch.
+
+
+</td></tr>
+<tr><td>
+
 [markdown](./sarif-to-comment.irejectedoutcome.markdown.md)
 
 

@@ -157,7 +157,7 @@ function assertReady(outcome: PrepareReviewOutcome): asserts outcome is IReadyOu
 
 function assertBlocked(outcome: PrepareReviewOutcome, expected: readonly (readonly [code: string, pointer: string | undefined])[]): asserts outcome is IBlockedOutcome {
   if (outcome.status !== 'blocked') throw new assert.AssertionError({ message: `expected blocked, got ready: ${JSON.stringify(outcome.review)}` });
-  assert.deepEqual(outcome.diagnostics.map((d) => [d.code, d.pointer]), expected.map(([code, pointer]) => [code, pointer]), outcome.markdown);
+  assert.deepEqual(outcome.diagnostics.map((d) => [d.code, d.location?.pointer]), expected.map(([code, pointer]) => [code, pointer]), outcome.markdown);
   for (const d of outcome.diagnostics) assert.ok(outcome.markdown.includes(d.message), 'every problem is in the explanation');
 }
 

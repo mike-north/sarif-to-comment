@@ -26,6 +26,9 @@ export type CloseSuggestionPullRequestsStatus = 'complete' | 'permission-limited
 export function createSarifDocument(options?: ICreateSarifDocumentOptions): ISarifLog;
 
 // @public
+export type DiagnosticSeverity = 'error' | 'warning' | 'note';
+
+// @public
 export function groupSarifFixes(sarif: object, options: IGroupSarifFixesOptions): GroupSarifFixesOutcome;
 
 // @public
@@ -41,6 +44,7 @@ export interface IAddedFinding {
 
 // @public
 export interface IAddedSarifCommentOutcome {
+    readonly diagnostics: readonly IDiagnostic[];
     readonly finding: IAddedFinding;
     readonly sarif: ISarifLog;
     readonly status: 'added';
@@ -48,6 +52,7 @@ export interface IAddedSarifCommentOutcome {
 
 // @public
 export interface IAddedStagedChangesOutcome {
+    readonly diagnostics: readonly IDiagnostic[];
     readonly receipt: IStagedChangesReceipt;
     readonly sarif: ISarifLog;
     readonly status: 'added';
@@ -64,6 +69,7 @@ export interface IAddStagedChangesInput {
 
 // @public
 export interface IBlockedAssessment {
+    readonly diagnostics: readonly IDiagnostic[];
     readonly markdown: string;
     readonly problems: readonly IProblem[];
     readonly status: 'blocked';
@@ -71,6 +77,7 @@ export interface IBlockedAssessment {
 
 // @public
 export interface IBlockedOutcome {
+    readonly diagnostics: readonly IDiagnostic[];
     readonly markdown: string;
     readonly status: 'blocked';
 }
@@ -95,6 +102,7 @@ export interface ICloseSuggestionPullRequestsInput {
 
 // @public
 export interface ICloseSuggestionPullRequestsOutcome {
+    readonly diagnostics: readonly IDiagnostic[];
     readonly dryRun: boolean;
     readonly markdown: string;
     readonly originals: readonly IOriginalPullRequest[];
@@ -109,7 +117,27 @@ export interface ICreateSarifDocumentOptions {
 }
 
 // @public
+export interface IDiagnostic {
+    readonly code: string;
+    readonly location?: IDiagnosticLocation;
+    readonly message: string;
+    readonly remedies?: readonly string[];
+    readonly severity: DiagnosticSeverity;
+    readonly subject?: string;
+    readonly title: string;
+}
+
+// @public
+export interface IDiagnosticLocation {
+    readonly endLine?: number;
+    readonly path?: string;
+    readonly pointer?: string;
+    readonly startLine?: number;
+}
+
+// @public
 export interface IFailedStagedChangesOutcome {
+    readonly diagnostics: readonly IDiagnostic[];
     readonly markdown: string;
     readonly problems: readonly IProblem[];
     readonly status: 'failed';
@@ -133,6 +161,7 @@ export interface IGroupedFinding {
 // @public
 export interface IGroupedSarifFixesOutcome {
     readonly changes: number;
+    readonly diagnostics: readonly IDiagnostic[];
     readonly extended: boolean;
     readonly findings: readonly IGroupedFinding[];
     readonly group: string;
@@ -148,12 +177,14 @@ export interface IGroupSarifFixesOptions {
 
 // @public
 export interface IIncompleteAssessment {
+    readonly diagnostics: readonly IDiagnostic[];
     readonly markdown: string;
     readonly status: 'incomplete';
 }
 
 // @public
 export interface IInspectedOutcome {
+    readonly diagnostics: readonly IDiagnostic[];
     readonly status: 'inspected';
     readonly view: ISarifInspection;
 }
@@ -168,7 +199,7 @@ export interface IInspectionArtifactChange {
 }
 
 // @public
-export interface IInspectionDiagnostic {
+export interface IInspectionDiagnostic extends IDiagnostic {
     readonly message: string;
     readonly pointer: string;
     readonly severity: 'warning';
@@ -295,6 +326,7 @@ export interface IInspectSarifOptions {
 
 // @public
 export interface IInvalidSarifOutcome {
+    readonly diagnostics: readonly IDiagnostic[];
     readonly markdown: string;
     readonly problems: readonly IProblem[];
     readonly status: 'invalid';
@@ -321,7 +353,7 @@ export interface IOriginalPullRequest {
 }
 
 // @public
-export interface IProblem {
+export interface IProblem extends IDiagnostic {
     readonly message: string;
     readonly path?: string | undefined;
     readonly pointer?: string | undefined;
@@ -329,6 +361,7 @@ export interface IProblem {
 
 // @public
 export interface IPublishedOutcome {
+    readonly diagnostics: readonly IDiagnostic[];
     readonly markdown: string;
     readonly review: IPublishedReview;
     readonly statePath: string;
@@ -379,12 +412,14 @@ export interface IPullRequestDestination {
 
 // @public
 export interface IReadyAssessment {
+    readonly diagnostics: readonly IDiagnostic[];
     readonly markdown: string;
     readonly status: 'ready';
 }
 
 // @public
 export interface IRefusedSuggestionGroupOutcome {
+    readonly diagnostics: readonly IDiagnostic[];
     readonly markdown: string;
     readonly problems: readonly IProblem[];
     readonly status: 'refused';
@@ -392,6 +427,7 @@ export interface IRefusedSuggestionGroupOutcome {
 
 // @public
 export interface IRejectedOutcome {
+    readonly diagnostics: readonly IDiagnostic[];
     readonly markdown: string;
     readonly statePath: string;
     readonly status: 'rejected';
@@ -409,6 +445,7 @@ export interface IRemovedFinding {
 
 // @public
 export interface IRemovedSarifCommentOutcome {
+    readonly diagnostics: readonly IDiagnostic[];
     readonly finding: IRemovedFinding;
     readonly sarif: ISarifLog;
     readonly status: 'removed';
@@ -495,6 +532,7 @@ export interface IStagedReplacementReceipt {
 
 // @public
 export interface IStaleSarifSelectorOutcome {
+    readonly diagnostics: readonly IDiagnostic[];
     readonly markdown: string;
     readonly problems: readonly IProblem[];
     readonly selector: string;
@@ -503,6 +541,7 @@ export interface IStaleSarifSelectorOutcome {
 
 // @public
 export interface IUncertainOutcome {
+    readonly diagnostics: readonly IDiagnostic[];
     readonly markdown: string;
     readonly statePath: string;
     readonly status: 'uncertain';
@@ -519,6 +558,7 @@ export interface IUngroupedFinding {
 
 // @public
 export interface IUngroupedSarifFixesOutcome {
+    readonly diagnostics: readonly IDiagnostic[];
     readonly findings: readonly IUngroupedFinding[];
     readonly sarif: ISarifLog;
     readonly status: 'ungrouped';

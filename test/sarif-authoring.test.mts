@@ -140,18 +140,18 @@ describe('authoring outcome field order', () => {
   // caller serializing the outcome see this order.
   test('an added comment and its finding', () => {
     const outcome = addSarifComment(createSarifDocument(), { file: 'a.js', line: 1, message: 'x' });
-    assert.deepStrictEqual(Object.keys(outcome), ['status', 'sarif', 'finding']);
+    assert.deepStrictEqual(Object.keys(outcome), ['status', 'sarif', 'finding', 'diagnostics']);
     assert.deepStrictEqual(Object.keys(added(outcome).finding), ['ref', 'runIndex', 'resultIndex', 'tool']);
   });
 
   test('both refusals: schema-invalid SARIF and a document without runs', () => {
     const invalid = addSarifComment({ version: '2.1.0', runs: [{ results: [] }] }, { file: 'a.js', line: 1, message: 'x' });
     assert.equal(invalid.status, 'invalid');
-    assert.deepStrictEqual(Object.keys(invalid), ['status', 'problems', 'markdown']);
+    assert.deepStrictEqual(Object.keys(invalid), ['status', 'problems', 'markdown', 'diagnostics']);
     const empty = addSarifComment({ version: '2.1.0', runs: [] }, { file: 'a.js', line: 1, message: 'x' });
     assert.equal(empty.status, 'invalid');
-    assert.deepStrictEqual(Object.keys(empty), ['status', 'problems', 'markdown']);
-    assert.deepStrictEqual(Object.keys(asRecord(empty.problems[0])), ['message', 'pointer']);
+    assert.deepStrictEqual(Object.keys(empty), ['status', 'problems', 'markdown', 'diagnostics']);
+    assert.deepStrictEqual(Object.keys(asRecord(empty.problems[0])), ['message', 'pointer', 'severity', 'code', 'title', 'location', 'remedies']);
   });
 });
 

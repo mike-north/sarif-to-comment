@@ -29,6 +29,10 @@
  *   requests publication created once their original pull request has merged
  *   or closed.
  *
+ * Every outcome carries `diagnostics`: its errors, warnings and notes as
+ * {@link IDiagnostic} values with stable codes, listed in the package's
+ * `docs/diagnostics.md`.
+ *
  * Authoring is optional: SARIF from any producer can be inspected, extended
  * and published directly, and no operation depends on how a document was
  * made. There is no builder, session or private format; each operation that
@@ -87,7 +91,16 @@ export type {
   ICloseSuggestionPullRequestsOutcome,
 } from './close-suggestion-pull-requests.cjs';
 
-export type { ISarifLog, IProblem, IInvalidSarifOutcome, IGitHubRepository, ISarifSourceBinding } from './public-types.cjs';
+export type {
+  ISarifLog,
+  IProblem,
+  IInvalidSarifOutcome,
+  IGitHubRepository,
+  ISarifSourceBinding,
+  DiagnosticSeverity,
+  IDiagnostic,
+  IDiagnosticLocation,
+} from './public-types.cjs';
 
 export { createSarifDocument, addSarifComment, removeSarifComment } from './sarif-authoring.cjs';
 export type {

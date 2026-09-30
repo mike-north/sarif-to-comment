@@ -41,6 +41,27 @@ Description
 </th></tr></thead>
 <tbody><tr><td>
 
+[diagnostics](./sarif-to-comment.ipublishedoutcome.diagnostics.md)
+
+
+</td><td>
+
+`readonly`
+
+
+</td><td>
+
+readonly [IDiagnostic](./sarif-to-comment.idiagnostic.md)<!-- -->\[\]
+
+
+</td><td>
+
+Warnings and notes about this publication: preparation's warnings (for example a finding published in the review body, or a suggestion pull request not created after a rewritten history), a completion that could not be recorded, and a branch that moved while suggestions were created.
+
+
+</td></tr>
+<tr><td>
+
 [markdown](./sarif-to-comment.ipublishedoutcome.markdown.md)
 
 

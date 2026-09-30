@@ -63,7 +63,9 @@ import * as util from 'node:util';
 
 import type { CommitComparison, IDefaultBranchFile, IFetchContextRequest, IPullRequestDestination, ISuggestionTarget } from './github.cjs';
 import { blockedBy, codeSpan, prepareReview } from './prepare-review.cjs';
-import type { IBlockedOutcome, IDiagnostic, IReadyOutcome } from './prepare-review.cjs';
+import type { IBlockedOutcome, IReadyOutcome } from './prepare-review.cjs';
+import { createDiagnostic } from './diagnostics.cjs';
+import type { DiagnosticCode, IDiagnostic } from './diagnostics.cjs';
 import type { IJsonObject, IPlainObject, JsonValue } from './sarif-common.cjs';
 import {
   LABEL_RULE,
@@ -605,8 +607,10 @@ async function checkSuggestionTarget(
   const configuration = await client.readDefaultBranchFile({ owner, repo, path: SUGGESTION_PR_CONFIGURATION_PATH, branch: target.defaultBranch });
   const canonical = resolveCanonicalLabel(configuration);
   const problems: IDiagnostic[] = [];
-  const problem = (code: string, message: string): void => {
-    problems.push({ code, message });
+  // These problems are facts of the repository, not of the document: they
+  // have no pointer, and name the repository as their subject.
+  const problem = (code: DiagnosticCode, message: string): void => {
+    problems.push(createDiagnostic(code, message, { subject: repository }));
   };
   // GitHub's own name for the pull request's repository decides sameness, whatever the caller's letter case.
   if (target.headRepository === null) {
@@ -663,6 +667,28 @@ export function labelList(labels: readonly string[]): string {
   const spans = labels.map(codeSpan);
   const last = spans.at(-1) ?? '';
   return spans.length <= 1 ? last : `${spans.slice(0, -1).join(', ')} and ${last}`;
+}
+
+/**
+ * An outcome with the CLI's human report of it: the outcome text for stdout
+ * without the problem and warning lists, which the CLI renders once, as
+ * diagnostics on stderr (docs/diagnostics.md, "Streams"). The outcome's own
+ * `markdown` remains the full report.
+ */
+export interface IReported<T> {
+  readonly outcome: T;
+  readonly report: string;
+}
+
+/**
+ * The CLI's human report of a blocked review, shown identically by
+ * publication and assessment: the outcome without the problem and warning
+ * lists, which are diagnostics on stderr (docs/diagnostics.md, "Streams").
+ */
+export function blockedReviewReport(prepared: { readonly diagnostics: readonly unknown[] }): string {
+  const count = prepared.diagnostics.length;
+  const problems = `${String(count)} problem${count === 1 ? '' : 's'} must be resolved before publication.`;
+  return ['## Review blocked', '', `Nothing was published and no publication state was written. ${problems}`].join('\n');
 }
 
 /** The explanation of a blocked review, shown identically by publication and assessment. */

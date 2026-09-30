@@ -378,13 +378,15 @@ describe('outcomes delegate to the library and map to exit statuses', () => {
     assert.equal(world.remote.calls('createReview').length, 1);
   });
 
-  test('blocked: exit 2 with the library Markdown, no remote write and no state', async () => {
+  test('blocked: exit 2, the report on stdout and each problem once on stderr, no remote write and no state', async () => {
     const world = makeWorld({}, INVALID);
     const run = runCli(world, standardArgs(world));
     assert.equal(run.status, 2, run.stderr);
     const library = await libraryOutcome(INVALID);
     assert.equal(library.outcome.status, 'blocked');
-    assert.equal(run.stdout.trimEnd(), library.outcome.markdown.trimEnd());
+    // docs/diagnostics.md "Streams": the problem lists are diagnostics on stderr, not repeated on stdout.
+    assert.equal(run.stdout, '## Review blocked\n\nNothing was published and no publication state was written. 1 problem must be resolved before publication.\n');
+    assert.match(run.stderr, /^✖ error {2}The document is not valid SARIF 2\.1\.0 {2}\[sarif-schema-invalid\]\n/);
     assert.deepEqual(world.remote.writeCalls(), []);
     assert.deepEqual(stateFiles(world), []);
   });

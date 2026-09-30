@@ -42,6 +42,7 @@ import { prepareReview } from '../dist/prepare-review.cjs';
 import { inspectSarif, renderInspectionText } from '../dist/sarif-inspection.cjs';
 import type { ISarifInspection } from '../dist/sarif-inspection.cjs';
 import { asArray, asRecord } from './support/runtime-types.mts';
+import { expectedDiagnostic, expectedProblem } from './support/diagnostics.mts';
 
 // ---------------------------------------------------------------------------
 // Documents
@@ -216,6 +217,7 @@ describe('groupSarifFixes groups the primary fixes of findings across the docume
         { ref: '/runs/0/results/1', runIndex: 0, resultIndex: 1, tool: TOOL, changes: 1 },
       ],
       changes: 2,
+      diagnostics: [],
     });
     // The owned key is written exactly as publication reads it.
     assert.equal(dig(outcome.sarif, 'runs', 0, 'results', 0, 'properties', 'sarifToComment', 'suggestionGroup'), 'retry-with-test');
@@ -305,8 +307,9 @@ describe('groupSarifFixes refuses what the rules forbid, changing nothing', () =
     const message = '`/runs/0/results/1` is already in suggestion group "script"; a finding belongs to at most one group. Ungroup it first to move it.';
     assert.deepEqual(outcome, {
       status: 'refused',
-      problems: [{ message, pointer: '/runs/0/results/1' }],
+      problems: [expectedProblem('finding-already-grouped', { message, pointer: '/runs/0/results/1' })],
       markdown: `**Cannot group the fixes:** nothing was changed.\n\n- ${message}`,
+      diagnostics: [expectedDiagnostic('finding-already-grouped', message, { location: { pointer: '/runs/0/results/1' } })],
     });
   });
 
@@ -327,6 +330,7 @@ describe('groupSarifFixes refuses what the rules forbid, changing nothing', () =
         { ref: '/runs/1/results/1', runIndex: 1, resultIndex: 1, tool: 'Second bot', changes: 1 },
       ],
       changes: 4,
+      diagnostics: [],
     });
   });
 
@@ -360,10 +364,10 @@ describe('groupSarifFixes refuses what the rules forbid, changing nothing', () =
   test('a new group of a single finding with one change is refused (fewer than two distinct changes)', () => {
     const sarif = threeEdits();
     const outcome = refused(groupSarifFixes(sarif, { findings: selectorsAt(sarif, '/runs/0/results/0'), group: 'solo' }));
-    assert.deepEqual(outcome.problems, [{
+    assert.deepEqual(outcome.problems, [expectedProblem('suggestion-group-single-change', {
       message: 'The findings hold only 1 distinct change; a group needs at least two distinct changes to accept together (identical changes count once).',
       pointer: '/runs/0/results/0',
-    }]);
+    })]);
   });
 
   test('a member without a change is refused when extending too', () => {
@@ -382,10 +386,10 @@ describe('groupSarifFixes refuses what the rules forbid, changing nothing', () =
       finding('Same again.', 'a.txt', 1, { fixes: [lineFix('a.txt', 1, 'x')] }),
     ]);
     const outcome = refused(groupSarifFixes(sarif, { findings: selectorsAt(sarif, '/runs/0/results/0', '/runs/0/results/1'), group: 'g' }));
-    assert.deepEqual(outcome.problems, [{
+    assert.deepEqual(outcome.problems, [expectedProblem('suggestion-group-single-change', {
       message: 'The findings hold only 1 distinct change; a group needs at least two distinct changes to accept together (identical changes count once).',
       pointer: '/runs/0/results/0',
-    }]);
+    })]);
   });
 
   test('a member without a change, reported with every other problem at once', () => {
@@ -397,9 +401,12 @@ describe('groupSarifFixes refuses what the rules forbid, changing nothing', () =
     const outcome = refused(groupSarifFixes(sarif, { findings: selectorsAt(sarif, '/runs/0/results/0', '/runs/0/results/1', '/runs/0/results/2'), group: 'g' }));
     const noChange = (ref: string): string => `\`${ref}\` proposes no change: it has no fix and no proposed file operation, and a group joins changes. Leave it out of the group, or give it its change first.`;
     assert.deepEqual(outcome.problems, [
-      { message: noChange('/runs/0/results/0'), pointer: '/runs/0/results/0' },
-      { message: noChange('/runs/0/results/1'), pointer: '/runs/0/results/1' },
-      { message: 'The findings hold only 1 distinct change; a group needs at least two distinct changes to accept together (identical changes count once).', pointer: '/runs/0/results/0' },
+      expectedProblem('suggestion-group-member-without-change', { message: noChange('/runs/0/results/0'), pointer: '/runs/0/results/0' }),
+      expectedProblem('suggestion-group-member-without-change', { message: noChange('/runs/0/results/1'), pointer: '/runs/0/results/1' }),
+      expectedProblem('suggestion-group-single-change', {
+        message: 'The findings hold only 1 distinct change; a group needs at least two distinct changes to accept together (identical changes count once).',
+        pointer: '/runs/0/results/0',
+      }),
     ]);
     assert.equal(outcome.markdown, `**Cannot group the fixes:** nothing was changed.\n\n${outcome.problems.map((p) => `- ${p.message}`).join('\n')}`);
   });
@@ -410,10 +417,10 @@ describe('groupSarifFixes refuses what the rules forbid, changing nothing', () =
       finding('Fine.', 'b.txt', 1, { fixes: [lineFix('b.txt', 1, 'y')] }),
     ]);
     const outcome = refused(groupSarifFixes(sarif, { findings: selectorsAt(sarif, '/runs/0/results/0', '/runs/0/results/1'), group: 'g' }));
-    assert.deepEqual(outcome.problems, [{
+    assert.deepEqual(outcome.problems, [expectedProblem('owned-property-invalid', {
       message: '`/runs/0/results/0` has a `properties.sarifToComment` that is not an object, so its group cannot be recorded.',
       pointer: '/runs/0/results/0',
-    }]);
+    })]);
   });
 });
 
@@ -425,10 +432,10 @@ describe('selectors: stale and ambiguous selections are refused', () => {
     asArray(dig(changed, 'runs', 1, 'results')).push(finding('Later.', 'z.txt', 1));
     const outcome = stale(groupSarifFixes(changed, { findings: [String(a), String(b)], group: 'script' }));
     assert.equal(outcome.selector, a);
-    assert.deepEqual(outcome.problems, [{
+    assert.deepEqual(outcome.problems, [expectedProblem('finding-selector-stale', {
       message: `The document has changed since the selector \`${String(a)}\` was taken from inspecting it, so it may no longer name the same finding. Nothing was changed. Inspect the document again and use its current selectors.`,
       pointer: '/runs/0/results/0',
-    }]);
+    })]);
     assert.ok(outcome.markdown.startsWith('**Cannot group the fixes:** '), outcome.markdown);
   });
 
@@ -515,6 +522,7 @@ describe('ungroupSarifFixes removes findings from their groups', () => {
         { ref: '/runs/0/results/1', runIndex: 0, resultIndex: 1, tool: TOOL, group: 'script' },
         { ref: '/runs/1/results/0', runIndex: 1, resultIndex: 0, tool: 'Second bot', group: 'script' },
       ],
+      diagnostics: [],
     });
     assert.equal(library.ungroupSarifFixes, ungroupSarifFixes, 'the package exports this operation');
   });
@@ -541,8 +549,9 @@ describe('ungroupSarifFixes removes findings from their groups', () => {
     const message = '`/runs/0/results/1` is not in a suggestion group, so there is nothing to ungroup.';
     assert.deepEqual(outcome, {
       status: 'refused',
-      problems: [{ message, pointer: '/runs/0/results/1' }],
+      problems: [expectedProblem('finding-not-grouped', { message, pointer: '/runs/0/results/1' })],
       markdown: `**Cannot ungroup the fixes:** nothing was changed.\n\n- ${message}`,
+      diagnostics: [expectedDiagnostic('finding-not-grouped', message, { location: { pointer: '/runs/0/results/1' } })],
     });
   });
 
@@ -551,10 +560,10 @@ describe('ungroupSarifFixes removes findings from their groups', () => {
     const once = grouped(groupSarifFixes(sarif, { findings: selectorsAt(sarif, '/runs/0/results/0', '/runs/0/results/1'), group: 'pair' })).sarif;
     const [keep] = selectorsAt(once, '/runs/0/results/1');
     const outcome = refused(ungroupSarifFixes(once, { findings: selectorsAt(once, '/runs/0/results/0') }));
-    assert.deepEqual(outcome.problems, [{
+    assert.deepEqual(outcome.problems, [expectedProblem('ungroup-leaves-single-change', {
       message: `Suggestion group "pair" would keep only 1 distinct change (\`/runs/0/results/1\`), and a group needs at least two. To dissolve the group, ungroup its other findings too: \`${String(keep)}\`.`,
       pointer: '/runs/0/results/1',
-    }]);
+    })]);
   });
 
   test('stale and misused selectors are refused as for grouping', () => {
