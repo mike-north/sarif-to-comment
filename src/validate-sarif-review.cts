@@ -142,7 +142,7 @@ export interface IReadyAssessment {
   /** What publication would create, and what this result does not promise. */
   readonly markdown: string;
   /**
-   * Preparation's warnings, if any; a ready assessment has no errors.
+   * Preparation's warnings, if any; a ready assessment has no errors. The
    * `markdown` states every warning in a headline under its heading.
    */
   readonly diagnostics: readonly IDiagnostic[];

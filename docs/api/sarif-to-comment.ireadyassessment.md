@@ -56,7 +56,7 @@ readonly [IDiagnostic](./sarif-to-comment.idiagnostic.md)<!-- -->\[\]
 
 </td><td>
 
-Preparation's warnings, if any; a ready assessment has no errors.`markdown` states every warning in a headline under its heading.
+Preparation's warnings, if any; a ready assessment has no errors. The`markdown` states every warning in a headline under its heading.
 
 
 </td></tr>
