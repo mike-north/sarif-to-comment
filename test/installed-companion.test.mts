@@ -292,3 +292,56 @@ describe('the installed package publishes a native multi-change fix as one sugge
     assert.equal(asArray(asRecord(readJson(upstream))['runs']).length, 1);
   });
 });
+
+/**
+ * Issue #42 through the installed executable: a staged change that two
+ * findings explain gets the identical fix on both, so grouping only one of
+ * them with another change is refused (exit 2, naming the other), and
+ * grouping both is a document `validate --allow-suggestion-prs` accepts.
+ *
+ * @see https://github.com/mike-north/sarif-to-comment/issues/42
+ */
+describe('the installed package never groups a change that publication would refuse (#42)', () => {
+  const skip = packProject().error || false;
+
+  test('CLI: two findings explain one staged change; grouping one of them is refused, grouping both is ready', { skip, timeout: 300_000 }, () => {
+    const { consumer, bin } = installIntoConsumer();
+    const w = world('installed-shared-change');
+    const authored = path.join(w.root, 'review.sarif');
+    const enriched = path.join(w.root, 'enriched.sarif');
+    const repoFlag = `${DESTINATION.owner}/${DESTINATION.repo}`;
+    const cli = (args: readonly string[], expectedExit = 0): Record<string, unknown> => {
+      const result: SpawnSyncReturns<string> = spawnSync(bin, [...args, '--format', 'json'], { cwd: consumer, env: w.env, encoding: 'utf8', timeout: 120_000 });
+      for (const text of [result.stdout, result.stderr]) assert.ok(!text.includes(TOKEN), 'the token never appears');
+      assert.equal(result.status, expectedExit, result.stdout + result.stderr);
+      return asRecord(parseJson(result.stdout));
+    };
+    cli(['init', '--output', authored, '--tool-name', 'Review agent', '--repo', repoFlag, '--commit', w.head]);
+    cli(['add-comment', '--sarif', authored, '--file', 'src/client.ts', '--line', '2', '--message', RETRY_MESSAGE]);
+    cli(['add-comment', '--sarif', authored, '--file', 'src/client.ts', '--line', '2', '--message', 'Log the retry.']);
+    cli(['add-comment', '--sarif', authored, '--file', 'test/client.test.ts', '--line', '3', '--message', COVER_MESSAGE]);
+    cli(['add-staged-changes', '--sarif', authored, '--output', enriched, '--worktree', w.dir, '--repo', repoFlag, '--commit', w.head]);
+    const findings = asArray(asRecord(cli(['inspect', '--sarif', enriched])['view'])['findings']).map((f) => asRecord(f));
+    const [first, second, cover] = findings;
+    assert.ok(first && second && cover && findings.length === 3, 'the three findings, in order');
+    const changesOf = (f: Record<string, unknown>): unknown[] => asArray(f['fixes']).map((fix) => asRecord(fix)['changes']);
+    assert.deepEqual(changesOf(first), changesOf(second), 'both findings of line 2 carry the identical fix');
+    const selector = (f: Record<string, unknown>): string => asString(f['selector']);
+
+    const before = fs.readFileSync(enriched);
+    const refused = cli(['group-fixes', '--sarif', enriched, '--finding', selector(first), '--finding', selector(cover), '--group', 'retry-with-test'], 2);
+    assert.equal(refused['status'], 'refused');
+    const problems = asArray(refused['problems']).map((p) => asRecord(p));
+    assert.deepEqual(problems.map((p) => [p['code'], p['pointer']]), [['suggestion-group-change-shared', '/runs/0/results/1']]);
+    assert.ok(asString(problems[0]?.['message']).endsWith(`Name it in the group too: \`${selector(second)}\`.`), asString(problems[0]?.['message']));
+    assert.deepEqual(fs.readFileSync(enriched), before, 'nothing was written');
+
+    const grouped = cli(['group-fixes', '--sarif', enriched, ...[first, second, cover].flatMap((f) => ['--finding', selector(f)]), '--group', 'retry-with-test']);
+    assert.equal(grouped['status'], 'grouped');
+    assert.equal(grouped['changes'], 2, 'the identical change counts once');
+    const flags = ['--sarif', enriched, '--repo', repoFlag, '--pull', String(DESTINATION.pullNumber), '--commit', w.head, '--allow-suggestion-prs'];
+    const ready = cli(['validate', ...flags]);
+    assert.equal(ready['status'], 'ready', asString(ready['message']));
+    assert.deepEqual(ready['diagnostics'], []);
+  });
+});

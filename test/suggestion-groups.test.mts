@@ -456,10 +456,18 @@ describe('selectors: stale and ambiguous selections are refused', () => {
   });
 
   test('identical findings in different runs are kept apart: only the selected one is grouped', () => {
-    const same = (): Json => finding('Same.', 'a.txt', 1, { fixes: [lineFix('a.txt', 1, 'x')] });
+    // Written identically, but read through each run's own SRC base, so they change different files (a.txt and
+    // sub/a.txt): distinct changes, and leaving one outside the group is not a shared change (#42).
+    const at = { uri: 'a.txt', uriBaseId: 'SRC' };
+    const same = (): Json => ({
+      message: { text: 'Same.' },
+      locations: [{ physicalLocation: { artifactLocation: at, region: { startLine: 1 } } }],
+      fixes: [{ artifactChanges: [{ artifactLocation: at, replacements: [{ deletedRegion: { startLine: 1 }, insertedContent: { text: 'x' } }] }] }],
+    });
     const sarif: Json = { version: '2.1.0', runs: [
-      { tool: { driver: { name: TOOL } }, results: [same(), finding('Other.', 'b.txt', 1, { fixes: [lineFix('b.txt', 1, 'y')] })] },
-      { tool: { driver: { name: TOOL } }, results: [same()] },
+      { tool: { driver: { name: TOOL } }, originalUriBaseIds: { SRC: { uri: 'file:///repo/' } },
+        results: [same(), finding('Other.', 'b.txt', 1, { fixes: [lineFix('b.txt', 1, 'y')] })] },
+      { tool: { driver: { name: TOOL } }, originalUriBaseIds: { SRC: { uri: 'file:///repo/sub/' } }, results: [same()] },
     ] };
     const outcome = grouped(groupSarifFixes(sarif, { findings: selectorsAt(sarif, '/runs/1/results/0', '/runs/0/results/1'), group: 'g' }));
     assert.deepEqual(outcome.sarif, expectGrouped(sarif, 'g', [[0, 1], [1, 0]]));
@@ -681,5 +689,124 @@ describe('grouping accepts exactly the group names publication accepts', () => {
   test('control: the verdicts are not all the same', async () => {
     assert.equal(await publisherAccepts('retry-with-test'), true);
     assert.equal(await publisherAccepts(' lead'), false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A change carried by one group or by none (issue #42)
+
+/**
+ * Two findings may explain one change: `add-staged-changes` gives both the
+ * identical fix. Publication refuses a review in which a group and a finding
+ * outside it carry the identical change (`suggestion-group-change-shared`,
+ * contract §2.3), so grouping and ungrouping refuse to write such a
+ * document, naming the findings with their current selectors (§2.12).
+ *
+ * @see https://github.com/mike-north/sarif-to-comment/issues/42
+ */
+describe('findings that carry the identical change are grouped, or left out, together (#42)', () => {
+  /** Two findings explaining the identical change of a.txt line 9, and a distinct change of a.txt line 20. */
+  function sharedChange(): Json {
+    return sarifDoc([
+      finding('Explain the first half.', 'a.txt', 9, { fixes: [lineFix('a.txt', 9, 'shared')] }),
+      finding('Explain the second half.', 'a.txt', 9, { fixes: [lineFix('a.txt', 9, 'shared')] }),
+      finding('Another change.', 'a.txt', 20, { fixes: [lineFix('a.txt', 20, 'other')] }),
+    ]);
+  }
+
+  test('regression (#42): grouping only one of two findings that carry the identical change is refused, naming the other and its selector', () => {
+    const sarif = sharedChange();
+    const [sibling] = selectorsAt(sarif, '/runs/0/results/1');
+    const outcome = refused(groupSarifFixes(sarif, { findings: selectorsAt(sarif, '/runs/0/results/0', '/runs/0/results/2'), group: 'pair' }));
+    const message = '`/runs/0/results/1` carries the same change as `/runs/0/results/0` of suggestion group "pair", but would stay outside the group; '
+      + 'publication always refuses that, because one change cannot be accepted both in the group\'s suggestion pull request and on its own. '
+      + `Name it in the group too: \`${String(sibling)}\`.`;
+    assert.deepEqual(outcome, {
+      status: 'refused',
+      problems: [expectedProblem('suggestion-group-change-shared', { message, pointer: '/runs/0/results/1' })],
+      markdown: `**Cannot group the fixes:** nothing was changed.\n\n- ${message}`,
+      diagnostics: [expectedDiagnostic('suggestion-group-change-shared', message, { location: { pointer: '/runs/0/results/1' } })],
+    });
+  });
+
+  test('grouping both findings that carry the identical change, with another change, is accepted', () => {
+    const sarif = sharedChange();
+    const outcome = grouped(groupSarifFixes(sarif, { findings: selectorsAt(sarif, '/runs/0/results/0', '/runs/0/results/1', '/runs/0/results/2'), group: 'pair' }));
+    assert.deepEqual(outcome.sarif, expectGrouped(sarif, 'pair', [[0, 0], [0, 1], [0, 2]]));
+    assert.equal(outcome.changes, 2, 'the identical change counts once');
+  });
+
+  test('extending a group with only one of them is refused the same way; extending with both is accepted', () => {
+    const sarif = sharedChange();
+    asArray(dig(sarif, 'runs', 0, 'results')).push(finding('A fourth change.', 'a.txt', 30, { fixes: [lineFix('a.txt', 30, 'fourth')] }));
+    const started = grouped(groupSarifFixes(sarif, { findings: selectorsAt(sarif, '/runs/0/results/2', '/runs/0/results/3'), group: 'pair' })).sarif;
+    const [sibling] = selectorsAt(started, '/runs/0/results/1');
+    const extended = refused(groupSarifFixes(started, { findings: selectorsAt(started, '/runs/0/results/0'), group: 'pair' }));
+    assert.deepEqual(extended.problems, [expectedProblem('suggestion-group-change-shared', {
+      message: '`/runs/0/results/1` carries the same change as `/runs/0/results/0` of suggestion group "pair", but would stay outside the group; '
+        + 'publication always refuses that, because one change cannot be accepted both in the group\'s suggestion pull request and on its own. '
+        + `Name it in the group too: \`${String(sibling)}\`.`,
+      pointer: '/runs/0/results/1',
+    })]);
+    const both = grouped(groupSarifFixes(started, { findings: selectorsAt(started, '/runs/0/results/0', '/runs/0/results/1'), group: 'pair' }));
+    assert.equal(both.extended, true);
+    assert.equal(both.changes, 3);
+  });
+
+  test('a finding in another group that carries the identical change is named, with its group; groups are never joined', () => {
+    const inOther = { sarifToComment: { suggestionGroup: 'other' } };
+    const sarif = sarifDoc([
+      finding('Explain the first half.', 'a.txt', 9, { fixes: [lineFix('a.txt', 9, 'shared')] }),
+      finding('Explain the second half.', 'a.txt', 9, { fixes: [lineFix('a.txt', 9, 'shared')], properties: inOther }),
+      finding('Another change.', 'a.txt', 20, { fixes: [lineFix('a.txt', 20, 'other')] }),
+      finding('A third change.', 'a.txt', 30, { fixes: [lineFix('a.txt', 30, 'third')], properties: inOther }),
+    ]);
+    const outcome = refused(groupSarifFixes(sarif, { findings: selectorsAt(sarif, '/runs/0/results/0', '/runs/0/results/2'), group: 'pair' }));
+    assert.deepEqual(outcome.problems, [expectedProblem('suggestion-group-change-shared', {
+      message: '`/runs/0/results/1` carries the same change as `/runs/0/results/0` of suggestion group "pair", but is in suggestion group "other"; '
+        + 'publication always refuses that, because one change cannot be accepted in two suggestion pull requests. '
+        + 'Groups are never joined: ungroup it from "other" first to include it.',
+      pointer: '/runs/0/results/1',
+    })]);
+  });
+
+  test('regression (#42): ungrouping one of two findings that carry the identical change while the other stays is refused, naming it', () => {
+    const sarif = sharedChange();
+    const once = grouped(groupSarifFixes(sarif, { findings: selectorsAt(sarif, '/runs/0/results/0', '/runs/0/results/1', '/runs/0/results/2'), group: 'pair' })).sarif;
+    const [stays] = selectorsAt(once, '/runs/0/results/0');
+    const outcome = refused(ungroupSarifFixes(once, { findings: selectorsAt(once, '/runs/0/results/1') }));
+    assert.deepEqual(outcome.problems, [expectedProblem('suggestion-group-change-shared', {
+      message: '`/runs/0/results/1` carries the same change as `/runs/0/results/0`, which stays in suggestion group "pair"; '
+        + 'publication always refuses that, because one change cannot be accepted both in the group\'s suggestion pull request and on its own. '
+        + `Ungroup them together: \`${String(stays)}\`.`,
+      pointer: '/runs/0/results/1',
+    })]);
+    const together = ungrouped(ungroupSarifFixes(once, { findings: selectorsAt(once, '/runs/0/results/0', '/runs/0/results/1', '/runs/0/results/2') }));
+    assert.deepEqual(together.sarif, sarif);
+  });
+
+  test('an identical whole-file creation is one change too: grouping one of its two findings is refused', () => {
+    const sarif = sarifDoc([
+      finding('Add the page.', 'docs/new.md', 1, { properties: { sarifToComment: { proposedFileChanges: [{ operation: 'create', artifactIndex: 0 }] } } }),
+      finding('Link it.', 'README.md', 2, { fixes: [lineFix('README.md', 2, 'See docs/new.md.')] }),
+      finding('Also add the page.', 'docs/new.md', 1, { properties: { sarifToComment: { proposedFileChanges: [{ operation: 'create', artifactIndex: 0 }] } } }),
+    ], [{ location: { uri: 'docs/new.md' }, contents: { text: '# New\n' } }]);
+    const [sibling] = selectorsAt(sarif, '/runs/0/results/2');
+    const outcome = refused(groupSarifFixes(sarif, { findings: selectorsAt(sarif, '/runs/0/results/0', '/runs/0/results/1'), group: 'page' }));
+    assert.deepEqual(outcome.problems, [expectedProblem('suggestion-group-change-shared', {
+      message: '`/runs/0/results/2` carries the same change as `/runs/0/results/0` of suggestion group "page", but would stay outside the group; '
+        + 'publication always refuses that, because one change cannot be accepted both in the group\'s suggestion pull request and on its own. '
+        + `Name it in the group too: \`${String(sibling)}\`.`,
+      pointer: '/runs/0/results/2',
+    })]);
+  });
+
+  test('a different change of the same lines outside the group is not this refusal (publication judges overlaps, as without a group)', () => {
+    const sarif = sarifDoc([
+      finding('One way.', 'a.txt', 9, { fixes: [lineFix('a.txt', 9, 'one')] }),
+      finding('Another way.', 'a.txt', 9, { fixes: [lineFix('a.txt', 9, 'another')] }),
+      finding('Another change.', 'a.txt', 20, { fixes: [lineFix('a.txt', 20, 'other')] }),
+    ]);
+    grouped(groupSarifFixes(sarif, { findings: selectorsAt(sarif, '/runs/0/results/0', '/runs/0/results/2'), group: 'pair' }));
   });
 });
