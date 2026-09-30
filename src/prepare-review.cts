@@ -114,8 +114,9 @@
  *     fileOperation?: { operation, path, fileMode?, byteLength?,
  *       proposedLines? } (a general result's whole-file proposal),
  *     suggestionPullRequest? (the suggestion carrying a general result's change),
- *     alternatives?: [{ fix, path, replacement }] (a result's further fixes as
- *       listed, each with its index in fixes[] and exact replacement),
+ *     alternatives?: [{ fix, changes: [{ path, replacement }] }] (a result's
+ *       further fixes as listed, each with its index in fixes[] and every
+ *       file and exact replacement it makes, in order),
  *     taxa? (retained, not rendered),
  *     approval: 'none'|'declared-ready'|'hold-overridden',
  *     uninterpretedProperties? }

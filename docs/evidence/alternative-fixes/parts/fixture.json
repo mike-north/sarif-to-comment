@@ -21,11 +21,11 @@
   "files": {
     "48a9894d757e5680fa425966046d8caefd736ce0": {
       "examples/alternative-parts/parse.js": "const defaults = { strict: false };\nconst options = parseLegacy(input);\nmodule.exports = { defaults, options };\n",
-      "examples/alternative-parts/windows.txt": "one\ntwo\n"
+      "examples/alternative-parts/windows.txt": "one\r\ntwo\r\n"
     },
     "04f75e08a48244e8060d4463cec7e85e651bf0b0": {
       "examples/alternative-parts/parse.js": "const defaults = { strict: false };\nconst options = parseA(input);\nmodule.exports = { defaults, options };\n",
-      "examples/alternative-parts/windows.txt": "one\ntwo\n"
+      "examples/alternative-parts/windows.txt": "one\r\ntwo\r\n"
     }
   },
   "diff": "the pull request changes line 2 of examples/alternative-parts/parse.js; windows.txt (CRLF line endings) is unchanged and outside the diff"
