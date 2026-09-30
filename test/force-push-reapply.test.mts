@@ -192,8 +192,8 @@ function reviewDocument(): Json {
         { location: { uri: 'obsolete.txt' } },
       ],
       results: [
-        { message: { text: LINE6_MESSAGE }, locations: at('docs/sample.md', 6), fixes: [lineFix('docs/sample.md', 6, 'Line 6, suggested.')], properties: { sarifToComment: { acceptanceGroup: 'reword' } } },
-        { message: { text: LINE10_MESSAGE }, locations: at('docs/sample.md', 10), fixes: [lineFix('docs/sample.md', 10, 'Line 10, suggested.')], properties: { sarifToComment: { acceptanceGroup: 'reword' } } },
+        { message: { text: LINE6_MESSAGE }, locations: at('docs/sample.md', 6), fixes: [lineFix('docs/sample.md', 6, 'Line 6, suggested.')], properties: { sarifToComment: { suggestionGroup: 'reword' } } },
+        { message: { text: LINE10_MESSAGE }, locations: at('docs/sample.md', 10), fixes: [lineFix('docs/sample.md', 10, 'Line 10, suggested.')], properties: { sarifToComment: { suggestionGroup: 'reword' } } },
         { message: { text: NEW_MESSAGE }, locations: at('docs/new.md', 1), properties: { sarifToComment: { proposedFileChanges: [{ operation: 'create', artifactIndex: 0 }] } } },
         { message: { text: OBSOLETE_MESSAGE }, locations: at('obsolete.txt'), properties: { sarifToComment: { proposedFileChanges: [{ operation: 'delete', artifactIndex: 1 }] } } },
         { message: { text: REMARK } },
@@ -835,13 +835,13 @@ describe('every problem is reported together after a rewritten history too (§2.
     const artifacts = Array.from({ length: 11 }, (_, i) => ({ location: { uri: `docs/p${String(i)}.md` }, contents: { text: `# ${String(i)}\n` }, encoding: 'utf-8' }));
     const results = artifacts.map((_, i) => ({
       message: { text: `Page ${String(i)}.` },
-      properties: { sarifToComment: { proposedFileChanges: [{ operation: 'create', artifactIndex: i }], ...(i === 0 ? { acceptanceGroup: 'solo' } : {}) } },
+      properties: { sarifToComment: { proposedFileChanges: [{ operation: 'create', artifactIndex: i }], ...(i === 0 ? { suggestionGroup: 'solo' } : {}) } },
     }));
     const [run] = asArray(reviewDocument()['runs']);
     return { ...reviewDocument(), runs: [{ ...asRecord(run), artifacts, results }] };
   };
   const problems = [
-    '- `acceptance-group-single-change` at `/runs/0/results/0`: Acceptance group "solo" holds only one distinct change; a group needs at least two changes to accept together. Remove the group, and the change is published on its own.',
+    '- `suggestion-group-single-change` at `/runs/0/results/0`: Suggestion group "solo" holds only one distinct change; a group needs at least two changes to accept together. Remove the group, and the change is published on its own.',
     '- `too-many-suggestion-prs`: The review needs 11 suggestion pull requests; the limit is 10. Nothing is split or dropped.',
   ];
 

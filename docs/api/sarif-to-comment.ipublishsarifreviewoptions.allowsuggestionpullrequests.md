@@ -4,7 +4,7 @@
 
 ## IPublishSarifReviewOptions.allowSuggestionPullRequests property
 
-Allow suggestion pull requests: whole-file creations and deletions, and explicitly grouped changes (`properties.sarifToComment.acceptanceGroup`<!-- -->), are proposed as pull requests into the pull request's head branch, which the review links. They follow the tool-neutral suggestion pull request convention and carry the repository's canonical label: the `label` of`.github/suggestion-prs.json` on the default branch, otherwise`suggestion-pr`<!-- -->. Omitted or `false`<!-- -->: disabled; creations and deletions are shown in the review body and a grouped document is refused, naming this option. Small edits stay native suggestions either way. Part of the publication identity.
+Allow suggestion pull requests: whole-file creations and deletions, a fix with several changes, and explicitly grouped changes (`properties.sarifToComment.suggestionGroup`<!-- -->, written by[groupSarifFixes()](./sarif-to-comment.groupsariffixes.md)<!-- -->) are proposed as pull requests into the pull request's head branch, which the review links. They follow the tool-neutral suggestion pull request convention and carry the repository's canonical label: the `label` of `.github/suggestion-prs.json` on the default branch, otherwise `suggestion-pr`<!-- -->. Omitted or `false`<!-- -->: disabled; creations and deletions are shown in the review body, and a grouped document or a fix with several changes is refused, naming this option. Small edits stay native suggestions either way. Part of the publication identity.
 
 **Signature:**
 
