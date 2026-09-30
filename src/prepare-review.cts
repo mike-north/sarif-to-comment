@@ -43,8 +43,8 @@
  *                    // and called only for, a head resolveRewrittenHead names.
  *                    // There, a readSource error whose `code` is
  *                    // 'undecodable-source' or 'source-too-large' (an edited
- *                    // file that is not source at the head) makes that
- *                    // suggestion not created instead of failing.
+ *                    // file that is not source at the head) is a reason
+ *                    // that suggestion cannot be re-applied, not a failure.
  *   fileExists?: async (commit, path) => boolean
  *                    // trusted existence check at the same boundary: whether
  *                    // a regular file exists there, without reading its
@@ -69,9 +69,11 @@
  *                                     // undefined. Each suggestion is then
  *                                     // re-applied onto it only when
  *                                     // everything it changes is identical
- *                                     // there, and is otherwise not created,
- *                                     // with a warning and its reasons in the
- *                                     // review body (contract §2.5.1)
+ *                                     // there; otherwise a whole-file
+ *                                     // proposal falls back to the review
+ *                                     // body with a warning, and a group or
+ *                                     // several-change fix blocks
+ *                                     // (contract §2.5.1, issue #37)
  *     maxComments?: number,           // default 100 inline comments
  *     maxCommentBodyChars?: number,   // default 60000 UTF-16 units per comment
  *                                     // body and for the review body
@@ -532,8 +534,8 @@ interface ISuggestionPullRequestsOption {
   /**
    * Answers the pull request's head when the reviewed commit is not its
    * ancestor (the history was rewritten), otherwise undefined: suggestions
-   * are then re-applied onto it, or not created
-   * (docs/companion-suggestion-pr-contract.md §2.5.1). Called at most once,
+   * are then re-applied onto it, or handled as if suggestion pull requests
+   * were not allowed (docs/companion-suggestion-pr-contract.md §2.5.1). Called at most once,
    * and only when the review has suggestion units, so a review that creates
    * none never depends on it (§2.8). A rejection is operational.
    */
@@ -3444,8 +3446,8 @@ async function rewrittenHeadOf(enabled: ISuggestionPullRequestsOption, context: 
  * (contract §2.5.1): every change must still meet exactly what was reviewed
  * there — an edited file with each replaced range byte-identical at the same
  * lines, a created path absent, a deleted file with the same blob and mode.
- * Created with the head's text of each edited file, or not created with every
- * reason, in the order of the changes.
+ * Created with the head's text of each edited file, or not re-appliable with
+ * every reason, in the order of the changes.
  */
 async function reapplication(unit: ISuggestionUnit, head: string, state: IPreparationState): Promise<UnitDecision> {
   const { readEntry } = state;
@@ -3519,8 +3521,8 @@ function tooManySuggestions(count: number): string {
 /**
  * Why a head file's text is not source a replaced range can be compared in,
  * by the reader's error code (src/github.cts): not UTF-8, or beyond the
- * source-read limit. Such a file makes its suggestion not created; any other
- * failure stays operational.
+ * source-read limit. Such a file is a reason its suggestion cannot be
+ * re-applied; any other failure stays operational.
  */
 const UNREADABLE_SOURCE: Readonly<Record<string, string>> = {
   'undecodable-source': 'is not UTF-8 text at the head',

@@ -2,7 +2,7 @@
 
 > **Status note (reconciled September 28, 2026).** This log remains the authoritative decision record. Its statement that no behavior has been implemented is historical. For current status, see [Current status and reconciliation](status.md).
 
-Updated: September 30, 2026 (the owner decision in D45, which supersedes D13). Earlier: September 29, 2026 (the owner acceptances and decisions in D34–D44).
+Updated: September 30, 2026 (the owner decisions in D45, which supersedes D13, and D46, which amends D42). Earlier: September 29, 2026 (the owner acceptances and decisions in D34–D44).
 
 This is the working design record for the product-shaping conversation. It records decisions, their reasons, their consequences, and what remains open. It is not an implementation specification. No behavior described here has been implemented or integration-tested in this project.
 
@@ -461,6 +461,8 @@ A branch that only moved forward after the review is not a reason to refuse: sug
 
 **Still open:** the details of re-application and the handling of a branch rewritten again after planning, as the [companion contract §4](companion-suggestion-pr-contract.md#4-decisions-awaiting-acceptance) and the [convention's open questions](suggestion-pr-convention.md#10-open-questions) list them.
 
+**Amended by [D46](#d46-fall-back-as-if-suggestion-pull-requests-were-not-allowed--owner-decision):** a suggestion that cannot be re-applied is no longer skipped with its change shown as text; it is handled as if suggestion pull requests were not allowed.
+
 ### D43. Group independent fixes by an explicit authoring step — owner decisions
 
 **Provenance:** [issue #29](https://github.com/mike-north/sarif-to-comment/issues/29), implemented in [PR #33](https://github.com/mike-north/sarif-to-comment/pull/33).
@@ -492,6 +494,16 @@ Errors, warnings and notes are modelled once, as structured diagnostics with a s
 **Consequences:** `problems` arrays and receipt warnings keep their fields and gain the diagnostic fields additively; `markdown` fields remain. Exit statuses and behavior are unchanged. Six unclear internal codes were renamed before their first release as public codes. R15's Markdown requirement is now one rendering among several.
 
 **Owner decisions of the same day:** in human output, the diagnostic blocks on stderr are the single rendering of problems and warnings: `validate`, `publish` and `close-suggestion-prs` keep their outcome text on stdout without repeating them, while the library's `markdown` and the JSON and TOON `message` remain the full report. Color is decided by `--color`, then `FORCE_COLOR`, then `NO_COLOR`, then the terminal, keeping Node's rule that `FORCE_COLOR` overrides `NO_COLOR`.
+
+### D46. Fall back as if suggestion pull requests were not allowed — owner decision
+
+**Provenance:** [issue #37](https://github.com/mike-north/sarif-to-comment/issues/37), the owner's decision of September 30, 2026. It amends [D42](#d42-test-ancestry-when-the-originals-branch-has-moved--owner-decision) and builds on [D45](#d45-model-diagnostics-once-and-render-them-per-audience--owner-decision).
+
+`allowSuggestionPullRequests` is read literally: use a suggestion pull request where one is needed and can be made; otherwise behave, for that change, exactly as if suggestion pull requests were not allowed. After a rewritten history, a whole-file creation or deletion that cannot be re-applied onto the head falls back to the review-body proposal and the review publishes with a `suggestion-pr-fallback` warning naming the change and the reason; an explicit group or a fix with several changes that cannot be re-applied refuses the whole review before any write (`suggestion-group-not-reapplied`), naming the reason and the ways forward (review the current head again, or remove the group). `validate` reports the same outcome first. Every fallback is announced by a warning, and every warning of a published or ready outcome is stated in a headline under its heading, in `diagnostics`, and on stderr in human output; the exit status stays 0.
+
+**Reason:** Publishing a group as prose after a force-push was an exception nobody chose (A30 refuses the same group when suggestion pull requests are disallowed), and a warning only at the end of the output was too quiet for people and invisible to scripts.
+
+**Consequences:** The companion contract's §2.5.1 no longer has a "not created" presentation. `suggestion-pr-not-reapplied`, never released, is renamed `suggestion-pr-fallback`.
 
 ## Current concepts
 

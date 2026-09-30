@@ -45,7 +45,8 @@
  *   suggestion pull requests support, the client's compareCommits tests
  *   ancestry, lazily (§2.5, §2.8): a reviewed commit that is
  *   not an ancestor of the head makes preparation re-apply each suggestion
- *   onto the head or not create it (§2.5.1). A ready review that needs
+ *   onto the head, or handle it as if suggestion pull requests were not
+ *   allowed (§2.5.1). A ready review that needs
  *   suggestion pull requests is then checked against the repository — same
  *   repository, a base that is the default branch, push permission, the
  *   repository configuration read through readDefaultBranchFile
@@ -560,8 +561,8 @@ export async function prepareForDestination(captured: ICapturedReview, client: I
 
 /**
  * The pull request's head when the reviewed commit is not its ancestor, so
- * that suggestions must be re-applied onto it or not created (contract §2.5,
- * §2.5.1); undefined when the head is the reviewed commit or has only moved
+ * that suggestions must be re-applied onto it or handled as if suggestion
+ * pull requests were not allowed (contract §2.5, §2.5.1); undefined when the head is the reviewed commit or has only moved
  * forward from it. Read only for a pull request suggestion pull requests
  * support (same repository, default-branch base): the others are refused
  * anyway if they need one. A failed read is operational.

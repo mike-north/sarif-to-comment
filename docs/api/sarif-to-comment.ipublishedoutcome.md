@@ -56,7 +56,7 @@ readonly [IDiagnostic](./sarif-to-comment.idiagnostic.md)<!-- -->\[\]
 
 </td><td>
 
-Warnings and notes about this publication: preparation's warnings (for example a finding published in the review body, or a suggestion pull request not created after a rewritten history), a completion that could not be recorded, and a branch that moved while suggestions were created.
+Warnings and notes about this publication: preparation's warnings (for example a finding published in the review body, or a whole-file proposal presented in the body because its suggestion pull request could not be re-applied after a rewritten history), a completion that could not be recorded, and a branch that moved while suggestions were created.`markdown` states every warning in a headline under its heading.
 
 
 </td></tr>

@@ -147,6 +147,18 @@ Blocks are separated by a blank line. The summary line counts each severity pres
 
 **Streams.** Human output keeps the CLI's conventions: the primary result (what was created, written, inspected, checked, published or closed, and what happened to each file) goes to stdout, and diagnostics go to stderr. A refusal or an operational error writes only its file notes, such as ``… was not changed.``, to stdout. `inspect` no longer lists its warnings in its text, and `add-staged-changes` no longer prints `Warning:` lines: both are diagnostics on stderr. `validate`, `publish` and `close-suggestion-prs` print their outcome text on stdout (the heading, the review and pull request links, the state path, and the retry and next-step guidance) without repeating their problems and warnings: the diagnostic blocks on stderr are the single human rendering of them (owner decision, September 30, 2026). What stdout leaves out is exactly what a diagnostic says: the lists of problems and warnings, the detail of a failure, and, for cleanup, the pull requests that were refused, failed, could not be verified or do not follow the convention. The library's `markdown` fields and the JSON and TOON `message` are unchanged: they remain the full report.
 
+**Headline.** A successful `publish` or `validate` outcome with warnings states them directly under its heading, in the library's `markdown`, the JSON and TOON `message` and the human stdout alike, so that no warning is only at the end of the output ([issue #37](https://github.com/mike-north/sarif-to-comment/issues/37)): `**Published with N warning(s):**` or `**Ready to publish with N warning(s):**`, then one sentence per code, in the order first found. `suggestion-pr-fallback` has its own sentence (`1 suggestion pull request was not created; its change is shown in the review.`, or `… would not be created; its change would be shown in the review.` for `validate`, and the plural `2 suggestion pull requests were not created; their changes are shown in the review.`); any other code is its title, followed by `(N times)` when it occurs more than once. For example:
+
+```text
+## Draft review published
+
+**Published with 1 warning:** 1 suggestion pull request was not created; its change is shown in the review.
+
+Created the draft [review 42](https://github.com/acme/widgets/pull/7#pullrequestreview-42) on acme/widgets#7 at commit `…`. It stays a draft until someone submits it on GitHub.
+```
+
+Errors and notes are never counted in the headline, and an outcome without warnings has none. The exit status of a successful outcome with warnings stays 0.
+
 **Color.** Badges are red (error), yellow (warning) and blue (note); the location line is cyan; the `→` is green; the summary counts take their severity's color. Whether color is used is decided for stderr, in this order:
 
 1. `--color always` or `--color never`.
