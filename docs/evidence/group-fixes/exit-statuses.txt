@@ -1,0 +1,17 @@
+a01-init exit=0
+a02-comment-typo exit=0
+a03-comment-link exit=0
+a04-comment-checklist exit=0
+a05-staged exit=0
+a06-inspect exit=0
+a07-group exit=0
+a08-group-stale-human exit=2
+a09-inspect-human exit=0
+a10-validate-disabled exit=2
+a11-validate-enabled exit=0
+a12-publish exit=0
+b01-inspect-human exit=0
+b02-validate-disabled exit=2
+b03-publish-disabled exit=2
+b04-validate-enabled exit=0
+b05-publish exit=0

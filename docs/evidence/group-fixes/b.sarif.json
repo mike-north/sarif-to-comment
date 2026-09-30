@@ -1,0 +1,93 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Upstream docs linter",
+          "version": "0.1.0",
+          "rules": [
+            {
+              "id": "consistent-timeout"
+            }
+          ]
+        }
+      },
+      "columnKind": "utf16CodeUnits",
+      "versionControlProvenance": [
+        {
+          "repositoryUri": "https://github.com/mike-north/doc-linter",
+          "revisionId": "72b43d6f6f51d2bed9d8af061daf882932bf8fb2"
+        }
+      ],
+      "results": [
+        {
+          "ruleId": "consistent-timeout",
+          "level": "warning",
+          "message": {
+            "text": "The documented timeout disagrees with the client default of 10 seconds; update the guide and the reference together."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "docs/experiments/sarif-issue29/b-guide.md"
+                },
+                "region": {
+                  "startLine": 3
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "description": {
+                "text": "Document the 10-second timeout everywhere."
+              },
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "docs/experiments/sarif-issue29/b-guide.md"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 3
+                      },
+                      "insertedContent": {
+                        "text": "Requests time out after 10 seconds."
+                      }
+                    },
+                    {
+                      "deletedRegion": {
+                        "startLine": 5
+                      },
+                      "insertedContent": {
+                        "text": "The retry count is configured in the client; each attempt waits up to 10 seconds."
+                      }
+                    }
+                  ]
+                },
+                {
+                  "artifactLocation": {
+                    "uri": "docs/experiments/sarif-issue29/b-reference.md"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 5
+                      },
+                      "insertedContent": {
+                        "text": "| timeout | 10 seconds |"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

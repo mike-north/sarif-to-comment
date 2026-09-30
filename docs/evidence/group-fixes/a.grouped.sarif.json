@@ -1,0 +1,149 @@
+{
+  "$schema": "https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Review agent"
+        }
+      },
+      "columnKind": "utf16CodeUnits",
+      "versionControlProvenance": [
+        {
+          "repositoryUri": "https://github.com/mike-north/doc-linter",
+          "revisionId": "ea29b3d4966ca71eabdcc422607ffe4dfd7d7177"
+        }
+      ],
+      "results": [
+        {
+          "message": {
+            "text": "Typo: Teh."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "docs/experiments/sarif-issue29/a-guide.md"
+                },
+                "region": {
+                  "startLine": 5
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "docs/experiments/sarif-issue29/a-guide.md"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 5,
+                        "startColumn": 1,
+                        "endLine": 6,
+                        "endColumn": 1
+                      },
+                      "insertedContent": {
+                        "text": "The client retries once on a timeout.\n"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "message": {
+            "text": "Link the checklist this page refers to."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "docs/experiments/sarif-issue29/a-guide.md"
+                },
+                "region": {
+                  "startLine": 7
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "docs/experiments/sarif-issue29/a-guide.md"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 7,
+                        "startColumn": 1,
+                        "endLine": 7,
+                        "endColumn": 36
+                      },
+                      "insertedContent": {
+                        "text": "See [the checklist](a-checklist.md) before you ship.\n"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "sarifToComment": {
+              "suggestionGroup": "checklist-link"
+            }
+          }
+        },
+        {
+          "message": {
+            "text": "Add the checklist the link points to; the link and the page only make sense together."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "docs/experiments/sarif-issue29/a-checklist.md"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "properties": {
+            "sarifToComment": {
+              "proposedFileChanges": [
+                {
+                  "operation": "create",
+                  "artifactIndex": 0,
+                  "fileMode": "100644"
+                }
+              ],
+              "suggestionGroup": "checklist-link"
+            }
+          }
+        }
+      ],
+      "artifacts": [
+        {
+          "location": {
+            "uri": "docs/experiments/sarif-issue29/a-checklist.md"
+          },
+          "contents": {
+            "text": "# Retry checklist\n\n- The request is idempotent.\n- The timeout is shorter than the caller's deadline.\n"
+          },
+          "encoding": "utf-8"
+        }
+      ]
+    }
+  ]
+}

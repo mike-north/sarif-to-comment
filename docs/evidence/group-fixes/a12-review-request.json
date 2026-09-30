@@ -1,0 +1,23 @@
+{
+  "phase": "completed",
+  "receipt": {
+    "reviewId": 5361645031,
+    "htmlUrl": "https://github.com/mike-north/doc-linter/pull/60#pullrequestreview-5361645031",
+    "via": "created"
+  },
+  "request": {
+    "owner": "mike-north",
+    "repo": "doc-linter",
+    "pullNumber": 60,
+    "commitId": "ea29b3d4966ca71eabdcc422607ffe4dfd7d7177",
+    "body": "**Suggestion pull request:** [#72](https://github.com/mike-north/doc-linter/pull/72)\n\nMerging it into `sarif-issue29-20260929-a` applies these 2 changes together:\n\n- Edited [docs/experiments/sarif-issue29/a-guide.md line 7 at ea29b3d](https://github.com/mike-north/doc-linter/blob/ea29b3d4966ca71eabdcc422607ffe4dfd7d7177/docs/experiments/sarif-issue29/a-guide.md#L7)\n- New file `docs/experiments/sarif-issue29/a-checklist.md`: 101 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644\n\n**Source:** [docs/experiments/sarif-issue29/a-guide.md line 7 at ea29b3d](https://github.com/mike-north/doc-linter/blob/ea29b3d4966ca71eabdcc422607ffe4dfd7d7177/docs/experiments/sarif-issue29/a-guide.md#L7)\n\n```\nSee the checklist before you ship.\n```\n\nLink the checklist this page refers to.\n\n<sub>— Review agent</sub>\n\n---\n\n**Location:** line 1 of the proposed file\n\nAdd the checklist the link points to; the link and the page only make sense together.\n\n<sub>— Review agent</sub>\n\n<!-- sarif-to-comment:review:eabd6ea5-5b86-4b11-8f36-d7c7b0530b10 -->",
+    "comments": [
+      {
+        "path": "docs/experiments/sarif-issue29/a-guide.md",
+        "side": "RIGHT",
+        "line": 5,
+        "body": "Typo: Teh.\n\n<sub>— Review agent</sub>\n\n```suggestion\nThe client retries once on a timeout.\n```"
+      }
+    ]
+  }
+}

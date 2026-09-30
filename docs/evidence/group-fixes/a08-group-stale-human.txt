@@ -1,0 +1,3 @@
+**Cannot group the fixes:** The document has changed since the selector `/runs/0/results/1@139ba80f10af77d9` was taken from inspecting it, so it may no longer name the same finding. Nothing was changed. Inspect the document again and use its current selectors.
+
+<work>/a.staged.sarif was not changed.

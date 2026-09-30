@@ -1,0 +1,17 @@
+{
+  "command": "publish",
+  "status": "published",
+  "review": {
+    "id": 5361645031,
+    "url": "https://github.com/mike-north/doc-linter/pull/60#pullrequestreview-5361645031"
+  },
+  "suggestions": [
+    {
+      "number": 72,
+      "url": "https://github.com/mike-north/doc-linter/pull/72",
+      "branch": "suggestion-pr/60/d9f36f69-f1c8-47d9-8dd0-602daeb1d3b7"
+    }
+  ],
+  "statePath": "<work>/a-state.json",
+  "message": "## Draft review published\n\nCreated the draft [review 5361645031](https://github.com/mike-north/doc-linter/pull/60#pullrequestreview-5361645031) on mike-north/doc-linter#60 at commit `ea29b3d4966ca71eabdcc422607ffe4dfd7d7177`. It stays a draft until someone submits it on GitHub.\n\nSuggestion pull requests (drafts into `sarif-issue29-20260929-a`, labeled `suggestion-pr`):\n\n- [#72](https://github.com/mike-north/doc-linter/pull/72) from `suggestion-pr/60/d9f36f69-f1c8-47d9-8dd0-602daeb1d3b7`"
+}
