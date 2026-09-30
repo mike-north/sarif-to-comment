@@ -1342,9 +1342,33 @@ function receiptOutcome(record: ICompletedRecord, statePath: string): IPublished
   return publishedOutcome(record, statePath, { id: reviewId, htmlUrl }, 'receipt', true);
 }
 
+/**
+ * The framing this package's GitHub client gives an error answer
+ * (src/github.cts: "GitHub answered the <request> with HTTP <status>", then
+ * ": <GitHub's explanation>" when GitHub gave one). A refusal sentence
+ * already says who refused which request with which status, so the framing
+ * is dropped rather than repeated. Persisted refusals carry the message as
+ * the transport threw it, so this applies to them unchanged.
+ */
+const HOST_ANSWER_FRAMING = /^GitHub answered the .+? with HTTP \d{3}(?::\s*|\s*$)/;
+
+/**
+ * The opening sentence of a host refusal: `lead` (for example "GitHub refused
+ * the create-review request"), the HTTP status, and the reason GitHub gave,
+ * if any, as one sentence ending in a full stop so the text that follows
+ * stands apart. `message` is the bounded, untrusted refusal message; only a
+ * leading framing of this package's own client is removed from it.
+ */
+function refusalSentence(lead: string, status: number, message: string): string {
+  const reason = message.replace(HOST_ANSWER_FRAMING, '').trim();
+  const head = `${lead} (HTTP ${String(status)})`;
+  if (reason === '') return `${head}.`;
+  return `${head}: ${/[.!?]$/.test(reason) ? reason : `${reason}.`}`;
+}
+
 /** Explanation of a definitive refusal, quoting the host's (bounded) message. */
 function rejectionDetail(status: number, message: string): string {
-  return `GitHub refused the create-review request (HTTP ${String(status)}): ${message} It is never resent; this state path now records the refusal. Resolve the cause, then publish under a new state path.`;
+  return `${refusalSentence('GitHub refused the create-review request', status, message)} It is never resent; this state path now records the refusal. Resolve the cause, then publish under a new state path.`;
 }
 
 /** The outcome of a persisted refusal, reported without contacting the host. */
@@ -1411,7 +1435,7 @@ function settleRejection(
     statePath,
     detail: rejectionPersisted
       ? rejectionDetail(err.status, message)
-      : `GitHub refused the create-review request (HTTP ${String(err.status)}): ${message} The refusal could not be saved at ${statePath}; later calls on this state path will report uncertain delivery, and nothing is ever resent.`,
+      : `${refusalSentence('GitHub refused the create-review request', err.status, message)} The refusal could not be saved at ${statePath}; later calls on this state path will report uncertain delivery, and nothing is ever resent.`,
     rejectionPersisted,
     cause: err,
   };
@@ -1633,6 +1657,7 @@ export {
   isRefusalStatus,
   mismatch,
   modeMismatch,
+  refusalSentence,
   replaceFileDurably,
   thrownMessage,
   MAX_REJECTION_MESSAGE,

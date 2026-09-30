@@ -917,6 +917,22 @@ describe('durable identity and recovery (§2.9–§2.10)', () => {
     assert.equal(world.host.log().length, before, 'the recorded refusal is reported without contacting GitHub');
   });
 
+  test('regression (#43): a refused step\'s message states the refusal once, with GitHub\'s reason as a sentence', async () => {
+    // The host answers 422 with its message and errors (fake-http-companion.mts).
+    const world = makeWorld({ companion: { refuse: { pull: 422 } } });
+    for (const attempt of ['the response', 'the recorded refusal']) {
+      const outcome = await publish(world, groupedCodeAndTest());
+      assert.equal(status(outcome), 'rejected', markdown(outcome));
+      const diagnostics = asArray(outcome['diagnostics']).map((d) => asRecord(d));
+      assert.deepEqual(diagnostics.map((d) => d['code']), ['suggestion-pr-step-refused'], attempt);
+      for (const refused of diagnostics) {
+        const message = asString(refused['message'], 'the refusal message');
+        assert.match(message, /^GitHub refused to create the suggestion pull request for .+ \(HTTP 422\): Refused by the fake host \(pull\); pull refused\.$/, attempt);
+        assert.equal(message.includes('GitHub answered'), false, `${attempt}: the refusal is stated once`);
+      }
+    }
+  });
+
   test('a refused branch is recorded the same way', async () => {
     const world = makeWorld({ companion: { refuse: { ref: 403 } } });
     const first = await publish(world, groupedCodeAndTest());
