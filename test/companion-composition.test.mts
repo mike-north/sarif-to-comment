@@ -107,7 +107,7 @@ interface IResultSpec {
 
 function result({ text, group, location, fix, operation }: IResultSpec): Json {
   const owned: Json = {
-    ...(group === undefined ? {} : { acceptanceGroup: group }),
+    ...(group === undefined ? {} : { suggestionGroup: group }),
     ...(operation === undefined ? {} : { proposedFileChanges: [operation] }),
   };
   return {
@@ -395,7 +395,7 @@ async function assertBlockedEverywhere(world: IWorld, sarif: Json, lines: readon
 }
 
 const GROUP_REQUIRES = (group: string, pointer: string): string =>
-  `- \`acceptance-group-requires-suggestion-prs\` at \`${pointer}\`: Acceptance group "${group}" must be accepted as one unit, which needs a suggestion pull request. `
+  `- \`suggestion-group-requires-suggestion-prs\` at \`${pointer}\`: Suggestion group "${group}" must be accepted as one unit, which needs a suggestion pull request. `
   + 'Enable suggestion pull requests (options.allowSuggestionPullRequests or --allow-suggestion-prs); a group is never split into separate suggestions or published in part.';
 
 // ---------------------------------------------------------------------------
@@ -626,7 +626,7 @@ describe('group rules (§2.3–§2.4), identical in validate and publish', () =>
       result({ text: 'B.', group: ' padded ', operation: createOp(1) }),
     ], [created('docs/a.md', PAGE_A), created('docs/b.md', PAGE_B)]);
     const problem = (pointer: string): string =>
-      `- \`acceptance-group-invalid\` at \`${pointer}\`: properties.sarifToComment.acceptanceGroup must be 1-100 characters without control or invisible formatting characters or surrounding whitespace.`;
+      `- \`suggestion-group-invalid\` at \`${pointer}\`: properties.sarifToComment.suggestionGroup must be 1-100 characters without control or invisible formatting characters or surrounding whitespace.`;
     await assertBlockedEverywhere(makeWorld(), sarif, [problem('/runs/0/results/0'), problem('/runs/0/results/1')]);
   });
 
@@ -637,8 +637,8 @@ describe('group rules (§2.3–§2.4), identical in validate and publish', () =>
       result({ text: 'A again.', group: 'g1', operation: createOp(0) }),
     ], [created('docs/a.md', PAGE_A)]);
     await assertBlockedEverywhere(makeWorld(), sarif, [
-      '- `acceptance-group-member-without-change` at `/runs/0/results/0`: The finding is in acceptance group "g1" but proposes no change; a group joins changes. Remove the finding from the group, or give it its change.',
-      '- `acceptance-group-single-change` at `/runs/0/results/0`: Acceptance group "g1" holds only one distinct change; a group needs at least two changes to accept together. Remove the group, and the change is published on its own.',
+      '- `suggestion-group-member-without-change` at `/runs/0/results/0`: The finding is in suggestion group "g1" but proposes no change; a group joins changes. Remove the finding from the group, or give it its change.',
+      '- `suggestion-group-single-change` at `/runs/0/results/0`: Suggestion group "g1" holds only one distinct change; a group needs at least two changes to accept together. Remove the group, and the change is published on its own.',
     ]);
   });
 
@@ -1152,5 +1152,202 @@ describe('CLI + real GitHub client over HTTP', () => {
     const second = cli(world, args);
     assert.equal(second.status, 0, second.stdout + second.stderr);
     assert.equal(count(world, 'POST', PULLS), 1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A single SARIF fix with several changes is already a group (issue #29): with
+// suggestion pull requests allowed it becomes one suggestion pull request with
+// no extra property; disallowed, it is refused naming the setting (A30).
+
+describe('a native multi-change fix (one SARIF fix with several changes)', () => {
+  const change = (uri: string, ...replacements: readonly Json[]): Json => ({ artifactLocation: { uri }, replacements });
+  const replace = (region: Json, text: string): Json => ({ deletedRegion: region, insertedContent: { text } });
+  const RETRY_README = 'Retry, and say so in the README.';
+  const EDITED_README = '# Widgets\nThe widget client.\n';
+
+  /** One finding whose single fix edits src/client.ts line 2 and README.md line 2 together. */
+  const multiFile = (group?: string): Json => result({
+    text: RETRY_README,
+    location: at('src/client.ts', 2),
+    fix: { artifactChanges: [change('src/client.ts', replace({ startLine: 2 }, RETRY)), change('README.md', replace({ startLine: 2 }, 'The widget client.'))] },
+    ...(group === undefined ? {} : { group }),
+  });
+
+  const MULTI_CHANGES = [
+    `- Edited [src/client.ts line 2 at ${SHORT}](${blob('src/client.ts', '#L2')})`,
+    `- Edited [README.md line 2 at ${SHORT}](${blob('README.md', '#L2')})`,
+  ];
+  const MULTI_ITEM = [
+    `**Source:** [src/client.ts line 2 at ${SHORT}](${blob('src/client.ts', '#L2')})`,
+    '',
+    '```',
+    '  const response = await request(id);',
+    '```',
+    '',
+    RETRY_README,
+    '',
+    attribution,
+  ];
+
+  test('enabled: several files become one draft suggestion pull request, linked from the review', async () => {
+    const world = makeWorld();
+    const outcome = await publish(world, document([multiFile()]));
+    assert.equal(status(outcome), 'published', markdown(outcome));
+    const { pull, branch, id, publication } = onlyPull(world);
+    assert.equal(pull.title, 'Suggestion for #7: 2 changes');
+    assert.equal(pull.base, HEAD_REF);
+    assert.equal(pull.draft, true);
+    assert.deepEqual(pull.labels, ['suggestion-pr']);
+    assert.equal(pull.body, [
+      `Suggested in a review of #7 at commit ${HEAD}.`,
+      '',
+      'Merging this pull request into `feature/retry` applies these 2 changes together:',
+      '',
+      ...MULTI_CHANGES,
+      '',
+      DRAFT_NOTE,
+      '',
+      '---',
+      '',
+      ...MULTI_ITEM,
+      '',
+      markerFor(id, publication),
+    ].join('\n'));
+    assert.deepEqual(world.host.fileOnBranch(branch, 'src/client.ts'), Buffer.from(EDITED_CLIENT));
+    assert.deepEqual(world.host.fileOnBranch(branch, 'README.md'), Buffer.from(EDITED_README));
+    assert.deepEqual(world.host.filesOnBranch(branch), HEAD_FILES, 'no file is added or removed');
+    const [commit] = Object.values(world.host.companion().commits);
+    assert.ok(commit);
+    assert.deepEqual(commit.parents, [HEAD]);
+    assert.equal(commit.message, `Suggestion for #7: 2 changes\n\nSuggested in a review of ${OWNER}/${REPO} pull request 7 at commit ${HEAD}.`);
+
+    const [review] = world.host.reviews();
+    assert.ok(review);
+    assert.equal(review.request.body.replace(REVIEW_MARKER, ''), [
+      `**Suggestion pull request:** [#${String(pull.number)}](${pullUrl(pull.number)})`,
+      '',
+      'Merging it into `feature/retry` applies these 2 changes together:',
+      '',
+      ...MULTI_CHANGES,
+      '',
+      ...MULTI_ITEM,
+    ].join('\n'));
+    assert.deepEqual(review.request.comments, [], 'nothing is split into native suggestions');
+    assert.deepEqual(outcome['suggestions'], [{ number: pull.number, url: pullUrl(pull.number), branch }]);
+  });
+
+  test('enabled: several replacements of one file are combined in one commit of that file', async () => {
+    const world = makeWorld();
+    const sarif = document([result({
+      text: 'Type the result.',
+      location: at('src/client.ts', 3),
+      fix: { artifactChanges: [change('src/client.ts',
+        replace({ startLine: 1 }, 'export async function fetchWidget(id: string): Promise<string> {'),
+        replace({ startLine: 3 }, '  return String(response.body);'))] },
+    })]);
+    const outcome = await publish(world, sarif);
+    assert.equal(status(outcome), 'published', markdown(outcome));
+    const { pull, branch } = onlyPull(world);
+    assert.equal(pull.title, 'Suggestion for #7: edit src/client.ts');
+    assert.ok(pull.body.includes([
+      'Merging this pull request into `feature/retry` applies these 2 changes together:',
+      '',
+      `- Edited [src/client.ts line 1 at ${SHORT}](${blob('src/client.ts', '#L1')})`,
+      `- Edited [src/client.ts line 3 at ${SHORT}](${blob('src/client.ts', '#L3')})`,
+    ].join('\n')), pull.body);
+    assert.deepEqual(world.host.fileOnBranch(branch, 'src/client.ts'), Buffer.from([
+      'export async function fetchWidget(id: string): Promise<string> {\n', CLIENT[1], '  return String(response.body);\n', CLIENT[3],
+    ].join('')));
+  });
+
+  test('enabled: two replacements on one line apply together as one change of that line', async () => {
+    const world = makeWorld();
+    // "Teh widget client." — columns 1-3 are "Teh", 12-17 are "client" (SARIF 3.30: endColumn is exclusive).
+    const sarif = document([result({
+      text: 'Wording.',
+      location: at('README.md', 2),
+      fix: { artifactChanges: [change('README.md',
+        replace({ startLine: 2, startColumn: 1, endColumn: 4 }, 'The'),
+        replace({ startLine: 2, startColumn: 12, endColumn: 18 }, 'API'))] },
+    })]);
+    const outcome = await publish(world, sarif);
+    assert.equal(status(outcome), 'published', markdown(outcome));
+    const { pull, branch } = onlyPull(world);
+    assert.equal(pull.title, 'Suggestion for #7: edit README.md');
+    assert.ok(pull.body.includes(`applies this change:\n\n- Edited [README.md line 2 at ${SHORT}](${blob('README.md', '#L2')})\n`), pull.body);
+    assert.deepEqual(world.host.fileOnBranch(branch, 'README.md'), Buffer.from('# Widgets\nThe widget API.\n'));
+  });
+
+  test('two findings carrying the identical multi-change fix share one pull request', async () => {
+    const world = makeWorld();
+    const second = { ...multiFile(), message: { text: 'Agreed.' } };
+    const outcome = await publish(world, document([multiFile(), second]));
+    assert.equal(status(outcome), 'published', markdown(outcome));
+    const { pull } = onlyPull(world);
+    assert.ok(pull.body.includes(RETRY_README) && pull.body.includes('Agreed.'), pull.body);
+  });
+
+  test('a multi-change fix joined to an explicit group contributes every change to the group\'s one pull request', async () => {
+    const world = makeWorld();
+    const sarif = document([
+      multiFile('retry-and-docs'),
+      result({ text: 'Add page A.', group: 'retry-and-docs', operation: { operation: 'create', artifactIndex: 0 } }),
+    ], [created('docs/a.md', PAGE_A)]);
+    const outcome = await publish(world, sarif);
+    assert.equal(status(outcome), 'published', markdown(outcome));
+    const { pull, branch } = onlyPull(world);
+    assert.equal(pull.title, 'Suggestion for #7: retry-and-docs (3 changes)');
+    assert.ok(pull.body.includes([
+      'Merging this pull request into `feature/retry` applies these 3 changes together:',
+      '',
+      ...MULTI_CHANGES,
+      '- New file `docs/a.md`: 17 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644',
+    ].join('\n')), pull.body);
+    assert.deepEqual(world.host.fileOnBranch(branch, 'README.md'), Buffer.from(EDITED_README));
+    assert.deepEqual(world.host.fileOnBranch(branch, 'docs/a.md'), Buffer.from(PAGE_A));
+  });
+
+  test('disabled (the default): refused naming the setting; nothing is split or written (A30)', async () => {
+    const line = '- `fix-changes-require-suggestion-prs` at `/runs/0/results/0`: The fix makes 2 changes that apply together (a SARIF fix is accepted whole), which needs a suggestion pull request. '
+      + 'Enable suggestion pull requests (options.allowSuggestionPullRequests or --allow-suggestion-prs); a fix is never split into separate suggestions or published in part.';
+    await assertBlockedEverywhere(makeWorld(), document([multiFile()]), [line], null);
+    await assertBlockedEverywhere(makeWorld(), document([multiFile()]), [line], { allowSuggestionPullRequests: false });
+  });
+
+  test('replacements of one fix that overlap, or start at the same position, are refused (their combined effect is undefined)', async () => {
+    for (const second of [replace({ startLine: 2, startColumn: 3, endColumn: 6 }, 'x'), replace({ startLine: 2, startColumn: 1, endColumn: 1 }, 'x')]) {
+      const sarif = document([result({
+        text: 'Clash.',
+        location: at('README.md', 2),
+        fix: { artifactChanges: [change('README.md', replace({ startLine: 2, startColumn: 1, endColumn: 4 }, 'The'), second)] },
+      })]);
+      await assertBlockedEverywhere(makeWorld(), sarif, [
+        '- `fix-replacements-overlap` at `/runs/0/results/0`: Two replacements of README.md in this fix overlap or start at the same position, so their combined effect is not defined. Correct the fix.',
+      ]);
+    }
+  });
+
+  test('a located finding outside every change of its fix is never moved', async () => {
+    const sarif = document([result({
+      text: 'Where?',
+      location: at('src/client.ts', 4),
+      fix: { artifactChanges: [change('src/client.ts', replace({ startLine: 2 }, RETRY)), change('README.md', replace({ startLine: 2 }, 'The widget client.'))] },
+    })]);
+    await assertBlockedEverywhere(makeWorld(), sarif, [
+      '- `fix-association-unsupported` at `/runs/0/results/0`: The result\'s location is not within its fix\'s replacement lines; presenting them together would move the feedback. Keep the correct result location and separate the feedback from this unsupported fix association.',
+    ]);
+  });
+});
+
+describe('the group property is `suggestionGroup` (renamed from the unreleased `acceptanceGroup`)', () => {
+  test('`acceptanceGroup` is an unknown owned key: blocked, never read as a group', async () => {
+    const sarif = document([
+      { message: { text: 'Old name.' }, properties: { sarifToComment: { acceptanceGroup: 'g', proposedFileChanges: [{ operation: 'create', artifactIndex: 0 }] } } },
+      result({ text: 'B.', operation: { operation: 'create', artifactIndex: 1 } }),
+    ], [created('docs/a.md', PAGE_A), created('docs/b.md', PAGE_B)]);
+    await assertBlockedEverywhere(makeWorld(), sarif, [
+      '- `owned-property-invalid` at `/runs/0/results/0`: properties.sarifToComment has keys this product does not define here: acceptanceGroup.',
+    ]);
   });
 });

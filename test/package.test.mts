@@ -200,9 +200,11 @@ describe('manifest', () => {
       'addStagedChangesToSarif',
       'closeSuggestionPullRequests',
       'createSarifDocument',
+      'groupSarifFixes',
       'inspectSarif',
       'publishSarifReview',
       'removeSarifComment',
+      'ungroupSarifFixes',
       'validateSarifReview',
     ]);
     const loaded: unknown = require(resolved);
@@ -695,14 +697,16 @@ export async function main(): Promise<void> { ${workflow} }` },
       ['addStagedChangesToSarif', 'function'],
       ['closeSuggestionPullRequests', 'function'],
       ['createSarifDocument', 'function'],
+      ['groupSarifFixes', 'function'],
       ['inspectSarif', 'function'],
       ['publishSarifReview', 'function'],
       ['removeSarifComment', 'function'],
+      ['ungroupSarifFixes', 'function'],
       ['validateSarifReview', 'function'],
     ]);
   });
 
-  test('CommonJS and ES module consumers see the same eight functions with no __esModule marker', { skip, timeout: 300_000 }, () => {
+  test('CommonJS and ES module consumers see the same ten functions with no __esModule marker', { skip, timeout: 300_000 }, () => {
     // Interop shape of 0.2.0 (plain `module.exports = { ... }`): require()
     // yields the functions in the documented order (src/index.cjs module
     // doc); import() yields a namespace whose default export is that very
@@ -712,7 +716,7 @@ export async function main(): Promise<void> { ${workflow} }` },
     // 'module.exports' namespace key (Node 22 does not); it is the same object.
     const { consumer } = installIntoConsumer();
     // 0.2.0's five in their shipped order; later additions are appended, so that order is kept.
-    const names = ['createSarifDocument', 'addSarifComment', 'inspectSarif', 'addStagedChangesToSarif', 'publishSarifReview', 'removeSarifComment', 'validateSarifReview', 'closeSuggestionPullRequests'];
+    const names = ['createSarifDocument', 'addSarifComment', 'inspectSarif', 'addStagedChangesToSarif', 'publishSarifReview', 'removeSarifComment', 'validateSarifReview', 'closeSuggestionPullRequests', 'groupSarifFixes', 'ungroupSarifFixes'];
     fs.writeFileSync(
       path.join(consumer, 'interop-probe.mjs'),
       [
@@ -755,7 +759,7 @@ export async function main(): Promise<void> { ${workflow} }` },
     assert.deepEqual(
       seen.namespaceKeys.filter((k) => k !== 'default' && k !== 'module.exports'),
       [...names].sort(),
-      'named exports are exactly the eight functions',
+      'named exports are exactly the ten functions',
     );
     assert.ok(seen.namespaceKeys.includes('default'));
     assert.equal(seen.defaultIsRequire, true, 'the default export is the require() object itself');
