@@ -1,8 +1,8 @@
 # Companion suggestion pull requests: contract
 
-Partly owner-accepted · September 29, 2026. Publication of whole-file operations and explicitly grouped edits as companion suggestion pull requests is implemented under the options below. Suggestion pull requests follow the tool-neutral [suggestion pull request convention](suggestion-pr-convention.md). The default-off setting (§2.1) is the owner's decision on [issue #5](https://github.com/mike-north/sarif-to-comment/issues/5) (recorded in D22 and R16); the options, the convention, labels, draft and ready pull requests, the supported scope and the limits are the owner's decisions on [issue #27](https://github.com/mike-north/sarif-to-comment/issues/27). The decisions still listed in [Decisions awaiting acceptance](#4-decisions-awaiting-acceptance) are provisional until the owner accepts or replaces them.
+Partly owner-accepted · September 29, 2026. Publication of whole-file operations and explicitly grouped edits as companion suggestion pull requests is implemented under the options below. Suggestion pull requests follow the tool-neutral [suggestion pull request convention](suggestion-pr-convention.md). The default-off setting (§2.1) is the owner's decision on [issue #5](https://github.com/mike-north/sarif-to-comment/issues/5) (recorded in D22 and R16); the options, the convention, labels, draft and ready pull requests, the supported scope and the limits are the owner's decisions on [issue #27](https://github.com/mike-north/sarif-to-comment/issues/27); proposing on a branch that has moved since the review, including after a force-push (§2.5.1), is the owner's decision on [issue #28](https://github.com/mike-north/sarif-to-comment/issues/28). The decisions still listed in [Decisions awaiting acceptance](#4-decisions-awaiting-acceptance) are provisional until the owner accepts or replaces them.
 
-**Sources.** [Issue #5](https://github.com/mike-north/sarif-to-comment/issues/5); [issue #27](https://github.com/mike-north/sarif-to-comment/issues/27) and the [suggestion pull request convention](suggestion-pr-convention.md); [specification](specification.md) R16 and open contract O11, with R1, R3, R8, R10, R12, R13 and R14; [decisions](design-decisions.md) D7, D12, D14, D21–D29; the [file-operation publication contract](file-operation-publication-contract.md), which remains the form used when suggestion pull requests are not enabled; the [grouped-suggestion](grouped-suggestion-experiment.md), [lifecycle](companion-pr-lifecycle-experiment.md) and [recovery](publication-recovery-experiment.md) experiments; [status](status.md). Cleanup of suggestion pull requests after their original pull request ends ([issue #6](https://github.com/mike-north/sarif-to-comment/issues/6)) is specified separately, in the [suggestion cleanup contract](suggestion-cleanup-contract.md); §5 states what it relies on.
+**Sources.** [Issue #5](https://github.com/mike-north/sarif-to-comment/issues/5); [issue #27](https://github.com/mike-north/sarif-to-comment/issues/27) and the [suggestion pull request convention](suggestion-pr-convention.md); [issue #28](https://github.com/mike-north/sarif-to-comment/issues/28) and the [force-push experiment](force-push-experiment.md); [specification](specification.md) R16 and open contract O11, with R1, R3, R8, R10, R12, R13 and R14; [decisions](design-decisions.md) D7, D12, D14, D21–D29; the [file-operation publication contract](file-operation-publication-contract.md), which remains the form used when suggestion pull requests are not enabled; the [grouped-suggestion](grouped-suggestion-experiment.md), [lifecycle](companion-pr-lifecycle-experiment.md) and [recovery](publication-recovery-experiment.md) experiments; [status](status.md). Cleanup of suggestion pull requests after their original pull request ends ([issue #6](https://github.com/mike-north/sarif-to-comment/issues/6)) is specified separately, in the [suggestion cleanup contract](suggestion-cleanup-contract.md); §5 states what it relies on.
 
 ## 1. What is fixed by the sources
 
@@ -99,9 +99,31 @@ A group edit is applied to the reviewed file exactly as a native suggestion's re
   - another base (`suggestion-pr-base-unsupported`): following a suggestion through an original that merges into a branch other than the default branch (for example one pull request of a stack, which GitHub retargets when the branch below it merges) has not been built or verified yet.
 - **Target.** Each suggestion pull request's base is the original pull request's head branch (`head.ref`), read from the pull request during validation. Because the original's base is the default branch, its head branch never is.
 - **Base commit.** Each proposal branch is one commit whose parent is the **reviewed commit**. The proposed changes are therefore exactly the pull request's diff from the reviewed state, never a rebase or a merge.
-- **A head that moved on since the review.** The owner decided (#27) that a branch that moved forward after the review is not a reason to refuse; handling rewritten history (a force-push) is tracked in [#28](https://github.com/mike-north/sarif-to-comment/issues/28), which also carries that relaxation. Until then the suggestion is created only when the reviewed commit is still the pull request's head (`suggestion-pr-historical-unsupported`), and the refusal says what is missing: a check that the reviewed commit is still part of the branch, so the suggestion can be proposed on top of later commits.
-- **A head that moves later** (after validation) is not chased. The branch keeps the reviewed commit as its parent, the pull request still targets the head branch, and nothing is retargeted, rebased or re-validated on retry. GitHub shows the suggestion's own changes; whether they still merge cleanly is for the person accepting them.
+- **A head that moved on since the review** (owner decision, [#28](https://github.com/mike-north/sarif-to-comment/issues/28); [convention §5.1](suggestion-pr-convention.md#51-when-the-originals-branch-has-moved-since-the-review)). The tool tests ancestry, not equality. When the pull request's head is not the reviewed commit, validation compares them (`GET compare/{reviewed}...{head}`):
+  - `ahead`: the reviewed commit is an ancestor of the head, so the branch only moved forward. Publication proceeds exactly as for the head: each proposal branch's parent is the reviewed commit, and GitHub shows any conflict with the later commits.
+  - `behind` or `diverged`: the history was rewritten (a force-push, amend or rebase). Each suggestion pull request is re-applied onto the head or not created, as §2.5.1 states.
+
+  The comparison is read only when the head moved and the pull request is one suggestion pull requests support (same repository, default-branch base), before preparation, because what is created depends on it. A failed read is operational (`publish` rejects, `validate` answers `incomplete`).
+- **A head that moves later** (after validation, or after a re-application) is not chased. The branch keeps the reviewed commit as its parent, the pull request still targets the head branch, and nothing is retargeted, rebased or re-validated on retry. GitHub shows the suggestion's own changes; whether they still merge cleanly is for the person accepting them.
 - **Draft or ready.** Suggestion pull requests are created as drafts, in both review modes, unless `markSuggestionPullRequestsReady` asks for them ready for review (owner decision, #27). A draft avoids automatic review requests to code owners, and cannot be merged until someone with write access marks it ready (the lifecycle, §2.11). A repository that does not allow draft pull requests refuses the create; that refusal is recorded like any other (§2.9).
+
+### 2.5.1 Re-application after a rewritten history
+
+When the reviewed commit is not an ancestor of the head H (read when the publication is planned), each suggestion pull request is decided on its own, from its complete list of changes:
+
+| Change | Re-applied onto H only when | Otherwise, the reason given |
+| --- | --- | --- |
+| Edit of `PATH` (one or more replaced line ranges of the reviewed file) | `PATH` is a regular file at H, and each replaced range holds exactly the reviewed bytes at the same lines (line terminators included) | `` `PATH` line L differs from the reviewed text `` or `` `PATH` lines A-B differ from the reviewed text `` (one reason per range); `` `PATH` no longer exists `` |
+| Creation of `PATH` | nothing exists at `PATH` at H | `` `PATH` already exists `` |
+| Deletion of `PATH` | `PATH` is a regular file at H with the reviewed file's exact content and mode (the same Git blob and mode) | `` `PATH` differs from the reviewed file ``; `` `PATH` no longer exists `` |
+| Any change | — | `` `X` is a directory ``, `` `X` is a symbolic link `` or `` `X` is a submodule `` when X, the path or a directory on the way to it, is one at H (never followed) |
+
+The checks read Git trees and, for an edit whose file changed, the file's text at H, through Git objects as source is read, never the Contents API; no blob of a created or deleted file is downloaded. A range is compared at the same line numbers: a range that only moved is treated as changed and is never relocated. Every change must pass: a group is re-applied whole or not at all, never split.
+
+- **Re-applied:** the proposal commit's parent is H, and its changes are the same changes applied to H: an edited file is H's file with exactly the same ranges replaced (so later edits elsewhere in the file are kept), a creation and a deletion are unchanged. The marker is version 2 and names H as `reappliedOnto` ([convention §7](suggestion-pr-convention.md#7-the-marker)); the body and the review section say so (§2.11).
+- **Not created:** its section in the review body says so and lists every reason (§2.11), still showing the change and every finding carrying it; the ready assessment and the publication outcome carry one warning per such suggestion (`suggestion-pr-not-reapplied`), naming it and its reasons. Not creating a suggestion is not a refusal of the review, and everything else publishes as usual. A review whose suggestions are all not created needs no suggestion pull request at all: it is published exactly like one without them (no labels, permission or configuration are needed, and its state is the version-1 record).
+- The limit of 10 suggestion pull requests (§2.8) counts the ones that would be created.
+- The decision is made once, when the publication is planned, and recorded in the plan (§2.9). A retry never compares again or re-decides, even if the head was rewritten again in between: a re-application is a snapshot of the head it was made on.
 
 ### 2.6 Branch naming and ownership
 
@@ -109,7 +131,7 @@ Each suggestion's proposal branch is `suggestion-pr/<pull number>/<suggestion id
 
 The tool owns only branches it created, and only to create them: it creates each branch exactly once, pointing at its proposal commit, and never updates, force-pushes, rebases or deletes it. A branch a person has since changed is left as it is (§2.10). Deleting branches is outside publication; cleanup closes pull requests only, and branch removal is left to people or to GitHub's automatic deletion of merged branches.
 
-The proposal commit is created through GitHub's Git database API: one blob per created or edited file, whose Git blob id is computed locally from the exact proposed bytes and must equal the host's answer; one tree based on the reviewed commit's tree (a deletion is a `sha: null` entry); one commit with the reviewed commit as its only parent. Before the branch is created, the commit is read back: its tree, parent, and every changed path (blob id and mode, or absence for a deletion) must be exactly as proposed. An edited file keeps its existing mode; a created file has its proposed mode. These objects are content-addressed and invisible until a branch points at them, so creating them again after a failure creates nothing a person can see and is not an uncertain write.
+The proposal commit is created through GitHub's Git database API: one blob per created or edited file, whose Git blob id is computed locally from the exact proposed bytes and must equal the host's answer; one tree based on the parent's tree (a deletion is a `sha: null` entry); one commit with the parent as its only parent. The parent is the reviewed commit, or H for a re-applied suggestion (§2.5.1). Before the branch is created, the commit is read back: its tree, parent, and every changed path (blob id and mode, or absence for a deletion) must be exactly as proposed. An edited file keeps its existing mode; a created file has its proposed mode. These objects are content-addressed and invisible until a branch points at them, so creating them again after a failure creates nothing a person can see and is not an uncertain write.
 
 ### 2.7 Relationship: reference, marker and labels
 
@@ -122,7 +144,7 @@ A suggestion pull request's body establishes the relationship; the original pull
   <!-- suggestion-pr {"version":1,"original":{"owner":"<owner>","repo":"<repo>","pullNumber":<pull>},"reviewedCommit":"<40-hex>","id":"<suggestion id>","batch":"<publication id>"} -->
   ```
 
-  The JSON is canonical: exactly these members in this order, no whitespace. `id` identifies this suggestion (its branch carries it), `batch` groups the suggestions of one review (this tool uses its publication id, one per state path), `original` names the original pull request, and `reviewedCommit` the proposal's parent. The marker is metadata, not a secret, and never contains `-->`. The review-body marker released in 0.2.x is not part of the convention and is unchanged.
+  The JSON is canonical: exactly these members in this order, no whitespace. `id` identifies this suggestion (its branch carries it), `batch` groups the suggestions of one review (this tool uses its publication id, one per state path), `original` names the original pull request, and `reviewedCommit` the proposal's parent. A suggestion re-applied after a rewritten history (§2.5.1) carries the version-2 marker instead, `{"version":2,…,"reviewedCommit":"<40-hex>","reappliedOnto":"<40-hex>","id":…,"batch":…}`, whose `reappliedOnto` is the proposal's parent. The marker is metadata, not a secret, and never contains `-->`. The review-body marker released in 0.2.x is not part of the convention and is unchanged.
 - **Canonical label.** Resolved identically by `publish`, `validate` and `close-suggestion-prs`: the `label` of the optional, read-only, hand-maintained `.github/suggestion-prs.json` (`{ "label": "…" }`), read from the current commit of the repository's **default branch** so that a pull request cannot change its own label; otherwise **`suggestion-pr`**. The tool never writes that file, and keeps no state in the repository. The file's states are exactly those of [convention §4](suggestion-pr-convention.md#4-repository-configuration):
 
   | File on the default branch | Outcome |
@@ -141,10 +163,10 @@ A suggestion pull request's body establishes the relationship; the original pull
 Everything below runs in the shared review preflight, so `validate` and `publish` report the same outcome. It is read-only.
 
 1. Whole-review preparation of the SARIF with the setting: every rule of §2.3–§2.4, the file-operation rules, and the existing limits. With the setting enabled, one more limit applies: at most **10 suggestion pull requests** per review (`too-many-suggestion-prs`), a conservative product limit against pull-request storms; and every suggestion pull request body is held to the existing 60,000-character limit (`suggestion-body-too-large`), never truncated. A created file in a suggestion pull request may hold at most 1,000,000 bytes (`suggestion-file-too-large`), the source-read limit. File-content refusals of the file-operation contract (for example bare carriage returns) still apply. These limits are the owner-accepted ones (#27), and they are this tool's, not the convention's.
-2. With the setting enabled, the pull request's branches and repositories and the repository's default branch and permissions are read before preparation, because the suggestion texts name the head branch. Only when the ready preparation needs at least one suggestion pull request are the repository checks applied, all reported together: `suggestion-pr-fork-unsupported`, `suggestion-pr-base-unsupported`, `suggestion-pr-historical-unsupported`, `suggestion-pr-permission-missing`, `suggestion-pr-configuration-invalid`, `suggestion-label-missing`. The repository configuration and the labels are read only then (the canonical label is not checked when the configuration is invalid; the extra labels still are). A failed read is operational (`publish` rejects, `validate` answers `incomplete`). With the setting disabled, none of these reads happens.
+2. With the setting enabled, the pull request's branches and repositories and the repository's default branch and permissions are read before preparation, because the suggestion texts name the head branch; when the head is not the reviewed commit and the pull request is one suggestion pull requests support, their comparison is read too (§2.5), because what is created depends on it. Only when the ready preparation needs at least one suggestion pull request are the repository checks applied, all reported together: `suggestion-pr-fork-unsupported`, `suggestion-pr-base-unsupported`, `suggestion-pr-permission-missing`, `suggestion-pr-configuration-invalid`, `suggestion-label-missing`. A head that moved is never among them (§2.5). The repository configuration and the labels are read only then (the canonical label is not checked when the configuration is invalid; the extra labels still are). A failed read is operational (`publish` rejects, `validate` answers `incomplete`). With the setting disabled, none of these reads happens.
 3. The authenticated account's numeric id, as today.
 
-A `ready` assessment with suggestion pull requests says how many would be created, into which branch, in which form and with which labels, for example ``Publication would also create 1 draft suggestion pull request into `feature/retry`, labeled `suggestion-pr`.`` or ``Publication would also create 2 suggestion pull requests, ready for review, into `feature/retry`, labeled `suggestion-pr` and `docs`.`` Codes are internal, as always (D13); the Markdown and `problems` are the contract.
+A `ready` assessment with suggestion pull requests says how many would be created, into which branch, in which form and with which labels, for example ``Publication would also create 1 draft suggestion pull request into `feature/retry`, labeled `suggestion-pr`.`` or ``Publication would also create 2 suggestion pull requests, ready for review, into `feature/retry`, labeled `suggestion-pr` and `docs`.`` When they are re-applied after a rewritten history (§2.5.1), it adds ``The history of #7 was rewritten after the reviewed commit, so it is re-applied onto commit `H`, where everything it changes is still exactly as reviewed.`` (``so they are re-applied`` for several), and a suggestion that would not be created is a `suggestion-pr-not-reapplied` warning. Codes are internal, as always (D13); the Markdown and `problems` are the contract.
 
 ### 2.9 Durable identity and the order of writes
 
@@ -152,7 +174,7 @@ The caller's single `statePath` identifies the publication. With suggestion pull
 
 | File | Holds | Written |
 | --- | --- | --- |
-| `<statePath>` | The **plan**: format `sarif-to-comment.companion-publication-state`, version 1; destination, reviewed commit, input fingerprint, author id, mode, head branch, the labels (the canonical label first, then the extra labels, each as GitHub names it), whether the pull requests are created ready for review; the publication id (the marker's `batch`); for each suggestion its id, branch, title, body (with marker), commit message and exact changes; the review's body sections and inline comments; a fingerprint over all of it. | Once, exclusively, before any write. Never changed. |
+| `<statePath>` | The **plan**: format `sarif-to-comment.companion-publication-state`, version 1, or version 2 when its suggestions are re-applied (§2.5.1), which adds `reappliedOnto`, the commit they are re-applied onto; destination, reviewed commit, input fingerprint, author id, mode, head branch, the labels (the canonical label first, then the extra labels, each as GitHub names it), whether the pull requests are created ready for review; the publication id (the marker's `batch`); for each suggestion its id, branch, title, body (with marker), commit message and exact changes; the review's body sections and inline comments; a fingerprint over all of it. | Once, exclusively, before any write. Never changed. |
 | `<statePath>.suggestion-<n>-branch` | Intent: the proposal commit. Receipt: the branch verified at that commit. | Claimed exclusively before the branch is created. |
 | `<statePath>.suggestion-<n>-pull` | Intent to create the pull request. Receipt: its number and URL. | Claimed exclusively before the pull request is created. |
 | `<statePath>.suggestion-<n>-labels` | Intent to label pull request N with the plan's labels. Receipt: every label verified on it. | Claimed exclusively before the labels are added. |
@@ -171,7 +193,7 @@ A call that meets an existing plan continues it: each completed step is reported
 | Step | Investigation | Complete when | Otherwise |
 | --- | --- | --- | --- |
 | Branch | Read `refs/heads/<branch>` | It points at the intended commit | Absent: `not-found`. Elsewhere: `candidate-differs` (a person may have pushed). |
-| Pull request | List the repository's pull requests whose head is the proposal branch (`state=all`) | Exactly one carries the exact marker line, is authored by the plan's account, has the proposal branch as head in this repository and the original's head branch as base | None: `not-found`. Several: `ambiguous`. Wrong author, head or base: `candidate-mismatch`. |
+| Pull request | List the repository's pull requests whose head is the proposal branch (`state=all`) | Exactly one carries the exact marker line (version 2 for a re-applied suggestion), is authored by the plan's account, has the proposal branch as head in this repository and the original's head branch as base | None: `not-found`. Several: `ambiguous`. Wrong author, head or base: `candidate-mismatch`. |
 | Labels | Read the pull request's labels | Every planned label is present (compared case-insensitively) | `not-found`, naming the missing labels |
 | Review | The existing review investigation | As today | As today |
 
@@ -220,6 +242,8 @@ ITEMS
 ```
 Suggested in a review of #PULL at commit REVIEWED.
 
+REAPPLIED                                                         (only when re-applied, §2.5.1)
+
 Merging this pull request into HEADREF applies this change:     (or: these K changes together:)
 
 - CHANGE
@@ -246,9 +270,29 @@ Created ready for review:
 **How this suggestion is accepted:** it is a pull request into HEADREF, the branch of #PULL. The author of #PULL decides whether to merge it, and #PULL carries the change to its base. Once #PULL is merged or closed, this pull request can be closed.
 ```
 
-The commit message is the title, a blank line, and `Suggested in a review of OWNER/REPO pull request PULL at commit REVIEWED.`
+`REAPPLIED` is `The history of #PULL was rewritten after that commit, so this change is re-applied onto commit H, the head of #PULL when it was proposed, where everything it changes is still exactly as reviewed.`
 
-**Outcomes.** A published outcome gains `suggestions: [{ number, url, branch }]`, present only when suggestion pull requests were created; its Markdown lists them after ``Suggestion pull requests (drafts into `HEADREF`, labeled LABELS):`` or ``Suggestion pull requests (ready for review, into `HEADREF`, labeled LABELS):``, where LABELS lists every applied label as code spans joined like `` `a` ``, `` `a` and `b` ``, `` `a`, `b` and `c` ``. Uncertain and refused outcomes list what is already established. Everything else is unchanged.
+The commit message is the title, a blank line, and `Suggested in a review of OWNER/REPO pull request PULL at commit REVIEWED.`, or for a re-applied suggestion `Suggested in a review of OWNER/REPO pull request PULL at commit REVIEWED, and re-applied onto commit H after the pull request's history was rewritten.`
+
+**Re-application in the review body** (§2.5.1). A re-applied suggestion's section gains, after its link, the paragraph `The history of #PULL was rewritten after the reviewed commit, so this change is re-applied onto commit H, the head of #PULL when it was proposed, where everything it changes is still exactly as reviewed.` A suggestion that is not created keeps its section, at the same position, as:
+
+```
+**Suggestion pull request not created:** the history of #PULL was rewritten after the reviewed commit, and this change cannot be re-applied onto commit H, the head of #PULL, because there:
+
+- REASON
+- …
+
+It would have proposed this change:                    (or: these K changes together:)
+
+- CHANGE
+- …
+
+ITEMS
+```
+
+with the reasons of §2.5.1 in the order of the changes.
+
+**Outcomes.** A published outcome gains `suggestions: [{ number, url, branch }]`, present only when suggestion pull requests were created; its Markdown lists them after ``Suggestion pull requests (drafts into `HEADREF`, labeled LABELS):`` or ``Suggestion pull requests (ready for review, into `HEADREF`, labeled LABELS):``, where LABELS lists every applied label as code spans joined like `` `a` ``, `` `a` and `b` ``, `` `a`, `b` and `c` ``. Re-applied suggestions add ``, re-applied onto commit `H` `` before the colon, on every call that reports the publication. The `suggestion-pr-not-reapplied` warnings appear in the outcome of the call that planned the publication, as every preparation warning does; the review body keeps the reasons permanently. Uncertain and refused outcomes list what is already established. Everything else is unchanged.
 
 ## 3. Worked example
 
@@ -266,7 +310,7 @@ Decided by the owner, and no longer awaiting acceptance:
 
 - **Off by default, explicit opt-in** (§2.1): [#5](https://github.com/mike-north/sarif-to-comment/issues/5). The earlier provisional D22 default ("enabled when omitted") is superseded.
 - **The convention, options, labels and lifecycle** ([#27](https://github.com/mike-north/sarif-to-comment/issues/27)): the tool-neutral [convention](suggestion-pr-convention.md) (label `suggestion-pr`, the optional default-branch configuration file, branch `suggestion-pr/<pull>/<id>`, the marker with `batch`, neutral title and body with no closing keywords); the option names `allowSuggestionPullRequests` / `--allow-suggestion-prs`, `pullRequestLabels` / `--pr-labels`, `markSuggestionPullRequestsReady` / `--mark-suggestion-prs-ready`, and the removal of the per-call label; all of them in the publication identity; every label must already exist, the tool never creates one, and a missing label blocks before any write; drafts by default; branches created once and never updated, force-pushed or deleted; native suggestions first; same repository with a default-branch base, with forks and other bases not yet supported; and the limits and mechanics as merged (at most 10 suggestion pull requests per review, bodies of at most 60,000 characters, created files of at most 1 MB, per-step state persisted before each attempt, recovery by unique branch plus exact marker, a refused step stops publication, a retry never overwrites human pushes).
-- **A branch that moved forward after the review is not a reason to refuse** (#27). The relaxation itself is implemented with [#28](https://github.com/mike-north/sarif-to-comment/issues/28); until then the refusal of §2.5 stands, worded as a missing capability.
+- **A branch that moved forward after the review is not a reason to refuse** (#27), and **a rewritten history is handled by testing ancestry** ([#28](https://github.com/mike-north/sarif-to-comment/issues/28)): an advanced branch proceeds on the reviewed commit; after a rewrite, each suggestion is re-applied onto the head only when everything it changes is byte-identical there, and is otherwise not created, with its reason stated in the review and the outcome; ordinary feedback publishes as before (§2.5, §2.5.1).
 
 Still awaiting the owner:
 
@@ -277,11 +321,12 @@ Still awaiting the owner:
 5. **Details of the options** (§2.2): the CLI trims spaces around `--pr-labels` names; extra labels are deduplicated keeping the first spelling; the identity document's shape.
 6. **Details of the configuration read** (§2.7): through Git objects, with a symbolic link, directory or submodule, and a file over 1,000,000 bytes, treated as invalid; unknown members ignored ([convention open questions](suggestion-pr-convention.md#10-open-questions)).
 7. **One request for all labels**, and one labels step and state file per suggestion (§2.9).
+8. **Details of re-application** (§2.5.1, §2.11): ranges compared at the same line numbers, never relocated; a deletion compared by Git blob and mode; the reason and presentation wording; the plan's version 2 with `reappliedOnto`; and counting only the suggestion pull requests that would be created against the limit of 10.
 
 ## 5. What cleanup (#6) can rely on
 
-- Every suggestion pull request this tool creates follows the [convention](suggestion-pr-convention.md): it carries the canonical label and any extra labels (once its labels step completes) and exactly one marker line of §2.7, whose `original` names the original pull request in the same repository. Suggestion-first enumeration can list open pull requests with the canonical label and parse the marker; targeted discovery can start from the original's cross-reference backlinks, which the body's ordinary reference creates.
+- Every suggestion pull request this tool creates follows the [convention](suggestion-pr-convention.md): it carries the canonical label and any extra labels (once its labels step completes) and exactly one marker line of §2.7 (version 1, or version 2 when re-applied), whose `original` names the original pull request in the same repository. Suggestion-first enumeration can list open pull requests with the canonical label and parse the marker; targeted discovery can start from the original's cross-reference backlinks, which the body's ordinary reference creates.
 - The marker, not the title, is the relationship. A labeled pull request without a recognized marker is not a suggestion pull request.
 - The labels may be missing when a publication stopped before its labels step, or when a person removed them; such a suggestion is still reached from the original's backlinks and its marker.
-- Proposal branches are named `suggestion-pr/<pull>/<id>` and are never changed by the tool after creation.
+- Proposal branches are named `suggestion-pr/<pull>/<id>` and are never changed by the tool after creation. A re-applied one's commit is based on the marker's `reappliedOnto`, not on the reviewed commit.
 - The canonical label is resolved the same way for cleanup as for publication (§2.7).
