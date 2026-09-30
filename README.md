@@ -224,20 +224,35 @@ A refused request is recorded in the state file. Later runs with that path repor
 
 ## Suggestion pull requests (optional)
 
-Some proposals can't be accepted with GitHub's native suggestion button: a whole new or deleted file, or several changes that only make sense together (a fix and its regression test). With `options.suggestionPullRequests: true` (`--suggestion-prs`), the tool offers each of them as a **companion suggestion pull request**: a draft pull request into the reviewed pull request's head branch, which the author accepts by merging it. The review links every suggestion pull request.
+Some proposals can't be accepted with GitHub's native suggestion button: a whole new or deleted file, or several changes that only make sense together (a fix and its regression test). With `options.allowSuggestionPullRequests: true` (`--allow-suggestion-prs`), the tool offers each of them as a **suggestion pull request**: a pull request into the reviewed pull request's head branch, which the author accepts by merging it. The review links every suggestion pull request. Native suggestions are always preferred: only changes they can't represent safely become pull requests.
 
 It is **off by default**. Without it, creations and deletions are shown in the review body as before, and nothing else changes. Pull requests create clutter and can start CI runs, notifications and bots, so you opt in knowingly.
 
+Suggestion pull requests follow a tool-neutral **suggestion pull request convention**: what GitHub shows names no tool and no SARIF, and any tool could create them or tidy them up. The convention is specified in the source repository (`docs/suggestion-pr-convention.md`).
+
+| Library (`options`) | CLI | Meaning |
+| --- | --- | --- |
+| `allowSuggestionPullRequests: true` | `--allow-suggestion-prs` | Opt in. |
+| `pullRequestLabels: ['team-a', …]` | `--pr-labels team-a,…` | Extra existing labels, added **in addition to** the canonical label. Deduplicated case-insensitively; names may not contain commas. Needs the opt-in. |
+| `markSuggestionPullRequestsReady: true` | `--mark-suggestion-prs-ready` | Create them ready for review instead of as drafts (the default). Needs the opt-in. |
+
 - **What becomes a pull request.** Each distinct whole-file creation or deletion, and each explicit group. Small edits that a native suggestion represents faithfully stay native suggestions.
 - **Explicit groups.** Mark the results that must be accepted together with the same `properties.sarifToComment.acceptanceGroup` value (1–100 characters). Every member carries exactly one change: one fix (one replacement) or one file creation or deletion, and a group needs at least two distinct changes. The tool never infers a group, never joins two groups and never merges alternative fixes. Without the setting, a grouped document is blocked, naming the setting; a group is never split.
-- **Where it goes.** A proposal branch `sarif-to-comment/suggestions/<pull>/<id>` whose single commit has the reviewed commit as its parent, and a draft pull request from it into the head branch. The tool creates each branch once and never updates, force-pushes or deletes it.
-- **Relationship.** The pull request's body starts with an ordinary reference (`Suggested in a review of #42 …`, never a closing keyword), repeats the findings, and ends with a hidden structured marker naming the original pull request. It carries the label `suggestion`, or the one you name with `suggestionLabel` (`--suggestion-label`). The label must already exist; the tool never creates labels. The original pull request is never edited.
-- **Requirements, checked before anything is written** (and reported by `validate` too): the pull request's head branch is in the same repository and is not its default branch; the reviewed commit is the pull request's current head; your account can push; the label exists. At most 10 suggestion pull requests per review.
+- **The label.** Every suggestion pull request carries the repository's **canonical label**: `suggestion-pr`, unless the repository names another in an optional, hand-maintained `.github/suggestion-prs.json` (`{ "label": "…" }`) on its **default branch** (so a pull request can't change its own label). The tool never writes that file. An invalid file (bad JSON, a `label` that isn't a string, is empty or contains a comma) blocks the review, naming the file and field; a file that can't be read is an error, never a silent default. There is no per-call label option: the label is a convention of the repository, and cleanup relies on it.
+- **Labels must exist.** The canonical label and every extra label must already exist in the repository. Otherwise the whole review is blocked before anything is written, and `validate` says the same. The tool never creates labels.
+- **Where it goes.** A branch `suggestion-pr/<pull>/<id>` whose single commit has the reviewed commit as its parent, and a pull request from it into the head branch. The tool creates each branch once and never updates, force-pushes or deletes it.
+- **Relationship.** The pull request's title is `Suggestion for #42: …`; its body starts with an ordinary reference (`Suggested in a review of #42 at commit …`, never a closing keyword), says what merging applies, briefly explains the lifecycle, repeats the findings, and ends with a hidden structured marker naming the original pull request. The original pull request is never edited.
+- **Lifecycle.**
+  1. The tool creates the suggestion branch from the reviewed commit, with the change committed.
+  2. It opens a draft pull request into the original pull request's head branch.
+  3. **Someone with write access marks it "Ready for review"**: a draft can't be merged. With `--mark-suggestion-prs-ready` it starts ready.
+  4. The original's author merges it, or not; the original pull request then carries the change to its base.
+  5. Once the original has merged or closed, [cleanup](#closing-suggestion-pull-requests-after-the-original-ends) closes the suggestion pull requests still open.
+- **Supported today, checked before anything is written** (and reported by `validate` too): an original pull request whose head branch is in the same repository and whose base is the repository's default branch; the reviewed commit is the pull request's current head; your account can push; every label exists. Forks and other bases are not yet supported, and the message says which capability is missing. At most 10 suggestion pull requests per review.
 - **Credentials.** Creating branches, pull requests and labels needs write access. For a fine-grained token that is *Contents: Read and write* and *Pull requests: Read and write*.
-- **Retries.** The state path holds a plan, and each branch, pull request and label gets its own record beside it (`<state>.suggestion-1-branch` and so on), written before that request is sent. A retry never sends a step twice: it finds a pull request whose response was lost by its branch and marker, continues the steps never sent, and only then publishes the review. Keep all of these files. The setting and label are part of the publication's identity.
+- **Retries.** The state path holds a plan, and each branch, pull request and set of labels gets its own record beside it (`<state>.suggestion-1-branch` and so on), written before that request is sent. A retry never sends a step twice: it finds a pull request whose response was lost by its branch and marker, continues the steps never sent, and only then publishes the review. Keep all of these files. Every suggestion setting is part of the publication's identity: retry with the same ones.
 - **People's changes are kept.** A branch someone moved before its pull request exists stops the publication as `uncertain`; nothing is recreated or overwritten. A suggestion pull request someone edited, closed or merged is left as it is.
 - The published outcome lists them in `suggestions` (`number`, `url`, `branch`), and the CLI's JSON adds the same array. The full contract is in the source repository (`docs/companion-suggestion-pr-contract.md`).
-- Suggestion pull requests stay open until someone merges or closes them. Once their original pull request has ended, [cleanup](#closing-suggestion-pull-requests-after-the-original-ends) closes the ones still open.
 
 ## Closing suggestion pull requests after the original ends
 
@@ -259,13 +274,14 @@ const cleanup = await closeSuggestionPullRequests({
 for (const s of cleanup.suggestions) console.log(`#${s.number}: ${s.result}`);
 ```
 
-- **What it checks.** By default, every open pull request carrying the suggestion label (`suggestion`, or `--label` / `label`), page by page. With `--original N` (`originalPullNumber`), only the pull requests that reference pull request N. A pull request is one of this tool's suggestions only if its description carries the tool's hidden marker, exactly as the publisher wrote it; titles are never read.
-- **When it closes.** Only after the original named by the marker has been read and found **merged or closed**. An original that can't be read (not found, no access, a network or server error) is `unverified`, never treated as ended. The suggestion itself is then read again and closed only if it is still open, still carries the same marker and the label, and comes from its own proposal branch in the same repository.
+- **What it checks.** By default, every open pull request carrying the repository's canonical label, resolved exactly as publication resolves it (`suggestion-pr`, or the `label` of `.github/suggestion-prs.json` on the default branch; an invalid file stops cleanup before anything is closed), page by page. With `--original N` (`originalPullNumber`), only the pull requests that reference pull request N. A pull request is a suggestion only if it conforms to the convention: its description carries the hidden marker exactly in the convention's form, and it comes from its own `suggestion-pr/…` branch. Suggestions made by any tool following the convention are handled the same way; titles are never read.
+- **Migrating labels.** `--label NAME` (`label`) checks another label instead of the canonical one, for suggestions left under a previously configured label.
+- **When it closes.** Only after the original named by the marker has been read and found **merged or closed**. An original that can't be read (not found, no access, a network or server error) is `unverified`, never treated as ended. The suggestion itself is then read again and closed only if it is still open, still carries the same marker and the label, and comes from its own branch in the same repository.
 - **What it changes.** It closes pull requests, nothing else. Branches are never deleted; nothing is edited, labeled, commented on or reopened, and the original is never touched. Everything is read before the first close. `--dry-run` (`dryRun`) reads and verifies everything and closes nothing.
 - **Permissions.** Each close is attempted with your token. Pull requests GitHub doesn't let you close are reported as `permission-limited`, separately from failures; someone allowed to close them can run cleanup for the rest.
 - **Running it again is safe.** Closed suggestions are no longer listed (with `--original`, they are reported `already-closed`).
 
-Each pull request checked gets one `result`: `closed`, `would-close` (dry run), `already-closed`, `left-open` (the original is still open), `unverified`, `permission-limited`, `failed`, `not-ours` (no recognizable marker, another repository or original, or another branch; never touched) or `unlabeled`.
+Each pull request checked gets one `result`: `closed`, `would-close` (dry run), `already-closed`, `left-open` (the original is still open), `unverified`, `permission-limited`, `failed`, `not-ours` (not a conforming suggestion pull request: no recognizable marker, another repository or original, or another branch; never touched) or `unlabeled`.
 
 | Library `status` | CLI exit | Meaning |
 | --- | --- | --- |
@@ -273,7 +289,7 @@ Each pull request checked gets one `result`: `closed`, `would-close` (dry run), 
 | `permission-limited` | 2 | Everything else is done; some eligible suggestions could not be closed with this token. |
 | `incomplete` | 3 | An original could not be verified or an action failed. Run it again later. |
 
-Invalid input rejects with a `TypeError`, and a failure while listing rejects, both before anything is closed (CLI exit 1). With `--format json`, the CLI prints `{ command, status, dryRun, originals, suggestions, message }`. Labels containing a comma are refused, here and for `suggestionLabel`, because GitHub's label filter would read them as several labels. The full contract is in the source repository (`docs/suggestion-cleanup-contract.md`).
+Invalid input rejects with a `TypeError`; an invalid or unreadable label configuration, and a failure while listing, reject with an `Error`; all before anything is closed (CLI exit 1). With `--format json`, the CLI prints `{ command, status, dryRun, originals, suggestions, message }`. Labels containing a comma are refused everywhere, because GitHub's label filter would read them as several labels. The full contract is in the source repository (`docs/suggestion-cleanup-contract.md`).
 
 ## Supported SARIF (first-milestone profile)
 
@@ -288,7 +304,7 @@ Invalid input rejects with a `TypeError`, and a failure while listing rejects, b
   - A deletion links the file at the reviewed commit and says that the whole file is removed, not emptied. Its content is never read unless a finding quotes lines of it, so binary and oversized files can be deleted.
   - Content that a code block cannot show exactly is refused before anything is written: control characters, a carriage return that doesn't end a CRLF line, mixed CRLF and LF line endings, invisible bidirectional or separator characters, and binary or non-UTF-8 contents. Nothing is truncated or split; a proposal that doesn't fit the body limit refuses the whole review.
   - There is no editor link and no collapsing. Emptying an existing file is an ordinary edit, published as a suggestion. The full contract is in the source repository (`docs/file-operation-publication-contract.md`).
-  - With [suggestion pull requests](#suggestion-pull-requests-optional) enabled, each distinct proposal is offered as a draft pull request instead, and the review body links it.
+  - With [suggestion pull requests](#suggestion-pull-requests-optional) enabled, each distinct proposal is offered as a suggestion pull request instead, and the review body links it.
 - **Refused features.** Multiple locations, related locations, code flows, graphs, stacks, attachments, suppressions, and alternative or multi-file fixes are refused with an explanation.
 - **Metadata limits.**
   - Producer fingerprints, rank and occurrence counts are not rendered.
