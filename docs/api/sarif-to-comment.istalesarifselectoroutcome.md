@@ -4,7 +4,7 @@
 
 ## IStaleSarifSelectorOutcome interface
 
-The selector does not select a finding in this document as it is now, usually because the document changed after it was inspected. Nothing was removed.
+A selector does not select a finding in this document as it is now, usually because the document changed after it was inspected. Nothing was changed: [removeSarifComment()](./sarif-to-comment.removesarifcomment.md) removed nothing, and[groupSarifFixes()](./sarif-to-comment.groupsariffixes.md) and [ungroupSarifFixes()](./sarif-to-comment.ungroupsariffixes.md) grouped or ungrouped nothing.
 
 **Signature:**
 
@@ -94,7 +94,7 @@ string
 
 </td><td>
 
-The selector, as given.
+The selector, as given (the first that does not fit, when several were given).
 
 
 </td></tr>

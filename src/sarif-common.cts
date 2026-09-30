@@ -298,6 +298,15 @@ const MAX_JSON_DEPTH = 512;
 /** GitHub web host used for repository identity. */
 const GITHUB_HOST = 'github.com';
 
+/** Control and invisible formatting characters a suggestion group name may not contain (the publisher's rule). */
+const INVISIBLE_IN_GROUP = /[\u0000-\u001F\u007F-\u009F\uFEFF\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069\u2028\u2029]/;
+
+/** A UTF-16 surrogate without its pair: not valid Unicode text. */
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+
+/** Longest suggestion group name, in UTF-16 code units. */
+const MAX_GROUP_NAME = 100;
+
 // ---------------------------------------------------------------------------
 // Capture
 
@@ -521,6 +530,34 @@ export function namesRepository(uri: string, { owner, repo }: IRepositoryIdentit
   if (!['https:', 'http:', 'ssh:', 'git:'].includes(url.protocol) || url.hostname.toLowerCase() !== GITHUB_HOST) return false;
   const parts = url.pathname.replace(/\/+$/, '').replace(/\.git$/, '').split('/').filter(Boolean);
   return parts.length === 2 && parts[0]?.toLowerCase() === owner.toLowerCase() && parts[1]?.toLowerCase() === repo.toLowerCase();
+}
+
+/**
+ * Whether `value` can name a suggestion group
+ * (`properties.sarifToComment.suggestionGroup`): 1-100 UTF-16 code units of
+ * valid Unicode, with no control or invisible formatting character and no
+ * leading or trailing whitespace, so the name can be shown exactly in a pull
+ * request title. This is the publisher's rule
+ * (docs/companion-suggestion-pr-contract.md §2.3).
+ */
+export function isSuggestionGroupName(value: unknown): value is string {
+  return typeof value === 'string' && value.length >= 1 && value.length <= MAX_GROUP_NAME && !INVISIBLE_IN_GROUP.test(value)
+    && !LONE_SURROGATE.test(value) && !/^\s|\s$/.test(value);
+}
+
+/**
+ * JSON text of `value` with every object's keys in sorted order, so equal
+ * values have equal text whatever their key order or formatting.
+ *
+ * @param value - a captured JSON value
+ */
+export function canonicalJson(value: JsonValue): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  const members = Object.entries(value)
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([key, member]) => `${JSON.stringify(key)}:${canonicalJson(member)}`);
+  return `{${members.join(',')}}`;
 }
 
 /**

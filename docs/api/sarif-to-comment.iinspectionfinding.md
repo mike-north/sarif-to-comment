@@ -346,7 +346,28 @@ string
 
 </td><td>
 
-Selects this finding for [removeSarifComment()](./sarif-to-comment.removesarifcomment.md)<!-- -->. It is bound to the document exactly as inspected: after any change to the document, inspect again for current selectors. Treat it as opaque.
+Selects this finding for [removeSarifComment()](./sarif-to-comment.removesarifcomment.md)<!-- -->,[groupSarifFixes()](./sarif-to-comment.groupsariffixes.md) and [ungroupSarifFixes()](./sarif-to-comment.ungroupsariffixes.md)<!-- -->. It is bound to the document exactly as inspected: after any change to the document, inspect again for current selectors. Treat it as opaque.
+
+
+</td></tr>
+<tr><td>
+
+[suggestionGroup?](./sarif-to-comment.iinspectionfinding.suggestiongroup.md)
+
+
+</td><td>
+
+`readonly`
+
+
+</td><td>
+
+string \| undefined
+
+
+</td><td>
+
+_(Optional)_ The suggestion group the finding's change belongs to (`properties.sarifToComment.suggestionGroup`<!-- -->), as written, when it is a string. See [groupSarifFixes()](./sarif-to-comment.groupsariffixes.md)<!-- -->.
 
 
 </td></tr>

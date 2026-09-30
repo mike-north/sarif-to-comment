@@ -31,8 +31,9 @@
  *   repository, inspection never judges a source foreign. The input SARIF is
  *   captured and never changed.
  * - Selectable. Every finding carries a selector bound to the document as
- *   inspected (finding-selectors.cts), which removal requires, so a finding
- *   is never removed from a document that changed after it was inspected.
+ *   inspected (finding-selectors.cts), which removal and grouping require,
+ *   so a finding is never removed or grouped in a document that changed
+ *   after it was inspected.
  * - Shared interpretation. Paths, rules and messages are read with the same
  *   rules the publisher uses (`sarif-common.cjs`). What cannot be resolved
  *   stays in the view (`path: null`, `resolved: false`) with a warning.
@@ -252,7 +253,8 @@ export interface IInspectionFinding {
   /** JSON Pointer to the result, such as `/runs/0/results/3`. */
   readonly ref: string;
   /**
-   * Selects this finding for {@link removeSarifComment}. It is bound to the
+   * Selects this finding for {@link removeSarifComment},
+   * {@link groupSarifFixes} and {@link ungroupSarifFixes}. It is bound to the
    * document exactly as inspected: after any change to the document, inspect
    * again for current selectors. Treat it as opaque.
    */
@@ -271,6 +273,12 @@ export interface IInspectionFinding {
   readonly baselineState?: string | undefined;
   /** A declared approval hold, as written. */
   readonly approval?: string | undefined;
+  /**
+   * The suggestion group the finding's change belongs to
+   * (`properties.sarifToComment.suggestionGroup`), as written, when it is a
+   * string. See {@link groupSarifFixes}.
+   */
+  readonly suggestionGroup?: string | undefined;
   /** The full message. */
   readonly message: IInspectionMessage;
   /** Every location, in order; empty for a general finding. */
@@ -920,8 +928,14 @@ function fileProposalViews(result: IResultInput, run: IRunInput, ref: string, st
 
 /** The declared approval state in an owned property bag, if any (shown as declared, never verified). */
 function approvalOf(properties: IPlainObject | undefined): string | undefined {
+  return ownedString(properties, 'approval');
+}
+
+/** A string an owned property bag declares under `key`, if any (shown as written). */
+function ownedString(properties: IPlainObject | undefined, key: 'approval' | 'suggestionGroup'): string | undefined {
   const owned = properties && properties['sarifToComment'];
-  return isPlainObject(owned) && typeof owned['approval'] === 'string' ? owned['approval'] : undefined;
+  const value = isPlainObject(owned) ? owned[key] : undefined;
+  return typeof value === 'string' ? value : undefined;
 }
 
 /**
@@ -952,6 +966,7 @@ function findingView(
     : result.rule && result.rule.id !== undefined ? result.rule.id : finding.rule && finding.rule.id;
   const level = result.level !== undefined ? result.level : defaultLevel(finding.rule);
   const approval = approvalOf(result.properties);
+  const suggestionGroup = ownedString(result.properties, 'suggestionGroup');
   return {
     ref,
     selector: findingSelector(ref, digest),
@@ -962,6 +977,7 @@ function findingView(
     ...(result.kind !== undefined ? { kind: result.kind } : {}),
     ...(result.baselineState !== undefined ? { baselineState: result.baselineState } : {}),
     ...(approval !== undefined ? { approval } : {}),
+    ...(suggestionGroup !== undefined ? { suggestionGroup } : {}),
     message: messageView(result.message, finding.rule, finding.component, `${ref}/message`, state),
     locations: (result.locations || []).map((l, k) => locationView(l, run, finding, `${ref}/locations/${String(k)}`, state)),
     relatedLocations: (result.relatedLocations || []).map((l, k) => locationView(l, run, finding, `${ref}/relatedLocations/${String(k)}`, state)),
@@ -1290,7 +1306,7 @@ function findingLines(finding: IInspectionFinding, view: ISarifInspection): stri
   if (run === undefined) throw new Error(`Internal error: finding ${finding.ref} names run ${String(finding.runIndex)}, which the view does not have.`);
   const facts = [toolLabel(run.tool)];
   if (finding.ruleId !== undefined) facts.push(`rule ${finding.ruleId}`);
-  for (const key of ['level', 'kind', 'baselineState', 'approval'] as const) {
+  for (const key of ['level', 'kind', 'baselineState', 'approval', 'suggestionGroup'] as const) {
     const value = finding[key];
     if (value !== undefined) facts.push(`${key}: ${value}`);
   }

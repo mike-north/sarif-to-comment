@@ -11,6 +11,9 @@
  *   init                create a SARIF file              createSarifDocument
  *   add-comment         add one finding, in place        addSarifComment
  *   remove-comment      remove one finding, in place     removeSarifComment
+ *   group-fixes         group fixes for joint            groupSarifFixes
+ *                       acceptance, in place or to a copy
+ *   ungroup-fixes       undo a grouping                  ungroupSarifFixes
  *   inspect             read-only view of a SARIF file   inspectSarif
  *   add-staged-changes  add staged Git changes to a copy addStagedChangesToSarif
  *   validate            readiness, without publishing    validateSarifReview
@@ -35,7 +38,7 @@
  * outcomes to stdout and usage/operational errors to stderr.
  *
  * Exit statuses: 0 success or help; 1 usage error or operational error; 2 the
- * content was refused (`invalid` / `failed` / `stale`). `publish` keeps the publisher's
+ * content was refused (`invalid` / `failed` / `stale` / `refused`). `publish` keeps the publisher's
  * statuses: 0 published, 2 blocked, 3 uncertain, 1 otherwise. `validate`
  * (docs/readiness-assessment-contract.md): 0 ready, 2 blocked, 1 incomplete
  * or otherwise. `close-suggestion-prs`: 0 complete (a dry run too), 2
@@ -60,8 +63,9 @@ import type { ISarifSourceBinding } from './public-types.cjs';
 import { parseFindingSelector } from './finding-selectors.cjs';
 import { createSarifDocument, addSarifCommentWithUntypedInput, removeSarifCommentWithUntypedInput } from './sarif-authoring.cjs';
 import type { ICreateSarifDocumentOptions, INewSarifRun, ISarifComment } from './sarif-authoring.cjs';
-import { isNormalizedRepositoryPath, OWNER_PATTERN, REPO_PATTERN } from './sarif-common.cjs';
+import { isNormalizedRepositoryPath, isSuggestionGroupName, OWNER_PATTERN, REPO_PATTERN } from './sarif-common.cjs';
 import { inspectSarifWithUntypedInput, renderInspectionText } from './sarif-inspection.cjs';
+import { groupSarifFixesWithUntypedInput, ungroupSarifFixesWithUntypedInput } from './suggestion-groups.cjs';
 import { LABEL_RULE, isLabelName } from './suggestion-pr-convention.cjs';
 import type { IInspectSarifOptions } from './sarif-inspection.cjs';
 import { addStagedChangesToSarifWithUntypedInput } from './staged-changes.cjs';
@@ -72,10 +76,22 @@ import type { IValidateSarifReviewInternals } from './validate-sarif-review.cjs'
 const md = String.raw;
 
 /** A CLI command, in workflow order. */
-type CliCommand = 'init' | 'add-comment' | 'remove-comment' | 'inspect' | 'add-staged-changes' | 'validate' | 'publish' | 'close-suggestion-prs';
+type CliCommand =
+  | 'init'
+  | 'add-comment'
+  | 'remove-comment'
+  | 'group-fixes'
+  | 'ungroup-fixes'
+  | 'inspect'
+  | 'add-staged-changes'
+  | 'validate'
+  | 'publish'
+  | 'close-suggestion-prs';
 
 /** The commands, in workflow order. */
-const COMMANDS: readonly CliCommand[] = ['init', 'add-comment', 'remove-comment', 'inspect', 'add-staged-changes', 'validate', 'publish', 'close-suggestion-prs'];
+const COMMANDS: readonly CliCommand[] = [
+  'init', 'add-comment', 'remove-comment', 'group-fixes', 'ungroup-fixes', 'inspect', 'add-staged-changes', 'validate', 'publish', 'close-suggestion-prs',
+];
 
 /**
  * The private test seam the executable passes to the GitHub-using
@@ -133,10 +149,10 @@ const REVIEW_POLICY_OPTIONS = md`  --source-root ABSOLUTE_FILE_URI
                                  approves or requests changes. Retry a
                                  publication with the mode it started with.
   --allow-suggestion-prs         Allow suggestion pull requests: propose
-                                 whole-file creations and deletions, and grouped
-                                 changes (acceptanceGroup), as pull requests
-                                 into the pull request's head branch, linked
-                                 from the review. They carry the repository's
+                                 whole-file creations and deletions, fixes with
+                                 several changes, and changes grouped with
+                                 group-fixes, as pull requests into the pull
+                                 request's head branch, linked from the review. They carry the repository's
                                  suggestion label (suggestion-pr, or the label
                                  in .github/suggestion-prs.json on the default
                                  branch), which must already exist.
@@ -175,6 +191,8 @@ Usage:
   sarif-to-comment init --output FILE [options]
   sarif-to-comment add-comment --sarif FILE --file PATH --line N (--message TEXT | --message-file FILE|-) [options]
   sarif-to-comment remove-comment --sarif FILE --finding SELECTOR [options]
+  sarif-to-comment group-fixes --sarif FILE --finding SELECTOR --finding SELECTOR [...] --group NAME [options]
+  sarif-to-comment ungroup-fixes --sarif FILE --finding SELECTOR [...] [options]
   sarif-to-comment inspect --sarif FILE [options]
   sarif-to-comment add-staged-changes --sarif IN --output OUT --worktree DIR --repo OWNER/REPO --commit FULLSHA [options]
   sarif-to-comment validate --sarif FILE --repo OWNER/REPO --pull N --commit FULLSHA [options]
@@ -190,6 +208,8 @@ Commands:
   init                 Create a SARIF document for your own findings.
   add-comment          Add one finding on a line or line range to a SARIF file.
   remove-comment       Remove a finding and its attached fixes from the SARIF document.
+  group-fixes          Group fixes of several findings to be accepted together.
+  ungroup-fixes        Remove findings from their suggestion groups.
   inspect              Show the findings, locations and fixes in a SARIF file.
   add-staged-changes   Add proposed changes from the Git index to a SARIF document.
   validate             Check, without publishing, that a SARIF file can be published.
@@ -207,7 +227,8 @@ ${CREDENTIALS}
 Exit status:
   0  success; published (or already published); ready; cleanup complete
   2  refused content: blocked (nothing was published), invalid/failed input,
-     or a stale finding selector; cleanup left pull requests it may not close
+     a refused grouping, or a stale finding selector; cleanup left pull
+     requests it may not close
   3  uncertain: delivery could not be confirmed; retry with the same --state;
      cleanup incomplete (safe to run again)
   1  usage error, unreadable file, refused request, incomplete validation,
@@ -298,14 +319,80 @@ Exit status: 0 removed; 2 the selector is stale (the file changed since it was
 inspected) or the file is not valid SARIF; 1 usage error or the file could not
 be read or replaced.
 `,
+  'group-fixes': md`sarif-to-comment group-fixes — Group fixes of several findings to be accepted together.
+
+Usage:
+  sarif-to-comment group-fixes --sarif FILE --finding SELECTOR --finding SELECTOR [...]
+                               --group NAME [--output FILE] [--format human|json]
+
+Records that the changes of the selected findings must be accepted together:
+each finding gets the same properties.sarifToComment.suggestionGroup. A
+finding's change is its primary (first) fix, or its proposed whole-file
+operation; further fixes are alternatives and are never grouped. Publishing
+with --allow-suggestion-prs proposes the group as one suggestion pull request;
+without it, publication refuses the group and never splits it. A single fix
+with several changes is already accepted whole and needs no group.
+
+Take each SELECTOR from inspect: "Selector:" under each finding, or "selector"
+in JSON. Selectors belong to the file exactly as inspected, so inspect again
+after any change. Refused, with nothing changed: a stale selector, a finding
+already in a group or without a change, a name already in use, or fewer than
+two distinct changes.
+
+The SARIF file is updated in place (atomically) unless --output names a new
+file.
+
+Options:
+  --sarif FILE                   SARIF file to read (and update in place).
+  --finding SELECTOR             A finding's selector from inspect; give at least two.
+  --group NAME                   The group's name, shown in the suggestion pull
+                                 request's title: 1-100 characters, no control
+                                 or invisible characters, no surrounding spaces.
+  --output FILE                  Write the result to this new file instead; an
+                                 existing file is refused and --sarif is not changed.
+${FORMAT_OPTION}
+While it runs, the command owns the file it writes through a marker file
+".<name>.sarif-to-comment-lock" beside it; another command's marker is never
+taken over.
+
+Exit status: 0 grouped; 2 refused, a stale selector, or not valid SARIF; 1
+usage error or a file could not be read or written.
+`,
+  'ungroup-fixes': md`sarif-to-comment ungroup-fixes — Remove findings from their suggestion groups.
+
+Usage:
+  sarif-to-comment ungroup-fixes --sarif FILE --finding SELECTOR [...]
+                                 [--output FILE] [--format human|json]
+
+Removes properties.sarifToComment.suggestionGroup from each selected finding,
+so its fix is published on its own again. A group is never left with fewer
+than two distinct changes: to dissolve a group, select all of its findings
+(a refusal lists the rest).
+
+Take each SELECTOR from inspect, as for group-fixes. The SARIF file is updated
+in place (atomically) unless --output names a new file.
+
+Options:
+  --sarif FILE                   SARIF file to read (and update in place).
+  --finding SELECTOR             A finding's selector from inspect; repeat for more.
+  --output FILE                  Write the result to this new file instead; an
+                                 existing file is refused and --sarif is not changed.
+${FORMAT_OPTION}
+While it runs, the command owns the file it writes through a marker file
+".<name>.sarif-to-comment-lock" beside it; another command's marker is never
+taken over.
+
+Exit status: 0 ungrouped; 2 refused, a stale selector, or not valid SARIF; 1
+usage error or a file could not be read or written.
+`,
   inspect: md`sarif-to-comment inspect — show the findings and fixes in a SARIF file
 
 Usage:
   sarif-to-comment inspect --sarif FILE [--preview-lines N|all] [--preview-chars N|all]
                            [--source-root ABSOLUTE_FILE_URI] [--format human|json]
 
-Shows every finding with its full text, locations and fixes, and the selector
-remove-comment takes. Only fix previews are shortened, and visibly so. The file
+Shows every finding with its full text, locations, fixes and suggestion group,
+and the selector remove-comment, group-fixes and ungroup-fixes take. Only fix previews are shortened, and visibly so. The file
 is not changed and nothing is contacted. Inspection is not a check that the
 file can be published.
 
@@ -445,15 +532,21 @@ class UsageError extends Error {}
 /** An output format; human is the default and is never inferred from a terminal. */
 type OutputFormat = 'human' | 'json';
 
-/** Parsed options: each value option's value, and the boolean flags given. */
+/** Parsed options: each value option's value, each repeatable option's values in order, and the boolean flags given. */
 interface IParsedOptions {
   readonly values: ReadonlyMap<string, string>;
+  readonly lists: ReadonlyMap<string, readonly string[]>;
   readonly flags: ReadonlySet<string>;
 }
 
-/** The options a command accepts; every other option is a usage error. */
+/**
+ * The options a command accepts; every other option is a usage error.
+ * `repeatable` options take a value and may be given several times;
+ * `required` may name value and repeatable options alike.
+ */
 interface IOptionSpec {
   readonly values: readonly string[];
+  readonly repeatable?: readonly string[];
   readonly booleans?: readonly string[];
   readonly required?: readonly string[];
 }
@@ -501,10 +594,12 @@ function resolveFormat(argv: readonly string[]): { readonly format: OutputFormat
 /**
  * Parses `--flag value` / `--flag=value` options exactly, as the flag-only
  * publisher always has: unknown, repeated, valueless or empty options and
- * positional arguments are usage errors. Returns { values: Map, flags: Set }.
+ * positional arguments are usage errors, except that a repeatable option
+ * collects every value in order. Returns { values: Map, lists: Map, flags: Set }.
  */
-function parseOptions(argv: readonly string[], { values: valueFlags, booleans = [], required = [] }: IOptionSpec): IParsedOptions {
+function parseOptions(argv: readonly string[], { values: valueFlags, repeatable = [], booleans = [], required = [] }: IOptionSpec): IParsedOptions {
   const values = new Map<string, string>();
+  const lists = new Map<string, string[]>();
   const flags = new Set<string>();
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argAt(argv, i);
@@ -520,7 +615,8 @@ function parseOptions(argv: readonly string[], { values: valueFlags, booleans = 
       flags.add(name);
       continue;
     }
-    if (!valueFlags.includes(name)) throw new UsageError(`unknown option ${name}`);
+    const listed = repeatable.includes(name);
+    if (!listed && !valueFlags.includes(name)) throw new UsageError(`unknown option ${name}`);
     if (values.has(name)) throw new UsageError(`${name} was given more than once`);
     let value: string;
     if (eq !== -1) {
@@ -532,11 +628,12 @@ function parseOptions(argv: readonly string[], { values: valueFlags, booleans = 
       i += 1;
     }
     if (value === '') throw new UsageError(`${name} requires a non-empty value`);
-    values.set(name, value);
+    if (listed) lists.set(name, [...(lists.get(name) ?? []), value]);
+    else values.set(name, value);
   }
-  const missing = required.filter((flag) => !values.has(flag));
+  const missing = required.filter((flag) => !values.has(flag) && !lists.has(flag));
   if (missing.length > 0) throw new UsageError(`missing required option ${missing.join(', ')}`);
-  return { values, flags };
+  return { values, lists, flags };
 }
 
 /**
@@ -982,7 +1079,190 @@ function removeComment(argv: readonly string[], { cwd }: IHandlerContext): IOutc
 }
 
 // ---------------------------------------------------------------------------
-// In-place edits (add-comment, remove-comment)
+// group-fixes and ungroup-fixes (docs/companion-suggestion-pr-contract.md §2.12)
+// ---------------------------------------------------------------------------
+
+/** The commands that group and ungroup fixes. */
+type GroupingCommand = 'group-fixes' | 'ungroup-fixes';
+
+/** What a grouping command writes and reports once the library has accepted the request. */
+interface IGroupingSuccess {
+  readonly sarif: unknown;
+  /** Receipt fields after `sarif` / `output`. */
+  readonly fields: Readonly<Record<string, unknown>>;
+  /** The human summary, given where the result was written. */
+  readonly summary: (written: { readonly sarifPath: string; readonly output: string | undefined }) => string;
+  /** One human line per finding. */
+  readonly members: readonly string[];
+  /** Human lines after the members, before the reminder about selectors. */
+  readonly notes: readonly string[];
+}
+
+/** What a grouping command's library call decided: success, or a refusal with its status. */
+type GroupingDecision =
+  | { readonly accepted: IGroupingSuccess }
+  | { readonly accepted?: undefined; readonly status: string; readonly problems: readonly unknown[]; readonly markdown: string };
+
+/** "1 change" / "2 changes". */
+const plural = (count: number, noun: string): string => `${String(count)} ${noun}${count === 1 ? '' : 's'}`;
+
+/** The --finding selectors, checked for form and repetition; throws UsageError. */
+function selectorFlags(lists: ReadonlyMap<string, readonly string[]>): readonly string[] {
+  const selectors = lists.get('--finding') ?? [];
+  for (const [i, selector] of selectors.entries()) {
+    if (parseFindingSelector(selector) === null) {
+      throw new UsageError('--finding must be a finding selector such as /runs/0/results/1@0123456789abcdef: run '
+        + '"sarif-to-comment inspect --sarif FILE" and copy the finding\'s selector (a position or message alone does not select a finding)');
+    }
+    if (selectors.indexOf(selector) !== i) throw new UsageError(`--finding ${selector} was given twice; name each finding once`);
+  }
+  return selectors;
+}
+
+/** The --output file of a grouping command, checked against --sarif and its directory; throws UsageError. */
+function groupingOutput(values: ReadonlyMap<string, string>, sarifPath: string, cwd: string): string | undefined {
+  const given = values.get('--output');
+  if (given === undefined) return undefined;
+  const output = path.resolve(cwd, given);
+  if (output === sarifPath || files.sameExistingFile(sarifPath, output)) {
+    throw new UsageError(`--output must be a different file from --sarif (${output} and ${sarifPath} are the same file); omit --output to edit ${sarifPath} in place`);
+  }
+  let directory: fs.Stats | null;
+  try {
+    directory = fs.statSync(path.dirname(output));
+  } catch {
+    directory = null;
+  }
+  if (!directory || !directory.isDirectory()) throw new UsageError(`the --output directory ${path.dirname(output)} does not exist`);
+  return output;
+}
+
+function groupFixes(argv: readonly string[], { cwd }: IHandlerContext): IOutcome {
+  const { values, lists } = parseOptions(argv, { values: ['--sarif', '--group', '--output'], repeatable: ['--finding'], required: ['--sarif', '--finding', '--group'] });
+  const findings = selectorFlags(lists);
+  if (findings.length < 2) {
+    throw new UsageError('group-fixes needs at least two --finding selectors (a single fix with several changes is already accepted whole)');
+  }
+  const group = requiredValue(values, '--group');
+  if (!isSuggestionGroupName(group)) {
+    throw new UsageError('--group must be 1-100 characters without control or invisible formatting characters or surrounding whitespace');
+  }
+  const sarifPath = path.resolve(cwd, requiredValue(values, '--sarif'));
+  const output = groupingOutput(values, sarifPath, cwd);
+  return runGrouping('group-fixes', sarifPath, output, (value): GroupingDecision => {
+    const outcome = libraryCall(() => groupSarifFixesWithUntypedInput(value, { findings, group }));
+    if (outcome.status !== 'grouped') return outcome;
+    return {
+      accepted: {
+        sarif: outcome.sarif,
+        fields: { group: outcome.group, findings: outcome.findings, changes: outcome.changes },
+        summary: ({ sarifPath: file, output: written }) => {
+          const what = plural(outcome.findings.length, 'finding');
+          const grouping = `as suggestion group ${JSON.stringify(outcome.group)}: ${String(outcome.changes)} distinct changes to accept together.`;
+          return written === undefined ? `Grouped ${what} in ${file} ${grouping}` : `Grouped ${what} ${grouping} Wrote ${written}; ${file} was not changed.`;
+        },
+        members: outcome.findings.map((f) => `  ${f.ref} (tool "${f.tool}"): ${plural(f.changes, 'change')}`),
+        notes: ['Publishing with --allow-suggestion-prs proposes the group as one suggestion pull request; without it, publication refuses the group.'],
+      },
+    };
+  });
+}
+
+function ungroupFixes(argv: readonly string[], { cwd }: IHandlerContext): IOutcome {
+  const { values, lists } = parseOptions(argv, { values: ['--sarif', '--output'], repeatable: ['--finding'], required: ['--sarif', '--finding'] });
+  const findings = selectorFlags(lists);
+  const sarifPath = path.resolve(cwd, requiredValue(values, '--sarif'));
+  const output = groupingOutput(values, sarifPath, cwd);
+  return runGrouping('ungroup-fixes', sarifPath, output, (value): GroupingDecision => {
+    const outcome = libraryCall(() => ungroupSarifFixesWithUntypedInput(value, { findings }));
+    if (outcome.status !== 'ungrouped') return outcome;
+    return {
+      accepted: {
+        sarif: outcome.sarif,
+        fields: { findings: outcome.findings },
+        summary: ({ sarifPath: file, output: written }) => {
+          const what = plural(outcome.findings.length, 'finding');
+          return written === undefined ? `Ungrouped ${what} in ${file}.` : `Ungrouped ${what}. Wrote ${written}; ${file} was not changed.`;
+        },
+        members: outcome.findings.map((f) => `  ${f.ref} (tool "${f.tool}"): was in suggestion group ${JSON.stringify(f.group)}`),
+        notes: [],
+      },
+    };
+  });
+}
+
+/** Runs a library operation, reporting caller misuse (a TypeError) as a usage error. */
+function libraryCall<T>(call: () => T): T {
+  try {
+    return call();
+  } catch (err) {
+    if (err instanceof TypeError) throw new UsageError(err.message);
+    throw err;
+  }
+}
+
+/**
+ * Runs a grouping command: edits --sarif in place, or writes the result to a
+ * new --output file and leaves --sarif unchanged. A refusal writes nothing
+ * and exits 2.
+ */
+function runGrouping(command: GroupingCommand, sarifPath: string, output: string | undefined, decide: (value: unknown) => GroupingDecision): IOutcome {
+  const reminder = output === undefined
+    ? 'Selectors from earlier inspections no longer apply; inspect the file again before another edit.'
+    : `Inspect ${output} for its selectors before editing it.`;
+  const refusal = (decision: Exclude<GroupingDecision, { readonly accepted: IGroupingSuccess }>, receipt: ArtifactReceipt, notes: readonly string[]): IOutcome => ({
+    exit: EXIT.refused,
+    doc: { command, status: decision.status, ...receipt, problems: decision.problems },
+    out: refusedText(decision.markdown, notes),
+  });
+  const success = (accepted: IGroupingSuccess, receipt: ArtifactReceipt): IOutcome => ({
+    exit: EXIT.ok,
+    doc: { command, status: command === 'group-fixes' ? 'grouped' : 'ungrouped', ...receipt, ...accepted.fields },
+    out: `${[accepted.summary({ sarifPath, output }), ...accepted.members, ...accepted.notes, reminder].join('\n')}\n`,
+  });
+
+  if (output === undefined) {
+    const notWritten = { sarif: { path: sarifPath, written: false } };
+    return editInPlace(command, sarifPath, (value) => {
+      const decision = decide(value);
+      if (decision.accepted === undefined) return { outcome: refusal(decision, notWritten, [`${sarifPath} was not changed.`]) };
+      return { replacement: serialize(decision.accepted.sarif), outcome: success(decision.accepted, { sarif: { path: sarifPath, written: true } }) };
+    });
+  }
+
+  const notWritten = { sarif: { path: sarifPath, written: false }, output: { path: output, written: false } };
+  const notes = [`${sarifPath} was not changed.`, `${output} was not written.`];
+  let release: ReleaseOwnership;
+  try {
+    release = files.acquireOwnership(output);
+  } catch (err) {
+    if (err instanceof files.ArtifactError) return errorOutcome(command, err.message, notWritten, notes);
+    throw err;
+  }
+  try {
+    let read: IJsonFile;
+    try {
+      read = files.readJsonFile(sarifPath, 'SARIF file');
+    } catch (err) {
+      if (err instanceof files.ArtifactError) return errorOutcome(command, err.message, notWritten, notes);
+      throw err;
+    }
+    const decision = decide(read.value);
+    if (decision.accepted === undefined) return refusal(decision, notWritten, notes);
+    try {
+      files.createExclusive(output, serialize(decision.accepted.sarif));
+    } catch (err) {
+      if (err instanceof files.ArtifactError) return errorOutcome(command, err.message, notWritten, notes);
+      throw err;
+    }
+    return success(decision.accepted, { sarif: { path: sarifPath, written: false }, output: { path: output, written: true } });
+  } finally {
+    release();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// In-place edits (add-comment, remove-comment, group-fixes, ungroup-fixes)
 // ---------------------------------------------------------------------------
 
 /**
@@ -1004,7 +1284,7 @@ interface IInPlaceEdit {
  * and reports it with `written: false`. A UsageError thrown by `edit`
  * propagates after ownership is released.
  */
-function editInPlace(command: 'add-comment' | 'remove-comment', sarifPath: string, edit: (value: unknown) => IInPlaceEdit): IOutcome {
+function editInPlace(command: 'add-comment' | 'remove-comment' | GroupingCommand, sarifPath: string, edit: (value: unknown) => IInPlaceEdit): IOutcome {
   const notWritten = { sarif: { path: sarifPath, written: false } };
   let target: string;
   try {
@@ -1458,6 +1738,8 @@ const HANDLERS: Readonly<Record<CliCommand, Handler>> = {
   init,
   'add-comment': addComment,
   'remove-comment': removeComment,
+  'group-fixes': groupFixes,
+  'ungroup-fixes': ungroupFixes,
   inspect,
   'add-staged-changes': addStagedChanges,
   validate,

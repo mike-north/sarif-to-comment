@@ -14,7 +14,8 @@
  *
  * Every expected document and message is written by hand from the contract
  * (docs/companion-suggestion-pr-contract.md §2.3 and §2.12); none is captured
- * from the implementation.
+ * from the implementation. Group names are checked for parity with
+ * publication's own reading, behaviourally, never by sharing its code.
  *
  * @see https://github.com/mike-north/sarif-to-comment/issues/29
  * @see docs/companion-suggestion-pr-contract.md
@@ -35,6 +36,8 @@ import type {
   IUngroupedSarifFixesOutcome,
   UngroupSarifFixesOutcome,
 } from '../dist/suggestion-groups.cjs';
+import type { IStaleSarifSelectorOutcome } from '../dist/sarif-authoring.cjs';
+import { prepareReview } from '../dist/prepare-review.cjs';
 import { inspectSarif, renderInspectionText } from '../dist/sarif-inspection.cjs';
 import type { ISarifInspection } from '../dist/sarif-inspection.cjs';
 import { asArray, asRecord } from './support/runtime-types.mts';
@@ -135,6 +138,11 @@ function grouped(outcome: GroupSarifFixesOutcome): IGroupedSarifFixesOutcome {
 
 function ungrouped(outcome: UngroupSarifFixesOutcome): IUngroupedSarifFixesOutcome {
   if (outcome.status !== 'ungrouped') throw new AssertionError({ message: `ungrouping refused (${outcome.status}): ${outcome.markdown}` });
+  return outcome;
+}
+
+function stale(outcome: GroupSarifFixesOutcome | UngroupSarifFixesOutcome): IStaleSarifSelectorOutcome {
+  if (outcome.status !== 'stale') throw new AssertionError({ message: `expected a stale refusal, got ${outcome.status}` });
   return outcome;
 }
 
@@ -359,9 +367,7 @@ describe('selectors: stale and ambiguous selections are refused', () => {
     const [a, b] = selectorsAt(sarif, '/runs/0/results/0', '/runs/0/results/1');
     const changed = structuredClone(sarif);
     asArray(dig(changed, 'runs', 1, 'results')).push(finding('Later.', 'z.txt', 1));
-    const outcome = groupSarifFixes(changed, { findings: [String(a), String(b)], group: 'script' });
-    assert.equal(outcome.status, 'stale');
-    assert.ok(outcome.status === 'stale');
+    const outcome = stale(groupSarifFixes(changed, { findings: [String(a), String(b)], group: 'script' }));
     assert.equal(outcome.selector, a);
     assert.deepEqual(outcome.problems, [{
       message: `The document has changed since the selector \`${String(a)}\` was taken from inspecting it, so it may no longer name the same finding. Nothing was changed. Inspect the document again and use its current selectors.`,
@@ -382,9 +388,7 @@ describe('selectors: stale and ambiguous selections are refused', () => {
   test('a selector whose position holds no finding is stale', () => {
     const sarif = threeEdits();
     const digest = String(selectorAt(sarif, '/runs/0/results/0').split('@')[1]);
-    const outcome = groupSarifFixes(sarif, { findings: [selectorAt(sarif, '/runs/0/results/0'), `/runs/0/results/9@${digest}`], group: 'g' });
-    assert.equal(outcome.status, 'stale');
-    assert.ok(outcome.status === 'stale');
+    const outcome = stale(groupSarifFixes(sarif, { findings: [selectorAt(sarif, '/runs/0/results/0'), `/runs/0/results/9@${digest}`], group: 'g' }));
     assert.deepEqual(outcome.problems.map((p) => p.pointer), ['/runs/0/results/9']);
   });
 
@@ -502,9 +506,7 @@ describe('ungroupSarifFixes removes findings from their groups', () => {
     const [a] = selectorsAt(once, '/runs/0/results/0');
     const changed = structuredClone(once);
     asArray(dig(changed, 'runs', 0, 'results')).push(finding('Later.', 'z.txt', 1));
-    const outcome = ungroupSarifFixes(changed, { findings: [String(a)] });
-    assert.equal(outcome.status, 'stale');
-    assert.ok(outcome.status === 'stale');
+    const outcome = stale(ungroupSarifFixes(changed, { findings: [String(a)] }));
     assert.ok(outcome.markdown.startsWith('**Cannot ungroup the fixes:** '), outcome.markdown);
     for (const options of [{ findings: [] }, { findings: ['/runs/0/results/0'] }, { findings: [String(a), String(a)] }, {}]) {
       assert.throws(() => Reflect.apply(ungroupSarifFixes, undefined, [once, options]),
@@ -570,5 +572,49 @@ describe('inspection shows each finding\'s group', () => {
     const view = viewOf(sarif);
     assert.equal(view.findings[0]?.suggestionGroup, undefined);
     assert.deepEqual(dig(view.findings[0], 'otherContent', 'properties'), { sarifToComment: { suggestionGroup: 7 } });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Parity with publication
+
+describe('grouping accepts exactly the group names publication accepts', () => {
+  const COMMIT = 'c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de';
+
+  /** Whether publication's preparation reads `name` as a valid suggestion group (it reports no suggestion-group-invalid). */
+  async function publisherAccepts(name: string): Promise<boolean> {
+    const outcome = await prepareReview({
+      sarif: sarifDoc([{ message: { text: 'm' }, properties: { sarifToComment: { suggestionGroup: name } } }]),
+      context: { owner: 'octo', repo: 'widgets', pullNumber: 1, reviewedCommit: COMMIT, diff: { baseCommit: COMMIT, headCommit: COMMIT, files: [] } },
+      readSource: () => Promise.resolve(null),
+    });
+    return outcome.status === 'ready' || !outcome.diagnostics.some((d) => d.code === 'suggestion-group-invalid');
+  }
+
+  function groupingAccepts(name: string): boolean {
+    const sarif = threeEdits();
+    try {
+      return groupSarifFixes(sarif, { findings: selectorsAt(sarif, '/runs/0/results/0', '/runs/0/results/1'), group: name }).status === 'grouped';
+    } catch (err) {
+      if (err instanceof TypeError) return false;
+      throw err;
+    }
+  }
+
+  const names = [
+    'retry-with-test', 'x', 'g'.repeat(100), 'g'.repeat(101), '', ' lead', 'trail ', 'inner space', 'tab\tinside', 'line\nbreak',
+    'bell\u0007', 'del\u007F', 'c1\u0085', 'bom﻿', 'rtl‮', 'isolate⁦', 'lrm‎', 'ls ',
+    'lone\uD800', '\uDC00lone', 'emoji 😀', 'ünïcödé',
+  ];
+  for (const name of names) {
+    test(`the same verdict for ${JSON.stringify(name)}`, async () => {
+      const published = await publisherAccepts(name);
+      assert.equal(groupingAccepts(name), published);
+    });
+  }
+
+  test('control: the verdicts are not all the same', async () => {
+    assert.equal(await publisherAccepts('retry-with-test'), true);
+    assert.equal(await publisherAccepts(' lead'), false);
   });
 });

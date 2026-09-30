@@ -271,7 +271,7 @@ describe('the installed package publishes a native multi-change fix as one sugge
     }, null, 2));
     const written = fs.readFileSync(upstream);
     const inspected = asArray(asRecord(cli(['inspect', '--sarif', upstream])['view'])['findings']);
-    assert.equal(asArray(asRecord(asArray(asRecord(inspected[0])['fixes'])[0])['artifactChanges']).length, 2);
+    assert.equal(asArray(asRecord(asArray(asRecord(inspected[0])['fixes'])[0])['changes']).length, 2, 'inspection shows the one fix with both file changes');
 
     const flags = ['--sarif', upstream, '--repo', repoFlag, '--pull', String(DESTINATION.pullNumber), '--commit', w.head];
     const refused = cli(['validate', ...flags], 2);
