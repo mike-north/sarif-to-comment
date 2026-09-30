@@ -110,7 +110,7 @@ GH_TOKEN=... npx sarif-to-comment \
 - **Optional flags:** `--source-root FILE_URI`, `--old-source-commit FULLSHA`, `--ignore-approval-hold`, `--submit`, `--format human|json|toon` and `--color auto|always|never`. Run `sarif-to-comment --help` for details; it needs no token and makes no request.
 - **Checking first:** `sarif-to-comment validate` takes the same flags without `--state` and runs the same checks without publishing; see [Checking readiness without publishing](#checking-readiness-without-publishing).
 - **Command form:** `sarif-to-comment publish` followed by the same flags does exactly the same thing. With `--format json` either form prints one JSON document (`status`, `review`, `statePath`, the Markdown `message` and `diagnostics`), with the same exit status.
-- **Same core as the library:** the CLI reads the file, calls the same `publishSarifReview`, prints the same Markdown to stdout, and writes its [diagnostics](#output-formats-and-diagnostics) to stderr.
+- **Same core as the library:** the CLI reads the file and calls the same `publishSarifReview`. It prints the outcome (the review link, the state path, what to do next) to stdout and each problem or warning once, as a [diagnostic](#output-formats-and-diagnostics), to stderr; `--format json` carries the library's full Markdown as `message`.
 - **File encoding:** the SARIF file must be UTF-8 JSON.
   - A leading UTF-8 byte-order mark is ignored, so the CLI and a library caller passing the same parsed document produce the same publication.
   - A file that is not valid UTF-8 (including UTF-16) is refused before any request is made. Its bytes are never silently replaced.
@@ -208,7 +208,7 @@ Every library outcome and every CLI document carries `diagnostics`: its errors, 
 
 The CLI renders the same diagnostics for each audience with `--format`:
 
-- **`human`** (the default): the primary result on stdout, and each diagnostic on stderr as a block with a severity badge (`✖ error`, `▲ warning`, `ℹ note`), its title and code, where it is, the message wrapped to the terminal and `→` remedies, closed by a summary such as `1 error, 2 warnings`.
+- **`human`** (the default): the primary result on stdout, and each diagnostic on stderr as a block with a severity badge (`✖ error`, `▲ warning`, `ℹ note`), its title and code, where it is, the message wrapped to the terminal and `→` remedies, closed by a summary such as `1 error, 2 warnings`. The blocks are the only human rendering of problems and warnings: `validate`, `publish` and `close-suggestion-prs` print their outcome text on stdout without repeating them.
 - **`json`**: one JSON document on stdout, ending with `diagnostics`; nothing on stderr.
 - **`toon`**: the same document encoded as [TOON](https://toonformat.dev), a compact notation for agents; decoding it gives the JSON document exactly.
 
@@ -222,7 +222,7 @@ $ sarif-to-comment inspect --sarif broken.sarif.json
 1 error
 ```
 
-Color is used on a terminal only. `--color always` or `--color never` decides it explicitly; otherwise `FORCE_COLOR` turns it on (`0` or `false` off), and a non-empty `NO_COLOR` turns it off. Output that is not a terminal is plain and unwrapped. JSON and TOON never contain color. Exit statuses do not depend on the format.
+Color is used on a terminal only. `--color always` or `--color never` decides it explicitly; otherwise `FORCE_COLOR` turns it on (`0` or `false` off) and wins over `NO_COLOR`, as in Node.js, and a non-empty `NO_COLOR` turns it off. Output that is not a terminal is plain and unwrapped. JSON and TOON never contain color. Exit statuses do not depend on the format.
 
 ## Credentials
 

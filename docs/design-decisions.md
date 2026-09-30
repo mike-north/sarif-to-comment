@@ -491,6 +491,8 @@ Errors, warnings and notes are modelled once, as structured diagnostics with a s
 
 **Consequences:** `problems` arrays and receipt warnings keep their fields and gain the diagnostic fields additively; `markdown` fields remain. Exit statuses and behavior are unchanged. Six unclear internal codes were renamed before their first release as public codes. R15's Markdown requirement is now one rendering among several.
 
+**Owner decisions of the same day:** in human output, the diagnostic blocks on stderr are the single rendering of problems and warnings: `validate`, `publish` and `close-suggestion-prs` keep their outcome text on stdout without repeating them, while the library's `markdown` and the JSON and TOON `message` remain the full report. Color is decided by `--color`, then `FORCE_COLOR`, then `NO_COLOR`, then the terminal, keeping Node's rule that `FORCE_COLOR` overrides `NO_COLOR`.
+
 ## Current concepts
 
 | Concept | Role |

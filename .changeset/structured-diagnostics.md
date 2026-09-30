@@ -15,7 +15,7 @@ Codes renamed before their first release as public codes. They appear under thei
 - `provenance-conflict` → `provenance-revision-conflict`
 - `suggestion-historical-unsupported` → `suggestion-reviewed-commit-not-head`
 
-The CLI's `--format` takes `human|json|toon`. `toon` prints the JSON document encoded as [TOON](https://toonformat.dev) for token-efficient agent use; decoding it gives the JSON document exactly. The default `human` format keeps the primary result on stdout and writes each diagnostic to stderr as a block, closed by a summary line. A block has a severity badge, the title, the code, where it is, the message wrapped to the terminal's width, and `→` remedies. A refusal now writes only its file notes to stdout. `inspect` lists its warnings, and `add-staged-changes` its `Warning:` lines, as diagnostics on stderr. `validate`, `publish` and `close-suggestion-prs` still print their full Markdown report on stdout. Color comes from chalk and is decided by the new `--color auto|always|never`, then `FORCE_COLOR`, then `NO_COLOR`; without an explicit choice, only a terminal gets color. Output that is not a terminal is plain and unwrapped. JSON and TOON never carry color.
+The CLI's `--format` takes `human|json|toon`. `toon` prints the JSON document encoded as [TOON](https://toonformat.dev) for token-efficient agent use; decoding it gives the JSON document exactly. The default `human` format keeps the primary result on stdout and writes each diagnostic to stderr as a block, closed by a summary line. A block has a severity badge, the title, the code, where it is, the message wrapped to the terminal's width, and `→` remedies. A refusal now writes only its file notes to stdout. `inspect` lists its warnings, and `add-staged-changes` its `Warning:` lines, as diagnostics on stderr. `validate`, `publish` and `close-suggestion-prs` print their outcome text on stdout (heading, review and pull request links, state path, next steps) without repeating the problems and warnings, which the diagnostic blocks on stderr render once; the library's `markdown` and the JSON and TOON `message` keep the full report. Color comes from chalk and is decided by the new `--color auto|always|never`, then `FORCE_COLOR` (which wins over `NO_COLOR`, as in Node.js), then `NO_COLOR`; without an explicit choice, only a terminal gets color. Output that is not a terminal is plain and unwrapped. JSON and TOON never carry color.
 
 chalk 6 and `@toon-format/toon` are new runtime dependencies. Both are ES modules without dependencies, loaded with `import()` only when needed, so the package stays CommonJS and `engines.node` stays `>=22`.
 
@@ -52,6 +52,35 @@ stderr:
 +
 +1 error
 ```
+
+### `sarif-to-comment validate` (human) on a document with an approval hold: the problem is rendered once, on stderr
+
+stdout:
+
+```diff
+ ## Review blocked
+
+-Nothing was published and no publication state was written.
+-
+-**Review blocked:** 1 problem must be resolved before publication; nothing was published.
+-
+-- `approval-hold` at `/runs/0/results/0`: Awaiting approval: the whole review is held. Resolve the hold or use the explicit override.
++Nothing was published and no publication state was written. 1 problem must be resolved before publication.
+```
+
+stderr:
+
+```diff
++✖ error  The review is held for approval  [approval-hold]
++  /runs/0/results/0
++  Awaiting approval: the whole review is held. Resolve the hold or use the explicit override.
++  → Resolve the hold in the SARIF.
++  → Or publish deliberately despite it with `--ignore-approval-hold` (`ignoreApprovalHold`).
++
++1 error
+```
+
+`publish` shows the same blocked report. A published review with warnings keeps only its heading and link on stdout (the `**Warnings:**` list moves to stderr), and `close-suggestion-prs` lists on stdout only the pull requests it handled.
 
 ### `sarif-to-comment inspect` (human): a usage error
 
