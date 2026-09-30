@@ -70,7 +70,7 @@ SARIF groups changes natively only within one fix: a single `fix` with several `
 
 - Its replacements are located in the unmodified file and applied as if in array order, the reading staged extraction already uses; their combined effect is therefore defined only when they are disjoint and no two start at the same position, and otherwise the review is blocked (`fix-replacements-overlap`). Several artifact changes naming one file are that file's replacements.
 - Replacements whose lines overlap become one change of the union of their lines; changes of one file are combined in line order. The change count is the number of such changes.
-- With suggestion pull requests disabled, the finding is refused (`fix-changes-require-suggestion-prs`), naming the setting; the fix is never split into separate suggestions (A30). How such a fix could be presented without suggestion pull requests remains open in [#30](https://github.com/mike-north/sarif-to-comment/issues/30).
+- With suggestion pull requests disabled, the finding is refused (`fix-changes-require-suggestion-prs`), naming the setting; the fix is never split into separate suggestions (A30). This refusal is the known limitation that [#30](https://github.com/mike-north/sarif-to-comment/issues/30) allowed to be recorded for such a fix without suggestion pull requests ([D44](design-decisions.md#d44-publish-the-first-fix-and-list-the-others-as-alternatives--owner-decision)).
 
 **An explicit group** is declared by a per-result owned property:
 

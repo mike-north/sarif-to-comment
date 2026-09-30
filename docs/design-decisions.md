@@ -2,7 +2,7 @@
 
 > **Status note (reconciled September 28, 2026).** This log remains the authoritative decision record. Its statement that no behavior has been implemented is historical. For current status, see [Current status and reconciliation](status.md).
 
-Updated: September 29, 2026 (the owner acceptances in D34–D43).
+Updated: September 29, 2026 (the owner acceptances and decisions in D34–D44).
 
 This is the working design record for the product-shaping conversation. It records decisions, their reasons, their consequences, and what remains open. It is not an implementation specification. No behavior described here has been implemented or integration-tested in this project.
 
@@ -385,7 +385,7 @@ Tests, fixture helpers and build, check and release tooling are `.mts` files tha
 
 ### Owner acceptances of September 29, 2026
 
-On September 29, 2026 the owner accepted the contracts that had been implemented under provisional options, the security baseline and an evidence policy ([issue #24](https://github.com/mike-north/sarif-to-comment/issues/24)), and decided the suggestion pull request convention, force-push handling and grouping ([#27](https://github.com/mike-north/sarif-to-comment/issues/27), [#28](https://github.com/mike-north/sarif-to-comment/issues/28), [#29](https://github.com/mike-north/sarif-to-comment/issues/29)). D34–D43 record those decisions. Each names its source issue and the merged pull request whose behavior it accepts. A contract item that is not named here, or that its contract still lists as awaiting the owner, remains undecided. The companion suggestion PR default decided the same day (explicit opt-in, default off, [#5](https://github.com/mike-north/sarif-to-comment/issues/5)) is recorded in [D22](#d22-gate-suggestion-prs-with-one-caller-setting--settled-direction).
+On September 29, 2026 the owner accepted the contracts that had been implemented under provisional options, the security baseline and an evidence policy ([issue #24](https://github.com/mike-north/sarif-to-comment/issues/24)), and decided the suggestion pull request convention, force-push handling, grouping and alternative fixes ([#27](https://github.com/mike-north/sarif-to-comment/issues/27), [#28](https://github.com/mike-north/sarif-to-comment/issues/28), [#29](https://github.com/mike-north/sarif-to-comment/issues/29), [#30](https://github.com/mike-north/sarif-to-comment/issues/30)). D34–D44 record those decisions. Each names its source issue and the merged pull request whose behavior it accepts. A contract item that is not named here, or that its contract still lists as awaiting the owner, remains undecided. The companion suggestion PR default decided the same day (explicit opt-in, default off, [#5](https://github.com/mike-north/sarif-to-comment/issues/5)) is recorded in [D22](#d22-gate-suggestion-prs-with-one-caller-setting--settled-direction).
 
 ### D34. Remove findings by document-bound selectors — owner-accepted
 
@@ -397,11 +397,11 @@ A finding is selected for removal by the selector that inspection shows: its pos
 
 ### D35. Readiness assessment reports ready, blocked or incomplete, statelessly — owner-accepted; one check added
 
-**Provenance:** [issue #24](https://github.com/mike-north/sarif-to-comment/issues/24), accepting the [readiness assessment contract](readiness-assessment-contract.md) as merged in [PR #15](https://github.com/mike-north/sarif-to-comment/pull/15) ([#2](https://github.com/mike-north/sarif-to-comment/issues/2)), with one addition.
+**Provenance:** [issue #24](https://github.com/mike-north/sarif-to-comment/issues/24), accepting the [readiness assessment contract](readiness-assessment-contract.md) as merged in [PR #15](https://github.com/mike-north/sarif-to-comment/pull/15) ([#2](https://github.com/mike-north/sarif-to-comment/issues/2)), with one addition, specified in [#23](https://github.com/mike-north/sarif-to-comment/issues/23) and implemented in [PR #35](https://github.com/mike-north/sarif-to-comment/pull/35).
 
 Accepted: the `ready`, `blocked` and `incomplete` outcomes; operational failures reported as `incomplete` rather than thrown; `problems` on a `blocked` outcome; exit statuses 0, 2 and 1; stateless operation, with no state path accepted and no file written; and no approval stamp, so publication rechecks everything against the pull request as it is then.
 
-**Addition:** Assessment must also report a known publication obstacle: a pending review on the exact destination pull request owned by the authenticated account. This replaces the contract's earlier proposal not to pre-check pending reviews. It is tracked in [#23](https://github.com/mike-north/sarif-to-comment/issues/23) and is not implemented yet.
+**Addition:** Assessment must also report a known publication obstacle: a pending review on the exact destination pull request owned by the authenticated account. This replaces the contract's earlier proposal not to pre-check pending reviews. It is implemented (merged, unreleased): pending reviews by other accounts and submitted reviews are ignored, and a review list that cannot be read makes the assessment `incomplete` ([contract: Pending review of this account](readiness-assessment-contract.md#pending-review-of-this-account), [live evidence](pending-review-check-e2e-evidence.md)). Publication still meets the condition only as GitHub's refusal of the create request.
 
 ### D36. Publish whole-file operations as byte-determined review-body sections — owner-accepted
 
@@ -466,6 +466,16 @@ A branch that only moved forward after the review is not a reason to refuse: sug
 Extraction stays deterministic: every separable staged hunk is its own fix. Grouping is a separate authoring step (`group-fixes` / `groupSarifFixes`, `ungroup-fixes` / `ungroupSarifFixes`) that writes the per-result `suggestionGroup` property, renamed from the unreleased `acceptanceGroup`. A SARIF fix with several changes is already a group and needs no property. A group holds at least two distinct changes; a finding belongs to at most one group; groups are never joined, and a name already in use extends its group; only a finding's primary fix is a member; a member without a change is refused; nothing is inferred. With suggestion pull requests disabled, a grouped document is refused naming the setting ([companion contract §2.3, §2.4 and §2.12](companion-suggestion-pr-contract.md#23-groups-a-fix-with-several-changes-and-explicit-groups)).
 
 **Consequences:** This applies D7: groups are supplied, never inferred.
+
+### D44. Publish the first fix and list the others as alternatives — owner decision
+
+**Provenance:** [issue #30](https://github.com/mike-north/sarif-to-comment/issues/30), which supersedes [#9](https://github.com/mike-north/sarif-to-comment/issues/9), implemented in [PR #34](https://github.com/mike-north/sarif-to-comment/pull/34); the [specification's R4 clarification](specification.md#r4-treat-irreconcilable-mechanical-conflicts-as-repair-work).
+
+When a SARIF result carries several fixes, the first is its suggested change: a native suggestion where eligible, otherwise a suggestion pull request when allowed, otherwise the existing review-body presentation. Every further fix is listed in the same comment under "Alternatives to consider:", each in a dynamic fence (D37). The producer's order decides; the tool makes no semantic judgment. Alternatives are never unioned into one patch and are never members of a suggestion group (D43). They count toward the size limits and are never truncated. Extraction from staged changes is unaffected: it produces one fix per hunk.
+
+**Reason:** R4's "MUST NOT choose a semantic winner" governs conflicting edits during generation and combination, not the presentation of alternatives a producer has already ordered. The earlier `fix-alternatives-unsupported` refusal was a limit of the first milestone's supported profile, not an owner decision.
+
+**Consequences:** A single fix with several changes remains one change accepted whole. Without suggestion pull requests it is refused, naming the setting, rather than split: the known limitation #30 allowed to be recorded ([status](status.md#open-questions-for-the-owner), question 5). Live evidence: [alternative fixes](alternative-fixes-e2e-evidence.md).
 
 ## Current concepts
 
