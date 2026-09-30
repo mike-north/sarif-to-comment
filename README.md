@@ -145,7 +145,14 @@ npx sarif-to-comment remove-comment --sarif review.sarif --finding '/runs/0/resu
 npx sarif-to-comment add-comment --sarif review.sarif --file src/parse.js --line 2 --message "…"
 ```
 
-The library has the same operations for in-memory SARIF: `createSarifDocument`, `addSarifComment`, `removeSarifComment`, `inspectSarif`, `addStagedChangesToSarif`, `validateSarifReview` and `publishSarifReview`. Each returns a new document or a view and never changes its input.
+To have several changes accepted together (a link and the page it points to, a fix and its test), group their findings by the selectors `inspect` shows, then publish with suggestion pull requests allowed (see [Grouping fixes](#grouping-fixes-for-joint-acceptance)):
+
+```sh
+npx sarif-to-comment group-fixes --sarif review.staged.sarif \
+  --finding '/runs/0/results/1@…' --finding '/runs/0/results/2@…' --group checklist-link
+```
+
+The library has the same operations for in-memory SARIF: `createSarifDocument`, `addSarifComment`, `removeSarifComment`, `groupSarifFixes`, `ungroupSarifFixes`, `inspectSarif`, `addStagedChangesToSarif`, `validateSarifReview` and `publishSarifReview`. Each returns a new document or a view and never changes its input.
 
 - **Line numbers** refer to the reviewed commit. For a file the reviewed commit doesn't have, they refer to its staged content.
 - **Associating changes with findings.** Only the staged index is read. A staged change becomes a fix on a finding only when the finding's lines lie within the lines the change replaces; neither is enlarged.
@@ -153,13 +160,29 @@ The library has the same operations for in-memory SARIF: `createSarifDocument`, 
   - A change that no finding explains is kept as a short factual finding attributed to `sarif-to-comment`. A change that only adds lines replaces no reviewed line, so it is never credited to a nearby finding; the receipt marks it `insertion: true`.
   - Findings that already have fixes are never changed. If your staged change differs from such a fix on the same lines, the command fails rather than choose between them.
 - **Removing findings.** `remove-comment` removes one finding with every fix attached to it; all other findings and fixes stay, including identical ones. Its selector belongs to the file exactly as inspected, so inspect again after any change: an old selector is refused (exit status 2), never applied to whichever finding has moved into its place. Removal only changes the local file, never a published review. Correct the file you authored and run `add-staged-changes` again, rather than editing its output.
-- **Files.** `init` refuses to overwrite an existing file. `add-comment` and `remove-comment` update their SARIF file in place, atomically. `add-staged-changes` writes a separate output; if that output file already exists, it's first renamed to `<UTC time>.old.<name>`, and a failed run writes no output.
-- **Output.** `inspect` shows every finding in full, with its locations and fixes, plus log-level and inline external properties verbatim. Only fix previews are shortened, visibly. It doesn't check whether the file can be published.
+- **Files.** `init` refuses to overwrite an existing file. `add-comment` and `remove-comment` update their SARIF file in place, atomically; so do `group-fixes` and `ungroup-fixes`, unless `--output` names a new file (an existing one is refused). `add-staged-changes` writes a separate output; if that output file already exists, it's first renamed to `<UTC time>.old.<name>`, and a failed run writes no output.
+- **Output.** `inspect` shows every finding in full, with its locations, fixes and suggestion group, plus log-level and inline external properties verbatim. Only fix previews are shortened, visibly. It doesn't check whether the file can be published.
   - `--format json` on any command prints one JSON document for every outcome, errors included. Exit statuses are the same in both formats.
-  - Exit statuses: 0 success; 2 content refused (not valid SARIF, a stale finding selector, or a staged change that can't be represented); 1 usage or operational error. `publish` keeps the exit statuses below, and `validate` has its own (see [Checking readiness without publishing](#checking-readiness-without-publishing)).
+  - Exit statuses: 0 success; 2 content refused (not valid SARIF, a stale finding selector, a refused grouping, or a staged change that can't be represented); 1 usage or operational error. `publish` keeps the exit statuses below, and `validate` has its own (see [Checking readiness without publishing](#checking-readiness-without-publishing)).
 - **Changes that can't be represented.** Staged edits to UTF-8 text files become fixes. Publication still checks native-suggestion compatibility: empty reviewed files, or files containing only a byte-order mark, have no source line for an inline suggestion and are blocked. File creations and deletions become proposed file operations, which `inspect` shows and `publish` presents in the review body (see [whole-file proposals](#supported-sarif-first-milestone-profile)), or as [suggestion pull requests](#suggestion-pull-requests-optional) when you enable them. `add-staged-changes` fails, naming the path, for mode changes, symbolic links, submodules, binary or non-UTF-8 files, conflicts and intent-to-add entries.
 
 See the [getting-started guide](https://unpkg.com/sarif-to-comment/docs/getting-started.md#write-a-review-yourself) for complete, tested examples of both surfaces and of SARIF from an analyzer.
+
+## Grouping fixes for joint acceptance
+
+Extraction keeps every separable change of your staged diff as its own fix, so each can be accepted independently. When some must be accepted together, declare it as a separate step, by hand or by an agent, without editing SARIF:
+
+```sh
+npx sarif-to-comment inspect --sarif review.staged.sarif        # note each finding's "Selector:"
+npx sarif-to-comment group-fixes --sarif review.staged.sarif \
+  --finding '/runs/0/results/1@…' --finding '/runs/0/results/2@…' --group checklist-link
+npx sarif-to-comment ungroup-fixes --sarif review.staged.sarif --finding '/runs/0/results/1@…' --finding '/runs/0/results/2@…'
+```
+
+- **What it writes.** Each selected finding gets the same `properties.sarifToComment.suggestionGroup`. Nothing else changes; `inspect` shows the group beside each finding. With `--allow-suggestion-prs`, `publish` proposes the group as one [suggestion pull request](#suggestion-pull-requests-optional); without it, the document is blocked, naming the setting.
+- **Rules.** Name at least two findings, by the selectors of the file as it is now: a stale selector is refused (exit status 2). A finding's change is its primary (first) fix or its file creation or deletion; further fixes are alternatives and never join a group. The request is refused, with nothing changed, when a finding is already in a group or has no change, when the name is already in use (groups are created whole, never extended or joined), or when the findings hold fewer than two distinct changes. A single fix with several changes needs no group.
+- **Ungrouping** removes the property again. It never leaves a group with fewer than two distinct changes: to dissolve a group, name all its findings (the refusal lists the rest).
+- **Files and output.** Both commands edit `--sarif` in place, atomically, or write `--output`, a new file. `--format json` prints the receipt (`group`, `findings` with each one's `ref`, `tool` and `changes`, and the group's distinct `changes`). The library functions are `groupSarifFixes(sarif, { findings, group })` and `ungroupSarifFixes(sarif, { findings })`; both return a new document.
 
 ## Checking readiness without publishing
 
@@ -224,7 +247,7 @@ A refused request is recorded in the state file. Later runs with that path repor
 
 ## Suggestion pull requests (optional)
 
-Some proposals can't be accepted with GitHub's native suggestion button: a whole new or deleted file, or several changes that only make sense together (a fix and its regression test). With `options.allowSuggestionPullRequests: true` (`--allow-suggestion-prs`), the tool offers each of them as a **suggestion pull request**: a pull request into the reviewed pull request's head branch, which the author accepts by merging it. The review links every suggestion pull request. Native suggestions are always preferred: only changes they can't represent safely become pull requests.
+Some proposals can't be accepted with GitHub's native suggestion button: a whole new or deleted file, a SARIF fix with several changes, or several changes that only make sense together (a fix and its regression test). With `options.allowSuggestionPullRequests: true` (`--allow-suggestion-prs`), the tool offers each of them as a **suggestion pull request**: a pull request into the reviewed pull request's head branch, which the author accepts by merging it. The review links every suggestion pull request. Native suggestions are always preferred: only changes they can't represent safely become pull requests.
 
 It is **off by default**. Without it, creations and deletions are shown in the review body as before, and nothing else changes. Pull requests create clutter and can start CI runs, notifications and bots, so you opt in knowingly.
 
@@ -236,8 +259,9 @@ Suggestion pull requests follow a tool-neutral **suggestion pull request convent
 | `pullRequestLabels: ['team-a', …]` | `--pr-labels team-a,…` | Extra existing labels, added **in addition to** the canonical label. Deduplicated case-insensitively; names may not contain commas. Needs the opt-in. |
 | `markSuggestionPullRequestsReady: true` | `--mark-suggestion-prs-ready` | Create them ready for review instead of as drafts (the default). Needs the opt-in. |
 
-- **What becomes a pull request.** Each distinct whole-file creation or deletion, and each explicit group. Small edits that a native suggestion represents faithfully stay native suggestions.
-- **Explicit groups.** Mark the results that must be accepted together with the same `properties.sarifToComment.acceptanceGroup` value (1–100 characters). Every member carries exactly one change: one fix (one replacement) or one file creation or deletion, and a group needs at least two distinct changes. The tool never infers a group, never joins two groups and never merges alternative fixes. Without the setting, a grouped document is blocked, naming the setting; a group is never split.
+- **What becomes a pull request.** Each distinct whole-file creation or deletion, each SARIF fix with several changes, and each explicit group. Small edits that a native suggestion represents faithfully stay native suggestions.
+- **A fix with several changes.** SARIF already applies one fix's artifact changes and replacements together, so such a fix becomes one suggestion pull request with no extra property. Its replacements are located in the unmodified file and must not overlap or start at the same position; replacements on the same lines become one change of those lines. Without the setting it is blocked, naming the setting; it is never split into separate suggestions.
+- **Explicit groups.** SARIF cannot join fixes of different findings, or an edit with a file creation or deletion. Group them with [`group-fixes`](#grouping-fixes-for-joint-acceptance) (or `groupSarifFixes`), which gives each finding the same `properties.sarifToComment.suggestionGroup` value (1–100 characters). A member's change is its primary (first) fix or its file creation or deletion, and a group needs at least two distinct changes. The tool never infers a group, never joins two groups and never merges alternative fixes. Without the setting, a grouped document is blocked, naming the setting; a group is never split.
 - **The label.** Every suggestion pull request carries the repository's **canonical label**: `suggestion-pr`, unless the repository names another in an optional, hand-maintained `.github/suggestion-prs.json` (`{ "label": "…" }`) on its **default branch** (so a pull request can't change its own label). The tool never writes that file. An invalid file (bad JSON, a `label` that isn't a string, is empty or contains a comma) blocks the review, naming the file and field; a file that can't be read is an error, never a silent default. There is no per-call label option: the label is a convention of the repository, and cleanup relies on it.
 - **Labels must exist.** The canonical label and every extra label must already exist in the repository. Otherwise the whole review is blocked before anything is written, and `validate` says the same. The tool never creates labels.
 - **Where it goes.** A branch `suggestion-pr/<pull>/<id>` whose single commit has the reviewed commit as its parent (or, after a force-push, the head it was re-applied onto; see below), and a pull request from it into the head branch. The tool creates each branch once and never updates, force-pushes or deletes it.
@@ -300,7 +324,7 @@ Invalid input rejects with a `TypeError`; an invalid or unreadable label configu
 - **Whole-review validation.** The document is validated against the official SARIF 2.1.0 schema, then checked for consistency against the pull request's actual source. Invalid input or an unsupported finding, source association or fix blocks the entire review. Every accepted finding is included; this is not a lossless rendering of all SARIF metadata.
 - **General findings.** A result without a location goes in the review body.
 - **Findings with a location.** A result with one physical location becomes an inline comment when it maps exactly onto a line of the pull request's diff at the reviewed commit. Otherwise it goes in the body with an exact permalink to that commit and a copy of the source. Nothing is ever placed on a nearby or different line.
-- **Suggestions.** A fix with one text replacement on the reviewed head, inside the diff, becomes a native GitHub suggestion.
+- **Suggestions.** A fix with one text replacement on the reviewed head, inside the diff, becomes a native GitHub suggestion. A fix with several changes is accepted whole, as a [suggestion pull request](#suggestion-pull-requests-optional).
   - A located result must refer to the same file and revision, with its lines contained in the replacement's lines. Otherwise this profile refuses the association; keep the correct finding location and separate the feedback from the unsupported fix.
   - Cases GitHub doesn't apply faithfully are refused before anything is written: raw CR in the suggestion payload, nested triple-backtick fences, blank-only replacements and unsafe final-line deletions.
 - **Whole-file proposals.** A finding may carry a proposed file creation or deletion (`properties.sarifToComment.proposedFileChanges`, as `add-staged-changes` writes it). Each distinct proposal becomes one section of the review body, followed by every finding that carries it, each with its own attribution.
@@ -309,7 +333,7 @@ Invalid input rejects with a `TypeError`; an invalid or unreadable label configu
   - Content that a code block cannot show exactly is refused before anything is written: control characters, a carriage return that doesn't end a CRLF line, mixed CRLF and LF line endings, invisible bidirectional or separator characters, and binary or non-UTF-8 contents. Nothing is truncated or split; a proposal that doesn't fit the body limit refuses the whole review.
   - There is no editor link and no collapsing. Emptying an existing file is an ordinary edit, published as a suggestion. The full contract is in the source repository (`docs/file-operation-publication-contract.md`).
   - With [suggestion pull requests](#suggestion-pull-requests-optional) enabled, each distinct proposal is offered as a suggestion pull request instead, and the review body links it.
-- **Refused features.** Multiple locations, related locations, code flows, graphs, stacks, attachments, suppressions, and alternative or multi-file fixes are refused with an explanation.
+- **Refused features.** Multiple locations, related locations, code flows, graphs, stacks, attachments, suppressions, and alternative fixes are refused with an explanation. A fix with several changes is refused unless suggestion pull requests are allowed.
 - **Metadata limits.**
   - Producer fingerprints, rank and occurrence counts are not rendered.
   - A logical location accompanying a physical location is not rendered; a logical-only location is unsupported.
