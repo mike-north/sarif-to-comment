@@ -1638,9 +1638,10 @@ export {
   STATE_FORMAT,
 };
 export type { IPublicationFs, IPublicationInternals, PublicationMode };
-// The pre-send checks that readiness assessment runs unchanged
+// The pre-send checks that readiness assessment runs unchanged, and the
+// complete paginated enumeration its pending-review check reads reviews with
 // (src/validate-sarif-review.cts); not part of the package's public API.
-export { authenticatedUserId, validatePreparedReview };
+export { authenticatedUserId, readAllPages, validatePreparedReview };
 // For compile-time checks of state parsing (test/publication-state.types.mts);
 // not part of the package's public API.
 export type { ParsedStateRecord };

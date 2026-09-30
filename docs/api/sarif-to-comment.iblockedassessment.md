@@ -4,7 +4,7 @@
 
 ## IBlockedAssessment interface
 
-Publication of this document would be blocked. Nothing was published and nothing was written.
+Publication of this document would be blocked, or GitHub would refuse it because the account already has a pending review on the pull request. Nothing was published and nothing was written.
 
 **Signature:**
 
@@ -52,7 +52,7 @@ string
 
 </td><td>
 
-The explanation publication itself gives for this document.
+The explanation publication itself gives for this document, or the pending review that stands in the way.
 
 
 </td></tr>

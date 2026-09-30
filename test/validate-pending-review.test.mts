@@ -224,8 +224,8 @@ function localFiles(world: IWorld): string[] {
  * Guarantees): the host holds exactly the reviews it held before, and no
  * file appeared.
  */
-function assertNothingWritten(world: IWorld, reviewsBefore: readonly IStoredReview[], filesBefore: readonly string[] = []): void {
-  assert.deepEqual(world.remote.writeCalls(), [], 'no remote write');
+function assertNothingWritten(world: IWorld, reviewsBefore: readonly IStoredReview[], filesBefore: readonly string[] = [], writesBefore = 0): void {
+  assert.deepEqual(world.remote.writeCalls().slice(writesBefore), [], 'no remote write');
   assert.deepEqual(world.remote.reviews(), reviewsBefore, 'the host holds exactly the reviews it held before');
   assert.deepEqual(localFiles(world), filesBefore, 'no file was written');
 }
@@ -361,12 +361,14 @@ describe('a pending review of the authenticated account blocks; nothing else abo
     const stateBefore = fs.readFileSync(world.statePath);
     const before = world.remote.reviews();
     const filesBefore = localFiles(world);
+    const readbacksBefore = world.remote.calls('listReviewComments').length;
+    const writesBefore = world.remote.writeCalls().length;
 
     const outcome = await validate(world.createGitHubClient, input());
     assertNamesPendingReview(outcome, earlier);
-    assert.equal(world.remote.calls('listReviewComments').length, 0, 'no review is read back or matched against a publication');
+    assert.equal(world.remote.calls('listReviewComments').length, readbacksBefore, 'no review is read back or matched against a publication');
     assert.deepEqual(fs.readFileSync(world.statePath), stateBefore, 'the earlier publication state is untouched');
-    assertNothingWritten(world, before, filesBefore);
+    assertNothingWritten(world, before, filesBefore, writesBefore);
   });
 
   test('two pending reviews of the account (host data GitHub should not produce) are both named', async () => {

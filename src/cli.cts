@@ -451,9 +451,10 @@ Usage:
 
 Runs every check publish runs, reading the pull request and its source from
 GitHub, and stops before publishing: nothing is written to GitHub and no file
-is written. A ready result is not an approval: publish repeats every check
-against the pull request as it is then, and GitHub can still refuse the
-review (for example, a pending review of yours already on the pull request).
+is written. It also reads the pull request's reviews: a pending review of
+yours already there is reported as blocked, because GitHub refuses another
+review, draft or submitted, while it exists. A ready result is not an
+approval: publish repeats every check against the pull request as it is then.
 Validation takes no publication state file and reserves no publication.
 
 Options:
@@ -461,7 +462,8 @@ ${VALIDATE_OPTIONS}${FORMAT_OPTION}
 ${CREDENTIALS}
 Exit status:
   0  ready: publish would create the review
-  2  blocked: publish would refuse; every problem is listed
+  2  blocked: publish would refuse, or GitHub would refuse a pending review of
+     yours; every problem is listed
   1  incomplete: the check could not be completed (for example the credential,
      the network or a source read failed), or a usage error, unreadable SARIF
      file or operational failure

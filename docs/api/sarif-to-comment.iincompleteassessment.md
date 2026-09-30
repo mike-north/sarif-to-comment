@@ -4,7 +4,7 @@
 
 ## IIncompleteAssessment interface
 
-The assessment could not be completed (for example a refused credential, a network failure, a failed source read or a pull request that does not match the request). This is no verdict on the document; publication would refuse at the same point without writing. Nothing was published and nothing was written.
+The assessment could not be completed (for example a refused credential, a network failure, a failed source read, a pull request that does not match the request, or a review list that could not be read completely). This is no verdict on the document. Nothing was published and nothing was written.
 
 **Signature:**
 

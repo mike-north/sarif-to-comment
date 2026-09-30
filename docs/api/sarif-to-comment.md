@@ -217,7 +217,7 @@ Input to [addStagedChangesToSarif()](./sarif-to-comment.addstagedchangestosarif.
 
 </td><td>
 
-Publication of this document would be blocked. Nothing was published and nothing was written.
+Publication of this document would be blocked, or GitHub would refuse it because the account already has a pending review on the pull request. Nothing was published and nothing was written.
 
 
 </td></tr>
@@ -338,7 +338,7 @@ Options for [groupSarifFixes()](./sarif-to-comment.groupsariffixes.md)<!-- -->. 
 
 </td><td>
 
-The assessment could not be completed (for example a refused credential, a network failure, a failed source read or a pull request that does not match the request). This is no verdict on the document; publication would refuse at the same point without writing. Nothing was published and nothing was written.
+The assessment could not be completed (for example a refused credential, a network failure, a failed source read, a pull request that does not match the request, or a review list that could not be read completely). This is no verdict on the document. Nothing was published and nothing was written.
 
 
 </td></tr>
@@ -602,7 +602,7 @@ The pull request that receives the review.
 
 </td><td>
 
-Publication of this document would proceed to its single create-review request. Nothing was published and nothing was written.
+Publication of this document would proceed to its single create-review request, and the account had no pending review on the pull request. Nothing was published and nothing was written.
 
 
 </td></tr>
