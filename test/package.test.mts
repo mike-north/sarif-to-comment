@@ -324,6 +324,25 @@ describe('packed distributable', () => {
     assert.ok(apiPages.length >= 3, 'the generated API reference has pages');
   });
 
+  test('the release guard accepts a real pack of this checkout, as the publish workflow verifies it', { skip }, () => {
+    // publish.yml refuses to publish unless `release-guard.mts verify-pack`
+    // accepts npm's own pack listing. Synthetic pack results cannot notice a
+    // `files` entry the guard's boundary was never taught, so the real
+    // listing goes through the real command line here.
+    const { work, env } = requirePackedProject();
+    const pack = npm(['pack', '--dry-run', '--json'], { cwd: ROOT, env });
+    assert.equal(pack.status, 0, pack.stderr);
+    const packJson = path.join(fs.mkdtempSync(path.join(work, 'verify-pack-')), 'pack.json');
+    fs.writeFileSync(packJson, pack.stdout);
+    const verify = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'release-guard.mts'), 'verify-pack', packJson], {
+      cwd: ROOT,
+      encoding: 'utf8',
+      timeout: 60_000,
+    });
+    assert.equal(verify.status, 0, `verify-pack refused the real tarball:\n${verify.stderr}${verify.stdout}`);
+    assert.match(verify.stdout, new RegExp(`^Verified sarif-to-comment-${PKG.version.replaceAll('.', '\\.')}\\.tgz: \\d+ files`));
+  });
+
   test('the files negations keep build by-products out of a packed dist/', { skip }, () => {
     // The checkout's dist/ need not hold every by-product at any given time,
     // so the boundary is proven on a scratch package that holds all of them.
