@@ -924,12 +924,18 @@ describe('CLI + real GitHub client over HTTP', () => {
     assert.equal(checked.status, 0, checked.stdout + checked.stderr);
     const published = cli(world, ['publish', ...target, '--state', world.statePath]);
     assert.equal(published.status, 0, published.stdout + published.stderr);
-    const expected = warningsBlock(
-      notReapplied('/runs/0/results/0', REWORD, REWRITTEN, ['`docs/sample.md` line 6 differs from the reviewed text']),
-      notReapplied('/runs/0/results/3', DELETE, REWRITTEN, ['`obsolete.txt` differs from the reviewed file']),
-    );
-    assert.equal(warningsOf(checked.stdout), expected);
-    assert.equal(warningsOf(published.stdout), expected);
+    // Human form: the warnings are diagnostics on stderr, once each, with the messages the Markdown lists.
+    for (const [pointer, unit, reasons] of [
+      ['/runs/0/results/0', REWORD, ['`docs/sample.md` line 6 differs from the reviewed text']],
+      ['/runs/0/results/3', DELETE, ['`obsolete.txt` differs from the reviewed file']],
+    ] as const) {
+      const message = notReapplied(pointer, unit, REWRITTEN, reasons).replace(/^- `suggestion-pr-not-reapplied` at `[^`]+`: /, '');
+      for (const run of [checked, published]) {
+        assert.ok(run.stderr.includes(`[suggestion-pr-not-reapplied]\n  ${pointer}\n  ${message}\n`), run.stderr);
+        assert.equal(run.stdout.includes(message), false, 'not repeated on stdout');
+      }
+    }
+    for (const run of [checked, published]) assert.ok(run.stderr.endsWith('\n2 warnings\n'), run.stderr);
     assert.equal(world.host.pulls().length, 1);
   });
 });

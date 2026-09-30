@@ -788,7 +788,8 @@ describe('the real CLI over HTTP: human and JSON output, exit status 2', () => {
     const human = cli(world, []);
     assert.equal(human.status, 2, human.stdout + human.stderr);
     assert.match(human.stderr, /^✖ error {2}The account already has a pending review on the pull request {2}\[pending-review-exists\]\n {2}octo\/calc#12\n/);
-    assert.equal(human.stdout, `${libraryOutcome.markdown}\n`);
+    // docs/diagnostics.md "Streams": the report without the problem, which is rendered once, on stderr.
+    assert.equal(human.stdout, '## Review blocked\n\nNothing was published and no publication state was written. 1 problem must be resolved before publication.\n');
 
     assert.equal(posts(), postsBefore, 'the CLI wrote nothing to GitHub');
     assert.equal(world.host.reviews().length, 1);

@@ -1195,7 +1195,8 @@ describe('CLI + real GitHub client over HTTP', () => {
     const world = makeWorld();
     const result = cli(world, ['publish', '--sarif', sarifFile(world, groupedAdditions()), ...target, '--state', world.statePath]);
     assert.equal(result.status, 2, result.stdout + result.stderr);
-    assert.match(result.stdout, /--allow-suggestion-prs/);
+    assert.match(result.stdout, /^## Review blocked\n/);
+    assert.match(result.stderr, /\[suggestion-group-requires-suggestion-prs\][\s\S]*--allow-suggestion-prs/, 'the problem, naming the flag, is on stderr');
     assert.deepEqual(writes(world), []);
   });
 

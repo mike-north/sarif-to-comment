@@ -166,11 +166,12 @@ describe('CLI validate + real GitHub client over HTTP', () => {
     assertReadOnly(world);
   });
 
-  test('a refused credential in human form: exit 1, the explanation on stdout, nothing written', () => {
+  test('a refused credential in human form: exit 1, what to do on stdout, the cause on stderr, nothing written', () => {
     const world = makeWorld({ onlyCredential: TOKEN });
     const result = cli(world, [], 'ghp_wrong_credential_111111111111');
     assert.equal(result.status, 1, result.stdout + result.stderr);
-    assert.match(result.stdout, /401/);
+    assert.match(result.stderr, /\[assessment-incomplete\][\s\S]*401/);
+    assert.doesNotMatch(result.stdout, /401/, 'the cause is rendered once, on stderr');
     assert.match(result.stdout, /not a verdict/i);
     assertReadOnly(world);
   });

@@ -226,19 +226,20 @@ describe('human output: the primary result on stdout, diagnostics on stderr', ()
     assert.equal(result.stderr, '');
   });
 
-  test('validate: the Markdown report on stdout as before, and each problem as a block on stderr (exit 2)', () => {
+  test('validate: the report on stdout without the problem, which is a block on stderr (exit 2)', () => {
     const remote = FakeGitHubRemote.create(path.join(workDir(), 'remote'));
     const held = write(dir, 'held.sarif.json', readJson(path.join(PUBLIC_API, 'held.sarif.json')));
     const argv = ['validate', '--sarif', held, '--repo', 'acme/gizmos', '--pull', '7', '--commit', REPOSITORY.commits.head];
     const result = runWithGitHub(remote.dir, argv);
     assert.equal(result.status, 2);
     assert.match(result.stdout, /^## Review blocked\n/);
+    assert.doesNotMatch(result.stdout, /Awaiting approval/, 'the problem is rendered once, on stderr');
     assert.match(result.stderr, /^✖ error {2}The review is held for approval {2}\[approval-hold\]\n {2}\/runs\/0\/results\/0\n/);
     assert.ok(result.stderr.endsWith('\n1 error\n'));
     const json = runWithGitHub(remote.dir, [...argv, '--format', 'json']);
     assert.equal(json.status, 2);
     assert.equal(json.stderr, '');
-    assert.equal(jsonOf(json)['message'], result.stdout.replace(/\n$/, ''), 'stdout is the Markdown the JSON message carries');
+    assert.match(String(jsonOf(json)['message']), /Awaiting approval/, 'the JSON message is the full report');
   });
 });
 

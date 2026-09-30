@@ -1604,12 +1604,12 @@ describe('validate', () => {
     assertNothingWritten(world);
   });
 
-  test('a source-read failure in human form: exit 1 with the explanation on stdout and the diagnostic on stderr', () => {
+  test('a source-read failure in human form: exit 1, what to do on stdout, the cause as a diagnostic on stderr', () => {
     const world = publishWorld();
     setAdapterConfig(world.remote.dir, { context: 'source-read-fails' });
     const result = runPublish(world, ['validate', ...destinationFlags(world)]);
     assert.equal(result.status, 1, result.stdout + result.stderr);
-    assert.match(result.stdout, /502/);
+    assert.doesNotMatch(result.stdout, /502/, 'the cause is rendered once, on stderr');
     assert.match(result.stdout, /not a verdict/i);
     assert.match(result.stderr, /^✖ error {2}Readiness could not be assessed {2}\[assessment-incomplete\]\n[\s\S]*502/);
     assertNothingWritten(world);
