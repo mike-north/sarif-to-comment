@@ -1042,9 +1042,8 @@ describe('native suggestions from standard fixes', () => {
 
   const limitFix = fix({ startLine: 3, startColumn: 23, endColumn: 25 }, '20');
 
-  // SARIF's schema requires distinct fixes (uniqueItems), so the alternatives differ.
-  blockedFix('alternative fixes are not silently chosen between',
-    [limitFix, fix({ startLine: 3, startColumn: 23, endColumn: 25 }, '30')], 'fix-alternatives-unsupported');
+  // Several fixes on one result are published: the first is the suggestion and
+  // the others are listed as alternatives (test/alternative-fixes.test.mts).
   // A fix with several changes is accepted whole, which needs a suggestion pull request (issue #29, A30).
   blockedFix('a fix changing several files needs suggestion pull requests', [{ artifactChanges: [
     limitFix.artifactChanges[0], { ...present(limitFix.artifactChanges[0], 'the change'), artifactLocation: { uri: 'src/util.js' } },

@@ -1,0 +1,39 @@
+{
+  "verifiedAt": "2026-09-30T03:20:28.519Z",
+  "repository": "mike-north/doc-linter",
+  "pullNumber": 55,
+  "checks": [
+    {
+      "check": "exactly one review, PENDING, by mike-north, never submitted, on the reviewed commit (the head)",
+      "result": "passed"
+    },
+    {
+      "check": "the review body is only the hidden marker",
+      "result": "passed"
+    },
+    {
+      "check": "the pull request is an open draft",
+      "result": "passed"
+    },
+    {
+      "check": "one inline thread at examples/alternative-parts/parse.js line 2",
+      "result": "passed"
+    },
+    {
+      "check": "the stored comment body equals the hand-written oracle byte for byte",
+      "result": "passed"
+    },
+    {
+      "check": "no carriage return reached the stored body",
+      "result": "passed"
+    },
+    {
+      "check": "five code blocks in order: three parts of alternative (1), alternative (2), then the suggestion",
+      "result": "passed"
+    },
+    {
+      "check": "each part is labelled with its file, and both CRLF replacements state their style",
+      "result": "passed"
+    }
+  ]
+}

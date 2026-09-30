@@ -1,0 +1,24 @@
+{
+  "baseRefName": "sarif-issue30-20260929-base",
+  "headRefName": "sarif-issue30-20260929-reviewed",
+  "headRefOid": "8f005c8fb491bf13e9bc106b67b2657792be4331",
+  "isDraft": true,
+  "reviews": [
+    {
+      "id": "PRR_kwDOUuyy7s8AAAABP4rVSA",
+      "author": {
+        "login": "mike-north"
+      },
+      "authorAssociation": "OWNER",
+      "body": "\n\n<!-- sarif-to-comment:review:19db9ee8-6636-4469-80ae-ac62426613d3 -->",
+      "submittedAt": null,
+      "includesCreatedEdit": false,
+      "reactionGroups": [],
+      "state": "PENDING",
+      "commit": {
+        "oid": "8f005c8fb491bf13e9bc106b67b2657792be4331"
+      }
+    }
+  ],
+  "state": "OPEN"
+}

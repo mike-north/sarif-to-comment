@@ -1,0 +1,131 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Alternatives probe",
+          "version": "1.0.0"
+        }
+      },
+      "columnKind": "utf16CodeUnits",
+      "versionControlProvenance": [
+        {
+          "repositoryUri": "https://github.com/mike-north/doc-linter",
+          "revisionId": "04f75e08a48244e8060d4463cec7e85e651bf0b0"
+        }
+      ],
+      "results": [
+        {
+          "ruleId": "parser-choice",
+          "message": {
+            "text": "parseA does not validate its input."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "examples/alternative-parts/parse.js"
+                },
+                "region": {
+                  "startLine": 2
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "description": {
+                "text": "Use parseB, which validates its input."
+              },
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "examples/alternative-parts/parse.js"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 2
+                      },
+                      "insertedContent": {
+                        "text": "const options = parseB(input);"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "description": {
+                "text": "Switch to parseAll and record it."
+              },
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "examples/alternative-parts/parse.js"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 1
+                      },
+                      "insertedContent": {
+                        "text": "const defaults = { strict: true };"
+                      }
+                    },
+                    {
+                      "deletedRegion": {
+                        "startLine": 2
+                      },
+                      "insertedContent": {
+                        "text": "const options = parseAll(input);"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "artifactLocation": {
+                    "uri": "examples/alternative-parts/windows.txt"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 1
+                      },
+                      "insertedContent": {
+                        "text": "uno"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "description": {
+                "text": "Or record the change only."
+              },
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "examples/alternative-parts/windows.txt"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 2
+                      },
+                      "insertedContent": {
+                        "text": "deux\r\ntrois"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -681,19 +681,77 @@ describe('group rules (§2.3–§2.4), identical in validate and publish', () =>
     ]);
   });
 
-  test('regression: a group member carrying alternative fixes is refused, never unioned into the group', async () => {
-    const alternatives = {
-      text: 'Two ways to retry.',
-      group: 'g',
-      location: at('src/client.ts', 2),
-    };
+  test('a group member\'s first fix joins the group; its further fixes are listed as alternatives, never unioned (issue #30)', async () => {
+    const alternative = '  const response = await retry(request, id);';
     const sarif = document([
-      { ...result(alternatives), fixes: [lineFix('src/client.ts', 2, RETRY), lineFix('src/client.ts', 2, '  const response = await retry(request, id);')] },
+      { ...result({ text: 'Two ways to retry.', group: 'g', location: at('src/client.ts', 2) }), fixes: [lineFix('src/client.ts', 2, RETRY), lineFix('src/client.ts', 2, alternative)] },
       result({ text: 'Page.', group: 'g', operation: createOp(0) }),
     ], [created('docs/a.md', PAGE_A)]);
-    await assertBlockedEverywhere(makeWorld(), sarif, [
-      '- `fix-alternatives-unsupported` at `/runs/0/results/0`: Several alternative fixes were proposed; none is chosen silently.',
-    ]);
+    const world = makeWorld();
+    assert.equal(status(await validate(world, sarif)), 'ready');
+    const outcome = await publish(world, sarif);
+    assert.equal(status(outcome), 'published', markdown(outcome));
+    const { pull, branch, id, publication } = onlyPull(world);
+    assert.equal(pull.title, 'Suggestion for #7: g (2 changes)');
+    // Only the first fix is committed: the alternative is never applied or unioned into the group.
+    assert.deepEqual(world.host.fileOnBranch(branch, 'src/client.ts'), Buffer.from(EDITED_CLIENT));
+    assert.deepEqual(world.host.fileOnBranch(branch, 'docs/a.md'), Buffer.from(PAGE_A));
+    const changes = [
+      `- Edited [src/client.ts line 2 at ${SHORT}](${blob('src/client.ts', '#L2')})`,
+      '- New file `docs/a.md`: 17 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644',
+    ];
+    const items = [
+      `**Source:** [src/client.ts line 2 at ${SHORT}](${blob('src/client.ts', '#L2')})`,
+      '',
+      '```',
+      '  const response = await request(id);',
+      '```',
+      '',
+      'Two ways to retry.',
+      '',
+      '**Alternatives to consider:**',
+      '',
+      '(1) Replace line 2 with:',
+      '',
+      '```',
+      alternative,
+      '```',
+      '',
+      attribution,
+      '',
+      '---',
+      '',
+      'Page.',
+      '',
+      attribution,
+    ];
+    assert.equal(pull.body, [
+      `Suggested in a review of #7 at commit ${HEAD}.`,
+      '',
+      'Merging this pull request into `feature/retry` applies these 2 changes together:',
+      '',
+      ...changes,
+      '',
+      DRAFT_NOTE,
+      '',
+      '---',
+      '',
+      ...items,
+      '',
+      markerFor(id, publication),
+    ].join('\n'));
+    const [review] = world.host.reviews();
+    assert.ok(review);
+    assert.equal(review.request.body.replace(REVIEW_MARKER, ''), [
+      `**Suggestion pull request:** [#${String(pull.number)}](${pullUrl(pull.number)})`,
+      '',
+      'Merging it into `feature/retry` applies these 2 changes together:',
+      '',
+      ...changes,
+      '',
+      ...items,
+    ].join('\n'));
+    assert.deepEqual(review.request.comments, []);
   });
 
   test('regression: a suggestion pull request body over 60,000 characters blocks the review; nothing is truncated', async () => {

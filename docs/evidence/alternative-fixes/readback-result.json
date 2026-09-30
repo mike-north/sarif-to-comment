@@ -1,0 +1,51 @@
+{
+  "verifiedAt": "2026-09-30T03:08:45.158Z",
+  "repository": "mike-north/doc-linter",
+  "pullNumber": 54,
+  "checks": [
+    {
+      "check": "exactly one review on the pull request, PENDING, by mike-north, never submitted",
+      "result": "passed"
+    },
+    {
+      "check": "the review is on the reviewed commit, which is the pull request head",
+      "result": "passed"
+    },
+    {
+      "check": "the review body is empty apart from the hidden marker, which occurs once",
+      "result": "passed"
+    },
+    {
+      "check": "the pull request is an open draft (never merged)",
+      "result": "passed"
+    },
+    {
+      "check": "exactly one inline thread, at examples/alternative-fixes/parse.js line 2",
+      "result": "passed"
+    },
+    {
+      "check": "the stored comment body equals the hand-written oracle byte for byte",
+      "result": "passed"
+    },
+    {
+      "check": "the body holds exactly three code blocks: alternative (1), alternative (2), then the suggestion",
+      "result": "passed"
+    },
+    {
+      "check": "alternative (1) block: a 3-backtick fence holding the two replacement lines",
+      "result": "passed"
+    },
+    {
+      "check": "alternative (2) block: a 4-backtick fence (content has a 3-backtick run) holding its line exactly",
+      "result": "passed"
+    },
+    {
+      "check": "the native suggestion is the first fix only",
+      "result": "passed"
+    },
+    {
+      "check": "alternative (2) names its other file; alternative (1), on the first fix's file, does not",
+      "result": "passed"
+    }
+  ]
+}

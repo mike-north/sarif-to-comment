@@ -327,13 +327,32 @@ Invalid input rejects with a `TypeError`; an invalid or unreadable label configu
 - **Suggestions.** A fix with one text replacement on the reviewed head, inside the diff, becomes a native GitHub suggestion. A fix with several changes is accepted whole, as a [suggestion pull request](#suggestion-pull-requests-optional).
   - A located result must refer to the same file and revision, with its lines contained in the replacement's lines. Otherwise this profile refuses the association; keep the correct finding location and separate the feedback from the unsupported fix.
   - Cases GitHub doesn't apply faithfully are refused before anything is written: raw CR in the suggestion payload, nested triple-backtick fences, blank-only replacements and unsafe final-line deletions.
+- **Alternative fixes.** When a result carries several fixes, the **first** one is its suggested change, presented exactly as a single fix would be: a native suggestion, its group's suggestion pull request, or, for a fix with several changes, its own suggestion pull request. The producer's order decides; the tool never picks a "better" fix, and a first fix that can't be presented refuses the review even when a later one could be. Every further fix is listed in the same comment, under **Alternatives to consider:**, as `(1)`, `(2)`, … with its description and the reviewed lines it would replace:
+
+  ````md
+  **Alternatives to consider:**
+
+  (1) Cache the parse.
+
+  Replace line 2 with:
+
+  ```
+  const b = cachedParse(input);
+  ```
+  ````
+
+  - Each alternative is shown in a code block whose fence is longer than any backtick run inside it, and names its file when that isn't the first fix's file. A deletion is stated ("Delete line 2.") without a block.
+  - Alternatives are never applied, merged into one patch or made members of a group; only the first fix is. They count toward the size limits: if they don't fit, the whole review is refused, never truncated.
+  - An alternative that changes several files or makes several replacements is read as a fix with several changes is: replacements on the same lines are one change of those lines. It is listed as one alternative: `Changes 2 files together:` (or `Makes 2 changes together:`), then one part per change, each labelled with its file (`` `src/app.js` — replace line 2 with:``) and its own code block.
+  - The code block shows the lines with LF line breaks. When a replacement's lines end with CRLF, that is stated beside it: `Replace line 2 with (CRLF line endings):`.
+  - Each replacement must be text that applies exactly to the reviewed commit, no two replacements of one alternative may overlap, and its lines must be showable exactly (no invisible or bidirectional characters, no carriage return inside a line, no mix of CRLF and LF, no line that could open a suggestion block). Otherwise the review is refused, naming the alternative (`/runs/0/results/0/fixes/1`). `inspect` lists every fix. Rendering and read-back on live GitHub are recorded in the source repository (`docs/alternative-fixes-e2e-evidence.md`).
 - **Whole-file proposals.** A finding may carry a proposed file creation or deletion (`properties.sarifToComment.proposedFileChanges`, as `add-staged-changes` writes it). Each distinct proposal becomes one section of the review body, followed by every finding that carries it, each with its own attribution.
   - A new file is shown in full in a code block, with its size, line endings, final newline, any byte-order mark and its mode (`100644` or `100755`) stated beside it. An empty file is stated as empty. A finding's line refers to the proposed file, and no link to the absent file is invented.
   - A deletion links the file at the reviewed commit and says that the whole file is removed, not emptied. Its content is never read unless a finding quotes lines of it, so binary and oversized files can be deleted.
   - Content that a code block cannot show exactly is refused before anything is written: control characters, a carriage return that doesn't end a CRLF line, mixed CRLF and LF line endings, invisible bidirectional or separator characters, and binary or non-UTF-8 contents. Nothing is truncated or split; a proposal that doesn't fit the body limit refuses the whole review.
   - There is no editor link and no collapsing. Emptying an existing file is an ordinary edit, published as a suggestion. The full contract is in the source repository (`docs/file-operation-publication-contract.md`).
   - With [suggestion pull requests](#suggestion-pull-requests-optional) enabled, each distinct proposal is offered as a suggestion pull request instead, and the review body links it.
-- **Refused features.** Multiple locations, related locations, code flows, graphs, stacks, attachments, suppressions, and alternative fixes are refused with an explanation. A fix with several changes is refused unless suggestion pull requests are allowed.
+- **Refused features.** Multiple locations, related locations, code flows, graphs, stacks, attachments and suppressions are refused with an explanation. A first fix with several changes is refused unless suggestion pull requests are allowed; as an alternative, such a fix is listed with labelled parts.
 - **Metadata limits.**
   - Producer fingerprints, rank and occurrence counts are not rendered.
   - A logical location accompanying a physical location is not rendered; a logical-only location is unsupported.

@@ -1,0 +1,11 @@
+{
+  "command": "validate",
+  "status": "blocked",
+  "problems": [
+    {
+      "message": "Alternative fix (1) cannot be shown exactly: replacement line 1 contains U+202E, which a code block does not show.",
+      "pointer": "/runs/0/results/0/fixes/1"
+    }
+  ],
+  "message": "## Review blocked\n\nNothing was published and no publication state was written.\n\n**Review blocked:** 1 problem must be resolved before publication; nothing was published.\n\n- `alternative-content-unrepresentable` at `/runs/0/results/0/fixes/1`: Alternative fix (1) cannot be shown exactly: replacement line 1 contains U+202E, which a code block does not show."
+}

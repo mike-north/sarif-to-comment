@@ -1,0 +1,14 @@
+{
+  "threads": [
+    {
+      "firstId": 4140500511,
+      "resolved": false,
+      "replies": 0,
+      "author": "mike-north",
+      "loc": "examples/alternative-parts/parse.js:2",
+      "snippet": "parseA does not validate its input. **Fix:** Use parseB, which validates its inp",
+      "body": "parseA does not validate its input.\n\n**Fix:** Use parseB, which validates its input.\n\n**Alternatives to consider:**\n\n(1) Switch to parseAll and record it.\n\nChanges 2 files together:\n\n`examples/alternative-parts/parse.js` — replace line 1 with:\n\n```\nconst defaults = { strict: true };\n```\n\n`examples/alternative-parts/parse.js` — replace line 2 with:\n\n```\nconst options = parseAll(input);\n```\n\n`examples/alternative-parts/windows.txt` — replace line 1 with (CRLF line endings):\n\n```\nuno\n```\n\n(2) Or record the change only.\n\nReplace line 2 of `examples/alternative-parts/windows.txt` with (CRLF line endings):\n\n```\ndeux\ntrois\n```\n\n<sub>— Alternatives probe 1.0.0 · rule `parser-choice`</sub>\n\n```suggestion\nconst options = parseB(input);\n```"
+    }
+  ],
+  "missing": []
+}
