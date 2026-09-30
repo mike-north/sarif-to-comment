@@ -328,12 +328,12 @@ Usage:
 Records that the changes of the selected findings must be accepted together:
 each finding gets the same properties.sarifToComment.suggestionGroup. A NAME
 already in use extends that group, so a single finding may be added; groups
-are never joined. A
-finding's change is its primary (first) fix, or its proposed whole-file
-operation; further fixes are alternatives and are never grouped. Publishing
-with --allow-suggestion-prs proposes the group as one suggestion pull request;
-without it, publication refuses the group and never splits it. A single fix
-with several changes is already accepted whole and needs no group.
+are never joined. A finding's change is its primary (first) fix, or its
+proposed whole-file operation; further fixes are alternatives and are never
+grouped. Publishing with --allow-suggestion-prs proposes the group as one
+suggestion pull request; without it, publication refuses the group and never
+splits it. A single fix with several changes is already accepted whole and
+needs no group.
 
 Take each SELECTOR from inspect: "Selector:" under each finding, or "selector"
 in JSON. Selectors belong to the file exactly as inspected, so inspect again
