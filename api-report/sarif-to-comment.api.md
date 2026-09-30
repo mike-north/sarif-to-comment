@@ -20,7 +20,7 @@ export function addStagedChangesToSarif(input: IAddStagedChangesInput): Promise<
 export function closeSuggestionPullRequests(input: ICloseSuggestionPullRequestsInput): Promise<ICloseSuggestionPullRequestsOutcome>;
 
 // @public
-export type CloseSuggestionPullRequestsStatus = 'complete' | 'permission-limited' | 'incomplete';
+export type CloseSuggestionPullRequestsStatus = 'complete' | 'permission-limited' | 'incomplete' | 'too-many-candidates' | 'label-not-suggestion-prs';
 
 // @public
 export function createSarifDocument(options?: ICreateSarifDocumentOptions): ISarifLog;
@@ -94,18 +94,23 @@ export interface ICheckedSuggestionPullRequest {
 // @public
 export interface ICloseSuggestionPullRequestsInput {
     readonly dryRun?: boolean | undefined;
+    readonly force?: boolean | undefined;
     readonly label?: string | undefined;
+    readonly maxCandidates?: number | undefined;
     readonly originalPullNumber?: number | undefined;
+    readonly owner?: SuggestionOwnerScope | undefined;
     readonly repository: IGitHubRepository;
     readonly token: string;
 }
 
 // @public
 export interface ICloseSuggestionPullRequestsOutcome {
+    readonly counts: ISuggestionCleanupCounts;
     readonly diagnostics: readonly IDiagnostic[];
     readonly dryRun: boolean;
     readonly markdown: string;
     readonly originals: readonly IOriginalPullRequest[];
+    readonly owner: SuggestionOwnerScope;
     readonly status: CloseSuggestionPullRequestsStatus;
     readonly suggestions: readonly ICheckedSuggestionPullRequest[];
 }
@@ -540,6 +545,14 @@ export interface IStaleSarifSelectorOutcome {
 }
 
 // @public
+export interface ISuggestionCleanupCounts {
+    readonly candidates: number;
+    readonly checked: number;
+    readonly conforming: number;
+    readonly labeled: number;
+}
+
+// @public
 export interface IUncertainOutcome {
     readonly diagnostics: readonly IDiagnostic[];
     readonly markdown: string;
@@ -596,7 +609,10 @@ export function removeSarifComment(sarif: object, selector: string): RemoveSarif
 export type RemoveSarifCommentOutcome = IRemovedSarifCommentOutcome | IStaleSarifSelectorOutcome | IInvalidSarifOutcome;
 
 // @public
-export type SuggestionCleanupResult = 'closed' | 'would-close' | 'already-closed' | 'left-open' | 'unverified' | 'permission-limited' | 'failed' | 'not-ours' | 'unlabeled';
+export type SuggestionCleanupResult = 'closed' | 'would-close' | 'already-closed' | 'left-open' | 'unverified' | 'permission-limited' | 'failed' | 'not-conforming' | 'other-owner' | 'unlabeled';
+
+// @public
+export type SuggestionOwnerScope = 'me' | 'all';
 
 // @public
 export function ungroupSarifFixes(sarif: object, options: IUngroupSarifFixesOptions): UngroupSarifFixesOutcome;

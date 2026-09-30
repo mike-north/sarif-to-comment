@@ -12,6 +12,8 @@
  * DEFAULT_SUGGESTION_PR_LABEL          'suggestion-pr' (§3)
  * SUGGESTION_PR_CONFIGURATION_PATH     '.github/suggestion-prs.json' (§4)
  * suggestionPrBranch(pull, id)         'suggestion-pr/<pull>/<id>' (§5)
+ * SUGGESTION_BRANCH_PREFIX             'suggestion-pr/', the namespace every
+ *                                      suggestion branch is in (§5)
  * isLabelName(value), LABEL_RULE       a label name under the convention (§3)
  * resolveCanonicalLabel({ branch, content })
  *     -> { status: 'resolved', label, source: 'default' | 'repository', branch }
@@ -39,6 +41,13 @@ export const SUGGESTION_PR_CONFIGURATION_PATH = '.github/suggestion-prs.json';
 
 /** The first segment of every suggestion branch (convention §5). */
 const BRANCH_PREFIX = 'suggestion-pr';
+
+/**
+ * What every suggestion branch's name begins with (convention §5): the
+ * namespace a consumer lists to discover suggestion pull requests, whatever
+ * their labels.
+ */
+export const SUGGESTION_BRANCH_PREFIX = `${BRANCH_PREFIX}/`;
 
 /** A configuration larger than this is not a label configuration (the source-read limit). */
 export const MAX_CONFIGURATION_BYTES = 1_000_000;

@@ -232,13 +232,13 @@ describe('original states (A36)', () => {
     });
   }
 
-  test('regression (#43): a marker naming a pull request that does not exist (404) is not-ours, and the cleanup is complete rather than retried forever', async () => {
+  test('regression (#43): a marker naming a pull request that does not exist (404) is not-conforming, and the cleanup is complete rather than retried forever', async () => {
     const world = makeWorld([original(36, 'open'), suggestion(38, 36), suggestion(40, 37)], { pullReads: { '37': 'not-found' } });
     const outcome = await cleanup(world);
     assert.equal(outcome['status'], 'complete');
     assert.deepEqual(originals(outcome), [[36, 'open'], [37, 'not-found']]);
     assert.deepEqual(asArray(outcome['originals']).map((o) => Object.keys(asRecord(o))), [['number', 'state'], ['number', 'state']], 'a not-found original has no reason');
-    assert.deepEqual(results(outcome), [[38, 36, 'left-open'], [40, 37, 'not-ours']]);
+    assert.deepEqual(results(outcome), [[38, 36, 'left-open'], [40, 37, 'not-conforming']]);
     assert.equal(entry(outcome, 40)['reason'], 'its marker names #37, which is not a pull request in octo/widgets');
     assert.deepEqual(writes(world), []);
     assert.equal(stateOf(world, 40).state, 'open');
@@ -583,14 +583,30 @@ describe('targeted discovery from one original (§2.4, D21)', () => {
     });
   }
 
-  test('the repository is read exactly once, whether the configuration read proves it or the label override needs it', async () => {
+  test('the repository is read once where nothing else proves it exists, and never by a label sweep, whose first page does', async () => {
+    // The configuration read begins by reading the repository; a label
+    // sweep's first listing fails on a missing repository, so only the label
+    // override in targeted mode reads it on its own (§2.2.1).
     const repositoryReads = (world: IWorld): number => world.host.log().filter((r) => r.method === 'GET' && r.path === `/repos/${OWNER}/${REPO}`).length;
-    for (const extra of [{}, { label: 'suggestion-pr' }, { originalPullNumber: 37 }, { originalPullNumber: 37, label: 'suggestion-pr' }]) {
+    const cases: readonly (readonly [Json, number])[] = [
+      [{}, 1],
+      [{ label: 'suggestion-pr' }, 0],
+      [{ originalPullNumber: 37 }, 1],
+      [{ originalPullNumber: 37, label: 'suggestion-pr' }, 1],
+    ];
+    for (const [extra, reads] of cases) {
       const world = makeWorld([original(37, 'closed'), suggestion(40, 37)]);
       const outcome = await cleanup(world, extra);
       assert.equal(outcome['status'], 'complete', JSON.stringify(extra));
-      assert.equal(repositoryReads(world), 1, JSON.stringify(extra));
+      assert.equal(repositoryReads(world), reads, JSON.stringify(extra));
     }
+  });
+
+  test('a label sweep of a mistyped repository rejects on its first listing, never a not-found original', async () => {
+    const world = makeWorld([original(37, 'closed'), suggestion(40, 37)]);
+    await assert.rejects(cleanup(world, { repository: { owner: OWNER, repo: 'widgts' }, label: 'suggestion-pr' }), (err: unknown) => err instanceof Error && !(err instanceof TypeError));
+    assert.deepEqual(world.host.log().map((r) => `${r.method} ${r.path}`), ['POST /graphql'], 'one request, and no original is read');
+    assert.deepEqual(writes(world), []);
   });
 
   test('with a label override, an original that does not exist in a repository that does is still not-found', async () => {
@@ -614,7 +630,7 @@ describe('targeted discovery from one original (§2.4, D21)', () => {
       [
         '## Suggestion pull request cleanup complete',
         '',
-        'Checked the pull requests that reference #99 in octo/widgets; the suggestion label is `suggestion-pr` (the default suggestion label).',
+        'Checked the pull requests that reference #99 in octo/widgets; the suggestion label is `suggestion-pr` (the default suggestion label). Only suggestion pull requests opened by this account are closed.',
         '',
         'Original pull requests:',
         '',
@@ -827,7 +843,7 @@ describe('CLI + real GitHub client over HTTP', () => {
         [
           '## Suggestion pull request cleanup complete',
           '',
-          'Checked the pull requests that reference #99 in octo/widgets; the suggestion label is `suggestion-pr` (the default suggestion label).',
+          'Checked the pull requests that reference #99 in octo/widgets; the suggestion label is `suggestion-pr` (the default suggestion label). Only suggestion pull requests opened by this account are closed.',
           '',
           'No suggestion pull requests were found.',
           '',

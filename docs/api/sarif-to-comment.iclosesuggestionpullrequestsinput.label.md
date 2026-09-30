@@ -4,7 +4,7 @@
 
 ## ICloseSuggestionPullRequestsInput.label property
 
-A migration override of the repository's canonical suggestion label, for sweeping suggestions left under a previously configured label: 1-50 characters without commas, control or invisible formatting characters or surrounding whitespace. Omitted (the normal case): the canonical label, the `label` of `.github/suggestion-prs.json` on the default branch, otherwise `suggestion-pr`<!-- -->, exactly as publication resolves it.
+A migration override of the repository's canonical suggestion label, for sweeping suggestions left under a previously configured label: 1-50 characters without commas, control or invisible formatting characters or surrounding whitespace. Without it (the normal case), suggestions are found by their branches and confirmed by the canonical label: the label set in `.github/suggestion-prs.json` on the default branch, or else the default `suggestion-pr`<!-- -->, exactly as publication resolves it. With it, the repository configuration is not read, and without originalPullNumber the open pull requests carrying it are checked instead of the suggestion branches.
 
 **Signature:**
 

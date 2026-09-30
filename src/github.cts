@@ -268,19 +268,43 @@
  * ---------------------------------------------------------------------------
  * Suggestion cleanup (docs/suggestion-cleanup-contract.md)
  *
- *   listOpenLabeledPullRequests({ owner, repo, label })
- *       -> [{ number, htmlUrl, body, labels }]
- *     Every page of GET issues?labels={label}&state=open (the label filter is
- *     applied by the host; a label containing a comma, which GitHub reads as
- *     a list, is refused). Entries without a `pull_request` object are issues
- *     and are left out. A null body is ''. Host order; not deduplicated.
+ *   listOpenPullRequestsByBranchPrefix({ owner, repo, branchPrefix, first, after })
+ *       -> { totalCount, itemCount, pullRequests, nextCursor }
+ *     One page of a GraphQL query of the repository's branches under
+ *     `refs/heads/<branchPrefix>` (`refs(refPrefix:)`, in name order), each
+ *     with its open associated pull requests (`associatedPullRequests(states:
+ *     OPEN, first: 10)`: those whose head is that branch). totalCount and
+ *     itemCount count branches (the host's total, and this page's), so the
+ *     cost of a sweep scales with branches, not with the repository's pull
+ *     requests. A pull request of another repository (one from this
+ *     repository's branch into its upstream) is left out before anything
+ *     else about it is read or checked. A branch with more open pull
+ *     requests than one page holds is 'pagination', never truncated.
+ *     branchPrefix: '/'-separated segments ending in '/', no '.' or '..'.
+ *   listOpenPullRequestsByLabel({ owner, repo, label, first, after })
+ *       -> { totalCount, itemCount, pullRequests, nextCursor }
+ *     One page of a GraphQL query of the repository's open pull requests
+ *     carrying `label` (`pullRequests(labels: [$label], states: OPEN)`,
+ *     oldest first, so that pull requests opened while the listing is read
+ *     only add later pages). totalCount and itemCount count pull requests.
+ *     The label is a list element, so a comma in it is never read as a list.
+ *   Both: first 1-100 (GraphQL's maximum), after null or a cursor the
+ *     previous page answered; nextCursor is null on the last page, and a
+ *     next page without a cursor is 'pagination'. Each pull request is
+ *     { number, htmlUrl, body, headRef, headRepository, author, labels }:
+ *     headRepository null when the head repository was deleted, author the
+ *     login of the account that opened it (null when GitHub names none), a
+ *     null body ''. A pull request with more than 100 labels has its labels
+ *     read in full with listLabels. Host order; not deduplicated. Each call
+ *     is one page: the caller decides, from the first page's totalCount,
+ *     whether to read the next (docs/suggestion-cleanup-contract.md §2.4.1).
  *   readRepository({ owner, repo }) -> { fullName, defaultBranch }
  *     GET repository. The answer must name this repository (compared
  *     case-insensitively) and a default branch ('malformed-response'
  *     otherwise); a refusal keeps its status (404 for a repository that does
- *     not exist or that the token cannot see). With a label override, the
- *     read that proves the repository exists before an original's 404 is
- *     taken to mean "no such pull request".
+ *     not exist or that the token cannot see). With a label override in
+ *     targeted mode, the read that proves the repository exists before an
+ *     original's 404 is taken to mean "no such pull request".
  *   getPullRequest({ owner, repo, pullNumber })
  *       -> { number, htmlUrl, state: 'open' | 'closed', merged, body, headRef,
  *            headRepository, baseRepository, labels }
@@ -289,8 +313,8 @@
  *     headRepository is null when the head repository was deleted. Anything
  *     else is 'malformed-response', never a guess.
  *   listCrossReferencingPullRequests({ owner, repo, pullNumber })
- *       -> [{ number, htmlUrl, repository, state: 'open' | 'closed' | 'merged',
- *             body, labels }]
+ *       -> [{ number, htmlUrl, body, headRef, headRepository, author, labels,
+ *             repository, state: 'open' | 'closed' | 'merged' }]
  *     Every page of a GraphQL query of the pull request's timelineItems
  *     restricted to CROSS_REFERENCED_EVENT, following each event's source
  *     through a PullRequest fragment (variables { owner, repo, number, after }).
@@ -329,6 +353,9 @@
  * @see https://docs.github.com/en/rest/pulls/pulls#update-a-pull-request
  * @see https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api
  * @see https://docs.github.com/en/graphql/reference/objects#crossreferencedevent
+ * @see https://docs.github.com/en/graphql/reference/objects#ref
+ * @see https://docs.github.com/en/graphql/reference/objects#pullrequestconnection
+ * @see https://docs.github.com/en/graphql/guides/using-pagination-in-the-graphql-api
  */
 
 import * as crypto from 'node:crypto';
@@ -671,13 +698,23 @@ export interface IBranchPullRequest {
   readonly baseRef: unknown;
 }
 
-/** One open pull request carrying a label, as the labeled issues listing reports it. */
-export interface ILabeledPullRequest {
+/**
+ * A pull request as a discovery listing reports it: the fields suggestion
+ * cleanup classifies by before it reads anything else (its marker, head
+ * branch, author and labels).
+ */
+export interface IListedPullRequest {
   readonly number: number;
   readonly htmlUrl: string;
   /** The description ('' when it has none). */
   readonly body: string;
-  /** Label names as GitHub reports them. */
+  /** The head branch's name. */
+  readonly headRef: string;
+  /** The head branch's repository (`owner/repo`), or null when it was deleted. */
+  readonly headRepository: string | null;
+  /** The login of the account that opened it, or null when GitHub names none. */
+  readonly author: string | null;
+  /** Every label name, as GitHub reports it. */
   readonly labels: readonly string[];
 }
 
@@ -687,6 +724,27 @@ export interface IRepositorySnapshot {
   readonly fullName: string;
   /** The default branch's name. */
   readonly defaultBranch: string;
+}
+
+/** One page of a sweep listing, and how many items the whole listing holds. */
+export interface IOpenPullRequestPage {
+  /** How many items the whole listing holds, as GitHub counts them: branches for a branch-prefix listing, pull requests for a label listing. */
+  readonly totalCount: number;
+  /** How many of those items this page holds (a branch without an open pull request counts). */
+  readonly itemCount: number;
+  /** This page's open pull requests of the requested repository. */
+  readonly pullRequests: readonly IListedPullRequest[];
+  /** The cursor of the next page, or null when this is the last. */
+  readonly nextCursor: string | null;
+}
+
+/** Where a sweep page starts and how many items it asks for (1-100). */
+export interface ISweepPageRequest {
+  readonly owner: string;
+  readonly repo: string;
+  readonly first: number;
+  /** The previous page's nextCursor, or null for the first page. */
+  readonly after: string | null;
 }
 
 /** A pull request's current state and the fields suggestion cleanup verifies. */
@@ -708,16 +766,10 @@ export interface IPullRequestSnapshot {
 }
 
 /** A pull request whose body or comments reference another pull request (a cross-reference backlink). */
-export interface ICrossReferencingPullRequest {
-  readonly number: number;
-  readonly htmlUrl: string;
+export interface ICrossReferencingPullRequest extends IListedPullRequest {
   /** The repository holding it (`owner/name`), as GitHub names it: always the requested one, possibly in another letter case. */
   readonly repository: string;
   readonly state: 'open' | 'closed' | 'merged';
-  /** The description ('' when it has none). */
-  readonly body: string;
-  /** Every label name, as GitHub reports it. */
-  readonly labels: readonly string[];
 }
 
 /**
@@ -764,7 +816,8 @@ export interface IGitHubClient {
   readonly listBranchPullRequests: (request: { readonly owner: string; readonly repo: string; readonly branch: string }) => Promise<readonly IBranchPullRequest[]>;
   readonly addLabels: (request: { readonly owner: string; readonly repo: string; readonly number: number; readonly labels: readonly string[] }) => Promise<void>;
   readonly listLabels: (request: { readonly owner: string; readonly repo: string; readonly number: number }) => Promise<readonly string[]>;
-  readonly listOpenLabeledPullRequests: (request: { readonly owner: string; readonly repo: string; readonly label: string }) => Promise<readonly ILabeledPullRequest[]>;
+  readonly listOpenPullRequestsByBranchPrefix: (request: ISweepPageRequest & { readonly branchPrefix: string }) => Promise<IOpenPullRequestPage>;
+  readonly listOpenPullRequestsByLabel: (request: ISweepPageRequest & { readonly label: string }) => Promise<IOpenPullRequestPage>;
   readonly readRepository: (request: { readonly owner: string; readonly repo: string }) => Promise<IRepositorySnapshot>;
   readonly getPullRequest: (request: IPullRequestDestination) => Promise<IPullRequestSnapshot>;
   readonly listCrossReferencingPullRequests: (request: IPullRequestDestination) => Promise<readonly ICrossReferencingPullRequest[]>;
@@ -884,8 +937,23 @@ const THREADS_PER_PAGE = 100;
 /** Page size requested from the GraphQL timelineItems connection (its maximum). */
 const TIMELINE_PER_PAGE = 100;
 
-/** Labels read with each cross-referencing pull request (the connection's maximum); more are read through REST. */
+/** Labels read with each listed pull request (the connection's maximum); more are read through REST. */
 const SOURCE_LABELS = 100;
+
+/**
+ * Open pull requests read with each branch of a branch-prefix listing. GitHub
+ * allows one open pull request per head and base, so more than a few needs a
+ * branch proposed into several bases; more than this many is refused, never
+ * truncated. Kept small so a page of 100 branches stays far below GraphQL's
+ * node limit (100 x 10 x 100 labels).
+ */
+const ASSOCIATED_PULLS = 10;
+
+/** The greatest page a GraphQL connection answers (`first`). */
+const MAX_GRAPHQL_PAGE = 100;
+
+/** A branch prefix: '/'-separated segments of branch-name characters, ending in '/'. */
+const BRANCH_PREFIX = /^(?:[A-Za-z0-9._-]+\/)+$/;
 
 /** GraphQL pull request states, as cleanup names them. */
 const GRAPHQL_PULL_STATES: ReadonlyMap<unknown, ICrossReferencingPullRequest['state']> = new Map([
@@ -967,9 +1035,24 @@ const REVIEW_THREADS_QUERY = gql`query ($owner: String!, $repo: String!, $number
 }`;
 
 /**
+ * The fields of a pull request every discovery query selects (see
+ * IListedPullRequest), with its repository so that one of another repository
+ * can be left out before anything else about it is read. The first 100
+ * labels share the request.
+ */
+const LISTED_PULL_FIELDS = gql`number
+url
+body
+headRefName
+headRepository { nameWithOwner }
+repository { nameWithOwner }
+author { login }
+labels(first: ${String(SOURCE_LABELS)}) { pageInfo { hasNextPage } nodes { name } }`;
+
+/**
  * The pull requests that cross-reference one pull request: its timeline's
  * cross-reference events, each followed to its source when that is a pull
- * request (D21). The first 100 labels of each source share the request.
+ * request (D21).
  */
 const CROSS_REFERENCES_QUERY = gql`query ($owner: String!, $repo: String!, $number: Int!, $after: String) {
   repository(owner: $owner, name: $repo) {
@@ -981,16 +1064,47 @@ const CROSS_REFERENCES_QUERY = gql`query ($owner: String!, $repo: String!, $numb
             source {
               __typename
               ... on PullRequest {
-                number
-                url
-                body
                 state
-                repository { nameWithOwner }
-                labels(first: ${String(SOURCE_LABELS)}) { pageInfo { hasNextPage } nodes { name } }
+                ${LISTED_PULL_FIELDS}
               }
             }
           }
         }
+      }
+    }
+  }
+}`;
+
+/**
+ * One page of the branches under a prefix, each with its open pull requests
+ * (those whose head is that branch), and how many branches there are.
+ */
+const BRANCH_PREFIX_PULLS_QUERY = gql`query ($owner: String!, $repo: String!, $prefix: String!, $first: Int!, $after: String) {
+  repository(owner: $owner, name: $repo) {
+    refs(refPrefix: $prefix, first: $first, after: $after, orderBy: {field: ALPHABETICAL, direction: ASC}) {
+      totalCount
+      pageInfo { hasNextPage endCursor }
+      nodes {
+        name
+        associatedPullRequests(states: OPEN, first: ${String(ASSOCIATED_PULLS)}) {
+          pageInfo { hasNextPage }
+          nodes {
+            ${LISTED_PULL_FIELDS}
+          }
+        }
+      }
+    }
+  }
+}`;
+
+/** One page of the open pull requests carrying a label, oldest first, and how many there are. */
+const LABELED_PULLS_QUERY = gql`query ($owner: String!, $repo: String!, $label: String!, $first: Int!, $after: String) {
+  repository(owner: $owner, name: $repo) {
+    pullRequests(labels: [$label], states: OPEN, first: $first, after: $after, orderBy: {field: CREATED_AT, direction: ASC}) {
+      totalCount
+      pageInfo { hasNextPage endCursor }
+      nodes {
+        ${LISTED_PULL_FIELDS}
       }
     }
   }
@@ -2358,26 +2472,138 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
     return value;
   }
 
-  async function listOpenLabeledPullRequests({ owner, repo, label }: Unchecked<'owner' | 'repo' | 'label'> = {}): Promise<readonly ILabeledPullRequest[]> {
+  /**
+   * A listed pull request node of `owner/repo`, or null when it belongs to
+   * another repository. A foreign pull request is left out before anything
+   * else about it is read or checked: its labels may be unreadable (a
+   * private repository refuses their listing) or absent, and it is never a
+   * suggestion here (D25).
+   */
+  async function listedPullRequest(
+    node: unknown,
+    owner: string,
+    repo: string,
+    what: string,
+  ): Promise<{ readonly repository: string; readonly pull: IListedPullRequest } | null> {
+    if (!isPlainObject(node)) throw new GitHubError('malformed-response', `A ${what} is not an object.`);
+    const number = node['number'];
+    if (!isPositiveInteger(number)) throw new GitHubError('malformed-response', `A ${what} has no number.`);
+    const which = `${what} ${String(number)}`;
+    const repository = hostString(optionalMember(node, 'repository', 'nameWithOwner'), `${which}'s repository`);
+    if (repository.toLowerCase() !== `${owner}/${repo}`.toLowerCase()) return null;
+    const labels = node['labels'];
+    const more = optionalMember(labels, 'pageInfo', 'hasNextPage');
+    if (!isPlainObject(labels) || typeof more !== 'boolean') throw new GitHubError('malformed-response', `The ${which} has no label connection.`);
+    const headRepository = node['headRepository'];
+    const author = node['author'];
+    const pull: IListedPullRequest = {
+      number,
+      htmlUrl: hostString(node['url'], `${which}'s URL`),
+      body: bodyText(node['body'], which),
+      headRef: hostString(node['headRefName'], `${which}'s head branch`),
+      // GitHub answers null for a deleted head repository, and for a deleted (ghost) author.
+      headRepository: headRepository === null ? null : hostString(optionalMember(headRepository, 'nameWithOwner'), `${which}'s head repository`),
+      author: author === null ? null : hostString(optionalMember(author, 'login'), `${which}'s author`),
+      // A pull request with more labels than the connection holds is read in
+      // full from this repository's REST listing.
+      labels: more ? await listLabels({ owner, repo, number }) : labelNames(labels['nodes'], which),
+    };
+    return { repository, pull };
+  }
+
+  /** A sweep page request's `first` (1-100) and `after` (null or a cursor); anything else is refused. */
+  function sweepPage(first: unknown, after: unknown): { readonly first: number; readonly after: string | null } {
+    requireInput(isPositiveInteger(first) && first <= MAX_GRAPHQL_PAGE, `first must be an integer from 1 to ${String(MAX_GRAPHQL_PAGE)}`);
+    requireInput(after === null || (typeof after === 'string' && after !== ''), 'after must be null or a non-empty cursor');
+    return { first, after };
+  }
+
+  /**
+   * The body of a GraphQL query's answer: an `errors` array is
+   * 'graphql-errors', a refused request 'http-status'.
+   */
+  async function graphqlData(query: string, variables: Readonly<Record<string, unknown>>, what: string): Promise<unknown> {
+    const response = await send('POST', `${API_ORIGIN}/graphql`, { graphql: true, body: { query, variables } });
+    if (!response.ok) throw await statusError(response, what);
+    const body = await jsonBody(response, what);
+    if (isPlainObject(body) && isList(body['errors']) && body['errors'].length > 0) {
+      const types = body['errors'].map((e) => (isPlainObject(e) ? e['type'] || e['message'] : String(e))).join('; ');
+      throw new GitHubError('graphql-errors', redact(`The ${what} returned errors: ${types}`));
+    }
+    return body;
+  }
+
+  /**
+   * A sweep connection's count and next cursor: `totalCount` a non-negative
+   * integer, and a next page only with a cursor that differs from `after`.
+   */
+  function sweepConnection(connection: unknown, after: string | null, what: string): { readonly nodes: readonly unknown[]; readonly totalCount: number; readonly nextCursor: string | null } {
+    if (!isPlainObject(connection) || !isList(connection['nodes']) || !isPlainObject(connection['pageInfo'])) {
+      throw new GitHubError('malformed-response', `The ${what} returned no connection.`);
+    }
+    const totalCount = connection['totalCount'];
+    if (!isSafeInteger(totalCount) || totalCount < 0) throw new GitHubError('malformed-response', `The ${what} returned no total count.`);
+    const { hasNextPage, endCursor } = connection['pageInfo'];
+    if (hasNextPage === false) return { nodes: connection['nodes'], totalCount, nextCursor: null };
+    if (hasNextPage !== true || typeof endCursor !== 'string' || endCursor === '' || endCursor === after) {
+      throw new GitHubError('pagination', `The ${what} pagination is missing or repeats a cursor.`);
+    }
+    return { nodes: connection['nodes'], totalCount, nextCursor: endCursor };
+  }
+
+  async function listOpenPullRequestsByBranchPrefix({
+    owner,
+    repo,
+    branchPrefix,
+    first: firstInput,
+    after: afterInput,
+  }: Unchecked<'owner' | 'repo' | 'branchPrefix' | 'first' | 'after'> = {}): Promise<IOpenPullRequestPage> {
+    requireInput(isRepoName(owner) && isRepoName(repo), 'owner and repo must be GitHub names');
+    requireInput(
+      typeof branchPrefix === 'string' && BRANCH_PREFIX.test(branchPrefix) && !branchPrefix.split('/').some((segment) => segment === '.' || segment === '..'),
+      'branchPrefix must be branch-name segments, each followed by "/"',
+    );
+    const { first, after } = sweepPage(firstInput, afterInput);
+    const what = 'suggestion branch query';
+    const body = await graphqlData(BRANCH_PREFIX_PULLS_QUERY, { owner, repo, prefix: `refs/heads/${branchPrefix}`, first, after }, what);
+    const { nodes, totalCount, nextCursor } = sweepConnection(optionalMember(body, 'data', 'repository', 'refs'), after, what);
+    const pullRequests: IListedPullRequest[] = [];
+    for (const ref of nodes) {
+      const pulls = optionalMember(ref, 'associatedPullRequests');
+      const more = optionalMember(pulls, 'pageInfo', 'hasNextPage');
+      if (!isPlainObject(pulls) || !isList(pulls['nodes']) || typeof more !== 'boolean') {
+        throw new GitHubError('malformed-response', `A branch of the ${what} has no pull request connection.`);
+      }
+      if (more) throw new GitHubError('pagination', `A branch of the ${what} has more than ${String(ASSOCIATED_PULLS)} open pull requests.`);
+      for (const node of pulls['nodes']) {
+        const listed = await listedPullRequest(node, owner, repo, 'listed pull request');
+        if (listed !== null) pullRequests.push(listed.pull);
+      }
+    }
+    return { totalCount, itemCount: nodes.length, pullRequests, nextCursor };
+  }
+
+  async function listOpenPullRequestsByLabel({
+    owner,
+    repo,
+    label,
+    first: firstInput,
+    after: afterInput,
+  }: Unchecked<'owner' | 'repo' | 'label' | 'first' | 'after'> = {}): Promise<IOpenPullRequestPage> {
     requireInput(isRepoName(owner) && isRepoName(repo), 'owner and repo must be GitHub names');
     requireInput(typeof label === 'string' && label.length > 0, 'label must be a non-empty string');
-    requireInput(!label.includes(','), 'label must not contain a comma (GitHub reads a comma as a list of labels)');
-    const listed = await listAll(owner, repo, '/issues', 'labeled issue list', { labels: label, state: 'open' });
-    const pulls: ILabeledPullRequest[] = [];
-    for (const item of listed) {
-      const number = optionalMember(item, 'number');
-      if (!isPositiveInteger(number)) throw new GitHubError('malformed-response', 'A listed issue has no number.');
-      // Pull requests are issues with a `pull_request` object; plain issues carry none.
-      if (!isPlainObject(optionalMember(item, 'pull_request'))) continue;
-      const what = `listed pull request ${String(number)}`;
-      pulls.push({
-        number,
-        htmlUrl: hostString(optionalMember(item, 'html_url'), `${what}'s URL`),
-        body: bodyText(optionalMember(item, 'body'), what),
-        labels: labelNames(optionalMember(item, 'labels'), what),
-      });
+    const { first, after } = sweepPage(firstInput, afterInput);
+    const what = 'labeled pull request query';
+    const body = await graphqlData(LABELED_PULLS_QUERY, { owner, repo, label, first, after }, what);
+    const { nodes, totalCount, nextCursor } = sweepConnection(optionalMember(body, 'data', 'repository', 'pullRequests'), after, what);
+    const pullRequests: IListedPullRequest[] = [];
+    for (const node of nodes) {
+      // The connection is this repository's own, so every entry is of this repository.
+      const listed = await listedPullRequest(node, owner, repo, 'listed pull request');
+      if (listed === null) throw new GitHubError('malformed-response', `The ${what} answered a pull request of another repository.`);
+      pullRequests.push(listed.pull);
     }
-    return pulls;
+    return { totalCount, itemCount: nodes.length, pullRequests, nextCursor };
   }
 
   async function readRepository({ owner, repo }: Unchecked<'owner' | 'repo'> = {}): Promise<IRepositorySnapshot> {
@@ -2422,35 +2648,18 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
   }
 
   /**
-   * One cross-reference timeline node as a pull request source of `owner/repo`,
-   * or null when its source is not a pull request or is in another
-   * repository. A foreign source is left out before anything else about it is
-   * read or checked: its labels may be unreadable (a private repository
-   * refuses their listing) or absent, and it is never a suggestion here (D25).
+   * One cross-reference timeline node as a pull request source of
+   * `owner/repo`, or null when its source is not a pull request or is in
+   * another repository (left out before anything else about it is read).
    */
   async function crossReferenceSource(node: unknown, owner: string, repo: string): Promise<ICrossReferencingPullRequest | null> {
     const source = optionalMember(node, 'source');
     if (!isPlainObject(source) || source['__typename'] !== 'PullRequest') return null;
-    const number = source['number'];
-    if (!isPositiveInteger(number)) throw new GitHubError('malformed-response', 'A cross-referencing pull request has no number.');
-    const what = `cross-referencing pull request ${String(number)}`;
-    const repository = hostString(optionalMember(source, 'repository', 'nameWithOwner'), `${what}'s repository`);
-    if (repository.toLowerCase() !== `${owner}/${repo}`.toLowerCase()) return null;
+    const listed = await listedPullRequest(source, owner, repo, 'cross-referencing pull request');
+    if (listed === null) return null;
     const state = GRAPHQL_PULL_STATES.get(source['state']);
-    if (state === undefined) throw new GitHubError('malformed-response', `The ${what} has no valid state.`);
-    const labels = source['labels'];
-    const more = optionalMember(labels, 'pageInfo', 'hasNextPage');
-    if (!isPlainObject(labels) || typeof more !== 'boolean') throw new GitHubError('malformed-response', `The ${what} has no label connection.`);
-    return {
-      number,
-      htmlUrl: hostString(source['url'], `${what}'s URL`),
-      repository,
-      state,
-      body: bodyText(source['body'], what),
-      // A source with more labels than the connection holds is read in full
-      // from this repository's REST listing.
-      labels: more ? await listLabels({ owner, repo, number }) : labelNames(labels['nodes'], what),
-    };
+    if (state === undefined) throw new GitHubError('malformed-response', `The cross-referencing pull request ${String(listed.pull.number)} has no valid state.`);
+    return { ...listed.pull, repository: listed.repository, state };
   }
 
   async function listCrossReferencingPullRequests({
@@ -2466,16 +2675,7 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
     let after: string | null = null;
     for (let pages = 1; ; pages += 1) {
       if (pages > limits.maxPages) throw new GitHubError('pagination', `Cross-references exceeded ${String(limits.maxPages)} pages.`);
-      const response = await send('POST', `${API_ORIGIN}/graphql`, {
-        graphql: true,
-        body: { query: CROSS_REFERENCES_QUERY, variables: { owner, repo, number: pullNumber, after } },
-      });
-      if (!response.ok) throw await statusError(response, 'cross-reference query');
-      const body = await jsonBody(response, 'cross-reference query');
-      if (isPlainObject(body) && isList(body['errors']) && body['errors'].length > 0) {
-        const types = body['errors'].map((e) => (isPlainObject(e) ? e['type'] || e['message'] : String(e))).join('; ');
-        throw new GitHubError('graphql-errors', redact(`The cross-reference query returned errors: ${types}`));
-      }
+      const body = await graphqlData(CROSS_REFERENCES_QUERY, { owner, repo, number: pullNumber, after }, 'cross-reference query');
       const items = optionalMember(body, 'data', 'repository', 'pullRequest', 'timelineItems');
       if (!isPlainObject(items) || !isList(items['nodes']) || !isPlainObject(items['pageInfo'])) {
         throw new GitHubError('malformed-response', 'The cross-reference query returned no timeline connection.');
@@ -2540,7 +2740,8 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
     listBranchPullRequests,
     addLabels,
     listLabels,
-    listOpenLabeledPullRequests,
+    listOpenPullRequestsByBranchPrefix,
+    listOpenPullRequestsByLabel,
     readRepository,
     getPullRequest,
     listCrossReferencingPullRequests,

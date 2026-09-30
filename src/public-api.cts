@@ -83,11 +83,13 @@ export type {
 export { closeSuggestionPullRequests } from './close-suggestion-pull-requests.cjs';
 export type {
   ICloseSuggestionPullRequestsInput,
+  SuggestionOwnerScope,
   OriginalPullRequestState,
   IOriginalPullRequest,
   SuggestionCleanupResult,
   ICheckedSuggestionPullRequest,
   CloseSuggestionPullRequestsStatus,
+  ISuggestionCleanupCounts,
   ICloseSuggestionPullRequestsOutcome,
 } from './close-suggestion-pull-requests.cjs';
 

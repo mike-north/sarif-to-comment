@@ -58,6 +58,27 @@ _(Optional)_ Read and verify everything, but close nothing; eligible suggestions
 </td></tr>
 <tr><td>
 
+[force?](./sarif-to-comment.iclosesuggestionpullrequestsinput.force.md)
+
+
+</td><td>
+
+`readonly`
+
+
+</td><td>
+
+boolean \| undefined
+
+
+</td><td>
+
+_(Optional)_ Continue a label sweep whose first page shows no suggestion pull request, instead of stopping with the status `label-not-suggestion-prs`<!-- -->. Only a label sweep stops that way.
+
+
+</td></tr>
+<tr><td>
+
 [label?](./sarif-to-comment.iclosesuggestionpullrequestsinput.label.md)
 
 
@@ -73,7 +94,28 @@ string \| undefined
 
 </td><td>
 
-_(Optional)_ A migration override of the repository's canonical suggestion label, for sweeping suggestions left under a previously configured label: 1-50 characters without commas, control or invisible formatting characters or surrounding whitespace. Omitted (the normal case): the canonical label, the `label` of `.github/suggestion-prs.json` on the default branch, otherwise `suggestion-pr`<!-- -->, exactly as publication resolves it.
+_(Optional)_ A migration override of the repository's canonical suggestion label, for sweeping suggestions left under a previously configured label: 1-50 characters without commas, control or invisible formatting characters or surrounding whitespace. Without it (the normal case), suggestions are found by their branches and confirmed by the canonical label: the label set in `.github/suggestion-prs.json` on the default branch, or else the default `suggestion-pr`<!-- -->, exactly as publication resolves it. With it, the repository configuration is not read, and without originalPullNumber the open pull requests carrying it are checked instead of the suggestion branches.
+
+
+</td></tr>
+<tr><td>
+
+[maxCandidates?](./sarif-to-comment.iclosesuggestionpullrequestsinput.maxcandidates.md)
+
+
+</td><td>
+
+`readonly`
+
+
+</td><td>
+
+number \| undefined
+
+
+</td><td>
+
+_(Optional)_ The most candidates a sweep evaluates: suggestion branches, or open pull requests with the label. When GitHub counts more, nothing is evaluated and the status is `too-many-candidates`<!-- -->. A positive integer; the default is 500. Targeted discovery has no limit.
 
 
 </td></tr>
@@ -94,7 +136,28 @@ number \| undefined
 
 </td><td>
 
-_(Optional)_ Check only the pull requests that reference this original pull request (its backlinks), instead of every open pull request with the label.
+_(Optional)_ Check only the pull requests that reference this original pull request (its backlinks), instead of sweeping the repository.
+
+
+</td></tr>
+<tr><td>
+
+[owner?](./sarif-to-comment.iclosesuggestionpullrequestsinput.owner.md)
+
+
+</td><td>
+
+`readonly`
+
+
+</td><td>
+
+[SuggestionOwnerScope](./sarif-to-comment.suggestionownerscope.md) \| undefined
+
+
+</td><td>
+
+_(Optional)_ Whose suggestion pull requests may be closed, by who opened them; the default is `'me'`<!-- -->. A conforming suggestion someone else opened is reported `other-owner` and left open.
 
 
 </td></tr>

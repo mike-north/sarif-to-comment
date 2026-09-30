@@ -6,10 +6,10 @@
 
 What cleanup did with one pull request:
 
-- `closed`<!-- -->: it was closed now. - `would-close`<!-- -->: a dry run would close it. - `already-closed`<!-- -->: it is no longer open. - `left-open`<!-- -->: its original is still open. - `unverified`<!-- -->: its original could not be verified, so it was left open. - `permission-limited`<!-- -->: GitHub refused to let this account close it. - `failed`<!-- -->: reading or closing it failed; running cleanup again is safe. - `not-ours`<!-- -->: it does not conform to the suggestion pull request  convention (no, several or a changed marker, another repository or  original, an original that is not a pull request of the repository, a  fork, or another branch), so it was not touched. - `unlabeled`<!-- -->: it does not carry the label, so it was not touched.
+- `closed`<!-- -->: it was closed now. - `would-close`<!-- -->: a dry run would close it. - `already-closed`<!-- -->: it is no longer open. - `left-open`<!-- -->: its original is still open. - `unverified`<!-- -->: its original could not be verified, so it was left open. - `permission-limited`<!-- -->: GitHub refused to let this account close it. - `failed`<!-- -->: reading or closing it failed; running cleanup again is safe. - `not-conforming`<!-- -->: it does not conform to the suggestion pull request  convention (no, several or a changed marker, another repository or  original, an original that is not a pull request of the repository, a  fork, or another branch), so it was not touched. - `other-owner`<!-- -->: it conforms, but someone other than this account opened  it, and the owner scope is `me`<!-- -->; it was left open. - `unlabeled`<!-- -->: it does not carry the label, so it was not touched.
 
 **Signature:**
 
 ```typescript
-export type SuggestionCleanupResult = 'closed' | 'would-close' | 'already-closed' | 'left-open' | 'unverified' | 'permission-limited' | 'failed' | 'not-ours' | 'unlabeled';
+export type SuggestionCleanupResult = 'closed' | 'would-close' | 'already-closed' | 'left-open' | 'unverified' | 'permission-limited' | 'failed' | 'not-conforming' | 'other-owner' | 'unlabeled';
 ```
