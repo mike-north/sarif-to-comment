@@ -41,6 +41,10 @@
  *                    // trusted tree read at the same boundary: what stands
  *                    // at a path, never downloading a blob. Required with,
  *                    // and called only for, suggestionPullRequests.rewrittenHead.
+ *                    // There, a readSource error whose `code` is
+ *                    // 'undecodable-source' or 'source-too-large' (an edited
+ *                    // file that is not source at the head) makes that
+ *                    // suggestion not created instead of failing.
  *   fileExists?: async (commit, path) => boolean
  *                    // trusted existence check at the same boundary: whether
  *                    // a regular file exists there, without reading its
@@ -2970,8 +2974,12 @@ async function reapplication(unit: ISuggestionUnit, head: string, state: IPrepar
         reasons.push(`${codeSpan(filePath)} no longer exists`);
         continue;
       }
-      const text = await state.readSource(head, filePath);
-      if (typeof text !== 'string') throw new TypeError(`readSource(${head}, ${filePath}) returned no text for a file that exists.`);
+      const read = await headSource(state, head, filePath);
+      if (read.kind === 'unreadable') {
+        reasons.push(`${codeSpan(filePath)} ${read.reason}`);
+        continue;
+      }
+      const { text } = read;
       const reviewedLines = sourceLines(first.edit.sourceText);
       const headLines = sourceLines(text);
       const differing = onPath.flatMap((change) => {
@@ -3002,6 +3010,36 @@ async function reapplication(unit: ISuggestionUnit, head: string, state: IPrepar
 /** The too-many-suggestion-prs problem for `count` suggestion pull requests (contract §2.8). */
 function tooManySuggestions(count: number): string {
   return `The review needs ${String(count)} suggestion pull requests; the limit is ${String(MAX_SUGGESTION_PULL_REQUESTS)}. Nothing is split or dropped.`;
+}
+
+/**
+ * Why a head file's text is not source a replaced range can be compared in,
+ * by the reader's error code (src/github.cts): not UTF-8, or beyond the
+ * source-read limit. Such a file makes its suggestion not created; any other
+ * failure stays operational.
+ */
+const UNREADABLE_SOURCE: Readonly<Record<string, string>> = {
+  'undecodable-source': 'is not UTF-8 text at the head',
+  'source-too-large': 'exceeds the source-read limit',
+};
+
+/** An edited file's text at a rewritten head, or why it cannot be compared (contract §2.5.1). */
+async function headSource(
+  state: IPreparationState,
+  head: string,
+  filePath: string,
+): Promise<{ readonly kind: 'text'; readonly text: string } | { readonly kind: 'unreadable'; readonly reason: string }> {
+  let text: unknown;
+  try {
+    text = await state.readSource(head, filePath);
+  } catch (err) {
+    const code: unknown = err instanceof Error ? Reflect.get(err, 'code') : undefined;
+    const reason = typeof code === 'string' && Object.hasOwn(UNREADABLE_SOURCE, code) ? UNREADABLE_SOURCE[code] : undefined;
+    if (reason === undefined) throw err;
+    return { kind: 'unreadable', reason };
+  }
+  if (typeof text !== 'string') throw new TypeError(`readSource(${head}, ${filePath}) returned no text for a file that exists.`);
+  return { kind: 'text', text };
 }
 
 /** A unit's changes grouped by path, in the order paths first appear. */
