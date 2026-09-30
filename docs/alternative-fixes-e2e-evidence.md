@@ -36,6 +36,15 @@ The stored review and its inline thread were read back with `gh pr view --json r
 
 Branch heads after the run are in [`branch-heads-after.txt`](evidence/alternative-fixes/branch-heads-after.txt): `main` is still `0a7b03f`.
 
+## Multi-part and CRLF alternatives
+
+Recorded later the same session, after alternatives changing several files or making several replacements became listable, and CRLF replacements became shown with LF line breaks and a stated style. Artifacts are in [`evidence/alternative-fixes/parts/`](evidence/alternative-fixes/parts/).
+
+- Fixture: draft pull request [#55](https://github.com/mike-north/doc-linter/pull/55), from `sarif-issue30-20260930-parts-reviewed` (`04f75e0`) into `sarif-issue30-20260930-parts-base` (`48a9894`), both new branches on `main` (`0a7b03f`, unchanged). The pull request changes line 2 of `examples/alternative-parts/parse.js`. `examples/alternative-parts/windows.txt` has CRLF line endings and is outside the diff ([`fixture.json`](evidence/alternative-fixes/parts/fixture.json)).
+- One finding with three fixes ([`input.sarif.json`](evidence/alternative-fixes/parts/input.sarif.json)): the first fix on line 2; then an alternative that makes two replacements in `parse.js` and one in `windows.txt`; then a two-line CRLF replacement in `windows.txt`. The expected comment was written by hand before publishing ([`oracle.json`](evidence/alternative-fixes/parts/oracle.json)).
+- `validate` reported `ready` and `publish` reported `published`, pending review `5361103017` (exit 0 each; nothing on stderr).
+- The independent verifier ([`readback-result.json`](evidence/alternative-fixes/parts/readback-result.json)) passed every check. The stored comment equals the oracle byte for byte and contains no carriage return. It has exactly five code blocks, in order: the three labelled parts of alternative (1) under "Changes 2 files together:", alternative (2), then the `suggestion` block holding only the first fix. Both CRLF replacements state "(CRLF line endings)".
+
 ## Live artifacts
 
 | Artifact | State |
@@ -43,6 +52,9 @@ Branch heads after the run are in [`branch-heads-after.txt`](evidence/alternativ
 | Branches `sarif-issue30-20260929-base`, `sarif-issue30-20260929-reviewed` | created for this fixture; kept |
 | Draft pull request [#54](https://github.com/mike-north/doc-linter/pull/54) | open draft, never merged |
 | Pending review `5361030472` with one inline comment | left pending for inspection, never submitted |
+| Branches `sarif-issue30-20260930-parts-base`, `sarif-issue30-20260930-parts-reviewed` | created for the multi-part fixture; kept |
+| Draft pull request [#55](https://github.com/mike-north/doc-linter/pull/55) | open draft, never merged |
+| Pending review `5361103017` with one inline comment | left pending for inspection, never submitted |
 
 ## What this does not show
 

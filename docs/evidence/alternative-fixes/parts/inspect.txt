@@ -1,0 +1,39 @@
+SARIF inspection: 1 run(s), 1 finding(s), 3 fix(es), 0 file proposal(s), 0 truncated preview(s).
+Run 0 (/runs/0): Alternatives probe 1.0.0 (source: declared; columnKind: utf16CodeUnits)
+  declared source: https://github.com/mike-north/doc-linter at 04f75e08a48244e8060d4463cec7e85e651bf0b0
+  Other run content:
+    {
+      "tool": {
+        "driver": {
+          "name": "Alternatives probe",
+          "version": "1.0.0"
+        }
+      }
+    }
+
+Finding /runs/0/results/0 — Alternatives probe 1.0.0 · rule parser-choice
+Selector: /runs/0/results/0@793c384a810d776c
+Message:
+parseA does not validate its input.
+Locations:
+  examples/alternative-parts/parse.js:2
+Fix 1 of 3 (/runs/0/results/0/fixes/0): Use parseB, which validates its input.
+  Change examples/alternative-parts/parse.js
+    Replace region {"startLine":2} with:
+      | const options = parseB(input);
+Fix 2 of 3 (/runs/0/results/0/fixes/1): Switch to parseAll and record it.
+  Change examples/alternative-parts/parse.js
+    Replace region {"startLine":1} with:
+      | const defaults = { strict: true };
+    Replace region {"startLine":2} with:
+      | const options = parseAll(input);
+  Change examples/alternative-parts/windows.txt
+    Replace region {"startLine":1} with:
+      | uno
+Fix 3 of 3 (/runs/0/results/0/fixes/2): Or record the change only.
+  Change examples/alternative-parts/windows.txt
+    Replace region {"startLine":2} with:
+      | deux
+      | trois
+
+This inspection only describes the SARIF; it does not check whether it can be published.

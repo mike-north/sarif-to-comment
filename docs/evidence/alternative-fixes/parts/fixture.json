@@ -1,0 +1,32 @@
+{
+  "repository": "mike-north/doc-linter",
+  "pullRequest": {
+    "number": 55,
+    "url": "https://github.com/mike-north/doc-linter/pull/55",
+    "draft": true,
+    "head": {
+      "ref": "sarif-issue30-20260930-parts-reviewed",
+      "commit": "04f75e08a48244e8060d4463cec7e85e651bf0b0"
+    },
+    "base": {
+      "ref": "sarif-issue30-20260930-parts-base",
+      "commit": "48a9894d757e5680fa425966046d8caefd736ce0"
+    }
+  },
+  "defaultBranch": {
+    "ref": "main",
+    "commit": "0a7b03fe399255a62118311cbc3e1bd6fe64cb23",
+    "note": "the fixture branches start from it; it was not changed"
+  },
+  "files": {
+    "48a9894d757e5680fa425966046d8caefd736ce0": {
+      "examples/alternative-parts/parse.js": "const defaults = { strict: false };\nconst options = parseLegacy(input);\nmodule.exports = { defaults, options };\n",
+      "examples/alternative-parts/windows.txt": "one\ntwo\n"
+    },
+    "04f75e08a48244e8060d4463cec7e85e651bf0b0": {
+      "examples/alternative-parts/parse.js": "const defaults = { strict: false };\nconst options = parseA(input);\nmodule.exports = { defaults, options };\n",
+      "examples/alternative-parts/windows.txt": "one\ntwo\n"
+    }
+  },
+  "diff": "the pull request changes line 2 of examples/alternative-parts/parse.js; windows.txt (CRLF line endings) is unchanged and outside the diff"
+}
