@@ -45,7 +45,8 @@
  *   suggestion pull requests support, the client's compareCommits tests
  *   ancestry, lazily (§2.5, §2.8): a reviewed commit that is
  *   not an ancestor of the head makes preparation re-apply each suggestion
- *   onto the head or not create it (§2.5.1). A ready review that needs
+ *   onto the head, or handle it as if suggestion pull requests were not
+ *   allowed (§2.5.1). A ready review that needs
  *   suggestion pull requests is then checked against the repository — same
  *   repository, a base that is the default branch, push permission, the
  *   repository configuration read through readDefaultBranchFile
@@ -533,10 +534,11 @@ export async function prepareForDestination(captured: ICapturedReview, client: I
     ancestry ??= readTarget === undefined ? Promise.resolve(undefined) : rewrittenHeadOf(readTarget, captured, client);
     return ancestry;
   };
+  const unavailable = target === undefined ? [] : unsupportedReasons(target, captured);
   const options = {
     ...(captured.ignoreApprovalHold === undefined ? {} : { ignoreApprovalHold: captured.ignoreApprovalHold }),
     ...(target === undefined || settings === undefined ? {} : {
-      suggestionPullRequests: { headRef: target.headRef, ready: settings.markReady, resolveRewrittenHead },
+      suggestionPullRequests: { headRef: target.headRef, ready: settings.markReady, resolveRewrittenHead, ...(unavailable.length === 0 ? {} : { unavailable }) },
     }),
   };
   const prepareInput = {
@@ -560,8 +562,8 @@ export async function prepareForDestination(captured: ICapturedReview, client: I
 
 /**
  * The pull request's head when the reviewed commit is not its ancestor, so
- * that suggestions must be re-applied onto it or not created (contract §2.5,
- * §2.5.1); undefined when the head is the reviewed commit or has only moved
+ * that suggestions must be re-applied onto it or handled as if suggestion
+ * pull requests were not allowed (contract §2.5, §2.5.1); undefined when the head is the reviewed commit or has only moved
  * forward from it. Read only for a pull request suggestion pull requests
  * support (same repository, default-branch base): the others are refused
  * anyway if they need one. A failed read is operational.
@@ -576,6 +578,30 @@ async function rewrittenHeadOf(target: ISuggestionTarget, captured: ICapturedRev
   return comparison === 'ahead' || comparison === 'identical' ? undefined : target.headSha;
 }
 
+/**
+ * Why no suggestion pull request can be made for this pull request, in a
+ * fixed order (contract §2.5; issue #37): its head is in a fork, or its head
+ * repository was deleted; its base is not the default branch. Each is a
+ * clause for the fallback and refusal sentences. Empty when suggestion pull
+ * requests are supported.
+ */
+function unsupportedReasons(target: ISuggestionTarget, captured: ICapturedReview): string[] {
+  const reasons: string[] = [];
+  // GitHub's own name for the pull request's repository decides sameness, whatever the caller's letter case.
+  if (target.headRepository === null) {
+    reasons.push("the pull request's head repository was deleted, so there is no branch to propose it into");
+  } else if (target.headRepository.toLowerCase() !== target.baseRepository.toLowerCase()) {
+    reasons.push(`the pull request's head branch ${codeSpan(target.headRef)} is in the fork ${target.headRepository}, `
+      + 'and suggestion pull requests are not yet supported for a pull request from a fork');
+  }
+  if (target.baseRef !== target.defaultBranch) {
+    const { owner, repo } = captured.destination;
+    reasons.push(`the pull request merges into ${codeSpan(target.baseRef)}, which is not the default branch ${codeSpan(target.defaultBranch)} of ${owner}/${repo}, `
+      + 'and suggestion pull requests are not yet supported for such a pull request');
+  }
+  return reasons;
+}
+
 /** A label a suggestion pull request must carry, and where it came from (for the missing-label problem). */
 interface IWantedLabel {
   readonly name: string;
@@ -584,11 +610,13 @@ interface IWantedLabel {
 
 /**
  * The repository facts suggestion pull requests need, all reported together
- * in a fixed order (contract §2.5, §2.7): the same repository, a base that is
- * the default branch, push permission, a valid repository configuration, and
- * every label. A head that moved is never among them (§2.5). Ready with the
- * head branch, the labels' own names, the ready setting and the commit they
- * are re-applied onto (if any), or blocked.
+ * in a fixed order (contract §2.5, §2.7): push permission, a valid
+ * repository configuration, and every label. A fork or a base other than
+ * the default branch never reaches here: preparation already handled every
+ * change as if suggestion pull requests were not allowed (issue #37). A head
+ * that moved is never among them (§2.5). Ready with the head branch, the
+ * labels' own names, the ready setting and the commit they are re-applied
+ * onto (if any), or blocked.
  */
 async function checkSuggestionTarget(
   prepared: IReadyOutcome,
@@ -612,17 +640,6 @@ async function checkSuggestionTarget(
   const problem = (code: DiagnosticCode, message: string): void => {
     problems.push(createDiagnostic(code, message, { subject: repository }));
   };
-  // GitHub's own name for the pull request's repository decides sameness, whatever the caller's letter case.
-  if (target.headRepository === null) {
-    problem('suggestion-pr-fork-unsupported', "The pull request's head repository was deleted, so there is no branch to propose a suggestion into.");
-  } else if (target.headRepository.toLowerCase() !== target.baseRepository.toLowerCase()) {
-    problem('suggestion-pr-fork-unsupported',
-      `Suggestion pull requests are not yet supported for a pull request from a fork: its head branch ${codeSpan(target.headRef)} is in ${target.headRepository}, so a suggestion would have to be opened there, as a pull request into that branch, and this tool opens suggestion pull requests only in ${target.baseRepository}.`);
-  }
-  if (target.baseRef !== target.defaultBranch) {
-    problem('suggestion-pr-base-unsupported',
-      `Suggestion pull requests are not yet supported for a pull request into ${codeSpan(target.baseRef)}, which is not the default branch ${codeSpan(target.defaultBranch)} of ${repository}: following a suggestion through a pull request that merges into another branch (for example one of a stack of pull requests, which GitHub retargets when the branch below it merges) is not built yet.`);
-  }
   if (!target.canPush) {
     problem('suggestion-pr-permission-missing', `The authenticated account cannot push to ${repository}, which creating proposal branches requires.`);
   }
@@ -689,6 +706,52 @@ export function blockedReviewReport(prepared: { readonly diagnostics: readonly u
   const count = prepared.diagnostics.length;
   const problems = `${String(count)} problem${count === 1 ? '' : 's'} must be resolved before publication.`;
   return ['## Review blocked', '', `Nothing was published and no publication state was written. ${problems}`].join('\n');
+}
+
+/**
+ * Whether a headline reports warnings of something that happened
+ * (`published`) or that publication would do (`ready`).
+ */
+export type WarningsHeadlineTense = 'published' | 'ready';
+
+/**
+ * How a headline states the warnings of a code whose nature it names
+ * specifically: a sentence for `count` of them. Any other code is stated by
+ * its catalog title.
+ */
+const HEADLINE_SENTENCES: Readonly<Record<string, (count: number, tense: WarningsHeadlineTense) => string>> = {
+  'suggestion-pr-fallback': (count, tense) => {
+    const [pulls, were, change, is] = count === 1
+      ? ['suggestion pull request', tense === 'published' ? 'was' : 'would', 'its change', tense === 'published' ? 'is' : 'would be']
+      : ['suggestion pull requests', tense === 'published' ? 'were' : 'would', 'their changes', tense === 'published' ? 'are' : 'would be'];
+    const created = tense === 'published' ? `${were} not created` : `${were} not be created`;
+    return `${String(count)} ${pulls} ${created}; ${change} ${is} shown in the review.`;
+  },
+};
+
+/**
+ * The line a successful outcome states its warnings in, directly under its
+ * heading (issue #37): their count, then the nature of each code in the
+ * order first found, for example `**Published with 1 warning:** 1 suggestion
+ * pull request was not created; its change is shown in the review.` Absent
+ * when there is no warning; errors and notes are never counted.
+ */
+export function warningsHeadline(diagnostics: readonly IDiagnostic[], tense: WarningsHeadlineTense): string | undefined {
+  const warnings = diagnostics.filter((d) => d.severity === 'warning');
+  if (warnings.length === 0) return undefined;
+  const byCode = new Map<string, { count: number; readonly title: string }>();
+  for (const w of warnings) {
+    const seen = byCode.get(w.code);
+    if (seen === undefined) byCode.set(w.code, { count: 1, title: w.title });
+    else seen.count += 1;
+  }
+  const sentences = [...byCode].map(([code, { count, title }]) => {
+    const sentence = Object.hasOwn(HEADLINE_SENTENCES, code) ? HEADLINE_SENTENCES[code] : undefined;
+    if (sentence !== undefined) return sentence(count, tense);
+    return count === 1 ? `${title}.` : `${title} (${String(count)} times).`;
+  });
+  const lead = tense === 'published' ? 'Published' : 'Ready to publish';
+  return `**${lead} with ${String(warnings.length)} warning${warnings.length === 1 ? '' : 's'}:** ${sentences.join(' ')}`;
 }
 
 /** The explanation of a blocked review, shown identically by publication and assessment. */

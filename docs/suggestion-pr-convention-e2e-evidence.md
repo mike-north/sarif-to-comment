@@ -67,7 +67,7 @@ Nothing else was changed. Steps 1–3, 5, 7–9, 12, 14 and 17–19 wrote nothin
 ## What this does not show
 
 - A repository-configured label, live (see the table above).
-- Forks: the fixture repository has no fork pull request; the refusal is covered by `test/suggestion-pr-convention.test.mts`.
+- Forks: the fixture repository has no fork pull request; the refusal is covered by `test/suggestion-pr-convention.test.mts`. *Since [#37](https://github.com/mike-north/sarif-to-comment/issues/37) (September 30, 2026), a fork or a base other than the default branch is no longer refused: each change is handled as if suggestion pull requests were not allowed ([evidence](suggestion-pr-fallback-e2e-evidence.md)).*
 - A reviewed commit that is no longer the head, which remains refused until [#28](https://github.com/mike-north/sarif-to-comment/issues/28); covered by the same tests.
 - Marking a draft suggestion ready and merging it: #58 is left as a draft, and nothing was merged.
 - A suggestion pull request made by another tool: cleanup's handling of foreign identifiers, batches and authors is covered by the fake host only.

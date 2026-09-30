@@ -672,35 +672,23 @@ export const DIAGNOSTIC_CATALOG = {
     title: 'A suggestion group holds fewer than two distinct changes',
     remedies: ['Remove the group, and the change is published on its own; or add another change to it.'],
   },
-  'suggestion-file-too-large': {
-    severity: 'error',
-    title: 'A proposed file is too large for a suggestion pull request',
-    remedies: ['Reduce the proposed file, or propose it outside the review.'],
-  },
-  'suggestion-body-too-large': {
-    severity: 'error',
-    title: 'A suggestion pull request\'s description would be too long',
-    remedies: ['Shorten the findings\' messages, or split the group.'],
-  },
   'too-many-suggestion-prs': {
     severity: 'error',
     title: 'The review would create too many suggestion pull requests',
     remedies: ['Publish fewer proposals in one review, or group related changes.'],
   },
-  'suggestion-pr-not-reapplied': {
+  'suggestion-pr-fallback': {
     severity: 'warning',
-    title: 'A suggestion pull request is not created after a rewritten history',
-    remedies: ['Review the pull request\'s new head, and publish the suggestion from there.'],
+    title: 'A change is handled as if suggestion pull requests were not allowed',
+    remedies: ['To propose the change as a suggestion pull request, review the pull request\'s current head again and publish that review.'],
   },
-  'suggestion-pr-fork-unsupported': {
+  'suggestion-group-pr-unavailable': {
     severity: 'error',
-    title: 'Suggestion pull requests are not supported for this pull request\'s head',
-    remedies: ['Publish without suggestion pull requests.'],
-  },
-  'suggestion-pr-base-unsupported': {
-    severity: 'error',
-    title: 'Suggestion pull requests need a pull request into the default branch',
-    remedies: ['Publish without suggestion pull requests.'],
+    title: 'A group\'s suggestion pull request cannot be made',
+    remedies: [
+      'Review the pull request\'s current head again, and publish that review.',
+      'Or remove the group (`ungroup-fixes`), so that its changes are published on their own.',
+    ],
   },
   'suggestion-pr-permission-missing': {
     severity: 'error',

@@ -117,6 +117,7 @@ import {
   prepareForDestination,
   redact,
   templateText,
+  warningsHeadline,
   withoutCredential,
 } from './review-preflight.cjs';
 import type { ICapturedReview, IContextClient, IReported, IReviewInputSpec } from './review-preflight.cjs';
@@ -306,9 +307,11 @@ export interface IPublishedOutcome {
   readonly markdown: string;
   /**
    * Warnings and notes about this publication: preparation's warnings (for
-   * example a finding published in the review body, or a suggestion pull
-   * request not created after a rewritten history), a completion that could
-   * not be recorded, and a branch that moved while suggestions were created.
+   * example a finding published in the review body, or a whole-file
+   * proposal presented in the body because no suggestion pull request could
+   * be made for it), a completion that could not be recorded, and a branch
+   * that moved while suggestions were created. The `markdown` states every
+   * warning in a headline under its heading.
    */
   readonly diagnostics: readonly IDiagnostic[];
 }
@@ -522,13 +525,20 @@ type DeliveredReview = Pick<PublishedResult, 'via' | 'receiptPersisted'> & { rea
 // what the outcome's diagnostics already say (problems, warnings, the detail
 // of a failure), which the CLI renders once, on stderr.
 
-function publishedMarkdown(result: DeliveredReview, captured: ICapturedInput, prepared: IReadyOutcome | undefined, full = true): string {
+function publishedMarkdown(
+  result: DeliveredReview,
+  captured: ICapturedInput,
+  prepared: IReadyOutcome | undefined,
+  diagnostics: readonly IDiagnostic[],
+  full = true,
+): string {
   const link = `[review ${String(result.review.id)}](${result.review.htmlUrl})`;
   const where = `${destinationLabel(captured)} at commit ${code(captured.reviewedCommit)}`;
   // A record is only ever continued in the mode it was started with, so the
   // requested mode is the mode of the review being reported.
   const wording = MODE_WORDING[captured.submit === true ? 'submitted' : 'draft'];
-  const lines = [wording.heading, ''];
+  const headline = warningsHeadline(diagnostics, 'published');
+  const lines = [wording.heading, '', ...(headline === undefined ? [] : [headline, ''])];
   if (result.via === 'receipt') {
     lines.push(`The ${wording.noun} ${link} on ${where} was already published; its completion is recorded at ${code(captured.statePath)}. Nothing was sent.`);
   } else if (result.via === 'recovered') {
@@ -612,17 +622,19 @@ function rejectedDiagnostics(detail: string, step: 'review' | 'suggestion', capt
 function present(result: PublicationResult, captured: ICapturedInput, prepared?: IReadyOutcome): IReported<PublishSarifReviewOutcome> {
   const { statePath } = captured;
   switch (result.status) {
-    case 'published':
+    case 'published': {
+      const diagnostics = publishedDiagnostics(result, captured, prepared);
       return {
         outcome: {
           status: 'published',
           review: { id: result.review.id, url: result.review.htmlUrl },
           statePath,
-          markdown: publishedMarkdown(result, captured, prepared),
-          diagnostics: publishedDiagnostics(result, captured, prepared),
+          markdown: publishedMarkdown(result, captured, prepared, diagnostics),
+          diagnostics,
         },
-        report: publishedMarkdown(result, captured, prepared, false),
+        report: publishedMarkdown(result, captured, prepared, diagnostics, false),
       };
+    }
     case 'uncertain':
       return {
         outcome: { status: 'uncertain', statePath, markdown: uncertainMarkdown(result, captured), diagnostics: uncertainDiagnostics(result.detail, captured) },
@@ -713,8 +725,9 @@ function presentCompanion(outcome: CompanionOutcome, captured: ICapturedInput, p
       const listed = suggestions.map((s) => `- [#${String(s.number)}](${s.url}) from ${code(s.branch)}`);
       const form = outcome.ready ? `ready for review, into ${code(outcome.headRef)}` : `drafts into ${code(outcome.headRef)}`;
       const reapplied = outcome.reappliedOnto === undefined ? '' : `, re-applied onto commit ${code(outcome.reappliedOnto)}`;
+      const diagnostics = publishedDiagnostics(outcome, captured, prepared, outcome.baseCheck);
       const text = (full: boolean): string => [
-        publishedMarkdown(outcome, captured, prepared, full),
+        publishedMarkdown(outcome, captured, prepared, diagnostics, full),
         '',
         ...(full ? baseCheckMarkdown(outcome.baseCheck, captured) : []),
         `Suggestion pull requests (${form}, labeled ${labelList(outcome.labels)}${reapplied}):`,
@@ -728,7 +741,7 @@ function presentCompanion(outcome: CompanionOutcome, captured: ICapturedInput, p
         suggestions,
         statePath,
         markdown: text(true),
-        diagnostics: publishedDiagnostics(outcome, captured, prepared, outcome.baseCheck),
+        diagnostics,
         },
         report: text(false),
       };

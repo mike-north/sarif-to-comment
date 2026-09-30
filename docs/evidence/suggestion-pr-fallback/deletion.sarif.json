@@ -1,0 +1,94 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Review bot",
+          "version": "1.0.0"
+        }
+      },
+      "columnKind": "utf16CodeUnits",
+      "versionControlProvenance": [
+        {
+          "repositoryUri": "https://github.com/mike-north/doc-linter",
+          "revisionId": "a96870958463377e3a1fa9c455099a876961abd3"
+        }
+      ],
+      "artifacts": [
+        {
+          "location": {
+            "uri": "docs/experiments/fallback/new-deletion.md"
+          },
+          "contents": {
+            "text": "# New\n"
+          },
+          "encoding": "utf-8"
+        },
+        {
+          "location": {
+            "uri": "docs/experiments/fallback/obsolete-deletion.txt"
+          }
+        }
+      ],
+      "results": [
+        {
+          "message": {
+            "text": "Add a new page."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "docs/experiments/fallback/new-deletion.md"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "properties": {
+            "sarifToComment": {
+              "proposedFileChanges": [
+                {
+                  "operation": "create",
+                  "artifactIndex": 0
+                }
+              ]
+            }
+          }
+        },
+        {
+          "message": {
+            "text": "Obsolete."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "docs/experiments/fallback/obsolete-deletion.txt"
+                }
+              }
+            }
+          ],
+          "properties": {
+            "sarifToComment": {
+              "proposedFileChanges": [
+                {
+                  "operation": "delete",
+                  "artifactIndex": 1
+                }
+              ]
+            }
+          }
+        },
+        {
+          "message": {
+            "text": "A general remark."
+          }
+        }
+      ]
+    }
+  ]
+}

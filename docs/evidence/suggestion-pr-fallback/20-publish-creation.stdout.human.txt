@@ -1,0 +1,5 @@
+## Draft review published
+
+**Published with 1 warning:** 1 suggestion pull request was not created; its change is shown in the review.
+
+Created the draft [review 5371097240](https://github.com/mike-north/doc-linter/pull/74#pullrequestreview-5371097240) on mike-north/doc-linter#74 at commit `74c018f61294532241be4f3f378055962c0d65b6`. It stays a draft until someone submits it on GitHub.

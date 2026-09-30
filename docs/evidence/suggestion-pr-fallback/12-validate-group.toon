@@ -1,0 +1,20 @@
+command: validate
+status: blocked
+problems[1]:
+  - message: "Suggestion pull requests are allowed, but suggestion group \"reword\" cannot become one: the history of #76 was rewritten after the reviewed commit, and its 2 changes cannot be re-applied onto commit `f2f401edb2edaf07321e34e03520a373532cec4c` because `docs/experiments/fallback/sample-group.md` line 6 differs from the reviewed text. Without a suggestion pull request, a group cannot be published: its changes are accepted together or not at all, and are never split or published in part."
+    pointer: /runs/0/results/0
+    severity: error
+    code: suggestion-group-not-reapplied
+    title: A group cannot be re-applied after a rewritten history
+    location:
+      pointer: /runs/0/results/0
+    remedies[2]: "Review the pull request's current head again, and publish that review.","Or remove the group (`ungroup-fixes`), so that its changes are published on their own."
+message: "## Review blocked\n\nNothing was published and no publication state was written.\n\n**Review blocked:** 1 problem must be resolved before publication; nothing was published.\n\n- `suggestion-group-not-reapplied` at `/runs/0/results/0`: Suggestion pull requests are allowed, but suggestion group \"reword\" cannot become one: the history of #76 was rewritten after the reviewed commit, and its 2 changes cannot be re-applied onto commit `f2f401edb2edaf07321e34e03520a373532cec4c` because `docs/experiments/fallback/sample-group.md` line 6 differs from the reviewed text. Without a suggestion pull request, a group cannot be published: its changes are accepted together or not at all, and are never split or published in part."
+diagnostics[1]:
+  - severity: error
+    code: suggestion-group-not-reapplied
+    title: A group cannot be re-applied after a rewritten history
+    message: "Suggestion pull requests are allowed, but suggestion group \"reword\" cannot become one: the history of #76 was rewritten after the reviewed commit, and its 2 changes cannot be re-applied onto commit `f2f401edb2edaf07321e34e03520a373532cec4c` because `docs/experiments/fallback/sample-group.md` line 6 differs from the reviewed text. Without a suggestion pull request, a group cannot be published: its changes are accepted together or not at all, and are never split or published in part."
+    location:
+      pointer: /runs/0/results/0
+    remedies[2]: "Review the pull request's current head again, and publish that review.","Or remove the group (`ungroup-fixes`), so that its changes are published on their own."

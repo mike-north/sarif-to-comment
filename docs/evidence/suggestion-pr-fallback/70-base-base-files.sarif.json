@@ -1,0 +1,94 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Review bot",
+          "version": "1.0.0"
+        }
+      },
+      "columnKind": "utf16CodeUnits",
+      "versionControlProvenance": [
+        {
+          "repositoryUri": "https://github.com/mike-north/doc-linter",
+          "revisionId": "0a75e4675630f506983735a9dcfa386e6c0259a9"
+        }
+      ],
+      "artifacts": [
+        {
+          "location": {
+            "uri": "docs/experiments/fallback/new-base.md"
+          },
+          "contents": {
+            "text": "# New\n"
+          },
+          "encoding": "utf-8"
+        },
+        {
+          "location": {
+            "uri": "docs/experiments/fallback/obsolete-base.txt"
+          }
+        }
+      ],
+      "results": [
+        {
+          "message": {
+            "text": "Add a new page."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "docs/experiments/fallback/new-base.md"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "properties": {
+            "sarifToComment": {
+              "proposedFileChanges": [
+                {
+                  "operation": "create",
+                  "artifactIndex": 0
+                }
+              ]
+            }
+          }
+        },
+        {
+          "message": {
+            "text": "Obsolete."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "docs/experiments/fallback/obsolete-base.txt"
+                }
+              }
+            }
+          ],
+          "properties": {
+            "sarifToComment": {
+              "proposedFileChanges": [
+                {
+                  "operation": "delete",
+                  "artifactIndex": 1
+                }
+              ]
+            }
+          }
+        },
+        {
+          "message": {
+            "text": "A general remark."
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+command: validate
+status: ready
+message: "## Ready to publish\n\n**Ready to publish with 1 warning:** 1 suggestion pull request would not be created; its change would be shown in the review.\n\nThe complete document can be published faithfully to mike-north/doc-linter#75 at commit `a96870958463377e3a1fa9c455099a876961abd3`.\n\nPublication would also create 1 draft suggestion pull request into `exp-fallback-20260930-deletion`, labeled `suggestion-pr`. The history of #75 was rewritten after the reviewed commit, so it is re-applied onto commit `8c35033bf19c1d8c439a0bc287b3fa67f5f0ace2`, where everything it changes is still exactly as reviewed.\n\n**Review prepared:** 0 inline comment(s) and 3 general section(s) for commit `a96870958463377e3a1fa9c455099a876961abd3`.\n\n**Warnings:**\n\n- `suggestion-pr-fallback` at `/runs/0/results/1`: Suggestion pull requests are allowed, but the deletion of `docs/experiments/fallback/obsolete-deletion.txt` is not proposed as one: the history of #75 was rewritten after the reviewed commit, and it cannot be re-applied onto commit `8c35033bf19c1d8c439a0bc287b3fa67f5f0ace2` because `docs/experiments/fallback/obsolete-deletion.txt` differs from the reviewed file. It is handled as if suggestion pull requests were not allowed: the review body proposes it, with its findings.\n\nNothing was published and no publication state was written.\n\nNo pending review of this account was found on the pull request. This is not an approval: publication repeats every check against the pull request as it is then. GitHub can still refuse the review, for example if this account starts a pending review on the pull request before publication."
+diagnostics[1]:
+  - severity: warning
+    code: suggestion-pr-fallback
+    title: A change is handled as if suggestion pull requests were not allowed
+    message: "Suggestion pull requests are allowed, but the deletion of `docs/experiments/fallback/obsolete-deletion.txt` is not proposed as one: the history of #75 was rewritten after the reviewed commit, and it cannot be re-applied onto commit `8c35033bf19c1d8c439a0bc287b3fa67f5f0ace2` because `docs/experiments/fallback/obsolete-deletion.txt` differs from the reviewed file. It is handled as if suggestion pull requests were not allowed: the review body proposes it, with its findings."
+    location:
+      pointer: /runs/0/results/1
+      path: docs/experiments/fallback/obsolete-deletion.txt
+    remedies[1]: "To propose the change as a suggestion pull request, review the pull request's current head again and publish that review."

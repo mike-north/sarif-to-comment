@@ -1,0 +1,6 @@
+✖ error  A group's suggestion pull request cannot be made  [suggestion-group-pr-unavailable]
+  /runs/0/results/0
+  Suggestion pull requests are allowed, but suggestion group "reword" cannot become one: the pull request merges into `exp-fallback-20260930-release`, which is not the default branch `main` of mike-north/doc-linter, and suggestion pull requests are not yet supported for such a pull request. Without a suggestion pull request, a group cannot be published: its changes are accepted together or not at all, and are never split or published in part.
+  → Remove the group (`ungroup-fixes`), so that its changes are published on their own.
+
+1 error

@@ -1,0 +1,73 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Review bot",
+          "version": "1.0.0"
+        }
+      },
+      "columnKind": "utf16CodeUnits",
+      "versionControlProvenance": [
+        {
+          "repositoryUri": "https://github.com/mike-north/doc-linter",
+          "revisionId": "4486ab3b0c2d96fa881ac5ae8cf407fa981a0a7d"
+        }
+      ],
+      "results": [
+        {
+          "message": {
+            "text": "Say what lines 6 and 10 mean, together."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "docs/experiments/fallback/sample-fix.md"
+                },
+                "region": {
+                  "startLine": 6
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "docs/experiments/fallback/sample-fix.md"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 6
+                      },
+                      "insertedContent": {
+                        "text": "Line 6, suggested."
+                      }
+                    },
+                    {
+                      "deletedRegion": {
+                        "startLine": 10
+                      },
+                      "insertedContent": {
+                        "text": "Line 10, suggested."
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "message": {
+            "text": "A general remark."
+          }
+        }
+      ]
+    }
+  ]
+}

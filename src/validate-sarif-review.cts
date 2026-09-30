@@ -84,6 +84,7 @@ import {
   messageChain,
   prepareForDestination,
   redact,
+  warningsHeadline,
   withoutCredential,
 } from './review-preflight.cjs';
 import type { ICapturedReview, IContextClient, IDestinationReady, IReadySuggestionPullRequests, IReported, IReviewInputSpec } from './review-preflight.cjs';
@@ -140,7 +141,10 @@ export interface IReadyAssessment {
   readonly status: 'ready';
   /** What publication would create, and what this result does not promise. */
   readonly markdown: string;
-  /** Preparation's warnings, if any; a ready assessment has no errors. */
+  /**
+   * Preparation's warnings, if any; a ready assessment has no errors. The
+   * `markdown` states every warning in a headline under its heading.
+   */
   readonly diagnostics: readonly IDiagnostic[];
 }
 
@@ -241,9 +245,11 @@ function readyMarkdown(prepared: IDestinationReady, captured: ICapturedReview, s
     `Publication would also create ${created} ${code(target.headRef)}, labeled ${labelList(target.labels)}.${reappliedSentence(target, captured, count)}`,
     '',
   ];
+  const headline = warningsHeadline(prepared.warnings, 'ready');
   return [
     '## Ready to publish',
     '',
+    ...(headline === undefined ? [] : [headline, '']),
     `The complete document can be published faithfully to ${destinationLabel(captured)} at commit ${code(captured.reviewedCommit)}${as}.`,
     '',
     ...suggestions,

@@ -4,7 +4,7 @@
 
 ## IReadyAssessment.diagnostics property
 
-Preparation's warnings, if any; a ready assessment has no errors.
+Preparation's warnings, if any; a ready assessment has no errors. The`markdown` states every warning in a headline under its heading.
 
 **Signature:**
 

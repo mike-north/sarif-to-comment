@@ -1,0 +1,151 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Review bot",
+          "version": "1.0.0"
+        }
+      },
+      "columnKind": "utf16CodeUnits",
+      "versionControlProvenance": [
+        {
+          "repositoryUri": "https://github.com/mike-north/doc-linter",
+          "revisionId": "897bc5f79394d4ba7b65222c97159aa1a60e0902"
+        }
+      ],
+      "artifacts": [
+        {
+          "location": {
+            "uri": "docs/experiments/fallback/new-group.md"
+          },
+          "contents": {
+            "text": "# New\n"
+          },
+          "encoding": "utf-8"
+        }
+      ],
+      "results": [
+        {
+          "message": {
+            "text": "Say what line 6 means."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "docs/experiments/fallback/sample-group.md"
+                },
+                "region": {
+                  "startLine": 6
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "docs/experiments/fallback/sample-group.md"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 6
+                      },
+                      "insertedContent": {
+                        "text": "Line 6, suggested."
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "sarifToComment": {
+              "suggestionGroup": "reword"
+            }
+          }
+        },
+        {
+          "message": {
+            "text": "Line 10 too."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "docs/experiments/fallback/sample-group.md"
+                },
+                "region": {
+                  "startLine": 10
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "docs/experiments/fallback/sample-group.md"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 10
+                      },
+                      "insertedContent": {
+                        "text": "Line 10, suggested."
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "sarifToComment": {
+              "suggestionGroup": "reword"
+            }
+          }
+        },
+        {
+          "message": {
+            "text": "Add a new page."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "docs/experiments/fallback/new-group.md"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "properties": {
+            "sarifToComment": {
+              "proposedFileChanges": [
+                {
+                  "operation": "create",
+                  "artifactIndex": 0
+                }
+              ]
+            }
+          }
+        },
+        {
+          "message": {
+            "text": "A general remark."
+          }
+        }
+      ]
+    }
+  ]
+}

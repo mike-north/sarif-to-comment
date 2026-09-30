@@ -147,6 +147,18 @@ Blocks are separated by a blank line. The summary line counts each severity pres
 
 **Streams.** Human output keeps the CLI's conventions: the primary result (what was created, written, inspected, checked, published or closed, and what happened to each file) goes to stdout, and diagnostics go to stderr. A refusal or an operational error writes only its file notes, such as ``… was not changed.``, to stdout. `inspect` no longer lists its warnings in its text, and `add-staged-changes` no longer prints `Warning:` lines: both are diagnostics on stderr. `validate`, `publish` and `close-suggestion-prs` print their outcome text on stdout (the heading, the review and pull request links, the state path, and the retry and next-step guidance) without repeating their problems and warnings: the diagnostic blocks on stderr are the single human rendering of them (owner decision, September 30, 2026). What stdout leaves out is exactly what a diagnostic says: the lists of problems and warnings, the detail of a failure, and, for cleanup, the pull requests that were refused, failed, could not be verified or do not follow the convention. The library's `markdown` fields and the JSON and TOON `message` are unchanged: they remain the full report.
 
+**Headline.** A successful `publish` or `validate` outcome with warnings states them directly under its heading, in the library's `markdown`, the JSON and TOON `message` and the human stdout alike, so that no warning is only at the end of the output ([issue #37](https://github.com/mike-north/sarif-to-comment/issues/37)): `**Published with N warning(s):**` or `**Ready to publish with N warning(s):**`, then one sentence per code, in the order first found. `suggestion-pr-fallback` has its own sentence (`1 suggestion pull request was not created; its change is shown in the review.`, or `… would not be created; its change would be shown in the review.` for `validate`, and the plural `2 suggestion pull requests were not created; their changes are shown in the review.`); any other code is its title, followed by `(N times)` when it occurs more than once. For example:
+
+```text
+## Draft review published
+
+**Published with 1 warning:** 1 suggestion pull request was not created; its change is shown in the review.
+
+Created the draft [review 42](https://github.com/acme/widgets/pull/7#pullrequestreview-42) on acme/widgets#7 at commit `…`. It stays a draft until someone submits it on GitHub.
+```
+
+Errors and notes are never counted in the headline, and an outcome without warnings has none. The exit status of a successful outcome with warnings stays 0.
+
 **Color.** Badges are red (error), yellow (warning) and blue (note); the location line is cyan; the `→` is green; the summary counts take their severity's color. Whether color is used is decided for stderr, in this order:
 
 1. `--color always` or `--color never`.
@@ -168,7 +180,7 @@ The library's `markdown` fields and the JSON `message` are Markdown rendered fro
 
 ## Renamed codes
 
-These internal codes were unclear. They were renamed before their first release as public codes; every other code keeps the name it had in Markdown.
+These internal codes were unclear. They were renamed before their first release as public codes; every other code keeps the name it had in Markdown. `suggestion-pr-not-reapplied` became `suggestion-pr-fallback` when a suggestion pull request that cannot be re-applied stopped being skipped and started falling back as if suggestion pull requests were not allowed ([issue #37](https://github.com/mike-north/sarif-to-comment/issues/37)); a group in that situation is refused as `suggestion-group-pr-unavailable`. Since the same decision, a fork, a base other than the default branch, a created file over the size limit and a description over the body limit are fallbacks too, so `suggestion-pr-fork-unsupported`, `suggestion-pr-base-unsupported`, `suggestion-file-too-large` and `suggestion-body-too-large`, never released, are no longer reported.
 
 | Before | After |
 |---|---|
@@ -178,6 +190,7 @@ These internal codes were unclear. They were renamed before their first release 
 | `repository-mismatch` | `provenance-repository-mismatch` |
 | `provenance-conflict` | `provenance-revision-conflict` |
 | `suggestion-historical-unsupported` | `suggestion-reviewed-commit-not-head` |
+| `suggestion-pr-not-reapplied` | `suggestion-pr-fallback` |
 
 ## Code catalog
 
@@ -357,12 +370,9 @@ One entry per code: its severity, its title, what it means and its typical remed
 | `suggestion-group-requires-suggestion-prs` | error | A suggestion group needs suggestion pull requests | A group is accepted as one unit through one suggestion pull request; it is never split or published in part. | Enable suggestion pull requests (`--allow-suggestion-prs`, `allowSuggestionPullRequests`).<br>Or ungroup the findings (`ungroup-fixes`). |
 | `suggestion-group-member-without-change` | error | A grouped finding proposes no change | A group joins changes; a member without a fix or file operation has none to join. | Remove the finding from the group, or give it its change. |
 | `suggestion-group-single-change` | error | A suggestion group holds fewer than two distinct changes | A group needs at least two distinct changes to accept together; identical changes count once. | Remove the group, and the change is published on its own; or add another change to it. |
-| `suggestion-file-too-large` | error | A proposed file is too large for a suggestion pull request | A suggestion pull request carries a bounded number of bytes per file. | Reduce the proposed file, or propose it outside the review. |
-| `suggestion-body-too-large` | error | A suggestion pull request's description would be too long | Nothing is truncated or split. | Shorten the findings' messages, or split the group. |
 | `too-many-suggestion-prs` | error | The review would create too many suggestion pull requests | The number of suggestion pull requests one review creates is bounded. | Publish fewer proposals in one review, or group related changes. |
-| `suggestion-pr-not-reapplied` | warning | A suggestion pull request is not created after a rewritten history | The branch history was rewritten after the reviewed commit, and something the suggestion changes is no longer byte-identical at the head. The review states the reason. | Review the pull request's new head, and publish the suggestion from there. |
-| `suggestion-pr-fork-unsupported` | error | Suggestion pull requests are not supported for this pull request's head | The head branch is in a fork, or its repository was deleted. | Publish without suggestion pull requests. |
-| `suggestion-pr-base-unsupported` | error | Suggestion pull requests need a pull request into the default branch | The pull request's base is not the repository's default branch. | Publish without suggestion pull requests. |
+| `suggestion-pr-fallback` | warning | A change is handled as if suggestion pull requests were not allowed | Suggestion pull requests are allowed, but this whole-file creation or deletion cannot become one, so it is published exactly as it would be without them: the review body proposes it, and the limits of that form apply. The reasons: the history was rewritten after the review and the change cannot be re-applied onto the head; the pull request is from a fork, or its head repository was deleted; its base is not the default branch; a created file is over 1,000,000 bytes; or the suggestion pull request's description would be over the body limit. The message names the change and each reason; the remedies are the ways to make the suggestion pull request, if any. Presenting a small edit as a native suggestion is intended, not a fallback. | To propose the change as a suggestion pull request, review the pull request's current head again and publish that review. |
+| `suggestion-group-pr-unavailable` | error | A group's suggestion pull request cannot be made | Suggestion pull requests are allowed, but an explicit group or a fix with several changes cannot become one, and without a suggestion pull request its changes cannot be kept together, so the whole review is refused before anything is written, as it is when suggestion pull requests are not allowed. The reasons are those of `suggestion-pr-fallback`. The message names the group or fix and each reason; the remedies address each reason, then removing the group (for a fix, splitting it into separate findings). | Review the pull request's current head again, and publish that review.<br>Or remove the group (`ungroup-fixes`), so that its changes are published on their own. |
 | `suggestion-pr-permission-missing` | error | The account cannot push to the repository | Creating proposal branches needs push access. | Use a token of an account with push access, or publish without suggestion pull requests. |
 | `suggestion-pr-configuration-invalid` | error | The suggestion pull request configuration is not valid | `.github/suggestion-prs.json` on the default branch cannot be used. | Fix the file on the default branch. |
 | `suggestion-label-missing` | error | A suggestion label does not exist | Every label must already exist; the tool never creates one. | Create the label in the repository, or choose an existing one. |

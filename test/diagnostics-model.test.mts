@@ -39,9 +39,11 @@ describe('the code catalog (docs/diagnostics.md "Code catalog")', () => {
 
   test('the codes the issue names are catalog entries, and the renamed codes are gone', () => {
     // Issue #38 names these internal codes as becoming catalog entries.
-    for (const code of ['suggestion-group-requires-suggestion-prs', 'pending-review-exists', 'suggestion-pr-not-reapplied']) {
+    for (const code of ['suggestion-group-requires-suggestion-prs', 'pending-review-exists']) {
       assert.ok(CATALOG.has(code), code);
     }
+    // Issue #37 names the fallback warning, and refuses a group that cannot be re-applied.
+    for (const code of ['suggestion-pr-fallback', 'suggestion-group-pr-unavailable']) assert.ok(CATALOG.has(code), code);
     // docs/diagnostics.md "Renamed codes".
     const renames: readonly (readonly [string, string])[] = [
       ['inline-unavailable', 'inline-placement-unavailable'],
@@ -50,6 +52,8 @@ describe('the code catalog (docs/diagnostics.md "Code catalog")', () => {
       ['repository-mismatch', 'provenance-repository-mismatch'],
       ['provenance-conflict', 'provenance-revision-conflict'],
       ['suggestion-historical-unsupported', 'suggestion-reviewed-commit-not-head'],
+      // Issue #37: the skip became a fallback, announced for every change handled as if suggestion pull requests were not allowed.
+      ['suggestion-pr-not-reapplied', 'suggestion-pr-fallback'],
     ];
     for (const [before, after] of renames) {
       assert.equal(CATALOG.has(before), false, `${before} was renamed`);
@@ -59,7 +63,8 @@ describe('the code catalog (docs/diagnostics.md "Code catalog")', () => {
   });
 
   test('each severity is used, and warnings and notes the model calls out have that severity', () => {
-    assert.equal(CATALOG.get('suggestion-pr-not-reapplied')?.severity, 'warning');
+    assert.equal(CATALOG.get('suggestion-pr-fallback')?.severity, 'warning');
+    assert.equal(CATALOG.get('suggestion-group-pr-unavailable')?.severity, 'error');
     assert.equal(CATALOG.get('finding-partially-overlaps-change')?.severity, 'warning');
     assert.equal(CATALOG.get('suggestion-branch-moved')?.severity, 'note');
     assert.equal(CATALOG.get('usage-error')?.severity, 'error');

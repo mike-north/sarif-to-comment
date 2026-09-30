@@ -1,0 +1,18 @@
+{
+  "command": "publish",
+  "status": "published",
+  "review": {
+    "id": 5371100573,
+    "url": "https://github.com/mike-north/doc-linter/pull/75#pullrequestreview-5371100573"
+  },
+  "suggestions": [
+    {
+      "number": 78,
+      "url": "https://github.com/mike-north/doc-linter/pull/78",
+      "branch": "suggestion-pr/75/0acdfa96-3a0c-4ab6-8a75-aa99aeb7cdc5"
+    }
+  ],
+  "statePath": "<evidence>/state/deletion.json",
+  "message": "## Draft review published\n\nThe draft [review 5371100573](https://github.com/mike-north/doc-linter/pull/75#pullrequestreview-5371100573) on mike-north/doc-linter#75 at commit `a96870958463377e3a1fa9c455099a876961abd3` was already published; its completion is recorded at `<evidence>/state/deletion.json`. Nothing was sent.\n\nSuggestion pull requests (drafts into `exp-fallback-20260930-deletion`, labeled `suggestion-pr`, re-applied onto commit `8c35033bf19c1d8c439a0bc287b3fa67f5f0ace2`):\n\n- [#78](https://github.com/mike-north/doc-linter/pull/78) from `suggestion-pr/75/0acdfa96-3a0c-4ab6-8a75-aa99aeb7cdc5`",
+  "diagnostics": []
+}
