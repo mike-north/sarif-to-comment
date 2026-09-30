@@ -1,0 +1,10 @@
+{
+  "command": "validate",
+  "status": "blocked",
+  "problems": [
+    {
+      "message": "The label `suggestion-pr` does not exist in mike-north/doc-linter. It is the default suggestion label: create it, or name another existing label in `.github/suggestion-prs.json` on the default branch. Labels are never created automatically."
+    }
+  ],
+  "message": "## Review blocked\n\nNothing was published and no publication state was written.\n\n**Review blocked:** 1 problem must be resolved before publication; nothing was published.\n\n- `suggestion-label-missing`: The label `suggestion-pr` does not exist in mike-north/doc-linter. It is the default suggestion label: create it, or name another existing label in `.github/suggestion-prs.json` on the default branch. Labels are never created automatically."
+}

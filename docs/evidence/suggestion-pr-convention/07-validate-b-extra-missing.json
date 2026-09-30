@@ -1,0 +1,10 @@
+{
+  "command": "validate",
+  "status": "blocked",
+  "problems": [
+    {
+      "message": "The label `sarif-issue27-no-such-label` does not exist in mike-north/doc-linter. It was given in pullRequestLabels (--pr-labels): create it, or leave it out. Labels are never created automatically."
+    }
+  ],
+  "message": "## Review blocked\n\nNothing was published and no publication state was written.\n\n**Review blocked:** 1 problem must be resolved before publication; nothing was published.\n\n- `suggestion-label-missing`: The label `sarif-issue27-no-such-label` does not exist in mike-north/doc-linter. It was given in pullRequestLabels (--pr-labels): create it, or leave it out. Labels are never created automatically."
+}

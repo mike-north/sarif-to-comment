@@ -1,0 +1,20 @@
+{
+  "command": "close-suggestion-prs",
+  "status": "complete",
+  "dryRun": false,
+  "originals": [
+    {
+      "number": 56,
+      "state": "open"
+    }
+  ],
+  "suggestions": [
+    {
+      "number": 58,
+      "url": "https://github.com/mike-north/doc-linter/pull/58",
+      "original": 56,
+      "result": "left-open"
+    }
+  ],
+  "message": "## Suggestion pull request cleanup complete\n\nChecked the open pull requests labeled `suggestion-pr` in mike-north/doc-linter (the default suggestion label).\n\nOriginal pull requests:\n\n- #56: open\n\nSuggestion pull requests:\n\n- #58 (for #56): left open, because the original is still open\n\nClosing never deletes a branch: each proposal branch is left in place."
+}
