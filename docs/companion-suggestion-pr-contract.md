@@ -129,7 +129,7 @@ A suggestion pull request's body establishes the relationship; the original pull
   | --- | --- |
   | Absent, or an object without `label` | The default `suggestion-pr` |
   | An object whose `label` is a valid label name | That label |
-  | Invalid UTF-8 or JSON; not an object; `label` not a string; `label` empty, containing a comma or otherwise not a label name; a directory, symbolic link or submodule at the path | **blocked** before any write (`suggestion-pr-configuration-invalid`), with a problem naming the file and the field; `validate` reports the same |
+  | Invalid UTF-8 or JSON; not an object; `label` not a string; `label` empty, containing a comma or otherwise not a label name; a directory, symbolic link or submodule at the path, or a symbolic link or submodule on the way to it (never followed) | **blocked** before any write (`suggestion-pr-configuration-invalid`), with a problem naming the file and the field; `validate` reports the same |
   | The read failed (network, HTTP 403, 5xx, a malformed answer) | Operational: `publish` rejects and `validate` answers `incomplete`. Never a silent default. |
 
   The file is read through Git objects (the default branch's reference, its commit, the trees on the path and the blob), never the Contents API, which would follow a symbolic link to another path's text. A configuration file over the 1,000,000-byte source limit is invalid.

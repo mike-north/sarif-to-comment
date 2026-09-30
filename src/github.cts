@@ -195,17 +195,19 @@
  *            defaultBranch, canPush }
  *     GET pull, GET repository. headRepository is null when the head
  *     repository was deleted; canPush is the account role's permissions.push.
- *   readDefaultBranchFile({ owner, repo, path })
+ *   readDefaultBranchFile({ owner, repo, path, branch? })
  *       -> { branch, commit, content }
  *     The file at `path` on the current commit of the repository's default
  *     branch (docs/suggestion-pr-convention.md §4): GET repository for the
- *     default branch, GET git/ref/heads/{branch} for its commit (404 is
+ *     default branch unless the caller already read it (`branch`), GET
+ *     git/ref/heads/{branch} for its commit (404 is
  *     'malformed-response': a default branch always has one), then the same
  *     verified Git-object reads as readSource, never the Contents API.
  *     content: { kind: 'absent' } when a complete listing shows no such path;
  *     { kind: 'not-a-file', entry: 'a directory' | 'a symbolic link' |
- *     'a submodule' } for anything at or above the path that is not a
- *     directory on the way or a regular file at the end (never followed);
+ *     'a submodule', path } for anything at or above the path that is not a
+ *     directory on the way or a regular file at the end (never followed),
+ *     `path` naming where it stands;
  *     { kind: 'too-large', size } beyond maxSourceBytes (never downloaded);
  *     { kind: 'file', bytes } with the exact verified bytes, not decoded.
  *     Any failed read is an error, never absence.
@@ -682,7 +684,13 @@ export interface IGitHubClient {
   readonly fetchContext: (request: IFetchContextRequest) => Promise<IFetchedContext>;
   readonly readSuggestionTarget: (request: IPullRequestDestination) => Promise<ISuggestionTarget>;
   readonly findLabel: (request: { readonly owner: string; readonly repo: string; readonly name: string }) => Promise<string | null>;
-  readonly readDefaultBranchFile: (request: { readonly owner: string; readonly repo: string; readonly path: string }) => Promise<IDefaultBranchFile>;
+  readonly readDefaultBranchFile: (request: {
+    readonly owner: string;
+    readonly repo: string;
+    readonly path: string;
+    /** The default branch, when the caller has already read it from the repository. */
+    readonly branch?: string | undefined;
+  }) => Promise<IDefaultBranchFile>;
   readonly createProposalCommit: (request: {
     readonly owner: string;
     readonly repo: string;
@@ -2061,20 +2069,27 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
     return 'a submodule';
   }
 
-  async function readDefaultBranchFile({ owner, repo, path: filePath }: Unchecked<'owner' | 'repo' | 'path'> = {}): Promise<IDefaultBranchFile> {
+  async function readDefaultBranchFile({
+    owner,
+    repo,
+    path: filePath,
+    branch: known,
+  }: Unchecked<'owner' | 'repo' | 'path' | 'branch'> = {}): Promise<IDefaultBranchFile> {
     requireInput(isRepoName(owner) && isRepoName(repo), 'owner and repo must be GitHub names');
     requireRepositoryPath(filePath);
-    const { body: repository } = await restGet(`${API_ORIGIN}${repoPath(owner, repo)}`, 'repository');
-    const branch = hostString(optionalMember(repository, 'default_branch'), 'repository default branch');
+    requireInput(known === undefined || (typeof known === 'string' && known !== ''), 'branch must be a non-empty string when given');
+    const branch = typeof known === 'string'
+      ? known
+      : hostString(optionalMember((await restGet(`${API_ORIGIN}${repoPath(owner, repo)}`, 'repository')).body, 'default_branch'), 'repository default branch');
     const commit = await getBranch({ owner, repo, branch });
     if (commit === null) throw new GitHubError('malformed-response', redact(`The default branch ${branch} has no commit.`));
     const walked = await walkTo(owner, repo, commit, filePath);
     // A symbolic link or submodule on the way is never followed: what is
     // there is not a file, which is the convention's problem to name.
-    if (walked.kind === 'through') return { branch, commit, content: { kind: 'not-a-file', entry: walked.entry } };
+    if (walked.kind === 'through') return { branch, commit, content: { kind: 'not-a-file', entry: walked.entry, path: walked.at } };
     const { entry } = walked;
     if (entry === null) return { branch, commit, content: { kind: 'absent' } };
-    if (!REGULAR_FILE_MODES.has(entry.mode)) return { branch, commit, content: { kind: 'not-a-file', entry: entryKind(entry.mode) } };
+    if (!REGULAR_FILE_MODES.has(entry.mode)) return { branch, commit, content: { kind: 'not-a-file', entry: entryKind(entry.mode), path: filePath } };
     if (entry.size !== undefined && entry.size > limits.maxSourceBytes) return { branch, commit, content: { kind: 'too-large', size: entry.size } };
     const { body } = await restGet(`${API_ORIGIN}${repoPath(owner, repo)}/git/blobs/${String(entry.sha)}`, 'blob request');
     return { branch, commit, content: { kind: 'file', bytes: new Uint8Array(blobBytes(body, entry.sha, entry.size, filePath)) } };

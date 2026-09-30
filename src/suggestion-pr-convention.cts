@@ -74,7 +74,13 @@ export function suggestionPrBranch(pullNumber: number, id: string): string {
 /** What is at the configuration path on the default branch, as the transport read it. */
 export type RepositoryFileContent =
   | { readonly kind: 'absent' }
-  | { readonly kind: 'not-a-file'; readonly entry: string }
+  | {
+      readonly kind: 'not-a-file';
+      /** What stands there: 'a directory', 'a symbolic link' or 'a submodule'. */
+      readonly entry: string;
+      /** Where it stands: the path itself, or a directory on the way to it that is not one. */
+      readonly path: string;
+    }
   | { readonly kind: 'too-large'; readonly size: number }
   | { readonly kind: 'file'; readonly bytes: Uint8Array };
 
@@ -115,7 +121,11 @@ export function resolveCanonicalLabel(configuration: IDefaultBranchConfiguration
     case 'absent':
       return fallback;
     case 'not-a-file':
-      return invalid(`it is ${content.entry}, not a file`);
+      return invalid(
+        content.path === SUGGESTION_PR_CONFIGURATION_PATH
+          ? `it is ${content.entry}, not a file`
+          : `${code(content.path)} is ${content.entry}, which is never followed`,
+      );
     case 'too-large':
       return invalid(`it is larger than ${String(MAX_CONFIGURATION_BYTES)} bytes`);
     case 'file':

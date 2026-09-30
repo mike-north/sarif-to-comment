@@ -49,7 +49,7 @@ A tool reading it MUST treat each state exactly as follows:
 | Absent from the default branch | `suggestion-pr` |
 | An object without `label` | `suggestion-pr` |
 | An object whose `label` is a valid label name | that label |
-| Not valid UTF-8 or JSON; JSON that is not an object; `label` not a string; `label` empty, containing a comma, or otherwise not a valid label name; a directory, symbolic link or submodule at that path | **invalid**: a producer creates nothing and reports the problem naming the file and the field; a consumer refuses to act |
+| Not valid UTF-8 or JSON; JSON that is not an object; `label` not a string; `label` empty, containing a comma, or otherwise not a valid label name; a directory, symbolic link or submodule at that path, or a symbolic link or submodule on the way to it (never followed) | **invalid**: a producer creates nothing and reports the problem naming the file and the field; a consumer refuses to act |
 | Could not be read (network failure, HTTP 403, 5xx, a malformed answer) | **unknown**: the operation stops as incomplete or failed. A failed read is never treated as a missing file. |
 
 ## 5. The branch

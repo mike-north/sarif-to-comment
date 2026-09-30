@@ -144,7 +144,7 @@ export interface IContextClient {
   readonly findLabel?: ((request: { readonly owner: string; readonly repo: string; readonly name: string }) => Promise<string | null>) | undefined;
   /** Read only when a ready review needs suggestion pull requests: the repository configuration. */
   readonly readDefaultBranchFile?:
-    | ((request: { readonly owner: string; readonly repo: string; readonly path: string }) => Promise<IDefaultBranchFile>)
+    | ((request: { readonly owner: string; readonly repo: string; readonly path: string; readonly branch?: string }) => Promise<IDefaultBranchFile>)
     | undefined;
 }
 
@@ -553,7 +553,8 @@ async function checkSuggestionTarget(
   if (client.findLabel === undefined || client.readDefaultBranchFile === undefined) {
     throw new Error('This GitHub client cannot publish suggestion pull requests.');
   }
-  const configuration = await client.readDefaultBranchFile({ owner, repo, path: SUGGESTION_PR_CONFIGURATION_PATH });
+  // The default branch was read with the target; it is not read again.
+  const configuration = await client.readDefaultBranchFile({ owner, repo, path: SUGGESTION_PR_CONFIGURATION_PATH, branch: target.defaultBranch });
   const canonical = resolveCanonicalLabel(configuration);
   const problems: IDiagnostic[] = [];
   const problem = (code: string, message: string): void => {

@@ -50,7 +50,7 @@ Without `label`, cleanup resolves the repository's canonical label exactly as `p
 | --- | --- |
 | Absent, or an object without `label` | Uses `suggestion-pr` |
 | A valid `label` | Uses it |
-| Invalid (not UTF-8 JSON, not an object, `label` not a string, empty, with a comma or otherwise not a label name; a directory, symbolic link or submodule; over 1,000,000 bytes) | **Refuses**: rejects with an `Error` naming the file and the field (CLI: exit 1, "Nothing was closed."). Nothing else is read and nothing is closed. |
+| Invalid (not UTF-8 JSON, not an object, `label` not a string, empty, with a comma or otherwise not a label name; a directory, symbolic link or submodule at the path, or a symbolic link or submodule on the way to it; over 1,000,000 bytes) | **Refuses**: rejects with an `Error` naming the file and the field (CLI: exit 1, "Nothing was closed."). Nothing else is read and nothing is closed. |
 | The read failed (network, HTTP 403, 5xx, a malformed answer) | Operational: rejects (CLI: exit 1) before any other read. Never a silent default. |
 
 With `label` (`--label`), the configuration is not read at all: the override names the label to use. The Markdown's scope line says which label was used and where it came from (§2.10).
