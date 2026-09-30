@@ -9,10 +9,14 @@
  *   POST /repos/{o}/{r}/git/trees                 { base_tree, tree: [{ path, mode, type, sha }] }
  *   POST /repos/{o}/{r}/git/commits               { message, tree, parents }
  *   POST /repos/{o}/{r}/git/refs                  { ref: 'refs/heads/…', sha }
- *   GET  /repos/{o}/{r}/git/ref/heads/{branch}    one branch (404 when absent)
+ *   GET  /repos/{o}/{r}/git/ref/heads/{branch}    one branch (404 when absent); the
+ *                                                 default branch names the repository's
+ *                                                 `defaultBranchCommit`, whose snapshot
+ *                                                 holds the repository configuration
+ *                                                 (docs/suggestion-pr-convention.md §4)
  *   POST /repos/{o}/{r}/pulls                     { title, head, base, body, draft }
  *   GET  /repos/{o}/{r}/pulls?head=o:b&state=all  pull requests from one branch
- *   POST /repos/{o}/{r}/issues/{n}/labels         { labels: [name] }
+ *   POST /repos/{o}/{r}/issues/{n}/labels         { labels: [name, …] }
  *   GET  /repos/{o}/{r}/issues/{n}/labels         labels of one pull request
  *
  * Object ids: blobs are real Git blob ids; created trees and commits get
@@ -23,7 +27,8 @@
  * Like GitHub, the host refuses a second branch of one name (422), a pull
  * request whose head or base branch does not exist (422), a second open pull
  * request for one head and base (422), and a label the repository does not
- * have (422). Request bodies must have exactly the documented keys: anything
+ * have (422). (Live GitHub is reported to create such a label instead; the fake refuses it
+ * so that a product that ever sent one fails loudly.) Request bodies must have exactly the documented keys: anything
  * else is a harness failure that answers 400, so a wire-format regression in
  * the client fails loudly.
  *
@@ -37,7 +42,11 @@
  *   failRepositoryRead: the repository read (default branch, permissions)
  *                    answers 502
  *   failRefReadsAfter: branch reads after this many (counted from the host's
- *                    creation) answer 502; 0 fails every branch read
+ *                    creation) answer 502; 0 fails every branch read. Reads of
+ *                    the default branch are neither counted nor failed.
+ *   defaultBranchRead: 'server-error' | 'forbidden' | 'network': the read of the
+ *                    default branch's reference (the first read of the
+ *                    repository configuration) fails that way
  *
  * Delayed visibility is set with the host's hide({ refs, pulls, labels }):
  * the next N reads of a branch, of a branch's pull requests, or of a pull
@@ -93,6 +102,8 @@ export interface ICompanionConfig {
   readonly refuse?: Readonly<Partial<Record<CompanionWrite, number>>> | undefined;
   readonly failRefReadsAfter?: number | undefined;
   readonly failRepositoryRead?: boolean | undefined;
+  /** How the read of the default branch's reference fails, instead of answering. */
+  readonly defaultBranchRead?: 'server-error' | 'forbidden' | 'network' | undefined;
   /** Pull request number -> how its GET pulls/{n} fails. */
   readonly pullReads?: Readonly<Record<string, PullReadFailure>> | undefined;
   /** Pull request number -> how its close (PATCH) fails. A lost response closes it first. */
@@ -172,6 +183,8 @@ export interface ICompanionRepository {
   readonly owner: string;
   readonly repo: string;
   readonly defaultBranch: string;
+  /** The snapshot commit the default branch points at. */
+  readonly defaultBranchCommit: string;
   readonly headRef: string;
   readonly push: boolean;
   readonly labels: readonly string[];
@@ -200,6 +213,7 @@ export const isCompanionConfig: Guard<ICompanionConfig> = isShape({
   refuse: isOptional(isRecordOf(isNumber)),
   failRefReadsAfter: isOptional(isNumber),
   failRepositoryRead: isOptional(isBoolean),
+  defaultBranchRead: isOptional(isOneOf('server-error', 'forbidden', 'network')),
   pullReads: isOptional(isRecordOf(isOneOf('forbidden', 'not-found', 'server-error', 'malformed'))),
   closes: isOptional(isRecordOf(isOneOf('forbidden', 'not-found', 'rate-limited', 'secondary-rate-limit', 'too-many-requests', 'server-error', 'lose-response'))),
   failIssueListing: isOptional(isBoolean),
@@ -449,6 +463,12 @@ export function companionRoute(host: ICompanionHost, method: string, u: URL, bod
   }
   if (method === 'GET' && p.startsWith(`${repoPath}/git/ref/heads/`)) {
     const branch = p.slice(`${repoPath}/git/ref/heads/`.length).split('/').map(decodeURIComponent).join('/');
+    if (branch === repository.defaultBranch) {
+      if (config.defaultBranchRead === 'network') lostResponse();
+      if (config.defaultBranchRead === 'forbidden') return json({ message: 'Resource not accessible by personal access token' }, 403);
+      if (config.defaultBranchRead === 'server-error') return json({ message: 'Server Error' }, 502);
+      return json({ ref: `refs/heads/${branch}`, object: { sha: repository.defaultBranchCommit, type: 'commit' } });
+    }
     const counted = { ...host.state(), refReads: host.state().refReads + 1 };
     host.save(counted);
     if (config.failRefReadsAfter !== undefined && counted.refReads > config.failRefReadsAfter) return json({ message: 'Server Error' }, 502);
@@ -527,14 +547,13 @@ export function companionRoute(host: ICompanionHost, method: string, u: URL, bod
     if (method === 'POST') {
       const request = body();
       const labels = request['labels'];
-      if (!hasExactKeys(request, ['labels']) || !isArrayOf(isString)(labels) || labels.length !== 1) {
+      if (!hasExactKeys(request, ['labels']) || !isArrayOf(isString)(labels) || labels.length === 0) {
         return json({ message: 'fake host: malformed label request' }, 400);
       }
       const early = before('label');
       if (early) return early;
-      const [name] = labels;
-      if (name === undefined || !repository.labels.includes(name)) return json({ message: 'Validation Failed', errors: [{ field: 'labels', code: 'invalid' }] }, 422);
-      const labelled: IStoredPull = { ...pull, labels: pull.labels.includes(name) ? pull.labels : [...pull.labels, name] };
+      if (!labels.every((name) => repository.labels.includes(name))) return json({ message: 'Validation Failed', errors: [{ field: 'labels', code: 'invalid' }] }, 422);
+      const labelled: IStoredPull = { ...pull, labels: [...pull.labels, ...labels.filter((name, i) => !pull.labels.includes(name) && labels.indexOf(name) === i)] };
       host.save({ ...state, pulls: state.pulls.map((pr, i) => (i === index ? labelled : pr)) });
       return after('label', json(labelled.labels.map((n) => ({ name: n }))));
     }

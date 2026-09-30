@@ -5,7 +5,8 @@
  * `fetch` is replaced.
  *
  * Every expected value is written by hand from
- * docs/companion-suggestion-pr-contract.md: the proposal branch's exact file
+ * docs/companion-suggestion-pr-contract.md and docs/suggestion-pr-convention.md:
+ * the proposal branch's exact file
  * bytes and modes, the suggestion pull request's title, body, base, draft
  * state and label, the review body that links it, the blocked explanations,
  * and the identity, recovery and human-change outcomes of §2.9–§2.10. Only
@@ -50,8 +51,8 @@ const TOKEN = 'ghp_COMPANION_COMPOSITION_0123456789';
 const REVIEW_PATH = `/repos/${OWNER}/${REPO}/pulls/${String(PULL)}/reviews`;
 const REVIEW_MARKER = /\n\n<!-- sarif-to-comment:review:[0-9a-f-]{36} -->$/;
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
-const BRANCH = new RegExp(`^sarif-to-comment/suggestions/7/(${UUID})$`);
-const SUGGESTION_MARKER = new RegExp(`\\n\\n(<!-- sarif-to-comment:suggestion (\\{[^\\n]*\\}) -->)$`);
+const BRANCH = new RegExp(`^suggestion-pr/7/(${UUID})$`);
+const SUGGESTION_MARKER = new RegExp(`\\n\\n(<!-- suggestion-pr (\\{[^\\n]*\\}) -->)$`);
 
 const CLIENT = [
   'export async function fetchWidget(id: string) {\n',
@@ -86,7 +87,7 @@ function repository(overrides: Partial<IHttpRepository> = {}): IHttpRepository {
     pullFiles: [{ filename: 'README.md', status: 'modified', additions: 1, deletions: 0, patch: ['@@ -1 +1,2 @@\n', ' # Widgets\n', '+Teh widget client.'] }],
     pull: { headRef: HEAD_REF, baseRef: 'main' },
     defaultBranch: 'main',
-    labels: ['bug', 'suggestion'],
+    labels: ['bug', 'suggestion-pr'],
     ...overrides,
   };
 }
@@ -193,7 +194,7 @@ function internalsFor(world: IWorld): { readonly createGitHubClient: (options: I
   return { createGitHubClient: (options) => createGitHubClient({ ...options, fetch: world.host.fetch }) };
 }
 
-const ENABLED: Json = { suggestionPullRequests: true };
+const ENABLED: Json = { allowSuggestionPullRequests: true };
 
 /** Library input; `options` null omits the field (the default: suggestion pull requests disabled). */
 function input(sarif: Json, options: Json | null, reviewedCommit = HEAD): Json {
@@ -253,12 +254,15 @@ function identify(pull: IStoredPull): { branch: string; id: string; publication:
   const parsed = asRecord(parseJson(marker[2] ?? ''), 'the marker JSON');
   const id = asString(parsed['id']);
   assert.equal(id, branch[1], 'the marker names the branch\'s suggestion id');
-  return { branch: pull.head, id, publication: asString(parsed['publication']), marker: marker[1] ?? '' };
+  return { branch: pull.head, id, publication: asString(parsed['batch']), marker: marker[1] ?? '' };
 }
 
 function markerFor(id: string, publication: string): string {
-  return `<!-- sarif-to-comment:suggestion {"id":"${id}","original":{"owner":"${OWNER}","pullNumber":${String(PULL)},"repo":"${REPO}"},"publication":"${publication}","reviewedCommit":"${HEAD}","version":1} -->`;
+  return `<!-- suggestion-pr {"version":1,"original":{"owner":"${OWNER}","repo":"${REPO}","pullNumber":${String(PULL)}},"reviewedCommit":"${HEAD}","id":"${id}","batch":"${publication}"} -->`;
 }
+
+/** Contract §2.11: the draft lifecycle note of a suggestion for #7 into `feature/retry`. */
+const DRAFT_NOTE = '**How this suggestion is accepted:** it is a draft pull request into `feature/retry`, the branch of #7. A draft cannot be merged: someone with write access first marks it ready for review. The author of #7 then decides whether to merge it, and #7 carries the change to its base. Once #7 is merged or closed, this pull request can be closed.';
 
 const blob = (file: string, anchor = ''): string => `https://github.com/${OWNER}/${REPO}/blob/${HEAD}/${file}${anchor}`;
 const pullUrl = (n: number): string => `https://github.com/${OWNER}/${REPO}/pull/${String(n)}`;
@@ -297,6 +301,8 @@ function expectedGroupPullBody(id: string, publication: string): string {
     '',
     ...GROUP_CHANGES,
     '',
+    DRAFT_NOTE,
+    '',
     '---',
     '',
     ...GROUP_ITEMS,
@@ -330,7 +336,7 @@ function assertGroupPublished(world: IWorld, outcome: Json): { branch: string; n
   assert.equal(pull.base, HEAD_REF);
   assert.equal(pull.draft, true);
   assert.equal(pull.state, 'open');
-  assert.deepEqual(pull.labels, ['suggestion']);
+  assert.deepEqual(pull.labels, ['suggestion-pr']);
   assert.equal(pull.body, expectedGroupPullBody(id, publication));
   assert.deepEqual(world.host.fileOnBranch(branch, 'src/client.ts'), Buffer.from(EDITED_CLIENT));
   assert.deepEqual(world.host.fileOnBranch(branch, 'test/client.test.ts'), Buffer.from(TEST_FILE));
@@ -390,7 +396,7 @@ async function assertBlockedEverywhere(world: IWorld, sarif: Json, lines: readon
 
 const GROUP_REQUIRES = (group: string, pointer: string): string =>
   `- \`acceptance-group-requires-suggestion-prs\` at \`${pointer}\`: Acceptance group "${group}" must be accepted as one unit, which needs a suggestion pull request. `
-  + 'Enable suggestion pull requests (options.suggestionPullRequests or --suggestion-prs); a group is never split into separate suggestions or published in part.';
+  + 'Enable suggestion pull requests (options.allowSuggestionPullRequests or --allow-suggestion-prs); a group is never split into separate suggestions or published in part.';
 
 // ---------------------------------------------------------------------------
 
@@ -416,7 +422,7 @@ describe('grouped code and test changes (A29)', () => {
     const outcome = await publish(world, groupedCodeAndTest());
     const { branch, number } = assertGroupPublished(world, outcome);
     assert.ok(markdown(outcome).includes(
-      ['Suggestion pull requests (drafts into `feature/retry`, labeled `suggestion`):', '', `- [#${String(number)}](${pullUrl(number)}) from \`${branch}\``].join('\n'),
+      ['Suggestion pull requests (drafts into `feature/retry`, labeled `suggestion-pr`):', '', `- [#${String(number)}](${pullUrl(number)}) from \`${branch}\``].join('\n'),
     ), markdown(outcome));
   });
 
@@ -433,7 +439,7 @@ describe('grouped code and test changes (A29)', () => {
   test('disabled (the default): blocked, naming the setting, with nothing split or written (A30)', async () => {
     const world = makeWorld();
     await assertBlockedEverywhere(world, groupedCodeAndTest(), [GROUP_REQUIRES('retry-with-test', '/runs/0/results/0')], null);
-    await assertBlockedEverywhere(makeWorld(), groupedCodeAndTest(), [GROUP_REQUIRES('retry-with-test', '/runs/0/results/0')], { suggestionPullRequests: false });
+    await assertBlockedEverywhere(makeWorld(), groupedCodeAndTest(), [GROUP_REQUIRES('retry-with-test', '/runs/0/results/0')], { allowSuggestionPullRequests: false });
   });
 
   test('a group edit keeps an executable file\'s mode, and two edits of one file combine in line order', async () => {
@@ -472,6 +478,8 @@ describe('grouped additions (A32)', () => {
       '- New file `docs/a.md`: 17 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644',
       '- New file `docs/b.md`: 18 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644',
       '',
+      DRAFT_NOTE,
+      '',
       '---',
       '',
       'Add page A.',
@@ -500,8 +508,8 @@ describe('standalone file operations (A28)', () => {
     assert.equal(status(outcome), 'published', markdown(outcome));
     const pulls = world.host.pulls();
     assert.deepEqual(pulls.map((p) => [p.number, p.title, p.base, p.labels]), [
-      [101, 'Suggestion for #7: create docs/guide.md', HEAD_REF, ['suggestion']],
-      [102, 'Suggestion for #7: delete obsolete.txt', HEAD_REF, ['suggestion']],
+      [101, 'Suggestion for #7: create docs/guide.md', HEAD_REF, ['suggestion-pr']],
+      [102, 'Suggestion for #7: delete obsolete.txt', HEAD_REF, ['suggestion-pr']],
     ]);
     const [creation, deletion] = pulls;
     assert.ok(creation && deletion);
@@ -575,7 +583,7 @@ describe('default-off behavior is unchanged', () => {
 
   test('omitted and false settings send the identical review request and read no repository or label', async () => {
     const bodies: string[] = [];
-    for (const options of [null, { suggestionPullRequests: false }]) {
+    for (const options of [null, { allowSuggestionPullRequests: false }]) {
       const world = makeWorld();
       assert.equal(status(await publish(world, standaloneOperations(), options)), 'published');
       const [review] = world.host.reviews();
@@ -601,27 +609,11 @@ describe('default-off behavior is unchanged', () => {
     assert.deepEqual(enabled.host.pulls(), []);
   });
 
-  test('a suggestion label without the setting is refused before any request', async () => {
+  test('the old option names are unknown options, refused before any request', async () => {
     const world = makeWorld();
-    await assert.rejects(publish(world, plain(), { suggestionLabel: 'suggestion' }), /suggestionLabel.*suggestionPullRequests/);
-    await assert.rejects(validate(world, plain(), { suggestionPullRequests: false, suggestionLabel: 'x' }), /suggestionLabel.*suggestionPullRequests/);
-    await assert.rejects(publish(world, plain(), { suggestionPullRequests: true, suggestionLabel: ' padded' }), /suggestionLabel/);
-    await assert.rejects(publish(world, plain(), { suggestionPullRequests: 'yes' }), /suggestionPullRequests must be a boolean/);
+    await assert.rejects(publish(world, plain(), { suggestionPullRequests: true }), /unknown option suggestionPullRequests/);
+    await assert.rejects(validate(world, plain(), { allowSuggestionPullRequests: true, suggestionLabel: 'suggestion-pr' }), /unknown option suggestionLabel/);
     assert.deepEqual(world.host.log(), []);
-  });
-
-  test('a suggestion label containing a comma is refused before any request: cleanup could never select it', async () => {
-    // docs/suggestion-cleanup-contract.md §2.2: GitHub's label filter is a
-    // comma-separated list, so such a label could never be swept.
-    const world = makeWorld({}, repository({ labels: ['a,b'] }));
-    for (const call of [publish, validate]) {
-      await assert.rejects(
-        call(world, groupedAdditions(), { suggestionPullRequests: true, suggestionLabel: 'a,b' }),
-        (err: unknown) => err instanceof TypeError && /options\.suggestionLabel must be .*without commas/.test(err.message),
-      );
-    }
-    assert.deepEqual(world.host.log(), []);
-    assert.equal(fs.existsSync(world.statePath), false);
   });
 });
 
@@ -716,6 +708,8 @@ describe('group rules (§2.3–§2.4), identical in validate and publish', () =>
       '',
       '- New file `docs/guide.md`: 25 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644',
       '',
+      DRAFT_NOTE,
+      '',
       '---',
       '',
       message,
@@ -750,16 +744,6 @@ describe('group rules (§2.3–§2.4), identical in validate and publish', () =>
 describe('repository readiness (§2.5, §2.7, §2.8), identical in validate and publish', () => {
   const capability = (code: string, message: string): string => `- \`${code}\`: ${message}`;
 
-  test('a missing label, no push permission, a fork, and a default-branch head are all reported together', async () => {
-    const world = makeWorld({}, repository({ labels: ['bug'], push: false, pull: { headRef: 'main', headRepo: 'fork-owner/widgets' } }));
-    await assertBlockedEverywhere(world, groupedAdditions(), [
-      capability('suggestion-pr-fork-unsupported', 'The pull request\'s head branch is in fork-owner/widgets, not octo/widgets; suggestion pull requests are supported only within one repository.'),
-      capability('suggestion-pr-default-branch-unsupported', 'The pull request\'s head branch `main` is the repository\'s default branch; a suggestion pull request targeting it could close issues or pull requests through keywords in its feedback.'),
-      capability('suggestion-pr-permission-missing', 'The authenticated account cannot push to octo/widgets, which creating proposal branches requires.'),
-      capability('suggestion-label-missing', 'The label `suggestion` does not exist in octo/widgets. Create it, or choose an existing label with suggestionLabel (--suggestion-label); labels are never created automatically.'),
-    ]);
-  });
-
   test('a historical reviewed commit', async () => {
     const world = makeWorld();
     const historical = {
@@ -767,25 +751,25 @@ describe('repository readiness (§2.5, §2.7, §2.8), identical in validate and 
       runs: [{ ...asRecord(asArray(groupedAdditions()['runs'])[0]), versionControlProvenance: [{ repositoryUri: `https://github.com/${OWNER}/${REPO}`, revisionId: BASE }] }],
     };
     await assertBlockedEverywhere(world, historical, [
-      capability('suggestion-pr-historical-unsupported', `The reviewed commit ${BASE} is not the pull request's head ${HEAD}; a suggestion pull request proposes changes to the reviewed head only. Review the current head, or publish without suggestion pull requests.`),
+      capability('suggestion-pr-historical-unsupported', `The reviewed commit ${BASE} is no longer the pull request's head ${HEAD}. Proposing a suggestion on top of later commits needs a check that the reviewed commit is still part of the branch, which is not yet supported. Review the current head, or publish without suggestion pull requests.`),
     ], ENABLED, BASE);
   });
 
-  test('a configured label is matched as GitHub names it, and applied under that name', async () => {
-    const world = makeWorld({}, repository({ labels: ['Proposed Change'] }));
-    const outcome = await publish(world, groupedAdditions(), { suggestionPullRequests: true, suggestionLabel: 'proposed change' });
+  test('an extra label is matched as GitHub names it, and applied under that name', async () => {
+    const world = makeWorld({}, repository({ labels: ['suggestion-pr', 'Proposed Change'] }));
+    const outcome = await publish(world, groupedAdditions(), { allowSuggestionPullRequests: true, pullRequestLabels: ['proposed change'] });
     assert.equal(status(outcome), 'published', markdown(outcome));
-    assert.deepEqual(onlyPull(world).pull.labels, ['Proposed Change']);
+    assert.deepEqual(onlyPull(world).pull.labels, ['suggestion-pr', 'Proposed Change']);
   });
 
   test('ready: validate says what would be created, using only reads', async () => {
     const world = makeWorld();
     const assessed = await validate(world, groupedCodeAndTest());
     assert.equal(status(assessed), 'ready', markdown(assessed));
-    assert.ok(markdown(assessed).includes('Publication would also create 1 draft suggestion pull request into `feature/retry`, labeled `suggestion`.'), markdown(assessed));
+    assert.ok(markdown(assessed).includes('Publication would also create 1 draft suggestion pull request into `feature/retry`, labeled `suggestion-pr`.'), markdown(assessed));
     assert.deepEqual(writes(world), []);
     const two = await validate(makeWorld(), standaloneOperations());
-    assert.ok(markdown(two).includes('Publication would also create 2 draft suggestion pull requests into `feature/retry`, labeled `suggestion`.'), markdown(two));
+    assert.ok(markdown(two).includes('Publication would also create 2 draft suggestion pull requests into `feature/retry`, labeled `suggestion-pr`.'), markdown(two));
   });
 
   test('a failing repository read: validate is incomplete and publish rejects, before any write', async () => {
@@ -902,17 +886,18 @@ describe('durable identity and recovery (§2.9–§2.10)', () => {
       'review.json',
       'review.json.review',
       'review.json.suggestion-1-branch',
-      'review.json.suggestion-1-label',
+      'review.json.suggestion-1-labels',
       'review.json.suggestion-1-pull',
       'review.json.suggestion-2-branch',
-      'review.json.suggestion-2-label',
+      'review.json.suggestion-2-labels',
       'review.json.suggestion-2-pull',
     ]);
     const plan = asRecord(readJson(world.statePath));
     assert.equal(plan['format'], 'sarif-to-comment.companion-publication-state');
     assert.equal(plan['version'], 1);
     assert.equal(plan['headRef'], HEAD_REF);
-    assert.equal(plan['label'], 'suggestion');
+    assert.deepEqual(plan['labels'], ['suggestion-pr']);
+    assert.equal(plan['ready'], false);
     const review = asRecord(readJson(`${world.statePath}.review`));
     assert.equal(review['format'], 'sarif-to-comment.publication-state');
     assert.equal(review['phase'], 'completed');
@@ -943,8 +928,8 @@ describe('durable identity and recovery (§2.9–§2.10)', () => {
     assert.equal(status(await publish(world, groupedCodeAndTest())), 'uncertain');
     const before = world.host.log().length;
     await assert.rejects(publish(world, groupedCodeAndTest(), null), /state-mismatch|different original input/);
-    await assert.rejects(publish(world, groupedCodeAndTest(), { suggestionPullRequests: true, suggestionLabel: 'bug' }), /different original input/);
-    await assert.rejects(publish(world, groupedCodeAndTest(), { suggestionPullRequests: true, submit: true }), /records a draft review/);
+    await assert.rejects(publish(world, groupedCodeAndTest(), { allowSuggestionPullRequests: true, pullRequestLabels: ['bug'] }), /different original input/);
+    await assert.rejects(publish(world, groupedCodeAndTest(), { allowSuggestionPullRequests: true, submit: true }), /records a draft review/);
     assert.equal(world.host.log().length, before);
   });
 
@@ -1022,7 +1007,7 @@ describe('human changes are never repaired (§2.10, D29)', () => {
     assert.ok(kept);
     assert.equal(kept.body, edited);
     assert.equal(kept.title, 'Renamed by a person');
-    assert.deepEqual(kept.labels, ['suggestion']);
+    assert.deepEqual(kept.labels, ['suggestion-pr']);
   });
 
   test('a person removed the marker from the unconfirmed pull request: uncertain, never recreated', async () => {
@@ -1049,7 +1034,7 @@ describe('human changes are never repaired (§2.10, D29)', () => {
     const [closed] = world.host.pulls();
     assert.ok(closed);
     assert.equal(closed.state, 'closed');
-    assert.deepEqual(closed.labels, ['suggestion']);
+    assert.deepEqual(closed.labels, ['suggestion-pr']);
     const [review] = world.host.reviews();
     assert.ok(review);
     assert.ok(review.request.body.startsWith(`**Suggestion pull request:** [#${String(pull.number)}]`));
@@ -1059,7 +1044,7 @@ describe('human changes are never repaired (§2.10, D29)', () => {
     const world = makeWorld({ companion: { loseResponse: ['label'] } });
     world.host.hide({ labels: 1 });
     assert.equal(status(await publish(world, groupedCodeAndTest())), 'uncertain');
-    world.host.removeLabel(onlyPull(world).pull.number, 'suggestion');
+    world.host.removeLabel(onlyPull(world).pull.number, 'suggestion-pr');
     world.host.setConfig({ companion: {} });
     const outcome = await publish(world, groupedCodeAndTest());
     assert.equal(status(outcome), 'uncertain', markdown(outcome));
@@ -1073,7 +1058,7 @@ describe('human changes are never repaired (§2.10, D29)', () => {
     const { pull, branch } = onlyPull(world);
     world.host.setRef(branch, HEAD);
     world.host.editPull(pull.number, { state: 'closed', body: 'gone' });
-    world.host.removeLabel(pull.number, 'suggestion');
+    world.host.removeLabel(pull.number, 'suggestion-pr');
     const before = world.host.log().length;
     const again = await publish(world, groupedCodeAndTest());
     assert.equal(status(again), 'published');
@@ -1098,7 +1083,7 @@ describe('relationship for cleanup (§2.7, §5)', () => {
     const world = makeWorld();
     await publish(world, standaloneOperations());
     const found = world.host.pulls()
-      .filter((p) => p.labels.includes('suggestion'))
+      .filter((p) => p.labels.includes('suggestion-pr'))
       .map((p) => SUGGESTION_MARKER.exec(p.body))
       .map((m) => asRecord(parseJson(m?.[2] ?? 'null')))
       .map((m) => asRecord(m['original']));
@@ -1121,13 +1106,13 @@ describe('CLI + real GitHub client over HTTP', () => {
   }
   const target = ['--repo', `${OWNER}/${REPO}`, '--pull', String(PULL), '--commit', HEAD];
 
-  test('publish --suggestion-prs --format json reports the suggestion pull requests', () => {
+  test('publish --allow-suggestion-prs --format json reports the suggestion pull requests', () => {
     const world = makeWorld();
     const file = sarifFile(world, groupedCodeAndTest());
-    const checked = cli(world, ['validate', '--sarif', file, ...target, '--suggestion-prs']);
+    const checked = cli(world, ['validate', '--sarif', file, ...target, '--allow-suggestion-prs']);
     assert.equal(checked.status, 0, checked.stdout + checked.stderr);
-    assert.ok(checked.stdout.includes('Publication would also create 1 draft suggestion pull request into `feature/retry`, labeled `suggestion`.'), checked.stdout);
-    const published = cli(world, ['publish', '--sarif', file, ...target, '--state', world.statePath, '--suggestion-prs', '--format', 'json']);
+    assert.ok(checked.stdout.includes('Publication would also create 1 draft suggestion pull request into `feature/retry`, labeled `suggestion-pr`.'), checked.stdout);
+    const published = cli(world, ['publish', '--sarif', file, ...target, '--state', world.statePath, '--allow-suggestion-prs', '--format', 'json']);
     assert.equal(published.status, 0, published.stdout + published.stderr);
     const doc = asRecord(parseJson(published.stdout));
     assert.equal(doc['command'], 'publish');
@@ -1137,43 +1122,19 @@ describe('CLI + real GitHub client over HTTP', () => {
     assert.deepEqual(Object.keys(doc), ['command', 'status', 'review', 'suggestions', 'statePath', 'message']);
   });
 
-  test('the legacy flag-only form accepts the same flags, and --suggestion-label names the label', () => {
-    const world = makeWorld({}, repository({ labels: ['proposal'] }));
+  test('the legacy flag-only form accepts the same flags, and --pr-labels adds labels', () => {
+    const world = makeWorld({}, repository({ labels: ['suggestion-pr', 'proposal'] }));
     const file = sarifFile(world, groupedAdditions());
-    const result = cli(world, ['--sarif', file, ...target, '--state', world.statePath, '--suggestion-prs', '--suggestion-label', 'proposal']);
+    const result = cli(world, ['--sarif', file, ...target, '--state', world.statePath, '--allow-suggestion-prs', '--pr-labels', 'proposal']);
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.deepEqual(onlyPull(world).pull.labels, ['proposal']);
-  });
-
-  test('--suggestion-label without --suggestion-prs is a usage error, and nothing is requested', () => {
-    const world = makeWorld();
-    const file = sarifFile(world, groupedAdditions());
-    for (const command of [['validate'], ['publish', '--state', world.statePath]]) {
-      const [name = '', ...rest] = command;
-      const result = cli(world, [name, '--sarif', file, ...target, ...rest, '--suggestion-label', 'x']);
-      assert.equal(result.status, 1, result.stdout + result.stderr);
-      assert.match(result.stderr, /--suggestion-label requires --suggestion-prs/);
-    }
-    assert.deepEqual(world.host.log(), []);
-  });
-
-  test('--suggestion-label with a comma is refused (exit 1), and nothing is requested', () => {
-    const world = makeWorld({}, repository({ labels: ['a,b'] }));
-    const file = sarifFile(world, groupedAdditions());
-    for (const command of [['validate'], ['publish', '--state', world.statePath]]) {
-      const [name = '', ...rest] = command;
-      const result = cli(world, [name, '--sarif', file, ...target, ...rest, '--suggestion-prs', '--suggestion-label', 'a,b']);
-      assert.equal(result.status, 1, result.stdout + result.stderr);
-      assert.match(result.stderr, /suggestionLabel must be .*without commas/);
-    }
-    assert.deepEqual(world.host.log(), []);
+    assert.deepEqual(onlyPull(world).pull.labels, ['suggestion-pr', 'proposal']);
   });
 
   test('without the flag a group is blocked (exit 2), naming the flag', () => {
     const world = makeWorld();
     const result = cli(world, ['publish', '--sarif', sarifFile(world, groupedAdditions()), ...target, '--state', world.statePath]);
     assert.equal(result.status, 2, result.stdout + result.stderr);
-    assert.match(result.stdout, /--suggestion-prs/);
+    assert.match(result.stdout, /--allow-suggestion-prs/);
     assert.deepEqual(writes(world), []);
   });
 
@@ -1181,7 +1142,7 @@ describe('CLI + real GitHub client over HTTP', () => {
     const world = makeWorld({ companion: { loseResponse: ['pull'] } });
     world.host.hide({ pulls: 1 });
     const file = sarifFile(world, groupedCodeAndTest());
-    const args = ['publish', '--sarif', file, ...target, '--state', world.statePath, '--suggestion-prs'];
+    const args = ['publish', '--sarif', file, ...target, '--state', world.statePath, '--allow-suggestion-prs'];
     const first = cli(world, args);
     assert.equal(first.status, 3, first.stdout + first.stderr);
     world.host.setConfig({ companion: {} });

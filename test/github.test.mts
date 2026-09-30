@@ -887,7 +887,7 @@ describe('client construction', () => {
   test('the client exposes exactly the transport methods, fetchContext, the suggestion pull request transport and the cleanup transport', () => {
     const c = client(new FakeHost());
     assert.deepEqual(Object.keys(c).sort(), [
-      'addLabel',
+      'addLabels',
       'closePullRequest',
       'createBranch',
       'createProposalCommit',
@@ -904,6 +904,7 @@ describe('client construction', () => {
       'listOpenLabeledPullRequests',
       'listReviewComments',
       'listReviews',
+      'readDefaultBranchFile',
       'readSuggestionTarget',
     ]);
   });
