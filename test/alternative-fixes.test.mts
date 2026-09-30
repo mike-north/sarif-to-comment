@@ -1,0 +1,430 @@
+/**
+ * Contract tests for publishing a finding that offers alternative fixes, at
+ * the preparation boundary (src/prepare-review.cts), and for inspecting it.
+ *
+ * The owner's decision of September 29, 2026 (issue #30), which these tests
+ * restate:
+ * - When a SARIF result carries several entries in `fixes[]`, the first one
+ *   is the result's suggested change, presented exactly as a single fix is
+ *   (a native suggestion where eligible). The producer's order decides; the
+ *   tool makes no semantic judgment, so an ineligible first fix is never
+ *   replaced by an eligible later one.
+ * - Every further fix is listed in the same comment, alongside the finding's
+ *   prose, under "Alternatives to consider:", numbered (1), (2), … in the
+ *   producer's order. Each is shown in a fence one backtick longer than the
+ *   longest backtick run in its content (never shorter than three), and names
+ *   its file when that differs from the first fix's file.
+ * - Alternatives are never applied, unioned or grouped: they take no part in
+ *   the overlap and conflict checks that govern applied changes.
+ * - Alternatives count toward the comment size limit; if they do not fit, the
+ *   whole review is refused and nothing is truncated.
+ * - `inspect` still lists every fix.
+ *
+ * Every expected body below is written by hand from those rules and from the
+ * rendering grammar in the module documentation of src/prepare-review.cts
+ * (item, alternative). None is captured from the implementation. The
+ * whole-line ranges and replacement lines come from the SARIF region rules
+ * (a region with only startLine covers that line's text, not its newline).
+ *
+ * @see https://github.com/mike-north/sarif-to-comment/issues/30
+ * @see https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/sarif-v2.1.0-errata01-os-complete.html (3.27.30 fixes, 3.55 fix, 3.56 artifactChange, 3.57 replacement, 3.30 region)
+ * @see https://github.github.com/gfm/#fenced-code-blocks
+ * @see https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/reviewing-changes-in-pull-requests/incorporating-feedback-in-your-pull-request
+ */
+
+import * as assert from 'node:assert/strict';
+import { describe, test } from 'node:test';
+
+import { prepareReview } from '../dist/prepare-review.cjs';
+import type { IBlockedOutcome, IReadyOutcome, PrepareReviewOutcome } from '../dist/prepare-review.cjs';
+import { inspectSarif, renderInspectionText } from '../dist/sarif-inspection.cjs';
+
+const BASE = '1111111111111111111111111111111111111111';
+const R = '2222222222222222222222222222222222222222';
+const SEP = '\n\n---\n\n';
+const ATTRIBUTION = '<sub>— T</sub>';
+const POINTER = '/runs/0/results/0';
+
+/** The reviewed snapshot: the pull request changed line 2 of src/app.js; src/other.js is outside the diff. */
+const SNAPSHOT: Readonly<Record<string, string>> = {
+  'src/app.js': 'const a = 1;\nconst b = parseA(input);\nconst c = 3;\n',
+  'src/other.js': 'export const parse = parseA;\n',
+};
+const BASE_SNAPSHOT: Readonly<Record<string, string>> = {
+  'src/app.js': 'const a = 1;\nconst b = oldParse(input);\nconst c = 3;\n',
+  'src/other.js': 'export const parse = parseA;\n',
+};
+
+const CONTEXT = {
+  owner: 'acme',
+  repo: 'widgets',
+  pullNumber: 7,
+  reviewedCommit: R,
+  diff: {
+    baseCommit: BASE,
+    headCommit: R,
+    files: [{ path: 'src/app.js', patch: '@@ -1,3 +1,3 @@\n const a = 1;\n-const b = oldParse(input);\n+const b = parseA(input);\n const c = 3;' }],
+  },
+};
+
+function readSource(commit: string, filePath: string): Promise<string | null> {
+  const snapshot = commit === R ? SNAPSHOT : commit === BASE ? BASE_SNAPSHOT : undefined;
+  if (snapshot === undefined) return Promise.reject(new Error(`unknown commit ${commit}`));
+  return Promise.resolve(Object.hasOwn(snapshot, filePath) ? snapshot[filePath] ?? null : null);
+}
+
+function prepare(sarif: unknown, options?: object): Promise<PrepareReviewOutcome> {
+  return prepareReview({ sarif, context: CONTEXT, readSource, ...(options === undefined ? {} : { options }) });
+}
+
+// ---------------------------------------------------------------------------
+// SARIF authoring
+
+type Json = Record<string, unknown>;
+
+/** A fix replacing the text of one line (its newline is kept, SARIF 3.30.x: an omitted endColumn ends before it). */
+function lineFix(uri: string, line: number, text: string, description?: string): Json {
+  return {
+    ...(description === undefined ? {} : { description: { text: description } }),
+    artifactChanges: [{ artifactLocation: { uri }, replacements: [{ deletedRegion: { startLine: line }, insertedContent: { text } }] }],
+  };
+}
+
+/** A finding at one line of a file, carrying `fixes` in the producer's order. */
+function finding(fixes: readonly Json[], text = 'Parsing with parseA is slow.', uri = 'src/app.js', line = 2): Json {
+  return { message: { text }, locations: [{ physicalLocation: { artifactLocation: { uri }, region: { startLine: line } } }], fixes };
+}
+
+function log(results: readonly Json[]): Json {
+  return {
+    version: '2.1.0',
+    runs: [{
+      tool: { driver: { name: 'T' } },
+      columnKind: 'utf16CodeUnits',
+      versionControlProvenance: [{ repositoryUri: 'https://github.com/acme/widgets', revisionId: R }],
+      results,
+    }],
+  };
+}
+
+const PRIMARY = lineFix('src/app.js', 2, 'const b = parseB(input);', 'Use parseB.');
+const CACHED = lineFix('src/app.js', 2, 'const b = cachedParse(input);', 'Cache the parse.');
+const OTHER_FILE = lineFix('src/other.js', 1, 'export const parse = parseB;');
+
+// ---------------------------------------------------------------------------
+// Expected Markdown (the module's rendering grammar, written by hand)
+
+/** The native suggestion for PRIMARY: line 2 of src/app.js becomes its text. */
+const PRIMARY_SUGGESTION = ['```suggestion', 'const b = parseB(input);', '```'].join('\n');
+
+/** An item: the finding's message, its first fix's description, its alternatives, then its attribution. */
+function item(alternatives: readonly string[], message = 'Parsing with parseA is slow.', fixDescription: string | null = 'Use parseB.'): string {
+  const parts = [message];
+  if (fixDescription !== null) parts.push(`**Fix:** ${fixDescription}`);
+  if (alternatives.length > 0) parts.push('**Alternatives to consider:**', ...alternatives);
+  parts.push(ATTRIBUTION);
+  return parts.join('\n\n');
+}
+
+/** A comment carrying items and the native suggestion. */
+const suggestionComment = (...items: readonly string[]): string => `${items.join(SEP)}\n\n${PRIMARY_SUGGESTION}`;
+
+const CACHED_ALTERNATIVE = (n: number): string => [
+  `(${String(n)}) Cache the parse.`,
+  '',
+  'Replace line 2 with:',
+  '',
+  '```',
+  'const b = cachedParse(input);',
+  '```',
+].join('\n');
+
+const OTHER_FILE_ALTERNATIVE = (n: number): string => [
+  `(${String(n)}) Replace line 1 of \`src/other.js\` with:`,
+  '',
+  '```',
+  'export const parse = parseB;',
+  '```',
+].join('\n');
+
+function assertReady(outcome: PrepareReviewOutcome): asserts outcome is IReadyOutcome {
+  assert.equal(outcome.status, 'ready', outcome.markdown);
+}
+
+function assertBlocked(outcome: PrepareReviewOutcome, expected: readonly (readonly [code: string, pointer: string | undefined])[]): asserts outcome is IBlockedOutcome {
+  if (outcome.status !== 'blocked') throw new assert.AssertionError({ message: `expected blocked, got ready: ${JSON.stringify(outcome.review)}` });
+  assert.deepEqual(outcome.diagnostics.map((d) => [d.code, d.pointer]), expected.map(([code, pointer]) => [code, pointer]), outcome.markdown);
+  for (const d of outcome.diagnostics) assert.ok(outcome.markdown.includes(d.message), 'every problem is in the explanation');
+}
+
+/**
+ * An independent reading of one GFM fenced code block (GFM §4.5): the text
+ * after `opening`'s line, up to the first later line that is a backtick run at
+ * least as long as the opening fence with nothing else on it.
+ */
+function fencedBlockAfter(markdown: string, lead: string): { fence: string; content: string } {
+  const start = markdown.indexOf(`${lead}\n\n`);
+  assert.notEqual(start, -1, `the Markdown has "${lead}"`);
+  const lines = markdown.slice(start + lead.length + 2).split('\n');
+  const opening = /^(`{3,})$/.exec(lines[0] ?? '');
+  assert.ok(opening?.[1], 'a backtick fence opens right after the lead');
+  const fence = opening[1];
+  const close = lines.findIndex((line, i) => i > 0 && /^`+[ \t]*$/.test(line) && line.trim().length >= fence.length);
+  assert.ok(close > 0, 'the fence is closed');
+  return { fence, content: lines.slice(1, close).join('\n') };
+}
+
+// ---------------------------------------------------------------------------
+
+describe('the first fix is the suggested change; every further fix is listed as an alternative', () => {
+  test('two fixes: the first is the native suggestion, the second is listed as alternative (1)', async () => {
+    const outcome = await prepare(log([finding([PRIMARY, CACHED])]));
+    assertReady(outcome);
+    assert.equal(outcome.review.body, '');
+    assert.deepEqual(outcome.review.comments, [{ path: 'src/app.js', side: 'RIGHT', line: 2, body: suggestionComment(item([CACHED_ALTERNATIVE(1)])) }]);
+    const [evidence] = outcome.evidence;
+    assert.ok(evidence?.treatment === 'suggestion');
+    // The suggestion is the first fix's exact replacement, never the alternative's.
+    assert.deepEqual(evidence.replacement, {
+      startLine: 2, endLine: 2, originalText: 'const b = parseA(input);\n', replacementText: 'const b = parseB(input);\n',
+    });
+    assert.deepEqual(evidence.alternatives, [{
+      fix: 1,
+      path: 'src/app.js',
+      replacement: { startLine: 2, endLine: 2, originalText: 'const b = parseA(input);\n', replacementText: 'const b = cachedParse(input);\n' },
+    }]);
+  });
+
+  test('three fixes: the two alternatives are numbered in the producer\'s order, and the one on another file names it', async () => {
+    const outcome = await prepare(log([finding([PRIMARY, CACHED, OTHER_FILE])]));
+    assertReady(outcome);
+    assert.equal(outcome.review.comments.length, 1);
+    assert.equal(outcome.review.comments[0]?.body, suggestionComment(item([CACHED_ALTERNATIVE(1), OTHER_FILE_ALTERNATIVE(2)])));
+  });
+
+  test('the producer\'s order decides: reordering the fixes changes which one is suggested', async () => {
+    const outcome = await prepare(log([finding([CACHED, PRIMARY])]));
+    assertReady(outcome);
+    const body = [
+      'Parsing with parseA is slow.',
+      '',
+      '**Fix:** Cache the parse.',
+      '',
+      '**Alternatives to consider:**',
+      '',
+      '(1) Use parseB.',
+      '',
+      'Replace line 2 with:',
+      '',
+      '```',
+      'const b = parseB(input);',
+      '```',
+      '',
+      ATTRIBUTION,
+      '',
+      '```suggestion',
+      'const b = cachedParse(input);',
+      '```',
+    ].join('\n');
+    assert.equal(outcome.review.comments[0]?.body, body);
+  });
+
+  test('an alternative on a different file names its path; its lines are that file\'s lines at the reviewed commit', async () => {
+    const outcome = await prepare(log([finding([PRIMARY, OTHER_FILE])]));
+    assertReady(outcome);
+    assert.equal(outcome.review.comments[0]?.body, suggestionComment(item([OTHER_FILE_ALTERNATIVE(1)])));
+    const [evidence] = outcome.evidence;
+    assert.deepEqual(evidence?.alternatives, [{
+      fix: 1,
+      path: 'src/other.js',
+      replacement: { startLine: 1, endLine: 1, originalText: 'export const parse = parseA;\n', replacementText: 'export const parse = parseB;\n' },
+    }]);
+  });
+
+  test('an alternative whose content contains backtick runs is fenced one backtick longer than its longest run', async () => {
+    // Lines 2 becomes three lines; the longest backtick run inside is four.
+    const fenced = lineFix('src/app.js', 2, 'const b = md`\n````\n`;');
+    const outcome = await prepare(log([finding([PRIMARY, fenced])]));
+    assertReady(outcome);
+    const alternative = [
+      '(1) Replace line 2 with:',
+      '',
+      '`````',
+      'const b = md`',
+      '````',
+      '`;',
+      '`````',
+    ].join('\n');
+    const body = present(outcome.review.comments[0]?.body);
+    assert.equal(body, suggestionComment(item([alternative])));
+    // Independently: the block a GFM reader sees holds exactly the replacement lines.
+    assert.deepEqual(fencedBlockAfter(body, '(1) Replace line 2 with:'), { fence: '`````', content: 'const b = md`\n````\n`;' });
+  });
+
+  test('a triple-backtick run needs a four-backtick fence; content without backticks keeps the minimum of three', async () => {
+    const triple = lineFix('src/app.js', 2, 'const b = "```";');
+    const outcome = await prepare(log([finding([PRIMARY, triple, CACHED])]));
+    assertReady(outcome);
+    const body = present(outcome.review.comments[0]?.body);
+    assert.equal(body, suggestionComment(item([
+      ['(1) Replace line 2 with:', '', '````', 'const b = "```";', '````'].join('\n'),
+      CACHED_ALTERNATIVE(2),
+    ])));
+    assert.deepEqual(fencedBlockAfter(body, '(1) Replace line 2 with:'), { fence: '````', content: 'const b = "```";' });
+  });
+
+  test('an alternative that deletes lines says so, with no code block', async () => {
+    // Deleting line 2 with its newline: the region ends at line 3, column 1.
+    const deletion: Json = {
+      artifactChanges: [{ artifactLocation: { uri: 'src/app.js' }, replacements: [{ deletedRegion: { startLine: 2, startColumn: 1, endLine: 3, endColumn: 1 } }] }],
+    };
+    const outcome = await prepare(log([finding([PRIMARY, deletion])]));
+    assertReady(outcome);
+    assert.equal(outcome.review.comments[0]?.body, suggestionComment(item(['(1) Delete line 2.'])));
+  });
+
+  test('an alternative spanning several lines names the range', async () => {
+    const twoLines: Json = {
+      artifactChanges: [{ artifactLocation: { uri: 'src/app.js' }, replacements: [{
+        deletedRegion: { startLine: 2, startColumn: 11, endLine: 3, endColumn: 13 }, insertedContent: { text: 'parseAll(input);' },
+      }] }],
+    };
+    const outcome = await prepare(log([finding([PRIMARY, twoLines])]));
+    assertReady(outcome);
+    assert.equal(outcome.review.comments[0]?.body, suggestionComment(item([
+      ['(1) Replace lines 2-3 with:', '', '```', 'const b = parseAll(input);', '```'].join('\n'),
+    ])));
+  });
+
+  test('R8: findings sharing the same first fix share one suggestion, and each keeps its own alternatives', async () => {
+    const outcome = await prepare(log([
+      finding([PRIMARY, CACHED]),
+      finding([PRIMARY, OTHER_FILE], 'Also slow on large inputs.'),
+    ]));
+    assertReady(outcome);
+    assert.equal(outcome.review.comments.length, 1);
+    assert.equal(outcome.review.comments[0]?.body, suggestionComment(
+      item([CACHED_ALTERNATIVE(1)]),
+      item([OTHER_FILE_ALTERNATIVE(1)], 'Also slow on large inputs.'),
+    ));
+  });
+
+  test('alternatives are never applied: one overlapping another finding\'s suggestion does not conflict with it', async () => {
+    const lineThree = lineFix('src/app.js', 3, 'const c = 4;');
+    const outcome = await prepare(log([
+      finding([PRIMARY, lineThree]),
+      finding([lineFix('src/app.js', 3, 'const c = 5;')], 'Wrong constant.', 'src/app.js', 3),
+    ]));
+    assertReady(outcome);
+    assert.deepEqual(outcome.review.comments.map((c) => [c.path, c.line]), [['src/app.js', 2], ['src/app.js', 3]]);
+    assert.equal(outcome.review.comments[1]?.body, ['Wrong constant.', '', ATTRIBUTION, '', '```suggestion', 'const c = 5;', '```'].join('\n'));
+  });
+
+  test('a finding with one fix is rendered exactly as before: no alternatives heading', async () => {
+    const outcome = await prepare(log([finding([PRIMARY])]));
+    assertReady(outcome);
+    assert.equal(outcome.review.comments[0]?.body, suggestionComment(item([])));
+    assert.equal(outcome.evidence[0]?.alternatives, undefined);
+  });
+});
+
+describe('no semantic judgment: the first fix is presented as a single fix would be', () => {
+  test('an ineligible first fix blocks as it would alone; an eligible later fix is never promoted', async () => {
+    // src/other.js is outside the diff, so its first fix cannot be a native suggestion.
+    const outcome = await prepare(log([finding([OTHER_FILE, PRIMARY], 'Parse elsewhere.', 'src/other.js', 1)]));
+    assertBlocked(outcome, [['suggestion-not-inline', POINTER]]);
+  });
+
+  test('the first fix\'s own problems and every alternative\'s problems are all reported at once', async () => {
+    const outcome = await prepare(log([finding([
+      lineFix('src/app.js', 2, 'const b = "```";'),
+      lineFix('src/app.js', 40, 'x'),
+    ])]));
+    assertBlocked(outcome, [['suggestion-fence-unverified', POINTER], ['replacement-invalid', `${POINTER}/fixes/1`]]);
+  });
+});
+
+describe('an alternative that cannot be listed faithfully refuses the whole review, at its own pointer', () => {
+  const blocked = (name: string, alternative: Json, code: string, index = 1) => {
+    test(name, async () => {
+      const fixes = index === 1 ? [PRIMARY, alternative] : [PRIMARY, CACHED, alternative];
+      const outcome = await prepare(log([finding(fixes)]));
+      assertBlocked(outcome, [[code, `${POINTER}/fixes/${String(index)}`]]);
+    });
+  };
+
+  blocked('an alternative changing several files', {
+    artifactChanges: [
+      { artifactLocation: { uri: 'src/app.js' }, replacements: [{ deletedRegion: { startLine: 2 }, insertedContent: { text: 'x' } }] },
+      { artifactLocation: { uri: 'src/other.js' }, replacements: [{ deletedRegion: { startLine: 1 }, insertedContent: { text: 'y' } }] },
+    ],
+  }, 'fix-multiple-files-unsupported');
+  blocked('an alternative with several replacements', {
+    artifactChanges: [{ artifactLocation: { uri: 'src/app.js' }, replacements: [
+      { deletedRegion: { startLine: 1 }, insertedContent: { text: 'x' } },
+      { deletedRegion: { startLine: 3 }, insertedContent: { text: 'y' } },
+    ] }],
+  }, 'fix-multiple-replacements-unsupported');
+  blocked('an alternative inserting binary content', {
+    artifactChanges: [{ artifactLocation: { uri: 'src/app.js' }, replacements: [{ deletedRegion: { startLine: 2 }, insertedContent: { binary: 'AAAA' } }] }],
+  }, 'fix-binary-unsupported');
+  blocked('the third fix naming a line the reviewed file does not have', lineFix('src/app.js', 40, 'x'), 'replacement-invalid', 2);
+  blocked('an alternative on a file the reviewed commit does not have', lineFix('src/missing.js', 1, 'x'), 'source-file-missing');
+  blocked('an alternative whose content could open a suggestion block', lineFix('src/app.js', 2, 'const b = md`\n```suggestion\n`;'), 'alternative-suggestion-fence');
+  blocked('an alternative whose content hides a bidirectional override', lineFix('src/app.js', 2, 'const b = parseB(input); // ‮'), 'alternative-content-unrepresentable');
+  blocked('an alternative whose content has a carriage return that does not end a line', lineFix('src/app.js', 2, 'const b = 1;\rconst d = 2;'), 'alternative-content-unrepresentable');
+
+  test('the refusal names the alternative and what it would need', async () => {
+    const outcome = await prepare(log([finding([PRIMARY, lineFix('src/app.js', 2, 'const b = parseB(input); // ‮')])]));
+    assertBlocked(outcome, [['alternative-content-unrepresentable', `${POINTER}/fixes/1`]]);
+    assert.equal(outcome.diagnostics[0]?.message,
+      'Alternative fix (1) cannot be shown exactly: line 1 contains U+202E, which a code block does not show.');
+  });
+});
+
+describe('alternatives count toward the size limit; nothing is truncated', () => {
+  const sarif = log([finding([PRIMARY, CACHED])]);
+  const expected = suggestionComment(item([CACHED_ALTERNATIVE(1)]));
+  const withoutAlternatives = suggestionComment(item([]));
+
+  test('a comment exactly at the limit, alternatives included, is ready', async () => {
+    const outcome = await prepare(sarif, { maxCommentBodyChars: expected.length });
+    assertReady(outcome);
+    assert.equal(outcome.review.comments[0]?.body, expected);
+  });
+
+  test('one character over the limit refuses the whole review, although the finding alone would fit', async () => {
+    const limit = expected.length - 1;
+    assert.ok(withoutAlternatives.length <= limit, 'only the alternatives take the comment over the limit');
+    assertReady(await prepare(log([finding([PRIMARY])]), { maxCommentBodyChars: limit }));
+    const outcome = await prepare(sarif, { maxCommentBodyChars: limit });
+    assertBlocked(outcome, [['comment-too-large', undefined]]);
+    assert.ok(outcome.markdown.includes(`Inline comment 0 is ${String(expected.length)} characters; the limit is ${String(limit)}.`), outcome.markdown);
+  });
+});
+
+describe('inspect lists every fix of a finding with alternatives', () => {
+  test('the view and the text list all three fixes, in order', () => {
+    const outcome = inspectSarif(log([finding([PRIMARY, CACHED, OTHER_FILE])]));
+    if (outcome.status !== 'inspected') throw new assert.AssertionError({ message: `SARIF refused: ${outcome.markdown}` });
+    const { view } = outcome;
+    assert.equal(view.summary.fixes, 3);
+    assert.deepEqual(view.findings[0]?.fixes.map((f) => [f.ref, f.description, f.changes.map((c) => c.path)]), [
+      [`${POINTER}/fixes/0`, 'Use parseB.', ['src/app.js']],
+      [`${POINTER}/fixes/1`, 'Cache the parse.', ['src/app.js']],
+      [`${POINTER}/fixes/2`, undefined, ['src/other.js']],
+    ]);
+    const text = renderInspectionText(view);
+    for (const line of [
+      `Fix 1 of 3 (${POINTER}/fixes/0): Use parseB.`,
+      `Fix 2 of 3 (${POINTER}/fixes/1): Cache the parse.`,
+      `Fix 3 of 3 (${POINTER}/fixes/2)`,
+    ]) assert.ok(text.split('\n').includes(line), `inspection shows "${line}":\n${text}`);
+  });
+});
+
+/** A value the preceding assertions establish is present. */
+function present<T>(value: T | undefined): T {
+  assert.ok(value !== undefined);
+  return value;
+}

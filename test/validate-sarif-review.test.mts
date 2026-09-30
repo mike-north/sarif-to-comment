@@ -100,6 +100,23 @@ const FIXED = sarifWith([
   },
 ]);
 
+/** A fix replacing the text of one line of src/app.js (its newline is kept). */
+function lineFix(line: number, text: string, uri = 'src/app.js'): Record<string, unknown> {
+  return { artifactChanges: [{ artifactLocation: { uri }, replacements: [{ deletedRegion: { startLine: line }, insertedContent: { text } }] }] };
+}
+
+/**
+ * FIXED's finding with further fixes after its own. The first fix stays the
+ * suggestion; every further fix is listed with the finding as an alternative
+ * (owner decision on issue #30), and is never applied.
+ */
+function withFurtherFixes(...further: readonly Record<string, unknown>[]): Record<string, unknown> {
+  const sarif = structuredClone(FIXED);
+  const result = asRecord(asArray(asRecord(asArray(sarif['runs'], 'runs')[0], 'run 0')['results'], 'results')[0], 'result 0');
+  result['fixes'] = [...asArray(result['fixes'], 'fixes'), ...further];
+  return sarif;
+}
+
 /** A document case whose verdict follows from the specification. */
 interface IDocumentCase {
   readonly name: string;
@@ -117,6 +134,22 @@ const DOCUMENT_CASES: readonly IDocumentCase[] = [
   { name: 'a fix on an in-diff line of the diff head', sarif: FIXED, expected: 'ready' },
   // R3, D15: structural validation with the official schema (a run requires a tool).
   { name: 'schema-invalid SARIF', sarif: INVALID, expected: 'blocked', mentions: /schema/i },
+  // Issue #30: the first fix is the suggestion and the others are listed as alternatives, so the review is not refused.
+  { name: 'a finding offering alternative fixes', sarif: withFurtherFixes(lineFix(4, 'const MAX = 200;'), lineFix(6, 'module.exports = { LIMIT };')), expected: 'ready' },
+  // Issue #30: an alternative is listed only when it makes one replacement in one file; it is refused at its own pointer.
+  {
+    name: 'an alternative fix changing several files',
+    sarif: withFurtherFixes({ artifactChanges: [...asArray(lineFix(4, 'const MAX = 200;')['artifactChanges'], 'changes'), ...asArray(lineFix(1, 'x', 'src/other.js')['artifactChanges'], 'changes')] }),
+    expected: 'blocked',
+    pointer: '/runs/0/results/0/fixes/1',
+  },
+  // Issue #30 and S5: alternatives count toward the 60,000-character comment limit; nothing is truncated.
+  {
+    name: 'alternative fixes that take the comment over the 60,000-character limit',
+    sarif: withFurtherFixes(lineFix(4, `const MAX = '${'x'.repeat(60_000)}';`)),
+    expected: 'blocked',
+    mentions: /the limit is 60000/,
+  },
   // R11, D11, D12: an explicit hold blocks the whole review by default ...
   { name: 'an approval hold', sarif: HELD, expected: 'blocked', pointer: '/runs/0/results/0' },
   // ... and the explicit override bypasses only the hold.
