@@ -39,7 +39,7 @@ These documents are included in the package. The links open them on unpkg (for t
 
 After installation, the same files are in `node_modules/sarif-to-comment/docs/` and `node_modules/sarif-to-comment/CHANGELOG.md`.
 
-The source repository also keeps unpackaged project records. `docs/status.md` (*Current status and reconciliation*) lists what each release contains, what is merged but not yet released, which contracts await acceptance, the open work, and which older plans and specifications are historical records rather than current status.
+The source repository also keeps unpackaged project records. `docs/status.md` (*Current status and reconciliation*) lists what each release contains, what is merged but not yet released, which contracts the owner has accepted and which decisions still await the owner, the open work, and which older plans and specifications are historical records rather than current status. `docs/evidence-policy.md` explains how recorded evidence is kept.
 
 ## Installation
 
