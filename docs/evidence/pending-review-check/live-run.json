@@ -1,0 +1,100 @@
+{
+  "date": "2026-09-29",
+  "sourceCommit": "baf95d39f83081a10ed4ff8cb1c31a85f3476b0f",
+  "package": {
+    "name": "sarif-to-comment",
+    "version": "0.2.1",
+    "tarballSha256": "aadb75ca02f388c57d27f8e4bac31fc580e84b60a03106a88853240a875300cb",
+    "installed": "npm install of the packed tarball into a clean consumer; the linked sarif-to-comment executable and import from sarif-to-comment"
+  },
+  "repository": "mike-north/doc-linter",
+  "sarif": "probe.sarif.json (one general finding, no location)",
+  "credential": "the maintainer account through gh auth token, inline; never printed",
+  "runs": [
+    {
+      "pull": 33,
+      "commit": "05f323760807c1c30aa7e9efa280d12b8717d7f3",
+      "surface": "cli",
+      "args": [
+        "validate",
+        "--format",
+        "json"
+      ],
+      "exit": 2,
+      "status": "blocked",
+      "output": "pr33-validate.json"
+    },
+    {
+      "pull": 33,
+      "commit": "05f323760807c1c30aa7e9efa280d12b8717d7f3",
+      "surface": "cli",
+      "args": [
+        "validate"
+      ],
+      "exit": 2,
+      "status": "blocked",
+      "output": "pr33-validate.txt"
+    },
+    {
+      "pull": 33,
+      "commit": "05f323760807c1c30aa7e9efa280d12b8717d7f3",
+      "surface": "cli",
+      "args": [
+        "validate",
+        "--submit",
+        "--format",
+        "json"
+      ],
+      "exit": 2,
+      "status": "blocked",
+      "output": "pr33-validate-submit.json"
+    },
+    {
+      "pull": 33,
+      "commit": "05f323760807c1c30aa7e9efa280d12b8717d7f3",
+      "surface": "library",
+      "status": "blocked",
+      "output": "pr33-library.json"
+    },
+    {
+      "pull": 34,
+      "commit": "05f323760807c1c30aa7e9efa280d12b8717d7f3",
+      "surface": "cli",
+      "args": [
+        "validate",
+        "--format",
+        "json"
+      ],
+      "exit": 0,
+      "status": "ready",
+      "output": "pr34-validate.json"
+    },
+    {
+      "pull": 34,
+      "commit": "05f323760807c1c30aa7e9efa280d12b8717d7f3",
+      "surface": "cli",
+      "args": [
+        "validate"
+      ],
+      "exit": 0,
+      "status": "ready",
+      "output": "pr34-validate.txt"
+    },
+    {
+      "pull": 34,
+      "commit": "05f323760807c1c30aa7e9efa280d12b8717d7f3",
+      "surface": "library",
+      "status": "ready",
+      "output": "pr34-library.json"
+    }
+  ],
+  "namedReview": {
+    "rest": {
+      "id": 5348454897,
+      "url": "https://github.com/mike-north/doc-linter/pull/33#pullrequestreview-5348454897"
+    },
+    "graphqlNodeId": "PRR_kwDOUuyy7s8AAAABPsrx8Q",
+    "nodeIdDecoding": "base64url payload 93 00 ce52ecb2ee cf000000013ecaf1f1: a MessagePack array [0, repository id, review id]; the last element is 0x13ecaf1f1 = 5348454897"
+  },
+  "reviewsUnchanged": "reviews-before-after.json: the reviews of #33 and #34 read with gh pr view before and after the runs are identical"
+}
