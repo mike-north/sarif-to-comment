@@ -56,7 +56,13 @@
  *   (src/github.cts's client).
  * continueCompanionPublication(identity, internals?) -> Promise<Outcome>
  *   For an existing plan: identity mismatches are refused locally
- *   (PublicationStateError 'state-mismatch') before any request.
+ *   (PublicationStateError 'state-mismatch') before any request. When a
+ *   suggestion's steps are not all complete, the pull request's head is read
+ *   (read-only) and compared with the plan's base (reappliedOnto, else the
+ *   reviewed commit): a base that is no longer part of the branch is
+ *   reported as `baseCheck` on the outcome, and nothing is re-decided
+ *   (docs/companion-suggestion-pr-contract.md §2.10). A failed read is
+ *   reported the same way, as unknown, never as a failure.
  * hasCompanionPlan(statePath, internals?) -> boolean
  *   Whether the file at the state path is a plan (never guessed further:
  *   anything else is for the version-1 reader to accept or refuse).
@@ -133,7 +139,21 @@ export interface ICompanionTransport {
   listBranchPullRequests(request: { readonly owner: string; readonly repo: string; readonly branch: string }): Promise<readonly IBranchPullRequest[]>;
   addLabels(request: { readonly owner: string; readonly repo: string; readonly number: number; readonly labels: readonly string[] }): Promise<void>;
   listLabels(request: { readonly owner: string; readonly repo: string; readonly number: number }): Promise<readonly string[]>;
+  /** Read only on a retry with work left, to say whether the branch changed since planning. */
+  readSuggestionTarget?(request: { readonly owner: string; readonly repo: string; readonly pullNumber: number }): Promise<{ readonly headSha: string }>;
+  /** Read only on a retry with work left, when the head is not the plan's base. */
+  compareCommits?(request: { readonly owner: string; readonly repo: string; readonly base: string; readonly head: string }): Promise<string>;
 }
+
+/**
+ * On a retry, whether the plan's base is still part of the pull request's
+ * branch: `changed` when it is not (its current head named), `unknown` when
+ * that could not be read. Absent when the base is still part of it, or when
+ * nothing is left to create.
+ */
+export type BaseCheck =
+  | { readonly kind: 'changed'; readonly base: string; readonly head: string }
+  | { readonly kind: 'unknown'; readonly base: string; readonly detail: string };
 
 /** The identity every call is checked against. */
 export interface ICompanionIdentity {
@@ -257,6 +277,7 @@ export interface ICompanionPublished {
   readonly ready: boolean;
   /** The commit the suggestions were re-applied onto, when they were. */
   readonly reappliedOnto?: string;
+  readonly baseCheck?: BaseCheck;
 }
 
 export interface ICompanionUncertain {
@@ -266,6 +287,7 @@ export interface ICompanionUncertain {
   readonly detail: string;
   readonly established: readonly IEstablished[];
   readonly cause?: unknown;
+  readonly baseCheck?: BaseCheck;
 }
 
 export interface ICompanionRejected {
@@ -276,6 +298,7 @@ export interface ICompanionRejected {
   readonly via: 'response' | 'record';
   readonly detail: string;
   readonly established: readonly IEstablished[];
+  readonly baseCheck?: BaseCheck;
 }
 
 export type CompanionOutcome = ICompanionPublished | ICompanionUncertain | ICompanionRejected;
@@ -554,7 +577,29 @@ export async function continueCompanionPublication(identity: ICompanionIdentity,
   const fs = internals.fs || nodeFs;
   const plan = readPlan(fs, identity.statePath);
   assertSameIdentity(plan, identity);
-  return drive(new Publication(fs, identity, plan, null));
+  const publication = new Publication(fs, identity, plan, null);
+  const baseCheck = publication.hasSuggestionWorkLeft() ? await checkPlannedBase(plan, identity.transport) : undefined;
+  const outcome = await drive(publication);
+  return baseCheck === undefined ? outcome : { ...outcome, baseCheck };
+}
+
+/**
+ * Whether the plan's base (reappliedOnto, else the reviewed commit) is still
+ * part of the pull request's branch; read-only, and never a reason to stop:
+ * a failed read is reported as unknown. Nothing is re-decided either way.
+ */
+async function checkPlannedBase(plan: IPlanRecord, transport: ICompanionTransport): Promise<BaseCheck | undefined> {
+  const base = plan.reappliedOnto ?? plan.reviewedCommit;
+  const { owner, repo, pullNumber } = plan.destination;
+  if (transport.readSuggestionTarget === undefined || transport.compareCommits === undefined) return undefined;
+  try {
+    const { headSha: head } = await transport.readSuggestionTarget({ owner, repo, pullNumber });
+    if (head === base) return undefined;
+    const comparison = await transport.compareCommits({ owner, repo, base, head });
+    return comparison === 'ahead' || comparison === 'identical' ? undefined : { kind: 'changed', base, head };
+  } catch (err) {
+    return { kind: 'unknown', base, detail: String(thrownMessage(err)) };
+  }
 }
 
 /** Refuses a plan for another destination, commit, mode or original input (the version-1 wording). */
@@ -640,6 +685,17 @@ class Publication {
 
   settle(index: number, record: StepRecord): void {
     replaceFileDurably(this.fs, stepPath(this.identity.statePath, index, record.step), serialize(record), 'step receipt');
+  }
+
+  /**
+   * Whether this call may still create something for a suggestion: some
+   * suggestion's steps are not all complete, and no step was refused (a
+   * recorded refusal ends the publication). Read from the local records only.
+   */
+  hasSuggestionWorkLeft(): boolean {
+    const steps: readonly StepName[] = ['branch', 'pull', 'labels'];
+    const refused = this.plan.suggestions.some((_, index) => steps.some((step) => this.readStep(index, step)?.phase === 'rejected'));
+    return !refused && this.plan.suggestions.some((_, index) => this.readStep<ILabelsStep>(index, 'labels')?.phase !== 'completed');
   }
 
   base(index: number): IStepBase {

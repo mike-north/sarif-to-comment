@@ -200,6 +200,8 @@ A call that meets an existing plan continues it: each completed step is reported
 
 Any unsettled outcome stops the publication as **uncertain**, naming the step, what is already established, and that a retry with the same state path only rechecks and never sends that step again. Absence is never treated as proof that nothing was created (delayed visibility), and the labels are never needed to locate a pull request.
 
+**The branch changed since planning.** A call that continues a plan in which some suggestion's steps are not all complete, and no step was refused, first reads the pull request's head (read-only) and compares it with the plan's base: `reappliedOnto`, otherwise the reviewed commit. When the base is no longer part of the branch (a force-push since the suggestions were planned), nothing is re-decided: the suggestion pull requests still to be created are created on the planned base, as planned. The outcome then says so, before the list of suggestion pull requests (or after the detail of an uncertain or refused outcome): ``**The branch of #7 changed since these suggestions were planned:** they are based on commit `B`, which is no longer part of it (its head is now `H`). The suggestion pull requests still to be created are created on that commit, as planned; nothing is re-decided.`` A failed read is not a reason to stop: the outcome says instead that whether the branch changed is not known, naming the read's failure. A branch that only moved forward from the base, or a plan with nothing left to create, gives no such paragraph, and a completed plan reads nothing. The review body is never changed for it (it is rendered from the plan).
+
 Before a pull request is created, the proposal branch is read once more. If it no longer points at the proposal commit, nothing is created and the outcome is uncertain (`branch-changed`): the branch is never recreated, reset or force-pushed.
 
 Exact outcomes for human changes (D29: none is repaired, restored or reconciled):
@@ -323,6 +325,7 @@ Still awaiting the owner:
 6. **Details of the configuration read** (§2.7): through Git objects, with a symbolic link, directory or submodule, and a file over 1,000,000 bytes, treated as invalid; unknown members ignored ([convention open questions](suggestion-pr-convention.md#10-open-questions)).
 7. **One request for all labels**, and one labels step and state file per suggestion (§2.9).
 8. **Details of re-application** (§2.5.1, §2.11): ranges compared at the same line numbers, never relocated; a deletion compared by Git blob and mode; the reason and presentation wording; the plan's version 2 with `reappliedOnto`; and counting only the suggestion pull requests that would be created against the limit of 10.
+9. **A branch rewritten again after planning** (§2.10): a retry keeps the plan (the remaining suggestion pull requests are still created on the planned base) and only warns in its outcome. Alternatives: stop the remaining steps, or re-plan them, which would break the rule that a retry never re-decides.
 
 ## 5. What cleanup (#6) can rely on
 
