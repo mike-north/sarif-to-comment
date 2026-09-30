@@ -191,10 +191,26 @@
  * Companion suggestion pull requests (docs/companion-suggestion-pr-contract.md)
  *
  *   readSuggestionTarget({ owner, repo, pullNumber })
- *       -> { headSha, headRef, headRepository, baseRepository, defaultBranch,
- *            canPush }
+ *       -> { headSha, headRef, headRepository, baseRef, baseRepository,
+ *            defaultBranch, canPush }
  *     GET pull, GET repository. headRepository is null when the head
  *     repository was deleted; canPush is the account role's permissions.push.
+ *   readDefaultBranchFile({ owner, repo, path, branch? })
+ *       -> { branch, commit, content }
+ *     The file at `path` on the current commit of the repository's default
+ *     branch (docs/suggestion-pr-convention.md §4): GET repository for the
+ *     default branch unless the caller already read it (`branch`), GET
+ *     git/ref/heads/{branch} for its commit (404 is
+ *     'malformed-response': a default branch always has one), then the same
+ *     verified Git-object reads as readSource, never the Contents API.
+ *     content: { kind: 'absent' } when a complete listing shows no such path;
+ *     { kind: 'not-a-file', entry: 'a directory' | 'a symbolic link' |
+ *     'a submodule', path } for anything at or above the path that is not a
+ *     directory on the way or a regular file at the end (never followed),
+ *     `path` naming where it stands;
+ *     { kind: 'too-large', size } beyond maxSourceBytes (never downloaded);
+ *     { kind: 'file', bytes } with the exact verified bytes, not decoded.
+ *     Any failed read is an error, never absence.
  *   findLabel({ owner, repo, name }) -> the label's name as GitHub reports
  *     it, or null for 404 (GET labels/{name}, name percent-encoded)
  *   createProposalCommit({ owner, repo, parent, message, changes })
@@ -216,18 +232,18 @@
  *     GET git/ref/heads/{branch}, each segment percent-encoded.
  *   createBranch({ owner, repo, branch, commit })
  *     POST git/refs { ref: 'refs/heads/' + branch, sha }. Never force.
- *   createPullRequest({ owner, repo, title, head, base, body })
+ *   createPullRequest({ owner, repo, title, head, base, body, draft })
  *       -> { number, htmlUrl }
- *     POST pulls { title, head, base, body, draft: true }.
+ *     POST pulls { title, head, base, body, draft }; draft is a boolean.
  *   listBranchPullRequests({ owner, repo, branch })
  *       -> [{ number, htmlUrl, body, authorId, headRef, headRepository, baseRef }]
  *     Every page of GET pulls?head={owner}:{branch}&state=all.
- *   addLabel({ owner, repo, number, label })
- *     POST issues/{number}/labels { labels: [label] }.
+ *   addLabels({ owner, repo, number, labels })
+ *     POST issues/{number}/labels { labels } (a non-empty list of names).
  *   listLabels({ owner, repo, number }) -> names
  *     Every page of GET issues/{number}/labels.
  *   The three writes a person can see (createBranch, createPullRequest,
- *   addLabel) classify their answers like create-review: hostRejected only
+ *   addLabels) classify their answers like create-review: hostRejected only
  *   for the understood refusal statuses.
  *
  * ---------------------------------------------------------------------------
@@ -290,6 +306,8 @@
  */
 
 import * as crypto from 'node:crypto';
+
+import type { RepositoryFileContent } from './suggestion-pr-convention.cjs';
 
 // ---------------------------------------------------------------------------
 // Domain types
@@ -552,11 +570,22 @@ export interface ISuggestionTarget {
   readonly headRef: string;
   /** The head branch's repository (`owner/repo`), or null when it was deleted. */
   readonly headRepository: string | null;
+  /** The pull request's base branch, which it merges into. */
+  readonly baseRef: string;
   /** The pull request's own repository (`owner/repo`). */
   readonly baseRepository: string;
   readonly defaultBranch: string;
   /** Whether the authenticated account's role allows pushing to the repository. */
   readonly canPush: boolean;
+}
+
+/** A file on the current commit of a repository's default branch (readDefaultBranchFile). */
+export interface IDefaultBranchFile {
+  /** The default branch's name. */
+  readonly branch: string;
+  /** The commit it pointed at when read. */
+  readonly commit: string;
+  readonly content: RepositoryFileContent;
 }
 
 /** One change of a proposal commit: exact new text for a created or edited file, or a deletion. */
@@ -655,6 +684,13 @@ export interface IGitHubClient {
   readonly fetchContext: (request: IFetchContextRequest) => Promise<IFetchedContext>;
   readonly readSuggestionTarget: (request: IPullRequestDestination) => Promise<ISuggestionTarget>;
   readonly findLabel: (request: { readonly owner: string; readonly repo: string; readonly name: string }) => Promise<string | null>;
+  readonly readDefaultBranchFile: (request: {
+    readonly owner: string;
+    readonly repo: string;
+    readonly path: string;
+    /** The default branch, when the caller has already read it from the repository. */
+    readonly branch?: string | undefined;
+  }) => Promise<IDefaultBranchFile>;
   readonly createProposalCommit: (request: {
     readonly owner: string;
     readonly repo: string;
@@ -671,9 +707,10 @@ export interface IGitHubClient {
     readonly head: string;
     readonly base: string;
     readonly body: string;
+    readonly draft: boolean;
   }) => Promise<ICreatedPullRequest>;
   readonly listBranchPullRequests: (request: { readonly owner: string; readonly repo: string; readonly branch: string }) => Promise<readonly IBranchPullRequest[]>;
-  readonly addLabel: (request: { readonly owner: string; readonly repo: string; readonly number: number; readonly label: string }) => Promise<void>;
+  readonly addLabels: (request: { readonly owner: string; readonly repo: string; readonly number: number; readonly labels: readonly string[] }) => Promise<void>;
   readonly listLabels: (request: { readonly owner: string; readonly repo: string; readonly number: number }) => Promise<readonly string[]>;
   readonly listOpenLabeledPullRequests: (request: { readonly owner: string; readonly repo: string; readonly label: string }) => Promise<readonly ILabeledPullRequest[]>;
   readonly getPullRequest: (request: IPullRequestDestination) => Promise<IPullRequestSnapshot>;
@@ -750,6 +787,11 @@ interface ITreeEntry {
   readonly sha: unknown;
   readonly size?: number | undefined;
 }
+
+/** Where a walk down a commit's trees ended: at the path's entry (or its absence), or at what it would read through. */
+type PathWalk =
+  | { readonly kind: 'entry'; readonly entry: ITreeEntry | null }
+  | { readonly kind: 'through'; readonly at: string; readonly entry: 'a symbolic link' | 'a submodule' };
 
 /** A pull request's pinned commits and changed-file count. */
 interface IPullSnapshot {
@@ -1732,21 +1774,33 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
    * symlink or submodule on the way is refused, never resolved.
    */
   async function entryAt(owner: string, repo: string, commit: unknown, filePath: string): Promise<ITreeEntry | null> {
+    const walked = await walkTo(owner, repo, commit, filePath);
+    if (walked.kind === 'through') {
+      throw new GitHubError('not-a-file', redact(`${walked.at} is ${walked.entry}; ${filePath} is not read through it.`));
+    }
+    return walked.entry;
+  }
+
+  /**
+   * The walk of entryAt: the entry at the path (null when a complete listing
+   * shows it absent, or a regular file stands on the way), or the symbolic
+   * link or submodule on the way that it would have to be read through.
+   */
+  async function walkTo(owner: string, repo: string, commit: unknown, filePath: string): Promise<PathWalk> {
     const segments = filePath.split('/');
     let treeSha = await commitTree(owner, repo, commit);
     for (const [i, segment] of segments.entries()) {
       const entry = (await treeEntries(owner, repo, treeSha)).get(segment);
-      if (entry === undefined) return null;
-      if (i === segments.length - 1) return entry;
+      if (entry === undefined) return { kind: 'entry', entry: null };
+      if (i === segments.length - 1) return { kind: 'entry', entry };
       if (entry.mode === TREE_MODE) {
         treeSha = entry.sha;
         continue;
       }
-      if (REGULAR_FILE_MODES.has(entry.mode)) return null;
-      const kind = entry.mode === SYMLINK_MODE ? 'a symbolic link' : 'a submodule';
-      throw new GitHubError('not-a-file', redact(`${segments.slice(0, i + 1).join('/')} is ${kind}; ${filePath} is not read through it.`));
+      if (REGULAR_FILE_MODES.has(entry.mode)) return { kind: 'entry', entry: null };
+      return { kind: 'through', at: segments.slice(0, i + 1).join('/'), entry: entry.mode === SYMLINK_MODE ? 'a symbolic link' : 'a submodule' };
     }
-    return null;
+    return { kind: 'entry', entry: null };
   }
 
   /**
@@ -1770,8 +1824,8 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
     return entry;
   }
 
-  /** Decodes one git blob answer, bound to the requested blob id. */
-  function decodeBlob(body: unknown, blobSha: unknown, expectedSize: number | undefined, filePath: string): string {
+  /** The exact bytes of one git blob answer, bound to the requested blob id. */
+  function blobBytes(body: unknown, blobSha: unknown, expectedSize: number | undefined, filePath: string): Buffer {
     if (!isPlainObject(body)) throw new GitHubError('malformed-response', 'The blob answer is not an object.');
     if (body['sha'] !== blobSha) throw identityError('blob', blobSha);
     if (body['encoding'] !== 'base64' || typeof body['content'] !== 'string' || !isSafeInteger(body['size'])) {
@@ -1795,6 +1849,12 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
     if (!sizeMatches || gitBlobSha(bytes) !== blobSha) {
       throw new GitHubError('blob-integrity', redact(`${filePath} content does not hash to the blob its tree names.`));
     }
+    return bytes;
+  }
+
+  /** Decodes one git blob answer as UTF-8 text, bound to the requested blob id. */
+  function decodeBlob(body: unknown, blobSha: unknown, expectedSize: number | undefined, filePath: string): string {
+    const bytes = blobBytes(body, blobSha, expectedSize, filePath);
     try {
       return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
     } catch (err) {
@@ -1986,6 +2046,7 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
       headSha: hostSha(optionalMember(pull, 'head', 'sha'), 'pull request head'),
       headRef: hostString(optionalMember(pull, 'head', 'ref'), 'pull request head branch'),
       headRepository: headRepository === null ? null : hostString(headRepository, 'pull request head repository'),
+      baseRef: hostString(optionalMember(pull, 'base', 'ref'), 'pull request base branch'),
       baseRepository: hostString(optionalMember(pull, 'base', 'repo', 'full_name'), 'pull request base repository'),
       defaultBranch: hostString(optionalMember(repository, 'default_branch'), 'repository default branch'),
       canPush: push === true,
@@ -1999,6 +2060,39 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
     if (response.status === 404) return null;
     if (!response.ok) throw await statusError(response, 'label request');
     return hostString(optionalMember(await jsonBody(response, 'label'), 'name'), 'label name');
+  }
+
+  /** How a tree entry that is not a regular file is named. */
+  function entryKind(mode: unknown): string {
+    if (mode === TREE_MODE) return 'a directory';
+    if (mode === SYMLINK_MODE) return 'a symbolic link';
+    return 'a submodule';
+  }
+
+  async function readDefaultBranchFile({
+    owner,
+    repo,
+    path: filePath,
+    branch: known,
+  }: Unchecked<'owner' | 'repo' | 'path' | 'branch'> = {}): Promise<IDefaultBranchFile> {
+    requireInput(isRepoName(owner) && isRepoName(repo), 'owner and repo must be GitHub names');
+    requireRepositoryPath(filePath);
+    requireInput(known === undefined || (typeof known === 'string' && known !== ''), 'branch must be a non-empty string when given');
+    const branch = typeof known === 'string'
+      ? known
+      : hostString(optionalMember((await restGet(`${API_ORIGIN}${repoPath(owner, repo)}`, 'repository')).body, 'default_branch'), 'repository default branch');
+    const commit = await getBranch({ owner, repo, branch });
+    if (commit === null) throw new GitHubError('malformed-response', redact(`The default branch ${branch} has no commit.`));
+    const walked = await walkTo(owner, repo, commit, filePath);
+    // A symbolic link or submodule on the way is never followed: what is
+    // there is not a file, which is the convention's problem to name.
+    if (walked.kind === 'through') return { branch, commit, content: { kind: 'not-a-file', entry: walked.entry, path: walked.at } };
+    const { entry } = walked;
+    if (entry === null) return { branch, commit, content: { kind: 'absent' } };
+    if (!REGULAR_FILE_MODES.has(entry.mode)) return { branch, commit, content: { kind: 'not-a-file', entry: entryKind(entry.mode), path: filePath } };
+    if (entry.size !== undefined && entry.size > limits.maxSourceBytes) return { branch, commit, content: { kind: 'too-large', size: entry.size } };
+    const { body } = await restGet(`${API_ORIGIN}${repoPath(owner, repo)}/git/blobs/${String(entry.sha)}`, 'blob request');
+    return { branch, commit, content: { kind: 'file', bytes: new Uint8Array(blobBytes(body, entry.sha, entry.size, filePath)) } };
   }
 
   /**
@@ -2104,12 +2198,14 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
     head,
     base,
     body,
-  }: Unchecked<'owner' | 'repo' | 'title' | 'head' | 'base' | 'body'> = {}): Promise<ICreatedPullRequest> {
+    draft,
+  }: Unchecked<'owner' | 'repo' | 'title' | 'head' | 'base' | 'body' | 'draft'> = {}): Promise<ICreatedPullRequest> {
     requireInput(isRepoName(owner) && isRepoName(repo), 'owner and repo must be GitHub names');
     for (const [name, value] of Object.entries({ title, head, base, body })) {
       requireInput(typeof value === 'string' && value.length > 0, `${name} must be a non-empty string`);
     }
-    const created = await restPost(`${API_ORIGIN}${repoPath(owner, repo)}/pulls`, { title, head, base, body, draft: true }, 'create-pull-request request', true);
+    requireInput(typeof draft === 'boolean', 'draft must be a boolean');
+    const created = await restPost(`${API_ORIGIN}${repoPath(owner, repo)}/pulls`, { title, head, base, body, draft }, 'create-pull-request request', true);
     const number = optionalMember(created, 'number');
     const htmlUrl = optionalMember(created, 'html_url');
     if (!isPositiveInteger(number) || typeof htmlUrl !== 'string') {
@@ -2137,11 +2233,14 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
     });
   }
 
-  async function addLabel({ owner, repo, number, label }: Unchecked<'owner' | 'repo' | 'number' | 'label'> = {}): Promise<void> {
+  async function addLabels({ owner, repo, number, labels }: Unchecked<'owner' | 'repo' | 'number' | 'labels'> = {}): Promise<void> {
     requireInput(isRepoName(owner) && isRepoName(repo), 'owner and repo must be GitHub names');
     requireInput(isPositiveInteger(number), 'number must be a positive integer');
-    requireInput(typeof label === 'string' && label.length > 0, 'label must be a non-empty string');
-    await restPost(`${API_ORIGIN}${repoPath(owner, repo)}/issues/${String(number)}/labels`, { labels: [label] }, 'add-label request', true);
+    requireInput(
+      isList(labels) && labels.length > 0 && labels.every((label) => typeof label === 'string' && label.length > 0),
+      'labels must be a non-empty list of non-empty names',
+    );
+    await restPost(`${API_ORIGIN}${repoPath(owner, repo)}/issues/${String(number)}/labels`, { labels: [...labels] }, 'add-labels request', true);
   }
 
   async function listLabels({ owner, repo, number }: Unchecked<'owner' | 'repo' | 'number'> = {}): Promise<readonly string[]> {
@@ -2331,12 +2430,13 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
     fetchContext,
     readSuggestionTarget,
     findLabel,
+    readDefaultBranchFile,
     createProposalCommit,
     getBranch,
     createBranch,
     createPullRequest,
     listBranchPullRequests,
-    addLabel,
+    addLabels,
     listLabels,
     listOpenLabeledPullRequests,
     getPullRequest,

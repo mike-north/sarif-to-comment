@@ -1,0 +1,61 @@
+{
+  "$schema": "https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Review agent"
+        }
+      },
+      "columnKind": "utf16CodeUnits",
+      "versionControlProvenance": [
+        {
+          "repositoryUri": "https://github.com/mike-north/doc-linter",
+          "revisionId": "37eaceec3431911c60692ff561d6c1afd91297fc"
+        }
+      ],
+      "results": [
+        {
+          "message": {
+            "text": "Add a guide for fixture page a."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "docs/experiments/sarif-issue27/a-guide.md"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "properties": {
+            "sarifToComment": {
+              "proposedFileChanges": [
+                {
+                  "operation": "create",
+                  "artifactIndex": 0,
+                  "fileMode": "100644"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "artifacts": [
+        {
+          "location": {
+            "uri": "docs/experiments/sarif-issue27/a-guide.md"
+          },
+          "contents": {
+            "text": "# Guide a\n\nHow to use the fixture page a.\n"
+          },
+          "encoding": "utf-8"
+        }
+      ]
+    }
+  ]
+}

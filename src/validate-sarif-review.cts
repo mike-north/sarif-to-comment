@@ -63,6 +63,7 @@ import {
   blockedReviewMarkdown,
   captureReviewInput,
   destinationLabel,
+  labelList,
   messageChain,
   prepareForDestination,
   redact,
@@ -200,8 +201,12 @@ function readyMarkdown(prepared: IDestinationReady, captured: ICapturedReview): 
   const as = captured.submit === true ? ' as a submitted comment review' : '';
   const count = prepared.suggestions?.companions.length ?? 0;
   const target = prepared.suggestionPullRequests;
+  const plural = count === 1 ? '' : 's';
+  const created = target?.ready === true
+    ? `${String(count)} suggestion pull request${plural}, ready for review, into`
+    : `${String(count)} draft suggestion pull request${plural} into`;
   const suggestions = count === 0 || target === undefined ? [] : [
-    `Publication would also create ${String(count)} draft suggestion pull request${count === 1 ? '' : 's'} into ${code(target.headRef)}, labeled ${code(target.label)}.`,
+    `Publication would also create ${created} ${code(target.headRef)}, labeled ${labelList(target.labels)}.`,
     '',
   ];
   return [
@@ -292,6 +297,7 @@ class OperationalFailures {
       },
       ...(client.readSuggestionTarget === undefined ? {} : { readSuggestionTarget: this.observeCall(client.readSuggestionTarget) }),
       ...(client.findLabel === undefined ? {} : { findLabel: this.observeCall(client.findLabel) }),
+      ...(client.readDefaultBranchFile === undefined ? {} : { readDefaultBranchFile: this.observeCall(client.readDefaultBranchFile) }),
     };
   }
 

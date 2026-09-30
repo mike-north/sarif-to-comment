@@ -1,0 +1,13 @@
+{
+  "command": "validate",
+  "status": "blocked",
+  "problems": [
+    {
+      "message": "Suggestion pull requests are not yet supported for a pull request into `sarif-issue5-20260929-base`, which is not the default branch `main` of mike-north/doc-linter: following a suggestion through a pull request that merges into another branch (for example one of a stack of pull requests, which GitHub retargets when the branch below it merges) is not built yet."
+    },
+    {
+      "message": "The label `suggestion-pr` does not exist in mike-north/doc-linter. It is the default suggestion label: create it, or name another existing label in `.github/suggestion-prs.json` on the default branch. Labels are never created automatically."
+    }
+  ],
+  "message": "## Review blocked\n\nNothing was published and no publication state was written.\n\n**Review blocked:** 2 problems must be resolved before publication; nothing was published.\n\n- `suggestion-pr-base-unsupported`: Suggestion pull requests are not yet supported for a pull request into `sarif-issue5-20260929-base`, which is not the default branch `main` of mike-north/doc-linter: following a suggestion through a pull request that merges into another branch (for example one of a stack of pull requests, which GitHub retargets when the branch below it merges) is not built yet.\n- `suggestion-label-missing`: The label `suggestion-pr` does not exist in mike-north/doc-linter. It is the default suggestion label: create it, or name another existing label in `.github/suggestion-prs.json` on the default branch. Labels are never created automatically."
+}

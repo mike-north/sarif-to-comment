@@ -16,6 +16,8 @@
  * @see https://docs.github.com/en/rest/pulls/pulls#list-pull-requests
  * @see https://docs.github.com/en/rest/issues/labels
  * @see https://docs.github.com/en/rest/repos/repos#get-a-repository
+ * @see https://docs.github.com/en/rest/git/blobs#get-a-blob
+ * @see https://docs.github.com/en/rest/git/trees#get-a-tree
  */
 
 import * as assert from 'node:assert/strict';
@@ -225,8 +227,8 @@ describe('createProposalCommit', () => {
 });
 
 describe('branches', () => {
-  const BRANCH = 'sarif-to-comment/suggestions/7/0f0e0d0c-0b0a-4908-8706-050403020100';
-  const REF_URL = `${REPO}/git/ref/heads/sarif-to-comment/suggestions/7/0f0e0d0c-0b0a-4908-8706-050403020100`;
+  const BRANCH = 'suggestion-pr/7/0f0e0d0c-0b0a-4908-8706-050403020100';
+  const REF_URL = `${REPO}/git/ref/heads/suggestion-pr/7/0f0e0d0c-0b0a-4908-8706-050403020100`;
 
   test('getBranch reads one reference: its commit, or null for 404', async () => {
     const script = new Script()
@@ -255,17 +257,32 @@ describe('branches', () => {
 });
 
 describe('pull requests and labels', () => {
-  const BRANCH = 'sarif-to-comment/suggestions/7/abc';
-  const LIST = `${REPO}/pulls?head=octo%3Asarif-to-comment%2Fsuggestions%2F7%2Fabc&state=all&per_page=100&page=`;
+  const BRANCH = 'suggestion-pr/7/abc';
+  const LIST = `${REPO}/pulls?head=octo%3Asuggestion-pr%2F7%2Fabc&state=all&per_page=100&page=`;
 
-  test('createPullRequest always creates a draft; its refusals are definitive', async () => {
-    const script = new Script()
-      .on('POST', `${REPO}/pulls`, json({ number: 101, html_url: 'https://github.com/octo/widgets/pull/101' }, 201), json({ message: 'Validation Failed' }, 422));
+  test('createPullRequest creates a draft or a ready pull request, as asked; its refusals are definitive', async () => {
+    const created = json({ number: 101, html_url: 'https://github.com/octo/widgets/pull/101' }, 201);
+    const script = new Script().on('POST', `${REPO}/pulls`, created, created, json({ message: 'Validation Failed' }, 422));
     const c = script.client();
-    const request = { owner: 'octo', repo: 'widgets', title: 'Suggestion for #7: x', head: BRANCH, base: 'feature', body: 'Suggested…' };
+    const request = { owner: 'octo', repo: 'widgets', title: 'Suggestion for #7: x', head: BRANCH, base: 'feature', body: 'Suggested…', draft: true };
     assert.deepEqual(await c.createPullRequest(request), { number: 101, htmlUrl: 'https://github.com/octo/widgets/pull/101' });
     assert.deepEqual(script.sent[0]?.body, { title: 'Suggestion for #7: x', head: BRANCH, base: 'feature', body: 'Suggested…', draft: true });
+    await c.createPullRequest({ ...request, draft: false });
+    assert.deepEqual(script.sent[1]?.body, { title: 'Suggestion for #7: x', head: BRANCH, base: 'feature', body: 'Suggested…', draft: false });
     await rejectsWith(c.createPullRequest(request), 'http-status', true);
+  });
+
+  test('createPullRequest refuses a missing or non-boolean draft before any request', async () => {
+    const script = new Script();
+    const c = script.client();
+    const request = { owner: 'octo', repo: 'widgets', title: 't', head: BRANCH, base: 'feature', body: 'b' };
+    for (const draft of [undefined, 'true', 1]) {
+      await assert.rejects(async () => {
+        const pending: unknown = Reflect.apply(c.createPullRequest, undefined, [{ ...request, draft }]);
+        await pending;
+      }, TypeError);
+    }
+    assert.deepEqual(script.sent, []);
   });
 
   test('listBranchPullRequests filters by head and state on every page, and refuses a link that drops the filter', async () => {
@@ -285,15 +302,27 @@ describe('pull requests and labels', () => {
     await rejectsWith(unsafe.client().listBranchPullRequests({ owner: 'octo', repo: 'widgets', branch: BRANCH }), 'unsafe-link');
   });
 
-  test('addLabel sends one label; listLabels reads every name', async () => {
+  test('addLabels sends every label in one request; listLabels reads every name', async () => {
     const script = new Script()
-      .on('POST', `${REPO}/issues/101/labels`, json([{ name: 'suggestion' }]), json({ message: 'Not Found' }, 404))
-      .on('GET', `${REPO}/issues/101/labels?per_page=100&page=1`, json([{ name: 'bug' }, { name: 'suggestion' }]));
+      .on('POST', `${REPO}/issues/101/labels`, json([{ name: 'suggestion-pr' }, { name: 'team-a' }]), json({ message: 'Not Found' }, 404))
+      .on('GET', `${REPO}/issues/101/labels?per_page=100&page=1`, json([{ name: 'bug' }, { name: 'suggestion-pr' }]));
     const c = script.client();
-    await c.addLabel({ owner: 'octo', repo: 'widgets', number: 101, label: 'suggestion' });
-    assert.deepEqual(script.sent[0]?.body, { labels: ['suggestion'] });
-    await rejectsWith(c.addLabel({ owner: 'octo', repo: 'widgets', number: 101, label: 'suggestion' }), 'http-status', true);
-    assert.deepEqual(await c.listLabels({ owner: 'octo', repo: 'widgets', number: 101 }), ['bug', 'suggestion']);
+    await c.addLabels({ owner: 'octo', repo: 'widgets', number: 101, labels: ['suggestion-pr', 'team-a'] });
+    assert.deepEqual(script.sent[0]?.body, { labels: ['suggestion-pr', 'team-a'] });
+    await rejectsWith(c.addLabels({ owner: 'octo', repo: 'widgets', number: 101, labels: ['suggestion-pr'] }), 'http-status', true);
+    assert.deepEqual(await c.listLabels({ owner: 'octo', repo: 'widgets', number: 101 }), ['bug', 'suggestion-pr']);
+  });
+
+  test('addLabels refuses an empty list or an empty name before any request', async () => {
+    const script = new Script();
+    const c = script.client();
+    for (const labels of [[], [''], 'suggestion-pr']) {
+      await assert.rejects(async () => {
+        const pending: unknown = Reflect.apply(c.addLabels, undefined, [{ owner: 'octo', repo: 'widgets', number: 101, labels }]);
+        await pending;
+      }, TypeError);
+    }
+    assert.deepEqual(script.sent, []);
   });
 
   test('findLabel reads the label by its encoded name, answers GitHub\'s own name, and null for 404', async () => {
@@ -309,11 +338,18 @@ describe('readSuggestionTarget', () => {
   const pull = (head: unknown): Answer => json({ head, base: { sha: PARENT, ref: 'main', repo: { full_name: 'octo/widgets' } } });
   const repository = json({ default_branch: 'main', permissions: { push: true } });
 
-  test('reads the head branch, both repositories, the default branch and push permission', async () => {
+  test('reads the head and base branches, both repositories, the default branch and push permission', async () => {
     const script = new Script().on('GET', `${REPO}/pulls/7`, pull({ sha: PARENT, ref: 'feature', repo: { full_name: 'fork/widgets' } })).on('GET', REPO, repository);
     assert.deepEqual(await script.client().readSuggestionTarget({ owner: 'octo', repo: 'widgets', pullNumber: 7 }), {
-      headSha: PARENT, headRef: 'feature', headRepository: 'fork/widgets', baseRepository: 'octo/widgets', defaultBranch: 'main', canPush: true,
+      headSha: PARENT, headRef: 'feature', headRepository: 'fork/widgets', baseRef: 'main', baseRepository: 'octo/widgets', defaultBranch: 'main', canPush: true,
     });
+  });
+
+  test('a missing base branch is malformed', async () => {
+    const script = new Script()
+      .on('GET', `${REPO}/pulls/7`, json({ head: { sha: PARENT, ref: 'feature', repo: { full_name: 'octo/widgets' } }, base: { sha: PARENT, repo: { full_name: 'octo/widgets' } } }))
+      .on('GET', REPO, repository);
+    await rejectsWith(script.client().readSuggestionTarget({ owner: 'octo', repo: 'widgets', pullNumber: 7 }), 'malformed-response');
   });
 
   test('a deleted head repository reads as null; a missing head branch is malformed', async () => {
@@ -330,5 +366,132 @@ describe('readSuggestionTarget', () => {
     await script.client().readSuggestionTarget({ owner: 'octo', repo: 'widgets', pullNumber: 7 });
     assert.deepEqual(script.sent.map((r) => r.method), ['GET', 'GET']);
     assert.equal(asRecord(script.sent[0] ?? {})['body'], undefined);
+  });
+});
+
+describe('readDefaultBranchFile (docs/suggestion-pr-convention.md §4)', () => {
+  const DEFAULT_HEAD = '7777777777777777777777777777777777777777';
+  const DEFAULT_ROOT = '8888888888888888888888888888888888888888';
+  const GITHUB_DIR = '9999999999999999999999999999999999999999';
+  const CONFIG_TEXT = '{ "label": "proposal" }\n';
+  const request = { owner: 'octo', repo: 'widgets', path: '.github/suggestion-prs.json' };
+
+  /** The default branch `trunk` at DEFAULT_HEAD, whose .github holds `entry` under the configuration's name. */
+  function defaultBranch(script: Script, entry: Record<string, unknown> | null): Script {
+    return script
+      .on('GET', REPO, json({ default_branch: 'trunk', permissions: { push: true } }))
+      .on('GET', `${REPO}/git/ref/heads/trunk`, json({ ref: 'refs/heads/trunk', object: { sha: DEFAULT_HEAD, type: 'commit' } }))
+      .on('GET', `${REPO}/git/commits/${DEFAULT_HEAD}`, json({ sha: DEFAULT_HEAD, tree: { sha: DEFAULT_ROOT } }))
+      .on('GET', `${REPO}/git/trees/${DEFAULT_ROOT}`, json({ sha: DEFAULT_ROOT, truncated: false, tree: [{ path: '.github', mode: '040000', type: 'tree', sha: GITHUB_DIR }] }))
+      .on('GET', `${REPO}/git/trees/${GITHUB_DIR}`, json({ sha: GITHUB_DIR, truncated: false, tree: entry === null ? [] : [{ path: 'suggestion-prs.json', ...entry }] }));
+  }
+
+  test('reads the file at the default branch\'s current commit through Git objects, as exact bytes', async () => {
+    const sha = blobId(CONFIG_TEXT);
+    const script = defaultBranch(new Script(), { mode: '100644', type: 'blob', sha, size: 24 })
+      .on('GET', `${REPO}/git/blobs/${sha}`, json({ sha, encoding: 'base64', content: Buffer.from(CONFIG_TEXT).toString('base64'), size: 24 }));
+    const read = await script.client().readDefaultBranchFile(request);
+    assert.equal(read.branch, 'trunk');
+    assert.equal(read.commit, DEFAULT_HEAD);
+    assert.equal(read.content.kind, 'file');
+    assert.equal(Buffer.from(read.content.bytes).toString('utf8'), CONFIG_TEXT);
+    assert.equal(script.sent.some((r) => r.url.includes('/contents/')), false, 'never the Contents API');
+    assert.deepEqual([...new Set(script.sent.map((r) => r.method))], ['GET']);
+  });
+
+  test('bytes that are not UTF-8 are returned as they are, for the convention to judge', async () => {
+    const raw = Buffer.from([0x7b, 0xff, 0x7d]);
+    const sha = crypto.createHash('sha1').update(Buffer.concat([Buffer.from('blob 3\0'), raw])).digest('hex');
+    const script = defaultBranch(new Script(), { mode: '100644', type: 'blob', sha, size: 3 })
+      .on('GET', `${REPO}/git/blobs/${sha}`, json({ sha, encoding: 'base64', content: raw.toString('base64'), size: 3 }));
+    const read = await script.client().readDefaultBranchFile(request);
+    assert.deepEqual(read.content.kind === 'file' ? [...read.content.bytes] : null, [0x7b, 0xff, 0x7d]);
+  });
+
+  test('given the default branch already known, the repository is not read again', async () => {
+    const script = new Script()
+      .on('GET', `${REPO}/git/ref/heads/trunk`, json({ ref: 'refs/heads/trunk', object: { sha: DEFAULT_HEAD, type: 'commit' } }))
+      .on('GET', `${REPO}/git/commits/${DEFAULT_HEAD}`, json({ sha: DEFAULT_HEAD, tree: { sha: DEFAULT_ROOT } }))
+      .on('GET', `${REPO}/git/trees/${DEFAULT_ROOT}`, json({ sha: DEFAULT_ROOT, truncated: false, tree: [] }));
+    const read = await script.client().readDefaultBranchFile({ ...request, branch: 'trunk' });
+    assert.deepEqual(read, { branch: 'trunk', commit: DEFAULT_HEAD, content: { kind: 'absent' } });
+    assert.deepEqual(script.sent.map((r) => r.url), [
+      `${REPO}/git/ref/heads/trunk`, `${REPO}/git/commits/${DEFAULT_HEAD}`, `${REPO}/git/trees/${DEFAULT_ROOT}`,
+    ]);
+  });
+
+  test('absent: a complete listing without the name', async () => {
+    const read = await defaultBranch(new Script(), null).client().readDefaultBranchFile(request);
+    assert.deepEqual(read, { branch: 'trunk', commit: DEFAULT_HEAD, content: { kind: 'absent' } });
+  });
+
+  test('absent: no .github directory at all', async () => {
+    const script = new Script()
+      .on('GET', REPO, json({ default_branch: 'trunk' }))
+      .on('GET', `${REPO}/git/ref/heads/trunk`, json({ ref: 'refs/heads/trunk', object: { sha: DEFAULT_HEAD, type: 'commit' } }))
+      .on('GET', `${REPO}/git/commits/${DEFAULT_HEAD}`, json({ sha: DEFAULT_HEAD, tree: { sha: DEFAULT_ROOT } }))
+      .on('GET', `${REPO}/git/trees/${DEFAULT_ROOT}`, json({ sha: DEFAULT_ROOT, truncated: false, tree: [] }));
+    assert.deepEqual((await script.client().readDefaultBranchFile(request)).content, { kind: 'absent' });
+  });
+
+  const notFiles: readonly (readonly [string, Record<string, unknown>])[] = [
+    ['a directory', { mode: '040000', type: 'tree', sha: OLD_BLOB }],
+    ['a symbolic link', { mode: '120000', type: 'blob', sha: OLD_BLOB, size: 5 }],
+    ['a submodule', { mode: '160000', type: 'commit', sha: OLD_BLOB }],
+  ];
+  for (const [entry, treeEntry] of notFiles) {
+    test(`${entry} at the path is not a file, and is never followed`, async () => {
+      const script = defaultBranch(new Script(), treeEntry);
+      assert.deepEqual((await script.client().readDefaultBranchFile(request)).content, { kind: 'not-a-file', entry, path: '.github/suggestion-prs.json' });
+    });
+  }
+
+  test('a symbolic link above the path is not followed either, and is named where it is', async () => {
+    const script = new Script()
+      .on('GET', REPO, json({ default_branch: 'trunk' }))
+      .on('GET', `${REPO}/git/ref/heads/trunk`, json({ ref: 'refs/heads/trunk', object: { sha: DEFAULT_HEAD, type: 'commit' } }))
+      .on('GET', `${REPO}/git/commits/${DEFAULT_HEAD}`, json({ sha: DEFAULT_HEAD, tree: { sha: DEFAULT_ROOT } }))
+      .on('GET', `${REPO}/git/trees/${DEFAULT_ROOT}`, json({ sha: DEFAULT_ROOT, truncated: false, tree: [{ path: '.github', mode: '120000', type: 'blob', sha: OLD_BLOB, size: 7 }] }));
+    assert.deepEqual((await script.client().readDefaultBranchFile(request)).content, { kind: 'not-a-file', entry: 'a symbolic link', path: '.github' });
+  });
+
+  test('a file over the source limit is too large, and its blob is never downloaded', async () => {
+    const script = defaultBranch(new Script(), { mode: '100644', type: 'blob', sha: OLD_BLOB, size: 1_000_001 });
+    assert.deepEqual((await script.client().readDefaultBranchFile(request)).content, { kind: 'too-large', size: 1_000_001 });
+    assert.equal(script.sent.some((r) => r.url.includes('/git/blobs/')), false);
+  });
+
+  test('a failed read is an error, never absence: the repository, the reference, a tree or the blob', async () => {
+    await rejectsWith(new Script().on('GET', REPO, json({ message: 'Server Error' }, 502)).client().readDefaultBranchFile(request), 'http-status');
+    const forbidden = new Script()
+      .on('GET', REPO, json({ default_branch: 'trunk' }))
+      .on('GET', `${REPO}/git/ref/heads/trunk`, json({ message: 'Resource not accessible' }, 403));
+    await rejectsWith(forbidden.client().readDefaultBranchFile(request), 'http-status');
+    const missingRef = new Script()
+      .on('GET', REPO, json({ default_branch: 'trunk' }))
+      .on('GET', `${REPO}/git/ref/heads/trunk`, json({ message: 'Not Found' }, 404));
+    await rejectsWith(missingRef.client().readDefaultBranchFile(request), 'malformed-response');
+    const tree = new Script()
+      .on('GET', REPO, json({ default_branch: 'trunk' }))
+      .on('GET', `${REPO}/git/ref/heads/trunk`, json({ ref: 'refs/heads/trunk', object: { sha: DEFAULT_HEAD, type: 'commit' } }))
+      .on('GET', `${REPO}/git/commits/${DEFAULT_HEAD}`, json({ sha: DEFAULT_HEAD, tree: { sha: DEFAULT_ROOT } }))
+      .on('GET', `${REPO}/git/trees/${DEFAULT_ROOT}`, json({ message: 'Server Error' }, 500));
+    await rejectsWith(tree.client().readDefaultBranchFile(request), 'http-status');
+    const sha = blobId(CONFIG_TEXT);
+    const blob = defaultBranch(new Script(), { mode: '100644', type: 'blob', sha, size: 24 })
+      .on('GET', `${REPO}/git/blobs/${sha}`, json({ sha, encoding: 'base64', content: Buffer.from('tampered text!!!!!!!!!!\n').toString('base64'), size: 24 }));
+    await rejectsWith(blob.client().readDefaultBranchFile(request), 'blob-integrity');
+  });
+
+  test('its input is checked before any request', async () => {
+    const script = new Script();
+    const c = script.client();
+    for (const bad of [{ ...request, owner: 'bad owner' }, { ...request, path: '/abs' }, { ...request, path: '../x' }, { ...request, branch: '' }, { ...request, branch: 7 }]) {
+      await assert.rejects(async () => {
+        const pending: unknown = Reflect.apply(c.readDefaultBranchFile, undefined, [bad]);
+        await pending;
+      }, TypeError);
+    }
+    assert.deepEqual(script.sent, []);
   });
 });

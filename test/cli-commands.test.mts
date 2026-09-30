@@ -217,8 +217,8 @@ describe('command dispatch and help', () => {
     ['remove-comment', ['--sarif', '--finding', '--format']],
     ['inspect', ['--sarif', '--preview-lines', '--preview-chars', '--source-root', '--format']],
     ['add-staged-changes', ['--sarif', '--output', '--worktree', '--repo', '--commit', '--source-root', '--format']],
-    ['validate', ['--sarif', '--repo', '--pull', '--commit', '--source-root', '--old-source-commit', '--ignore-approval-hold', '--submit', '--format']],
-    ['publish', ['--sarif', '--repo', '--pull', '--commit', '--state', '--source-root', '--old-source-commit', '--ignore-approval-hold', '--submit', '--format']],
+    ['validate', ['--sarif', '--repo', '--pull', '--commit', '--source-root', '--old-source-commit', '--ignore-approval-hold', '--submit', '--allow-suggestion-prs', '--pr-labels', '--mark-suggestion-prs-ready', '--format']],
+    ['publish', ['--sarif', '--repo', '--pull', '--commit', '--state', '--source-root', '--old-source-commit', '--ignore-approval-hold', '--submit', '--allow-suggestion-prs', '--pr-labels', '--mark-suggestion-prs-ready', '--format']],
     ['close-suggestion-prs', ['--repo', '--label', '--original', '--dry-run', '--format']],
   ];
   for (const [command, flags] of commands) {

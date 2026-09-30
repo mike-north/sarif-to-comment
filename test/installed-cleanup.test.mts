@@ -34,16 +34,18 @@ const TOKEN = 'ghp_CLEANUP_installed_0123456789';
 const OWNER = 'octo';
 const REPO = 'cleanup-uat';
 const HEAD = 'feedfeedfeedfeedfeedfeedfeedfeedfeedfeed';
-const PUBLICATION = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const BATCH = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+/** The repository's own canonical label, set on its default branch (docs/suggestion-pr-convention.md §4). */
+const LABEL = 'uat-suggestion';
 
 const idOf = (n: number): string => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 
 function suggestion(n: number, original: number): IStoredPull {
-  const marker = `<!-- sarif-to-comment:suggestion {"id":"${idOf(n)}","original":{"owner":"${OWNER}","pullNumber":${String(original)},"repo":"${REPO}"},"publication":"${PUBLICATION}","reviewedCommit":"${HEAD}","version":1} -->`;
+  const marker = `<!-- suggestion-pr {"version":1,"original":{"owner":"${OWNER}","repo":"${REPO}","pullNumber":${String(original)}},"reviewedCommit":"${HEAD}","id":"${idOf(n)}","batch":"${BATCH}"} -->`;
   return {
     number: n, title: `Suggestion for #${String(original)}`, body: `Suggested in a review of #${String(original)} at commit ${HEAD}.\n\n${marker}`,
-    head: `sarif-to-comment/suggestions/${String(original)}/${idOf(n)}`, base: `feature-${String(original)}`,
-    draft: true, state: 'open', merged: false, labels: ['suggestion'], authorId: 4242,
+    head: `suggestion-pr/${String(original)}/${idOf(n)}`, base: `feature-${String(original)}`,
+    draft: true, state: 'open', merged: false, labels: [LABEL], authorId: 4242,
   };
 }
 
@@ -61,8 +63,9 @@ function world(label: string): IWorld {
   const repository: IHttpRepository = {
     destination: { owner: OWNER, repo: REPO, pullNumber: 1 },
     commits: { base: HEAD, head: HEAD },
-    snapshots: { [HEAD]: { 'README.md': ['# Cleanup\n'] } },
+    snapshots: { [HEAD]: { 'README.md': ['# Cleanup\n'], '.github/suggestion-prs.json': [`{ "label": "${LABEL}" }\n`] } },
     pullFiles: [],
+    labels: [LABEL],
   };
   const hostDir = path.join(root, 'host');
   FakeHttpGitHub.create(hostDir, {}, repository);
@@ -136,6 +139,7 @@ describe('the installed package closes suggestion pull requests whose original e
       assert.equal(outcome.status, 'complete', outcome.markdown);
       assert.deepEqual(outcome.suggestions.map((s) => [s.number, s.result]), [[38, 'left-open'], [39, 'left-open'], [40, 'closed']]);
       assert.match(outcome.markdown, /Closing never deletes a branch/);
+      assert.match(outcome.markdown, /labeled \x60uat-suggestion\x60 in octo\/cleanup-uat \(the suggestion label set in \x60\.github\/suggestion-prs\.json\x60 on \x60main\x60\)/);
       await assert.rejects(closeSuggestionPullRequests({ ...input, label: 'a,b' }), TypeError);
       process.stdout.write(JSON.stringify({ status: outcome.status }));
     `;

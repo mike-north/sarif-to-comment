@@ -4,7 +4,7 @@
 
 ## closeSuggestionPullRequests() function
 
-Closes this tool's open companion suggestion pull requests whose original pull request has merged or closed, in one repository.
+Closes open suggestion pull requests whose original pull request has merged or closed, in one repository.
 
 **Signature:**
 
@@ -56,11 +56,11 @@ What was checked and done. `status` is `complete`<!-- -->,`permission-limited` (
 
 ## Exceptions
 
-`TypeError` for invalid input, before any request. An `Error` when discovery fails (GitHub, network, authentication), before anything was closed. Neither a result nor a rejection contains the token.
+`TypeError` for invalid input, before any request. An `Error` when the repository configuration is invalid (naming the file and field) or cannot be read, or when discovery fails (GitHub, network, authentication), before anything was closed. Neither a result nor a rejection contains the token.
 
 ## Remarks
 
-Suggestion pull requests are recognized by the structured marker the publisher writes into their description, never by their title. By default every open pull request carrying the suggestion label is checked; with`originalPullNumber`<!-- -->, only the pull requests referencing that original. A suggestion is closed only after its original has been read and found merged or closed, and after the suggestion itself has been read again and verified: an original that cannot be read is `unverified`<!-- -->, never treated as ended. Everything is read before anything is closed.
+Suggestion pull requests follow the tool-neutral suggestion pull request convention, whichever tool created them: they are recognized by the structured marker in their description, never by their title. By default every open pull request carrying the repository's canonical suggestion label is checked (the `label` of `.github/suggestion-prs.json` on the default branch, otherwise `suggestion-pr`<!-- -->); with `originalPullNumber`<!-- -->, only the pull requests referencing that original. A suggestion is closed only after its original has been read and found merged or closed, and after the suggestion itself has been read again and verified: an original that cannot be read is `unverified`<!-- -->, never treated as ended. Everything is read before anything is closed.
 
 Closing is the only change made. Branches are never deleted, and nothing is edited, labeled, commented on or reopened; the original is never touched. Running cleanup again is safe: suggestions already closed are not listed again (or are reported `already-closed`<!-- -->).
 

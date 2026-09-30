@@ -69,10 +69,11 @@ Add `options: { submit: true }` (library) or `--submit` (CLI, for `publish` and 
 
 ### Proposing new files and grouped changes as pull requests
 
-Add `options: { suggestionPullRequests: true }` (library) or `--suggestion-prs` (CLI, for `publish` and `validate`) to offer whole-file creations and deletions, and changes you marked with the same `properties.sarifToComment.acceptanceGroup` value, as **draft suggestion pull requests** into the pull request's head branch. The review links each one, and the outcome lists them in `suggestions`.
+Add `options: { allowSuggestionPullRequests: true }` (library) or `--allow-suggestion-prs` (CLI, for `publish` and `validate`) to offer whole-file creations and deletions, and changes you marked with the same `properties.sarifToComment.acceptanceGroup` value, as **suggestion pull requests** into the pull request's head branch: drafts, unless you add `markSuggestionPullRequestsReady: true` (`--mark-suggestion-prs-ready`). The review links each one, and the outcome lists them in `suggestions`.
 
 - It is off by default: every created pull request is visible to the repository and can trigger its CI and notifications.
-- The label `suggestion` (or `suggestionLabel` / `--suggestion-label`) must already exist, your token needs *Contents: Read and write*, and the reviewed commit must be the pull request's head.
+- Each carries the repository's suggestion label: `suggestion-pr`, or the `label` of `.github/suggestion-prs.json` on the default branch. Add team or campaign labels with `pullRequestLabels: ['team-a']` (`--pr-labels team-a`). Every label must already exist (the tool never creates labels), your token needs *Contents: Read and write*, the original pull request must come from the same repository and target its default branch, and the reviewed commit must be the pull request's head.
+- A draft can't be merged: someone with write access marks it ready for review, then the author merges it or not.
 - Keep the state file **and** the files created beside it (`<state>.suggestion-1-branch`, …, `<state>.review`); a retry uses them to continue without sending anything twice.
 - After the original pull request merges or closes, `sarif-to-comment close-suggestion-prs --repo OWNER/REPO` (library: [`closeSuggestionPullRequests`](./api/sarif-to-comment.closesuggestionpullrequests.md)) closes its suggestion pull requests that are still open. Try it with `--dry-run` first. It only closes pull requests: branches are never deleted, and an original it can't read is never treated as ended.
 

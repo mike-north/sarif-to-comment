@@ -28,9 +28,10 @@
  * (fake-http-cleanup.mts; pull requests are seeded with seedPulls). The pull
  * request under review is open and unmerged. The pull request reports its head
  * branch (`pull.headRef`, default `feature`), base branch and repositories;
- * the repository reports its default branch (default `main`), the account's
- * push permission (`push`, default true) and its labels (`labels`, default
- * `suggestion`).
+ * the repository reports its default branch (default `main`, pointing at the
+ * snapshot `defaultBranchCommit`, default the base commit, whose files include
+ * any `.github/suggestion-prs.json`), the account's push permission (`push`,
+ * default true) and its labels (`labels`, default `suggestion-pr`).
  * Like GitHub, it refuses a second pending review by one author on one pull
  * request with 422 (docs/native-suggestion-fidelity-experiment.md), and
  * refuses a submitted create the same way while a pending review exists.
@@ -142,9 +143,11 @@ export interface IHttpRepository {
   readonly pull?: IHttpPullBranches | undefined;
   /** The repository's default branch (default `main`). */
   readonly defaultBranch?: string | undefined;
+  /** The snapshot commit the default branch points at (default: `commits.base`). */
+  readonly defaultBranchCommit?: string | undefined;
   /** Whether the authenticated account may push (default true). */
   readonly push?: boolean | undefined;
-  /** The repository's labels (default: `suggestion`). */
+  /** The repository's labels (default: `suggestion-pr`). */
   readonly labels?: readonly string[] | undefined;
   /** Hand-authored expectations for tests (repository.json only); the host does not read them. */
   readonly expected?: unknown;
@@ -241,6 +244,7 @@ const isHttpRepository: Guard<IHttpRepository> = isShape({
   ),
   pull: isOptional(isShape({ headRef: isOptional(isString), baseRef: isOptional(isString), headRepo: isOptional(isEither(isString, isNull)) })),
   defaultBranch: isOptional(isString),
+  defaultBranchCommit: isOptional(isString),
   push: isOptional(isBoolean),
   labels: isOptional(isArrayOf(isString)),
   expected: isUnknown,
@@ -454,7 +458,9 @@ export class FakeHttpGitHub {
     let m: RegExpExecArray | null;
 
     if (method === 'GET' && p === '/user') return json(USER);
-    if (method === 'GET' && p === pull) {
+    // A test may seed a stored pull request under this number (for example the
+    // original, once merged, for cleanup); the stored one is then served.
+    if (method === 'GET' && p === pull && !this.companion().pulls.some((pr) => pr.number === pullNumber)) {
       const branches = repository.pull ?? {};
       const fullName = `${owner}/${repo}`;
       const headRepo = branches.headRepo === undefined ? fullName : branches.headRepo;
@@ -565,9 +571,10 @@ export class FakeHttpGitHub {
       owner: repository.destination.owner,
       repo: repository.destination.repo,
       defaultBranch: repository.defaultBranch ?? 'main',
+      defaultBranchCommit: repository.defaultBranchCommit ?? repository.commits.base,
       headRef: repository.pull?.headRef ?? 'feature',
       push: repository.push ?? true,
-      labels: repository.labels ?? ['suggestion'],
+      labels: repository.labels ?? ['suggestion-pr'],
       snapshotCommits: objects.commits,
       snapshotTrees: objects.trees,
       snapshotBlobs: objects.blobs,

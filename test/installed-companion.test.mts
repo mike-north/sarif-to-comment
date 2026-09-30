@@ -11,8 +11,13 @@
  * §2.3), and publishes with suggestion pull requests enabled against a fake
  * GitHub that speaks HTTP to the product's real client (the preload replaces
  * only `fetch`). Without the setting the same document is refused, naming it.
+ * The repository names its own canonical label in `.github/suggestion-prs.json`
+ * on its default branch (docs/suggestion-pr-convention.md §4); the CLI adds an
+ * extra label and asks for a ready pull request, the library keeps the draft
+ * default.
  *
- * Expected bytes, titles and bodies are written by hand from the contract.
+ * Expected bytes, titles, labels and bodies are written by hand from the
+ * contract and the convention.
  *
  * @see https://docs.github.com/en/rest/pulls/pulls#create-a-pull-request
  * @see https://docs.github.com/en/rest/git/trees#create-a-tree
@@ -40,6 +45,8 @@ const CLIENT = 'export async function fetchWidget(id: string) {\n  const respons
 const EDITED = 'export async function fetchWidget(id: string) {\n  const response = await request(id).catch(() => request(id));\n  return response.body;\n}\n';
 const TEST_FILE = "import { fetchWidget } from '../src/client';\n\ntest('retries once', async () => {\n  await fetchWidget('w1');\n});\n";
 const RETRY_MESSAGE = 'Retry once on timeout.';
+const CONFIG_PATH = '.github/suggestion-prs.json';
+const CONFIG = '{ "label": "uat-suggestion" }\n';
 const COVER_MESSAGE = 'Cover the retry.';
 
 interface IWorld {
@@ -93,9 +100,10 @@ function world(label: string): IWorld {
     destination: DESTINATION,
     commits: { base, head },
     snapshots: {
-      [base]: { 'README.md': ['# Widgets\n'], 'src/client.ts': lines(CLIENT) },
-      [head]: { 'README.md': ['# Widgets\n', 'More.\n'], 'src/client.ts': lines(CLIENT) },
+      [base]: { 'README.md': ['# Widgets\n'], 'src/client.ts': lines(CLIENT), [CONFIG_PATH]: [CONFIG] },
+      [head]: { 'README.md': ['# Widgets\n', 'More.\n'], 'src/client.ts': lines(CLIENT), [CONFIG_PATH]: [CONFIG] },
     },
+    labels: ['uat-suggestion', 'team-a'],
     pullFiles: [{ filename: 'README.md', status: 'modified', additions: 1, deletions: 0, patch: ['@@ -1 +1,2 @@\n', ' # Widgets\n', '+More.'] }],
     pull: { headRef: HEAD_REF, baseRef: 'main' },
   };
@@ -119,17 +127,19 @@ function grouped(sarif: unknown): unknown {
   return log;
 }
 
-/** One labelled draft pull request into the head branch with both exact files, and one review linking it. */
-function assertPublished(w: IWorld): void {
+/** One labelled pull request into the head branch with both exact files, and one review linking it. */
+function assertPublished(w: IWorld, expected: { readonly draft: boolean; readonly labels: readonly string[] }): void {
   const pulls = w.host.pulls();
   assert.equal(pulls.length, 1);
   const [pull] = pulls;
   assert.ok(pull);
   assert.equal(pull.title, 'Suggestion for #45: retry-with-test (2 changes)');
   assert.equal(pull.base, HEAD_REF);
-  assert.equal(pull.draft, true);
-  assert.deepEqual(pull.labels, ['suggestion']);
-  assert.match(pull.head, /^sarif-to-comment\/suggestions\/45\/[0-9a-f-]{36}$/);
+  assert.equal(pull.draft, expected.draft);
+  assert.deepEqual(pull.labels, expected.labels);
+  assert.match(pull.head, /^suggestion-pr\/45\/[0-9a-f-]{36}$/);
+  assert.match(pull.body, /\n<!-- suggestion-pr \{"version":1,"original":\{"owner":"octo","repo":"companion-uat","pullNumber":45\},"reviewedCommit":"[0-9a-f]{40}","id":"[0-9a-f-]{36}","batch":"[0-9a-f-]{36}"\} -->$/);
+  assert.ok(pull.body.includes(expected.draft ? 'it is a draft pull request into `feature/retry`, the branch of #45.' : 'it is a pull request into `feature/retry`, the branch of #45.'), pull.body);
   assert.ok(pull.body.startsWith(`Suggested in a review of #45 at commit ${w.head}.\n\nMerging this pull request into \`feature/retry\` applies these 2 changes together:`), pull.body);
   assert.ok(pull.body.includes(RETRY_MESSAGE) && pull.body.includes(COVER_MESSAGE));
   assert.deepEqual(w.host.fileOnBranch(pull.head, 'src/client.ts'), Buffer.from(EDITED));
@@ -167,13 +177,15 @@ describe('the installed package publishes grouped changes as a companion suggest
     const flags = ['--sarif', enriched, '--repo', repoFlag, '--pull', String(DESTINATION.pullNumber), '--commit', w.head];
     const refused = cli(['validate', ...flags], 2);
     assert.match(asString(refused['message']), /acceptance-group-requires-suggestion-prs/);
-    const ready = cli(['validate', ...flags, '--suggestion-prs']);
+    const suggestionFlags = ['--allow-suggestion-prs', '--pr-labels', 'team-a', '--mark-suggestion-prs-ready'];
+    const ready = cli(['validate', ...flags, ...suggestionFlags]);
     assert.equal(ready['status'], 'ready');
+    assert.ok(asString(ready['message']).includes('Publication would also create 1 suggestion pull request, ready for review, into `feature/retry`, labeled `uat-suggestion` and `team-a`.'), asString(ready['message']));
     assert.equal(w.host.pulls().length, 0);
-    const published = cli(['publish', ...flags, '--state', path.join(w.root, 'state.json'), '--suggestion-prs']);
+    const published = cli(['publish', ...flags, '--state', path.join(w.root, 'state.json'), ...suggestionFlags]);
     assert.equal(published['status'], 'published');
     assert.equal(asArray(published['suggestions']).length, 1);
-    assertPublished(w);
+    assertPublished(w, { draft: false, labels: ['uat-suggestion', 'team-a'] });
   });
 
   test('library: the same workflow in memory through the installed functions', { skip, timeout: 300_000 }, () => {
@@ -196,7 +208,7 @@ describe('the installed package publishes grouped changes as a companion suggest
       const input = { sarif: staged.sarif, destination: { owner, repo, pullNumber: 45 }, reviewedCommit, token: process.env.GH_TOKEN };
       const refused = await validateSarifReview(input);
       assert.equal(refused.status, 'blocked', refused.markdown);
-      const options = { suggestionPullRequests: true };
+      const options = { allowSuggestionPullRequests: true, pullRequestLabels: ['team-a'] };
       const assessed = await validateSarifReview({ ...input, options });
       assert.equal(assessed.status, 'ready', assessed.markdown);
       const outcome = await publishSarifReview({ ...input, options, statePath: process.env.REVIEW_STATE });
@@ -214,6 +226,6 @@ describe('the installed package publishes grouped changes as a companion suggest
     const result = spawnSync(process.execPath, [file], { cwd: consumer, env, encoding: 'utf8', timeout: 120_000 });
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.ok(!result.stdout.includes(TOKEN) && !result.stderr.includes(TOKEN));
-    assertPublished(w);
+    assertPublished(w, { draft: true, labels: ['uat-suggestion', 'team-a'] });
   });
 });

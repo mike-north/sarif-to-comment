@@ -1,35 +1,39 @@
 /**
- * The structured marker that relates a companion suggestion pull request to
- * its original pull request (private internal module;
- * docs/companion-suggestion-pr-contract.md §2.7).
+ * The structured marker that relates a suggestion pull request to its
+ * original pull request (private internal module;
+ * docs/suggestion-pr-convention.md §7).
  *
  * A suggestion pull request's body ends with exactly one hidden line:
  *
- *   <!-- sarif-to-comment:suggestion {"id":…,"original":{"owner":…,"pullNumber":…,"repo":…},"publication":…,"reviewedCommit":…,"version":1} -->
+ *   <!-- suggestion-pr {"version":1,"original":{"owner":…,"repo":…,"pullNumber":…},"reviewedCommit":…,"id":…,"batch":…} -->
  *
- * The JSON is canonical (keys sorted at every level, no whitespace), so the
- * line is a pure function of its fields and recovery can match it exactly.
- * `id` identifies the suggestion, `publication` the logical publication (one
- * per state path), `original` the original pull request in the same
- * repository, and `reviewedCommit` the proposal commit's parent. No value can
- * contain `>`, so the line can never close early: ids are UUIDs, the commit
- * is hex, the pull number an integer, and GitHub owner and repository names
- * are letters, digits, `.`, `_` and `-`. It is metadata, not a secret.
+ * The JSON is canonical: exactly these members, in exactly this order, with
+ * no whitespace, so the line is a pure function of its fields and recovery
+ * can match it exactly. `id` identifies the suggestion (its branch carries
+ * it), `batch` groups the suggestions of one review (this tool uses its
+ * publication id, one per state path), `original` names the original pull
+ * request in the same repository, and `reviewedCommit` the proposal commit's
+ * parent. No value can contain `>`, `"` or `\`, so the line can never close
+ * early and JSON writes it without escapes: the commit is hex, the pull
+ * number an integer, GitHub owner and repository names are letters, digits,
+ * `.`, `_` and `-`, and `id` and `batch` are letters, digits, `-` and `_`. It
+ * is metadata, not a secret.
  *
  * findSuggestionMarker reads it back for cleanup
- * (docs/suggestion-cleanup-contract.md §2.5). Recognition is strict: exactly
- * one line of the body may begin with the marker prefix, and that line must
- * be the canonical line of well-formed fields, byte for byte (the round trip
- * through formatSuggestionMarker is the check). A person may edit the rest of
- * the body, add text after the marker, or let GitHub store it with CRLF line
- * endings (one trailing carriage return per line is ignored); a changed,
- * duplicated or quoted marker is never guessed at.
+ * (docs/suggestion-cleanup-contract.md §2.5), whichever tool wrote it.
+ * Recognition is strict: exactly one line of the body may begin with the
+ * marker prefix, and that line must be the canonical line of well-formed
+ * fields, byte for byte (the round trip through formatSuggestionMarker is
+ * the check). A person may edit the rest of the body, add text after the
+ * marker, or let GitHub store it with CRLF line endings (one trailing
+ * carriage return per line is ignored); a changed, duplicated or quoted
+ * marker is never guessed at.
  */
 
 /** The fields one suggestion's marker records. */
 export interface ISuggestionMarkerFields {
   readonly id: string;
-  readonly publication: string;
+  readonly batch: string;
   readonly owner: string;
   readonly repo: string;
   readonly pullNumber: number;
@@ -47,17 +51,17 @@ export type SuggestionMarkerReading =
   | { readonly kind: 'malformed' }
   | { readonly kind: 'marker'; readonly line: string; readonly fields: ISuggestionMarkerFields };
 
-/** The marker format version. */
+/** The convention version this module writes and recognizes. */
 const MARKER_VERSION = 1;
 
-/** The start of every marker line, and of nothing else this tool writes. */
-const MARKER_PREFIX = '<!-- sarif-to-comment:suggestion ';
+/** The start of every marker line. */
+const MARKER_PREFIX = '<!-- suggestion-pr ';
 
 /** The canonical line's frame around its JSON. */
-const MARKER_LINE = /^<!-- sarif-to-comment:suggestion (\{[^\n]*\}) -->$/;
+const MARKER_LINE = /^<!-- suggestion-pr (\{[^\n]*\}) -->$/;
 
-/** A lowercase v4 UUID, as crypto.randomUUID() makes the suggestion and publication ids. */
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+/** A suggestion id or batch: 1-64 letters, digits, `-` and `_`, beginning and ending with a letter or digit. */
+const IDENTIFIER = /^[A-Za-z0-9](?:[A-Za-z0-9_-]{0,62}[A-Za-z0-9])?$/;
 
 /** A full lowercase commit id. */
 const COMMIT = /^[0-9a-f]{40}$/;
@@ -65,14 +69,19 @@ const COMMIT = /^[0-9a-f]{40}$/;
 /** GitHub owner and repository names (never `.` or `..`). */
 const NAME = /^[A-Za-z0-9_.-]+$/;
 
+/** Whether `value` is a suggestion id or batch under the convention. */
+export function isSuggestionIdentifier(value: unknown): value is string {
+  return typeof value === 'string' && IDENTIFIER.test(value);
+}
+
 /** The marker line for one suggestion (canonical JSON; see the module documentation). */
 export function formatSuggestionMarker(fields: ISuggestionMarkerFields): string {
   const json = JSON.stringify({
-    id: fields.id,
-    original: { owner: fields.owner, pullNumber: fields.pullNumber, repo: fields.repo },
-    publication: fields.publication,
-    reviewedCommit: fields.reviewedCommit,
     version: MARKER_VERSION,
+    original: { owner: fields.owner, repo: fields.repo, pullNumber: fields.pullNumber },
+    reviewedCommit: fields.reviewedCommit,
+    id: fields.id,
+    batch: fields.batch,
   });
   return `${MARKER_PREFIX}${json} -->`;
 }
@@ -97,21 +106,22 @@ function parseMarkerLine(line: string): ISuggestionMarkerFields | null {
     return null;
   }
   if (!isObject(parsed)) return null;
-  const { id, original, publication, reviewedCommit } = parsed;
+  const { id, original, batch, reviewedCommit } = parsed;
   if (!isObject(original)) return null;
   const { owner, repo, pullNumber } = original;
   if (
-    typeof id !== 'string' || !UUID.test(id) ||
-    typeof publication !== 'string' || !UUID.test(publication) ||
+    !isSuggestionIdentifier(id) ||
+    !isSuggestionIdentifier(batch) ||
     typeof reviewedCommit !== 'string' || !COMMIT.test(reviewedCommit) ||
     !isName(owner) || !isName(repo) ||
     typeof pullNumber !== 'number' || !Number.isSafeInteger(pullNumber) || pullNumber < 1
   ) {
     return null;
   }
-  const fields: ISuggestionMarkerFields = { id, publication, owner, repo, pullNumber, reviewedCommit };
-  // Canonical form only: extra or reordered keys, whitespace, another version
-  // or escaped characters all make the line differ from its formatted form.
+  const fields: ISuggestionMarkerFields = { id, batch, owner, repo, pullNumber, reviewedCommit };
+  // Canonical form only: extra or reordered members, whitespace, another
+  // version or escaped characters all make the line differ from its
+  // formatted form.
   return formatSuggestionMarker(fields) === line ? fields : null;
 }
 

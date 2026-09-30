@@ -1,0 +1,15 @@
+01-validate-a-label-missing: 2
+02-publish-a-label-missing: 2
+03-validate-36-base-not-default: 2
+05-validate-a-ready: 0
+06-publish-a-default-label: 0
+07-validate-b-extra-missing: 2
+08-publish-b-extra-missing: 2
+09-validate-b-ready-extra: 0
+10-publish-b-ready-extra: 0
+12-cleanup-dry-run-originals-open: 0
+14-cleanup-dry-run-after-close: 0
+15-cleanup: 0
+17-cleanup-original-57-rerun: 0
+18-cleanup-sweep-rerun: 0
+19-cleanup-label-override-dry-run: 0

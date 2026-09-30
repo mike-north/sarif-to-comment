@@ -9,9 +9,12 @@
  * which are left alone, each result and original state, the status, the
  * Markdown of the worked example (§3), the requests sent (reads before any
  * write; exactly one PATCH per closed suggestion; nothing else written), and
- * the CLI's output and exit statuses. Suggestion markers are written out by
- * hand from the companion contract's template (§2.7), never produced by the
- * code under test.
+ * the CLI's output and exit statuses. Suggestion markers and branches are
+ * written out by hand from the suggestion pull request convention's templates
+ * (docs/suggestion-pr-convention.md §5, §7), never produced by the code under
+ * test. The repository has no configuration file, so the canonical label is
+ * the default `suggestion-pr`; configured labels are tested in
+ * test/suggestion-pr-convention.test.mts.
  *
  * The host models documented GitHub behavior; it is not evidence of live
  * GitHub behavior (see docs/suggestion-cleanup-e2e-evidence.md).
@@ -43,7 +46,7 @@ const REPO = 'widgets';
 const TOKEN = 'ghp_CLEANUP_COMPOSITION_0123456789';
 const BASE = 'ba5eba5eba5eba5eba5eba5eba5eba5eba5eba5e';
 const HEAD = 'feedfeedfeedfeedfeedfeedfeedfeedfeedfeed';
-const PUBLICATION = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const BATCH = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
 function repository(): IHttpRepository {
   return {
@@ -51,7 +54,7 @@ function repository(): IHttpRepository {
     commits: { base: BASE, head: HEAD },
     snapshots: { [BASE]: { 'README.md': ['# Widgets\n'] }, [HEAD]: { 'README.md': ['# Widgets\n'] } },
     pullFiles: [],
-    labels: ['suggestion'],
+    labels: ['suggestion-pr'],
   };
 }
 
@@ -61,9 +64,9 @@ function repository(): IHttpRepository {
 /** The suggestion id a test gives suggestion pull request `n` (a v4 UUID). */
 const idOf = (n: number): string => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 
-/** The marker line of companion contract §2.7, written out from its template. */
-function markerLine(n: number, original: number, where = `"owner":"${OWNER}","pullNumber":${String(original)},"repo":"${REPO}"`): string {
-  return `<!-- sarif-to-comment:suggestion {"id":"${idOf(n)}","original":{${where}},"publication":"${PUBLICATION}","reviewedCommit":"${HEAD}","version":1} -->`;
+/** The marker line of convention §7, written out from its template. */
+function markerLine(n: number, original: number, where = `"owner":"${OWNER}","repo":"${REPO}","pullNumber":${String(original)}`): string {
+  return `<!-- suggestion-pr {"version":1,"original":{${where}},"reviewedCommit":"${HEAD}","id":"${idOf(n)}","batch":"${BATCH}"} -->`;
 }
 
 /** A suggestion body as the publisher writes it: the reference first, the marker last. */
@@ -83,12 +86,12 @@ function suggestion(n: number, originalNumber: number, change: Partial<IStoredPu
     number: n,
     title: `Suggestion for #${String(originalNumber)}: create docs/${String(n)}.md`,
     body: suggestionBody(n, originalNumber),
-    head: `sarif-to-comment/suggestions/${String(originalNumber)}/${idOf(n)}`,
+    head: `suggestion-pr/${String(originalNumber)}/${idOf(n)}`,
     base: `feature-${String(originalNumber)}`,
     draft: true,
     state: 'open',
     merged: false,
-    labels: ['suggestion'],
+    labels: ['suggestion-pr'],
     authorId: 4242,
     ...change,
   };
@@ -182,14 +185,14 @@ describe('harness controls', () => {
   test('the hand-written marker names the suggestion, and the seeded suggestion uses its branch', () => {
     assert.equal(
       markerLine(40, 37),
-      '<!-- sarif-to-comment:suggestion {"id":"00000000-0000-4000-8000-000000000040","original":{"owner":"octo","pullNumber":37,"repo":"widgets"},"publication":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","reviewedCommit":"feedfeedfeedfeedfeedfeedfeedfeedfeedfeed","version":1} -->',
+      '<!-- suggestion-pr {"version":1,"original":{"owner":"octo","repo":"widgets","pullNumber":37},"reviewedCommit":"feedfeedfeedfeedfeedfeedfeedfeedfeedfeed","id":"00000000-0000-4000-8000-000000000040","batch":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"} -->',
     );
-    assert.equal(suggestion(40, 37).head, 'sarif-to-comment/suggestions/37/00000000-0000-4000-8000-000000000040');
+    assert.equal(suggestion(40, 37).head, 'suggestion-pr/37/00000000-0000-4000-8000-000000000040');
   });
 
   test('the host closes only with the documented body, and lists only open labeled pull requests', async () => {
     const world = makeWorld([original(37, 'closed'), suggestion(40, 37), suggestion(41, 37, { state: 'closed' }), suggestion(42, 37, { labels: [] })]);
-    const listing = await world.host.fetch(`https://api.github.com/repos/${OWNER}/${REPO}/issues?labels=suggestion&state=open&per_page=100&page=1`, { headers: { authorization: `Bearer ${TOKEN}` } });
+    const listing = await world.host.fetch(`https://api.github.com/repos/${OWNER}/${REPO}/issues?labels=suggestion-pr&state=open&per_page=100&page=1`, { headers: { authorization: `Bearer ${TOKEN}` } });
     assert.deepEqual(asArray(await listing.json()).map((i) => asRecord(i)['number']), [40]);
     const wrong = await world.host.fetch(`https://api.github.com/repos/${OWNER}/${REPO}/pulls/40`, {
       method: 'PATCH', headers: { authorization: `Bearer ${TOKEN}` }, body: JSON.stringify({ state: 'closed', title: 'x' }),
@@ -210,7 +213,7 @@ describe('the worked example (§3)', () => {
   ];
 
   const header = [
-    'Checked the open pull requests labeled `suggestion` in octo/widgets.',
+    'Checked the open pull requests labeled `suggestion-pr` in octo/widgets (the default suggestion label).',
     '',
     'Original pull requests:',
     '',
@@ -222,7 +225,7 @@ describe('the worked example (§3)', () => {
     '- #38 (for #36): left open, because the original is still open',
     '- #39 (for #36): left open, because the original is still open',
   ];
-  const notOurs = "- #41: skipped, not one of this tool's suggestion pull requests: it has the label but no suggestion marker";
+  const notOurs = '- #41: skipped, not a conforming suggestion pull request: it has the label but no suggestion marker';
   const branches = 'Closing never deletes a branch: each proposal branch is left in place.';
 
   test('a dry run reads everything, reports what would be closed and writes nothing', async () => {
@@ -290,7 +293,7 @@ describe('original states (A36)', () => {
       assert.deepEqual(results(outcome), [[40, 37, 'closed']]);
       assert.ok(markdown(outcome).includes(`- #37: ${described}`), markdown(outcome));
       assert.deepEqual(writes(world), closes(40));
-      assert.deepEqual(stateOf(world, 40), { state: 'closed', merged: false, head: `sarif-to-comment/suggestions/37/${idOf(40)}` });
+      assert.deepEqual(stateOf(world, 40), { state: 'closed', merged: false, head: `suggestion-pr/37/${idOf(40)}` });
     });
   }
 
@@ -365,7 +368,7 @@ describe('pagination and duplicate references (A31)', () => {
   });
 
   test('two open pull requests claiming the same suggestion are both skipped, never closed', async () => {
-    const copy = { ...suggestion(41, 37), body: suggestionBody(40, 37), head: `sarif-to-comment/suggestions/37/${idOf(40)}`, base: 'main' };
+    const copy = { ...suggestion(41, 37), body: suggestionBody(40, 37), head: `suggestion-pr/37/${idOf(40)}`, base: 'main' };
     const world = makeWorld([original(37, 'closed'), suggestion(40, 37), copy]);
     const outcome = await cleanup(world);
     assert.equal(outcome['status'], 'complete');
@@ -396,12 +399,13 @@ describe('recognition and verification (§2.5–§2.8)', () => {
     ['the marker was removed', suggestion(40, 37, { body: 'Suggested in a review of #37.' }), /no suggestion marker/, null],
     ['the marker was changed', suggestion(40, 37, { body: suggestionBody(40, 37).replace('"version":1', '"version": 1') }), /canonical/, null],
     ['the marker is quoted twice', suggestion(40, 37, { body: `${suggestionBody(40, 37)}\n\n> ${markerLine(40, 37)}\n${markerLine(40, 37)}` }), /more than one/, null],
-    ['the marker names another repository', suggestion(40, 37, { body: `Moved.\n\n${markerLine(40, 37, '"owner":"elsewhere","pullNumber":37,"repo":"widgets"')}` }), /another repository \(elsewhere\/widgets\)/, null],
+    ['the marker names another repository', suggestion(40, 37, { body: `Moved.\n\n${markerLine(40, 37, '"owner":"elsewhere","repo":"widgets","pullNumber":37')}` }), /another repository \(elsewhere\/widgets\)/, null],
     ['its head is in a fork', suggestion(40, 37, { headRepo: 'someone/widgets' }), /someone\/widgets/, 37],
-    ['its head branch is not the marker\'s branch', suggestion(40, 37, { head: 'sarif-to-comment/suggestions/37/other' }), /sarif-to-comment\/suggestions\/37\/other/, 37],
+    ['its head branch is not the marker\'s branch', suggestion(40, 37, { head: 'suggestion-pr/37/other' }), /suggestion-pr\/37\/other/, 37],
+    ['its head branch is the unreleased tool-branded form', suggestion(40, 37, { head: `sarif-to-comment/suggestions/37/${idOf(40)}` }), /sarif-to-comment\/suggestions\/37/, 37],
   ];
   for (const [what, pull, reason, originalNumber] of skipped) {
-    test(`not one of this tool's suggestions, never closed: ${what}`, async () => {
+    test(`not a conforming suggestion, never closed: ${what}`, async () => {
       const world = makeWorld(ended(pull));
       const outcome = await cleanup(world);
       assert.equal(outcome['status'], 'complete');
@@ -412,7 +416,7 @@ describe('recognition and verification (§2.5–§2.8)', () => {
   }
 
   test('owner and repository in the marker are compared case-insensitively, as GitHub names are', async () => {
-    const world = makeWorld(ended(suggestion(40, 37, { body: `Text.\n\n${markerLine(40, 37, '"owner":"Octo","pullNumber":37,"repo":"Widgets"')}` })));
+    const world = makeWorld(ended(suggestion(40, 37, { body: `Text.\n\n${markerLine(40, 37, '"owner":"Octo","repo":"Widgets","pullNumber":37')}` })));
     const outcome = await cleanup(world);
     assert.deepEqual(results(outcome), [[40, 37, 'closed']]);
   });
@@ -457,7 +461,7 @@ describe('recognition and verification (§2.5–§2.8)', () => {
   test('a suggestion whose label was removed after the listing is reported unlabeled and not closed', async () => {
     const world = makeWorld(ended(suggestion(40, 37)));
     const outcome = await cleanupWithChangeAfterListing(world, () => {
-      world.host.removeLabel(40, 'suggestion');
+      world.host.removeLabel(40, 'suggestion-pr');
     });
     assert.deepEqual(results(outcome), [[40, 37, 'unlabeled']]);
     assert.deepEqual(writes(world), []);
@@ -465,7 +469,7 @@ describe('recognition and verification (§2.5–§2.8)', () => {
 
   for (const [what, body] of [
     ['removed', 'Rewritten without the marker.'],
-    ['replaced by another publication\'s marker for the same branch', suggestionBody(40, 37).replace(PUBLICATION, 'cccccccc-cccc-4ccc-8ccc-cccccccccccc')],
+    ['replaced by another batch\'s marker for the same branch', suggestionBody(40, 37).replace(BATCH, 'cccccccc-cccc-4ccc-8ccc-cccccccccccc')],
   ] as const) {
     test(`a suggestion whose marker was ${what} after the listing is not closed`, async () => {
       const world = makeWorld(ended(suggestion(40, 37)));
@@ -487,11 +491,11 @@ describe('recognition and verification (§2.5–§2.8)', () => {
     assert.deepEqual(writes(world), []);
   });
 
-  test('a label matched case-insensitively, and a label the caller names', async () => {
+  test('a label matched case-insensitively, and a label the caller names as a migration override', async () => {
     const world = makeWorld(ended(suggestion(40, 37, { labels: ['Proposal'] }), suggestion(41, 37)));
     const outcome = await cleanup(world, { label: 'proposal' });
     assert.deepEqual(results(outcome), [[40, 37, 'closed']]);
-    assert.ok(markdown(outcome).includes('Checked the open pull requests labeled `proposal` in octo/widgets.'), markdown(outcome));
+    assert.ok(markdown(outcome).includes('Checked the open pull requests labeled `proposal` in octo/widgets (a label given in place of the repository\'s suggestion label).'), markdown(outcome));
   });
 
   test('an issue carrying the label is not a pull request and is ignored', async () => {
@@ -508,7 +512,7 @@ describe('recognition and verification (§2.5–§2.8)', () => {
     assert.deepEqual(outcome['suggestions'], []);
     assert.equal(
       markdown(outcome),
-      ['## Suggestion pull request cleanup complete', '', 'Checked the open pull requests labeled `suggestion` in octo/widgets.', '', 'No suggestion pull requests were found.', '', 'Closing never deletes a branch: each proposal branch is left in place.'].join('\n'),
+      ['## Suggestion pull request cleanup complete', '', 'Checked the open pull requests labeled `suggestion-pr` in octo/widgets (the default suggestion label).', '', 'No suggestion pull requests were found.', '', 'Closing never deletes a branch: each proposal branch is left in place.'].join('\n'),
     );
   });
 });
@@ -581,7 +585,7 @@ describe('targeted discovery from one original (§2.4, D21)', () => {
     assert.deepEqual(results(outcome), [[40, 37, 'closed'], [46, 36, 'not-ours'], [47, 37, 'already-closed']]);
     assert.match(asString(entry(outcome, 46)['reason']), /names #36, not #37/);
     assert.deepEqual(writes(world), closes(40));
-    assert.ok(markdown(outcome).includes('Checked the pull requests that reference #37 in octo/widgets.'), markdown(outcome));
+    assert.ok(markdown(outcome).includes('Checked the pull requests that reference #37 in octo/widgets; the suggestion label is `suggestion-pr` (the default suggestion label).'), markdown(outcome));
     assert.equal(world.host.log().filter((r) => r.path.endsWith('/issues')).length, 0, 'the labeled listing is not used');
   });
 
@@ -604,7 +608,7 @@ describe('targeted discovery from one original (§2.4, D21)', () => {
     const outcome = await cleanup(world, { originalPullNumber: 37 });
     assert.equal(outcome['status'], 'complete');
     assert.deepEqual(results(outcome), [[40, 37, 'unlabeled'], [41, 37, 'closed']]);
-    assert.ok(markdown(outcome).includes('- #40 (for #37): skipped, it does not carry the label `suggestion`'), markdown(outcome));
+    assert.ok(markdown(outcome).includes('- #40 (for #37): skipped, it does not carry the label `suggestion-pr`'), markdown(outcome));
     assert.deepEqual(writes(world), closes(41));
   });
 

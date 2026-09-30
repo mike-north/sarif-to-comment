@@ -1,0 +1,14 @@
+== s58
+commit 5cd90d70e866cc6bb4cddea3c700ae731e91639c
+parents 37eaceec3431911c60692ff561d6c1afd91297fc
+subject Suggestion for #56: create docs/experiments/sarif-issue27/a-guide.md
+body Suggested in a review of mike-north/doc-linter pull request 56 at commit 37eaceec3431911c60692ff561d6c1afd91297fc.
+ docs/experiments/sarif-issue27/a-guide.md | 3 +++
+ 1 file changed, 3 insertions(+)
+== s59
+commit 45de42b4b8666c5733cf2bb77bd5289a76def47e
+parents 68cbc6c810720bdd1de289ef70a01c3482364f36
+subject Suggestion for #57: create docs/experiments/sarif-issue27/b-guide.md
+body Suggested in a review of mike-north/doc-linter pull request 57 at commit 68cbc6c810720bdd1de289ef70a01c3482364f36.
+ docs/experiments/sarif-issue27/b-guide.md | 3 +++
+ 1 file changed, 3 insertions(+)

@@ -16,7 +16,7 @@
  *   validate            readiness, without publishing    validateSarifReview
  *   publish             create the GitHub review         publishSarifReview
  *                       (a draft; --submit: submitted;
- *                       --suggestion-prs: with companion
+ *                       --allow-suggestion-prs: with
  *                       suggestion pull requests)
  *   close-suggestion-prs close suggestion pull requests  closeSuggestionPullRequests
  *                       whose original ended
@@ -60,9 +60,9 @@ import type { ISarifSourceBinding } from './public-types.cjs';
 import { parseFindingSelector } from './finding-selectors.cjs';
 import { createSarifDocument, addSarifCommentWithUntypedInput, removeSarifCommentWithUntypedInput } from './sarif-authoring.cjs';
 import type { ICreateSarifDocumentOptions, INewSarifRun, ISarifComment } from './sarif-authoring.cjs';
-import { LABEL_RULE, isLabelName } from './review-preflight.cjs';
 import { isNormalizedRepositoryPath, OWNER_PATTERN, REPO_PATTERN } from './sarif-common.cjs';
 import { inspectSarifWithUntypedInput, renderInspectionText } from './sarif-inspection.cjs';
+import { LABEL_RULE, isLabelName } from './suggestion-pr-convention.cjs';
 import type { IInspectSarifOptions } from './sarif-inspection.cjs';
 import { addStagedChangesToSarifWithUntypedInput } from './staged-changes.cjs';
 import type { IStagedChangesReceipt } from './staged-changes.cjs';
@@ -132,12 +132,20 @@ const REVIEW_POLICY_OPTIONS = md`  --source-root ABSOLUTE_FILE_URI
                                  comment review, instead of a draft. Never
                                  approves or requests changes. Retry a
                                  publication with the mode it started with.
-  --suggestion-prs               Propose whole-file creations and deletions,
-                                 and grouped changes (acceptanceGroup), as draft
-                                 suggestion pull requests into the pull
-                                 request's head branch, linked from the review.
-  --suggestion-label NAME        Existing label for suggestion pull requests
-                                 (default: suggestion). Needs --suggestion-prs.
+  --allow-suggestion-prs         Allow suggestion pull requests: propose
+                                 whole-file creations and deletions, and grouped
+                                 changes (acceptanceGroup), as pull requests
+                                 into the pull request's head branch, linked
+                                 from the review. They carry the repository's
+                                 suggestion label (suggestion-pr, or the label
+                                 in .github/suggestion-prs.json on the default
+                                 branch), which must already exist.
+  --pr-labels A,B,C              Extra existing labels for suggestion pull
+                                 requests, comma-separated. Needs
+                                 --allow-suggestion-prs.
+  --mark-suggestion-prs-ready    Create suggestion pull requests ready for
+                                 review instead of as drafts. Needs
+                                 --allow-suggestion-prs.
 `;
 
 const PUBLISH_OPTIONS = md`  --sarif FILE                   SARIF 2.1.0 JSON file to publish.
@@ -175,7 +183,7 @@ Usage:
   sarif-to-comment --sarif FILE --repo OWNER/REPO --pull N --commit FULLSHA
                    --state ABSOLUTE_FILE [--source-root ABSOLUTE_FILE_URI]
                    [--old-source-commit FULLSHA] [--ignore-approval-hold] [--submit]
-                   [--suggestion-prs [--suggestion-label NAME]]
+                   [--allow-suggestion-prs [--pr-labels A,B,C] [--mark-suggestion-prs-ready]]
   sarif-to-comment [COMMAND] --help
 
 Commands:
@@ -347,7 +355,8 @@ Usage:
   sarif-to-comment validate --sarif FILE --repo OWNER/REPO --pull N --commit FULLSHA
                             [--source-root ABSOLUTE_FILE_URI] [--old-source-commit FULLSHA]
                             [--ignore-approval-hold] [--submit]
-                            [--suggestion-prs [--suggestion-label NAME]] [--format human|json]
+                            [--allow-suggestion-prs [--pr-labels A,B,C] [--mark-suggestion-prs-ready]]
+                            [--format human|json]
 
 Runs every check publish runs, reading the pull request and its source from
 GitHub, and stops before publishing: nothing is written to GitHub and no file
@@ -372,7 +381,8 @@ Usage:
   sarif-to-comment publish --sarif FILE --repo OWNER/REPO --pull N --commit FULLSHA
                            --state ABSOLUTE_FILE [--source-root ABSOLUTE_FILE_URI]
                            [--old-source-commit FULLSHA] [--ignore-approval-hold]
-                           [--submit] [--suggestion-prs [--suggestion-label NAME]]
+                           [--submit] [--allow-suggestion-prs [--pr-labels A,B,C]
+                           [--mark-suggestion-prs-ready]]
                            [--format human|json]
 
 The same operation as the original form without a command.
@@ -392,9 +402,12 @@ Usage:
   sarif-to-comment close-suggestion-prs --repo OWNER/REPO [--label NAME] [--original N]
                                         [--dry-run] [--format human|json]
 
-Closes this tool's open suggestion pull requests (made by publish
---suggestion-prs) whose original pull request has merged or closed. They are
-recognized by the marker in their description, never by their title. A
+Closes open suggestion pull requests (made by publish --allow-suggestion-prs,
+or by any tool following the suggestion pull request convention) whose
+original pull request has merged or closed. They are recognized by the marker
+in their description, never by their title. They carry the repository's
+suggestion label: suggestion-pr, or the label in .github/suggestion-prs.json
+on the default branch; an invalid file stops the command. A
 suggestion is closed only after its original has been read and found merged
 or closed and the suggestion itself has been read again; an original that
 cannot be read is never treated as ended. Everything is read before anything
@@ -403,7 +416,9 @@ Running it again is safe.
 
 Options:
   --repo OWNER/REPO              Repository whose suggestion pull requests are checked.
-  --label NAME                   The suggestion label (default: suggestion).
+  --label NAME                   Check this label instead of the repository's
+                                 suggestion label, for suggestions left under a
+                                 previously configured label.
   --original N                   Check only the pull requests that reference
                                  original pull request N, instead of every open
                                  pull request with the label.
@@ -1207,8 +1222,8 @@ async function addStagedChanges(argv: readonly string[], { cwd }: IHandlerContex
 
 /** The review options publish and validate share: everything but --state. */
 const REVIEW_SPEC = {
-  values: ['--sarif', '--repo', '--pull', '--commit', '--source-root', '--old-source-commit', '--suggestion-label'],
-  booleans: ['--ignore-approval-hold', '--submit', '--suggestion-prs'],
+  values: ['--sarif', '--repo', '--pull', '--commit', '--source-root', '--old-source-commit', '--pr-labels'],
+  booleans: ['--ignore-approval-hold', '--submit', '--allow-suggestion-prs', '--mark-suggestion-prs-ready'],
   required: ['--sarif', '--repo', '--pull', '--commit'],
 } as const satisfies IOptionSpec;
 
@@ -1227,8 +1242,9 @@ interface IReviewRequestInput {
   readonly options?: {
     readonly ignoreApprovalHold?: true;
     readonly submit?: true;
-    readonly suggestionPullRequests?: true;
-    readonly suggestionLabel?: string;
+    readonly allowSuggestionPullRequests?: true;
+    readonly pullRequestLabels?: readonly string[];
+    readonly markSuggestionPullRequestsReady?: true;
   };
 }
 
@@ -1252,13 +1268,17 @@ function reviewRequestInput({ values, flags }: IParsedOptions): IReviewRequestIn
   const reviewedCommit = commitValue(requiredValue(values, '--commit'), '--commit');
   const oldSourceCommit = commitFlag(values, '--old-source-commit');
   const sourceRootUri = sourceRootFlag(values);
-  const label = values.get('--suggestion-label');
-  if (label !== undefined && !flags.has('--suggestion-prs')) throw new UsageError('--suggestion-label requires --suggestion-prs');
+  const allow = flags.has('--allow-suggestion-prs');
+  const labels = values.get('--pr-labels');
+  if (labels !== undefined && !allow) throw new UsageError('--pr-labels requires --allow-suggestion-prs');
+  const ready = flags.has('--mark-suggestion-prs-ready');
+  if (ready && !allow) throw new UsageError('--mark-suggestion-prs-ready requires --allow-suggestion-prs');
   const options = {
     ...(flags.has('--ignore-approval-hold') ? { ignoreApprovalHold: true as const } : {}),
     ...(flags.has('--submit') ? { submit: true as const } : {}),
-    ...(flags.has('--suggestion-prs') ? { suggestionPullRequests: true as const } : {}),
-    ...(label === undefined ? {} : { suggestionLabel: label }),
+    ...(allow ? { allowSuggestionPullRequests: true as const } : {}),
+    ...(labels === undefined ? {} : { pullRequestLabels: labelListFlag(labels) }),
+    ...(ready ? { markSuggestionPullRequestsReady: true as const } : {}),
   };
   return {
     destination,
@@ -1267,6 +1287,17 @@ function reviewRequestInput({ values, flags }: IParsedOptions): IReviewRequestIn
     ...(sourceRootUri === undefined ? {} : { sourceRootUri }),
     ...(Object.keys(options).length === 0 ? {} : { options }),
   };
+}
+
+/**
+ * The names of `--pr-labels`: split at commas, with the spaces around each
+ * name trimmed (docs/companion-suggestion-pr-contract.md §2.2). An empty
+ * name, or one that is not a label name, is a usage error.
+ */
+function labelListFlag(value: string): string[] {
+  const names = value.split(',').map((name) => name.trim());
+  if (!names.every(isLabelName)) throw new UsageError(`--pr-labels must be a comma-separated list of label names, each ${LABEL_RULE}`);
+  return names;
 }
 
 /** Library input fields from publish options; throws UsageError. */
