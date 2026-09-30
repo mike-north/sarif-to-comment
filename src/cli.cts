@@ -152,9 +152,10 @@ const REVIEW_POLICY_OPTIONS = md`  --source-root ABSOLUTE_FILE_URI
                                  whole-file creations and deletions, fixes with
                                  several changes, and changes grouped with
                                  group-fixes, as pull requests into the pull
-                                 request's head branch, linked from the review. They carry the repository's
-                                 suggestion label (suggestion-pr, or the label
-                                 in .github/suggestion-prs.json on the default
+                                 request's head branch, linked from the review.
+                                 They carry the repository's suggestion label
+                                 (suggestion-pr, or the label in
+                                 .github/suggestion-prs.json on the default
                                  branch), which must already exist.
   --pr-labels A,B,C              Extra existing labels for suggestion pull
                                  requests, comma-separated. Needs
