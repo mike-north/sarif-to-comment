@@ -140,7 +140,7 @@ Each block is:
 
 1. A severity badge (`✖ error`, `▲ warning`, `ℹ note`), the title in bold, and the code, dimmed, in brackets. This header is one line and is never wrapped.
 2. Where it is: `path:line` (or `path:start-end`), the JSON Pointer, and the subject, joined by ` · `. Omitted when there is none.
-3. The message, indented and wrapped to the terminal's width. Lines inside a fenced code block are never wrapped, and a word longer than the width is never broken.
+3. The message, indented and wrapped to the terminal's width, measured in display columns: a wide (CJK) character or an emoji is two columns, and a combining mark none. Lines inside a fenced code block are never wrapped, and a word longer than the width is never broken.
 4. Each remedy on its own `→` line.
 
 Blocks are separated by a blank line. The summary line counts each severity present, for example `1 error, 2 warnings`. When there are no diagnostics, nothing is written to stderr.

@@ -90,9 +90,36 @@ const SEVERITIES: readonly DiagnosticSeverity[] = ['error', 'warning', 'note'];
 const INDENT = '  ';
 const ARROW_INDENT = '    ';
 
+/** Splits text into user-perceived characters (extended grapheme clusters). */
+const GRAPHEMES = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+
+/**
+ * East Asian Wide and Fullwidth characters (Unicode UAX #11), which a
+ * terminal shows in two columns: Hangul Jamo, CJK radicals, punctuation,
+ * kana and ideographs, Yi, Hangul syllables, compatibility ideographs,
+ * vertical and small forms, fullwidth forms, and the supplementary
+ * ideographic planes.
+ */
+const EAST_ASIAN_WIDE = /[\u{1100}-\u{115F}\u{2E80}-\u{303E}\u{3041}-\u{33FF}\u{3400}-\u{4DBF}\u{4E00}-\u{9FFF}\u{A000}-\u{A4CF}\u{AC00}-\u{D7A3}\u{F900}-\u{FAFF}\u{FE30}-\u{FE4F}\u{FF00}-\u{FF60}\u{FFE0}-\u{FFE6}\u{20000}-\u{2FFFD}\u{30000}-\u{3FFFD}]/u;
+
+/** An emoji shown as a picture: emoji presentation by default, or requested with VS16. */
+const EMOJI = /\p{Emoji_Presentation}|\u{FE0F}/u;
+
+/**
+ * The number of terminal columns `text` occupies: each grapheme cluster is
+ * two columns when it is wide or an emoji, and one otherwise, so combining
+ * marks and emoji modifiers add nothing. (UTF-16 length would count an
+ * ideograph as one column and a toned emoji as four.)
+ */
+function displayWidth(text: string): number {
+  let width = 0;
+  for (const { segment } of GRAPHEMES.segment(text)) width += EAST_ASIAN_WIDE.test(segment) || EMOJI.test(segment) ? 2 : 1;
+  return width;
+}
+
 /**
  * `text` wrapped greedily at spaces so that each line, with `first` or
- * `rest` before it, fits `width` columns. A word longer than the width is
+ * `rest` before it, fits `width` columns, measured by {@link displayWidth}. A word longer than the width is
  * kept whole on its own line. Without a width the text is one line.
  */
 function wrap(text: string, first: string, rest: string, width: number | undefined): string[] {
@@ -103,7 +130,7 @@ function wrap(text: string, first: string, rest: string, width: number | undefin
   for (const word of words) {
     const prefix = lines.length === 0 ? first : rest;
     const candidate = current === '' ? word : `${current} ${word}`;
-    if (current !== '' && prefix.length + candidate.length > width) {
+    if (current !== '' && displayWidth(prefix) + displayWidth(candidate) > width) {
       lines.push(`${prefix}${current}`);
       current = word;
     } else {
