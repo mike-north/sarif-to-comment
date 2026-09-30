@@ -7,13 +7,20 @@
  *
  *   <!-- suggestion-pr {"version":1,"original":{"owner":…,"repo":…,"pullNumber":…},"reviewedCommit":…,"id":…,"batch":…} -->
  *
+ * or, for a suggestion re-applied onto a later commit after the original's
+ * history was rewritten (convention §5.1, version 2):
+ *
+ *   <!-- suggestion-pr {"version":2,"original":{…},"reviewedCommit":…,"reappliedOnto":…,"id":…,"batch":…} -->
+ *
  * The JSON is canonical: exactly these members, in exactly this order, with
  * no whitespace, so the line is a pure function of its fields and recovery
  * can match it exactly. `id` identifies the suggestion (its branch carries
  * it), `batch` groups the suggestions of one review (this tool uses its
  * publication id, one per state path), `original` names the original pull
- * request in the same repository, and `reviewedCommit` the proposal commit's
- * parent. No value can contain `>`, `"` or `\`, so the line can never close
+ * request in the same repository, `reviewedCommit` the commit the review was
+ * about, and the proposal commit's parent is `reappliedOnto` when present,
+ * otherwise `reviewedCommit`. The version follows from the fields: 2 exactly
+ * when `reappliedOnto` is present, which must differ from `reviewedCommit`. No value can contain `>`, `"` or `\`, so the line can never close
  * early and JSON writes it without escapes: the commit is hex, the pull
  * number an integer, GitHub owner and repository names are letters, digits,
  * `.`, `_` and `-`, and `id` and `batch` are letters, digits, `-` and `_`. It
@@ -38,6 +45,12 @@ export interface ISuggestionMarkerFields {
   readonly repo: string;
   readonly pullNumber: number;
   readonly reviewedCommit: string;
+  /**
+   * The commit the change was re-applied onto after the original's history
+   * was rewritten (a version 2 marker); absent when the suggestion is based
+   * on the reviewed commit (version 1).
+   */
+  readonly reappliedOnto?: string;
 }
 
 /**
@@ -51,8 +64,11 @@ export type SuggestionMarkerReading =
   | { readonly kind: 'malformed' }
   | { readonly kind: 'marker'; readonly line: string; readonly fields: ISuggestionMarkerFields };
 
-/** The convention version this module writes and recognizes. */
+/** The convention version of a suggestion based on the reviewed commit. */
 const MARKER_VERSION = 1;
+
+/** The convention version of a suggestion re-applied onto a later commit. */
+const REAPPLIED_MARKER_VERSION = 2;
 
 /** The start of every marker line. */
 const MARKER_PREFIX = '<!-- suggestion-pr ';
@@ -76,10 +92,12 @@ export function isSuggestionIdentifier(value: unknown): value is string {
 
 /** The marker line for one suggestion (canonical JSON; see the module documentation). */
 export function formatSuggestionMarker(fields: ISuggestionMarkerFields): string {
+  const { reappliedOnto } = fields;
   const json = JSON.stringify({
-    version: MARKER_VERSION,
+    version: reappliedOnto === undefined ? MARKER_VERSION : REAPPLIED_MARKER_VERSION,
     original: { owner: fields.owner, repo: fields.repo, pullNumber: fields.pullNumber },
     reviewedCommit: fields.reviewedCommit,
+    ...(reappliedOnto === undefined ? {} : { reappliedOnto }),
     id: fields.id,
     batch: fields.batch,
   });
@@ -106,22 +124,26 @@ function parseMarkerLine(line: string): ISuggestionMarkerFields | null {
     return null;
   }
   if (!isObject(parsed)) return null;
-  const { id, original, batch, reviewedCommit } = parsed;
+  const { id, original, batch, reviewedCommit, reappliedOnto } = parsed;
   if (!isObject(original)) return null;
   const { owner, repo, pullNumber } = original;
   if (
     !isSuggestionIdentifier(id) ||
     !isSuggestionIdentifier(batch) ||
     typeof reviewedCommit !== 'string' || !COMMIT.test(reviewedCommit) ||
+    (reappliedOnto !== undefined && (typeof reappliedOnto !== 'string' || !COMMIT.test(reappliedOnto) || reappliedOnto === reviewedCommit)) ||
     !isName(owner) || !isName(repo) ||
     typeof pullNumber !== 'number' || !Number.isSafeInteger(pullNumber) || pullNumber < 1
   ) {
     return null;
   }
-  const fields: ISuggestionMarkerFields = { id, batch, owner, repo, pullNumber, reviewedCommit };
-  // Canonical form only: extra or reordered members, whitespace, another
-  // version or escaped characters all make the line differ from its
-  // formatted form.
+  const fields: ISuggestionMarkerFields = {
+    id, batch, owner, repo, pullNumber, reviewedCommit, ...(reappliedOnto === undefined ? {} : { reappliedOnto }),
+  };
+  // Canonical form only: extra or reordered members, whitespace, a version
+  // that does not match the members (version 1 with reappliedOnto, version 2
+  // without it), an unknown version or escaped characters all make the line
+  // differ from its formatted form.
   return formatSuggestionMarker(fields) === line ? fields : null;
 }
 

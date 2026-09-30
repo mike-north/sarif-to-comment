@@ -110,3 +110,44 @@ describe('findSuggestionMarker', () => {
     });
   }
 });
+
+/**
+ * Version 2 (docs/suggestion-pr-convention.md §5.1, §7, §11; issue #28): a
+ * suggestion re-applied onto a later commit after the original's history was
+ * rewritten names that commit as `reappliedOnto`, right after
+ * `reviewedCommit`. Every line is written out by hand from the convention.
+ */
+describe('version 2: a re-applied suggestion (issue #28)', () => {
+  const HEAD = '3007343b1f1d5cf1a0d6d6c0f35b0c2a8f1e9d77';
+  const LINE2 = `<!-- suggestion-pr {"version":2,"original":{"owner":"mike-north","repo":"doc-linter","pullNumber":36},"reviewedCommit":"${COMMIT}","reappliedOnto":"${HEAD}","id":"${ID}","batch":"${BATCH}"} -->`;
+  const FIELDS2 = { ...FIELDS, reappliedOnto: HEAD };
+
+  test('the publisher formats a re-applied suggestion\'s marker as version 2, with reappliedOnto after reviewedCommit', () => {
+    assert.equal(formatSuggestionMarker(FIELDS2), LINE2);
+  });
+
+  test('a suggestion that was not re-applied keeps its version 1 marker, byte for byte', () => {
+    assert.equal(formatSuggestionMarker(FIELDS), LINE);
+    assert.deepEqual(findSuggestionMarker(BODY), { kind: 'marker', line: LINE, fields: FIELDS });
+  });
+
+  test('a version 2 marker is recognized, with the commit it was re-applied onto', () => {
+    assert.deepEqual(findSuggestionMarker(`Re-applied.\r\n\r\n${LINE2}`), { kind: 'marker', line: LINE2, fields: FIELDS2 });
+  });
+
+  const malformed2: readonly (readonly [string, string])[] = [
+    ['version 1 with reappliedOnto', LINE2.replace('"version":2', '"version":1')],
+    ['version 2 without reappliedOnto', LINE2.replace(`,"reappliedOnto":"${HEAD}"`, '')],
+    ['reappliedOnto before reviewedCommit', LINE2.replace(`"reviewedCommit":"${COMMIT}","reappliedOnto":"${HEAD}"`, `"reappliedOnto":"${HEAD}","reviewedCommit":"${COMMIT}"`)],
+    ['reappliedOnto equal to reviewedCommit', LINE2.replace(`"reappliedOnto":"${HEAD}"`, `"reappliedOnto":"${COMMIT}"`)],
+    ['an abbreviated reappliedOnto', LINE2.replace(`"reappliedOnto":"${HEAD}"`, `"reappliedOnto":"${HEAD.slice(0, 7)}"`)],
+    ['a null reappliedOnto', LINE2.replace(`"reappliedOnto":"${HEAD}"`, '"reappliedOnto":null')],
+    ['a version this convention does not define', LINE2.replace('"version":2', '"version":3')],
+  ];
+  for (const [what, line] of malformed2) {
+    test(`a non-canonical marker is refused: ${what}`, () => {
+      assert.notEqual(line, LINE2);
+      assert.deepEqual(findSuggestionMarker(`Body.\n\n${line}`), { kind: 'malformed' });
+    });
+  }
+});

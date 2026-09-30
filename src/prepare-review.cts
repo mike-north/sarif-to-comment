@@ -36,6 +36,15 @@
  *                    // repository-validated provenance revision, and only with
  *                    // paths that resolved inside the repository. A thrown
  *                    // error is operational and propagates unchanged.
+ *   readEntry?: async (commit, path) => { kind: 'file', blob, mode } |
+ *                    { kind: 'absent' } | { kind: 'not-a-file', entry, path }
+ *                    // trusted tree read at the same boundary: what stands
+ *                    // at a path, never downloading a blob. Required with,
+ *                    // and called only for, a head resolveRewrittenHead names.
+ *                    // There, a readSource error whose `code` is
+ *                    // 'undecodable-source' or 'source-too-large' (an edited
+ *                    // file that is not source at the head) makes that
+ *                    // suggestion not created instead of failing.
  *   fileExists?: async (commit, path) => boolean
  *                    // trusted existence check at the same boundary: whether
  *                    // a regular file exists there, without reading its
@@ -46,11 +55,23 @@
  *                    // operational and propagates unchanged.
  *   options?: {
  *     ignoreApprovalHold?: boolean,   // bypasses only an approval hold
- *     suggestionPullRequests?: { headRef, ready },  // enabled: whole-file
- *                                     // proposals and explicit groups become
- *                                     // suggestion pull requests into the
- *                                     // named head branch, drafts unless
- *                                     // `ready` (it words their lifecycle note)
+ *     suggestionPullRequests?: { headRef, ready, resolveRewrittenHead? },
+ *                                     // enabled: whole-file proposals and
+ *                                     // explicit groups become suggestion
+ *                                     // pull requests into the named head
+ *                                     // branch, drafts unless `ready` (it
+ *                                     // words their lifecycle note).
+ *                                     // `resolveRewrittenHead`: async, called
+ *                                     // at most once and only when the review
+ *                                     // has suggestion units; answers the pull
+ *                                     // request's head when the reviewed
+ *                                     // commit is not its ancestor, otherwise
+ *                                     // undefined. Each suggestion is then
+ *                                     // re-applied onto it only when
+ *                                     // everything it changes is identical
+ *                                     // there, and is otherwise not created,
+ *                                     // with a warning and its reasons in the
+ *                                     // review body (contract §2.5.1)
  *     maxComments?: number,           // default 100 inline comments
  *     maxCommentBodyChars?: number,   // default 60000 UTF-16 units per comment
  *                                     // body and for the review body
@@ -74,10 +95,11 @@
  *     evidence: Evidence[],   // one per SARIF result, in SARIF order
  *     warnings: Diagnostic[], markdown: string,
  *     suggestions?: { companions, sections } }  // only when suggestion pull
- *       // requests are needed: each companion's exact changes, title, commit
- *       // message and rendered parts, and the body's sections (text, or a
- *       // companion index rendered once its number is known); review.body
- *       // is then the body at its largest possible size, for the limits
+ *       // requests are created: each companion's exact changes (re-applied
+ *       // onto the rewritten head when there is one), title, commit message and rendered
+ *       // parts, and the body's sections (text, or a companion index
+ *       // rendered once its number is known); review.body is then the body
+ *       // at its largest possible size, for the limits
  *   { status: 'blocked', diagnostics: Diagnostic[], warnings: Diagnostic[], markdown: string }
  *
  *   Diagnostic: { code, pointer?, message }  pointer is a JSON Pointer into the
@@ -206,7 +228,7 @@ import * as crypto from 'node:crypto';
 import type { SchemaObject, ValidateFunction } from 'ajv';
 import type AjvDraft04Module = require('ajv-draft-04');
 import type AjvFormatsModule = require('ajv-formats');
-import type { IReviewContext, ProposalChange } from './github.cjs';
+import type { IReviewContext, PathEntry, ProposalChange } from './github.cjs';
 import { classifyPlacement } from './placement.cjs';
 import type { IPlacementSourceRange, PlacementAnchorSide } from './placement.cjs';
 import { applyReplacement as productionApplyReplacement } from './replacements.cjs';
@@ -436,6 +458,13 @@ type SnapshotReader = (commit: string, path: string) => unknown;
 type ExistenceCheck = (commit: string, path: string) => unknown;
 
 /**
+ * The trusted tree read: what stands at a path in a full commit, from its
+ * trees alone (checked where it is used). The review context's ReadEntry
+ * (src/github.cts) is one.
+ */
+type EntryReader = (commit: string, path: string) => unknown;
+
+/**
  * Suggestion pull requests are enabled (docs/companion-suggestion-pr-contract.md):
  * `headRef` is the pull request's head branch they would target, which their
  * rendered text names, and `ready` whether they are created ready for review
@@ -444,6 +473,15 @@ type ExistenceCheck = (commit: string, path: string) => unknown;
 interface ISuggestionPullRequestsOption {
   readonly headRef: string;
   readonly ready: boolean;
+  /**
+   * Answers the pull request's head when the reviewed commit is not its
+   * ancestor (the history was rewritten), otherwise undefined: suggestions
+   * are then re-applied onto it, or not created
+   * (docs/companion-suggestion-pr-contract.md §2.5.1). Called at most once,
+   * and only when the review has suggestion units, so a review that creates
+   * none never depends on it (§2.8). A rejection is operational.
+   */
+  readonly resolveRewrittenHead?: () => Promise<string | undefined>;
 }
 
 /** Caller options; every limit defaults to PRODUCT_LIMITS. */
@@ -462,6 +500,7 @@ export interface IPrepareReviewInput {
   readonly context: IPreparationContext;
   readonly readSource: SnapshotReader;
   readonly fileExists?: ExistenceCheck | undefined;
+  readonly readEntry?: EntryReader | undefined;
   readonly options?: IPrepareReviewOptions | undefined;
 }
 
@@ -784,6 +823,8 @@ interface IPreparationState {
   readonly applyFix: ApplyReplacement;
   readonly readSource: (commit: string, path: string) => Promise<unknown>;
   readonly fileExists: (commit: string, path: string) => Promise<boolean>;
+  /** Present exactly when suggestions may have to be re-applied onto a rewritten head. */
+  readonly readEntry: ((commit: string, path: string) => Promise<PathEntry>) | null;
   readonly sourceRoot: ParsedReference | null;
 }
 
@@ -847,15 +888,26 @@ export interface ISuggestionContext {
   readonly headRef: string;
   /** Whether the suggestion is created ready for review instead of as a draft (its lifecycle note says which). */
   readonly ready: boolean;
+  /** The commit the suggestion is re-applied onto after a rewritten history, when it is (§2.5.1). */
+  readonly reappliedOnto?: string;
 }
 
-/** What the unit-based assembly produces; `suggestions` is null when the review is blocked. */
+/**
+ * What the unit-based assembly produces (meaningful only when no error was
+ * reported); `suggestions` is absent when no suggestion pull request is
+ * created, because every one was not re-applied (§2.5.1).
+ */
 interface IUnitAssembly {
   readonly review: IPreparedReview;
   readonly evidence: Evidence[];
   readonly sectionCount: number;
-  readonly suggestions: IPreparedSuggestions | null;
+  readonly suggestions?: IPreparedSuggestions;
 }
+
+/** Whether one suggestion pull request is created (re-applied onto a head, with that head's edited files) or not. */
+type UnitDecision =
+  | { readonly kind: 'created'; readonly headTexts: ReadonlyMap<string, string> }
+  | { readonly kind: 'not-created'; readonly reasons: readonly string[] };
 
 /** Source text read at a location's resolved repository path and revision. */
 interface ILocatedSource {
@@ -1087,6 +1139,7 @@ async function prepareReview(input: unknown, internals: IPrepareReviewInternals 
     applyFix: (internals && internals.applyReplacement) || productionApplyReplacement,
     readSource: cachedSource,
     fileExists: existenceCheck(input.fileExists === undefined ? undefined : cachedReader(input.fileExists), cachedSource),
+    readEntry: input.readEntry === undefined ? null : entryReader(cachedReader(input.readEntry)),
     sourceRoot: context.sourceRootUri === undefined ? null : parseBaseUri(context.sourceRootUri),
   };
 
@@ -1113,8 +1166,8 @@ async function prepareReview(input: unknown, internals: IPrepareReviewInternals 
   const enabled = options.suggestionPullRequests;
   const needsUnits = items.some((item) => item.group !== undefined) || (enabled !== undefined && items.some((item) => item.fileOperation !== null));
   if (needsUnits) {
-    const units = assembleWithSuggestions(items, state);
-    if (report.errors.length > 0 || units.suggestions === null) return blocked(report);
+    const units = await assembleWithSuggestions(items, state);
+    if (report.errors.length > 0) return blocked(report);
     enforceLimits(units.review, [], state);
     if (report.errors.length > 0) return blocked(report);
     return {
@@ -1123,7 +1176,7 @@ async function prepareReview(input: unknown, internals: IPrepareReviewInternals 
       evidence: units.evidence,
       warnings: report.warnings,
       markdown: readyMarkdown(units.review, units.sectionCount, report),
-      suggestions: units.suggestions,
+      ...(units.suggestions === undefined ? {} : { suggestions: units.suggestions }),
     };
   }
 
@@ -1187,6 +1240,10 @@ function validateCallerInput(input: unknown): asserts input is IPrepareReviewInp
     ) {
       fail('`options.suggestionPullRequests` must be { headRef, ready } naming the pull request\'s head branch and whether they are created ready for review.');
     }
+    const resolve = isPlainObject(suggestions) ? suggestions['resolveRewrittenHead'] : undefined;
+    if (resolve !== undefined && typeof resolve !== 'function') {
+      fail('`options.suggestionPullRequests.resolveRewrittenHead` must be a function () => Promise<commit | undefined>.');
+    }
   }
 }
 
@@ -1214,8 +1271,35 @@ function existenceCheck(
   };
 }
 
+/**
+ * The caller's tree read, with its answer checked: an entry of a known kind
+ * with well-formed fields. Anything else is caller misuse.
+ */
+function entryReader(read: (commit: string, path: string) => Promise<unknown>): (commit: string, path: string) => Promise<PathEntry> {
+  return async (commit, path) => {
+    const entry = await read(commit, path);
+    if (isPathEntry(entry)) return entry;
+    throw new TypeError(`readEntry(${commit}, ${path}) returned an answer that is not a path entry.`);
+  };
+}
+
+/** Whether an answer of the caller's tree read is a PathEntry (see src/github.cts). */
+function isPathEntry(value: unknown): value is PathEntry {
+  if (!isPlainObject(value)) return false;
+  switch (value['kind']) {
+    case 'absent':
+      return true;
+    case 'file':
+      return isFullCommit(value['blob']) && (value['mode'] === '100644' || value['mode'] === '100755');
+    case 'not-a-file':
+      return ['a directory', 'a symbolic link', 'a submodule'].includes(String(value['entry'])) && typeof value['path'] === 'string';
+    default:
+      return false;
+  }
+}
+
 /** Reads each (commit, path) snapshot at most once. */
-function cachedReader(readSource: SnapshotReader | ExistenceCheck): (commit: string, path: string) => Promise<unknown> {
+function cachedReader(readSource: SnapshotReader | ExistenceCheck | EntryReader): (commit: string, path: string) => Promise<unknown> {
   const cache = new Map<string, Promise<unknown>>();
   return (commit, path) => {
     const key = `${commit}\0${path}`;
@@ -2675,7 +2759,7 @@ class ChangeRegistry {
  * is split. Each suggestion pull request's section takes the position of the
  * first finding carrying one of its changes.
  */
-function assembleWithSuggestions(items: readonly IPreparedItem[], state: IPreparationState): IUnitAssembly {
+async function assembleWithSuggestions(items: readonly IPreparedItem[], state: IPreparationState): Promise<IUnitAssembly> {
   const { context, report, options } = state;
   const enabled = options.suggestionPullRequests;
   const registry = new ChangeRegistry(report);
@@ -2784,31 +2868,40 @@ function assembleWithSuggestions(items: readonly IPreparedItem[], state: IPrepar
         + 'Remove the group, and the change is published on its own.');
     }
   }
-  if (enabled !== undefined && units.length > MAX_SUGGESTION_PULL_REQUESTS) {
-    report.error('too-many-suggestion-prs', undefined,
-      `The review needs ${String(units.length)} suggestion pull requests; the limit is ${String(MAX_SUGGESTION_PULL_REQUESTS)}. Nothing is split or dropped.`);
-  }
-
   const comments: PreparedComment[] = commentItems.map((entry) => {
     const body = entry.items.map(renderItem).join(SEPARATOR);
     return { ...entry.coordinates, body: entry.suggestion ? `${body}\n\n\`\`\`suggestion\n${entry.suggestion.payload}\`\`\`` : body };
   });
-  const blockedAssembly: IUnitAssembly = {
-    review: { commitId: context.reviewedCommit, body: '', comments },
-    evidence,
-    sectionCount: sections.length,
-    suggestions: null,
-  };
-  if (enabled === undefined || report.errors.length > 0) return blockedAssembly;
+  const blockedAssembly: IUnitAssembly = { review: { commitId: context.reviewedCommit, body: '', comments }, evidence, sectionCount: sections.length };
+  if (enabled === undefined) return blockedAssembly;
 
+  // Ancestry is resolved only now that suggestion units exist (§2.8), even
+  // when another problem already blocks, so that the limit below counts what
+  // would be created and is reported with every other problem.
+  const head = units.length === 0 ? undefined : await rewrittenHeadOf(enabled, context, state);
   const target: ISuggestionContext = {
     owner: context.owner, repo: context.repo, pullNumber: context.pullNumber, reviewedCommit: context.reviewedCommit, headRef: enabled.headRef,
-    ready: enabled.ready,
+    ready: enabled.ready, ...(head === undefined ? {} : { reappliedOnto: head }),
   };
-  const companions = units.map((unit) => prepareCompanion(unit, target, context));
+  // After a rewritten history each unit is re-applied onto the head or not
+  // created (contract §2.5.1); otherwise every unit is created as reviewed.
+  const decisions: UnitDecision[] = [];
+  for (const unit of units) decisions.push(head === undefined ? { kind: 'created', headTexts: new Map() } : await reapplication(unit, head, state));
+  const created = units.flatMap((_, i) => (itemAt(decisions, i).kind === 'created' ? [i] : []));
+  if (created.length > MAX_SUGGESTION_PULL_REQUESTS) report.error('too-many-suggestion-prs', undefined, tooManySuggestions(created.length));
+  if (report.errors.length > 0) return blockedAssembly;
+
+  /** Each created unit's companion index, in unit order. */
+  const companionOf = new Map(created.map((unitIndex, companionIndex) => [unitIndex, companionIndex]));
+  const prepared = units.map((unit, i) => {
+    const decision = itemAt(decisions, i);
+    return prepareCompanion(unit, target, context, decision.kind === 'created' ? decision.headTexts : new Map<string, string>());
+  });
+  const companions = created.map((i) => itemAt(prepared, i));
   const sizingMarker = formatSuggestionMarker({ ...target, id: SIZING_UUID, batch: SIZING_UUID });
   const { maxCommentBodyChars } = options;
-  for (const [i, companion] of companions.entries()) {
+  for (const i of created) {
+    const companion = itemAt(prepared, i);
     const size = renderSuggestionPullBody(companion, sizingMarker, target).length;
     const unit = itemAt(units, i);
     if (maxCommentBodyChars !== undefined && size > maxCommentBodyChars) {
@@ -2818,22 +2911,176 @@ function assembleWithSuggestions(items: readonly IPreparedItem[], state: IPrepar
     }
   }
   if (report.errors.length > 0) return blockedAssembly;
-  const parts = sections.map((section): string | number => (section.kind === 'item' ? renderSection(section.item, context) : section.unit));
+
+  const notCreated = new Map<number, string>();
+  for (const [i, decision] of decisions.entries()) {
+    if (decision.kind === 'created' || head === undefined) continue;
+    const companion = itemAt(prepared, i);
+    notCreated.set(i, renderNotCreatedSection(companion, decision.reasons, head, target));
+    report.warn('suggestion-pr-not-reapplied', itemAt(units, i).items[0]?.pointer,
+      `The history of #${String(target.pullNumber)} was rewritten after the reviewed commit, so the suggestion pull request ${codeSpan(companion.title)} `
+      + `would have to be re-applied onto commit ${codeSpan(head)}, and it cannot be: ${decision.reasons.join('; ')}. `
+      + 'It is not created; its change and findings are presented in the review body.');
+  }
+  const parts = sections.map((section): string | number => {
+    if (section.kind === 'item') return renderSection(section.item, context);
+    const part = companionOf.get(section.unit) ?? notCreated.get(section.unit);
+    if (part === undefined) throw new Error(`Internal error: suggestion unit ${String(section.unit)} is neither created nor presented as not created.`);
+    return part;
+  });
+  // A result carried by a suggestion that is not created is general feedback in that suggestion's section.
+  const renumbered = evidence.map((record): Evidence => {
+    if (record.treatment !== 'general' || record.suggestionPullRequest === undefined) return record;
+    const { suggestionPullRequest, ...rest } = record;
+    const index = companionOf.get(suggestionPullRequest);
+    return index === undefined ? rest : { ...rest, suggestionPullRequest: index };
+  });
+  if (companions.length === 0) {
+    const body = parts.map(String).join(SEPARATOR);
+    return { review: { commitId: context.reviewedCommit, body, comments }, evidence: renumbered, sectionCount: sections.length };
+  }
   const suggestions: IPreparedSuggestions = { companions, sections: parts };
   return {
     review: { commitId: context.reviewedCommit, body: renderReviewBody(suggestions, companions.map(() => LARGEST_PULL_NUMBER), target), comments },
-    evidence,
+    evidence: renumbered,
     sectionCount: sections.length,
     suggestions,
   };
 }
 
-/** A unit's companion: its exact commit changes, title, commit message and rendered parts. */
-function prepareCompanion(unit: ISuggestionUnit, target: ISuggestionContext, context: IPreparationContext): IPreparedCompanion {
-  const changes = [...unit.changes.values()];
+/**
+ * The rewritten head suggestions are re-applied onto (contract §2.5.1), from
+ * the caller's resolver, checked: a full commit other than the reviewed one,
+ * with a tree read to compare against. Undefined when there is none.
+ */
+async function rewrittenHeadOf(enabled: ISuggestionPullRequestsOption, context: IPreparationContext, state: IPreparationState): Promise<string | undefined> {
+  if (enabled.resolveRewrittenHead === undefined) return undefined;
+  const head: unknown = await enabled.resolveRewrittenHead();
+  if (head === undefined) return undefined;
+  if (!isFullCommit(head) || head === context.reviewedCommit) {
+    throw new TypeError('`resolveRewrittenHead` must answer a full commit other than the reviewed commit, or undefined.');
+  }
+  if (state.readEntry === null) throw new TypeError('`readEntry` is required to re-apply suggestions onto a rewritten head.');
+  return head;
+}
+
+/**
+ * Whether one suggestion pull request can be re-applied onto a rewritten head
+ * (contract §2.5.1): every change must still meet exactly what was reviewed
+ * there — an edited file with each replaced range byte-identical at the same
+ * lines, a created path absent, a deleted file with the same blob and mode.
+ * Created with the head's text of each edited file, or not created with every
+ * reason, in the order of the changes.
+ */
+async function reapplication(unit: ISuggestionUnit, head: string, state: IPreparationState): Promise<UnitDecision> {
+  const { readEntry } = state;
+  if (readEntry === null) throw new TypeError('`readEntry` is required to re-apply suggestions onto a rewritten head.');
+  const reasons: string[] = [];
+  const headTexts = new Map<string, string>();
+  for (const [filePath, onPath] of changesByPath(unit)) {
+    const first = itemAt(onPath, 0);
+    const entry = await readEntry(head, filePath);
+    if (entry.kind === 'not-a-file') {
+      reasons.push(`${codeSpan(entry.path)} is ${entry.entry}`);
+    } else if (first.kind === 'edit') {
+      if (entry.kind === 'absent') {
+        reasons.push(`${codeSpan(filePath)} no longer exists`);
+        continue;
+      }
+      const read = await headSource(state, head, filePath);
+      if (read.kind === 'unreadable') {
+        reasons.push(`${codeSpan(filePath)} ${read.reason}`);
+        continue;
+      }
+      const { text } = read;
+      const reviewedLines = sourceLines(first.edit.sourceText);
+      const headLines = sourceLines(text);
+      const differing = onPath.flatMap((change) => {
+        if (change.kind !== 'edit') return [];
+        const { startLine, endLine } = change.edit;
+        const region = (lines: readonly string[]): string => lines.slice(startLine - 1, endLine).join('');
+        if (region(headLines) === region(reviewedLines)) return [];
+        return [startLine === endLine
+          ? `${codeSpan(filePath)} line ${String(startLine)} differs from the reviewed text`
+          : `${codeSpan(filePath)} lines ${String(startLine)}-${String(endLine)} differ from the reviewed text`];
+      });
+      reasons.push(...differing);
+      if (differing.length === 0) headTexts.set(filePath, text);
+    } else if (first.operation.operation === 'create') {
+      if (entry.kind === 'file') reasons.push(`${codeSpan(filePath)} already exists`);
+    } else if (entry.kind === 'absent') {
+      reasons.push(`${codeSpan(filePath)} no longer exists`);
+    } else {
+      const reviewed = await readEntry(first.operation.commit, filePath);
+      if (reviewed.kind !== 'file' || reviewed.blob !== entry.blob || reviewed.mode !== entry.mode) {
+        reasons.push(`${codeSpan(filePath)} differs from the reviewed file`);
+      }
+    }
+  }
+  return reasons.length === 0 ? { kind: 'created', headTexts } : { kind: 'not-created', reasons };
+}
+
+/** The too-many-suggestion-prs problem for `count` suggestion pull requests (contract §2.8). */
+function tooManySuggestions(count: number): string {
+  return `The review needs ${String(count)} suggestion pull requests; the limit is ${String(MAX_SUGGESTION_PULL_REQUESTS)}. Nothing is split or dropped.`;
+}
+
+/**
+ * Why a head file's text is not source a replaced range can be compared in,
+ * by the reader's error code (src/github.cts): not UTF-8, or beyond the
+ * source-read limit. Such a file makes its suggestion not created; any other
+ * failure stays operational.
+ */
+const UNREADABLE_SOURCE: Readonly<Record<string, string>> = {
+  'undecodable-source': 'is not UTF-8 text at the head',
+  'source-too-large': 'exceeds the source-read limit',
+};
+
+/** An edited file's text at a rewritten head, or why it cannot be compared (contract §2.5.1). */
+async function headSource(
+  state: IPreparationState,
+  head: string,
+  filePath: string,
+): Promise<{ readonly kind: 'text'; readonly text: string } | { readonly kind: 'unreadable'; readonly reason: string }> {
+  let text: unknown;
+  try {
+    text = await state.readSource(head, filePath);
+  } catch (err) {
+    const code: unknown = err instanceof Error ? Reflect.get(err, 'code') : undefined;
+    const reason = typeof code === 'string' && Object.hasOwn(UNREADABLE_SOURCE, code) ? UNREADABLE_SOURCE[code] : undefined;
+    if (reason === undefined) throw err;
+    return { kind: 'unreadable', reason };
+  }
+  if (typeof text !== 'string') throw new TypeError(`readSource(${head}, ${filePath}) returned no text for a file that exists.`);
+  return { kind: 'text', text };
+}
+
+/** A unit's changes grouped by path, in the order paths first appear. */
+function changesByPath(unit: ISuggestionUnit): Map<string, UnitChange[]> {
   const byPath = new Map<string, UnitChange[]>();
-  for (const change of changes) byPath.set(changePath(change), [...(byPath.get(changePath(change)) ?? []), change]);
-  const commitChanges = [...byPath].map(([filePath, onPath]): ProposalChange => {
+  for (const change of unit.changes.values()) byPath.set(changePath(change), [...(byPath.get(changePath(change)) ?? []), change]);
+  return byPath;
+}
+
+/** A file's lines, each with its terminator (a final line may have none). */
+function sourceLines(text: string): string[] {
+  return text.match(/[^\n]*\n|[^\n]+$/g) || [];
+}
+
+/**
+ * A unit's companion: its exact commit changes, title, commit message and
+ * rendered parts. An edited file whose text at a rewritten head is given has
+ * the same ranges replaced in that text (a re-application, contract §2.5.1);
+ * otherwise in the reviewed file.
+ */
+function prepareCompanion(
+  unit: ISuggestionUnit,
+  target: ISuggestionContext,
+  context: IPreparationContext,
+  headTexts: ReadonlyMap<string, string>,
+): IPreparedCompanion {
+  const changes = [...unit.changes.values()];
+  const commitChanges = [...changesByPath(unit)].map(([filePath, onPath]): ProposalChange => {
     const first = itemAt(onPath, 0);
     if (first.kind === 'operation') {
       const operation = first.operation;
@@ -2842,7 +3089,7 @@ function prepareCompanion(unit: ISuggestionUnit, target: ISuggestionContext, con
         : { operation: 'delete', path: filePath };
     }
     const fileEdits = onPath.flatMap((c) => (c.kind === 'edit' ? [c.edit] : []));
-    return { operation: 'edit', path: filePath, text: combineEdits(first.edit.sourceText, fileEdits) };
+    return { operation: 'edit', path: filePath, text: combineEdits(headTexts.get(filePath) ?? first.edit.sourceText, fileEdits) };
   });
   const count = changes.length;
   const pull = `#${String(target.pullNumber)}`;
@@ -2853,7 +3100,8 @@ function prepareCompanion(unit: ISuggestionUnit, target: ISuggestionContext, con
   const title = full.length <= MAX_TITLE ? full : `Suggestion for ${pull}: ${String(count)} change${count === 1 ? '' : 's'}`;
   return {
     title,
-    commitMessage: `${title}\n\nSuggested in a review of ${target.owner}/${target.repo} pull request ${String(target.pullNumber)} at commit ${target.reviewedCommit}.`,
+    commitMessage: `${title}\n\nSuggested in a review of ${target.owner}/${target.repo} pull request ${String(target.pullNumber)} at commit ${target.reviewedCommit}`
+      + `${target.reappliedOnto === undefined ? '' : `, and re-applied onto commit ${target.reappliedOnto} after the pull request's history was rewritten`}.`,
     changes: commitChanges,
     changeCount: count,
     changeLines: changes.map((change) => changeLine(change, context)).join('\n'),
@@ -2867,7 +3115,7 @@ function prepareCompanion(unit: ISuggestionUnit, target: ISuggestionContext, con
  * the last line up, so earlier line numbers stay valid).
  */
 function combineEdits(sourceText: string, fileEdits: readonly IPreparedEdit[]): string {
-  const lines: string[] = sourceText.match(/[^\n]*\n|[^\n]+$/g) || [];
+  const lines = sourceLines(sourceText);
   for (const edit of [...fileEdits].sort((a, b) => b.startLine - a.startLine)) {
     lines.splice(edit.startLine - 1, edit.endLine - edit.startLine + 1, edit.replacementText);
   }
@@ -2901,11 +3149,37 @@ function mergeSentence(companion: IPreparedCompanion, subject: string, headRef: 
   return `Merging ${subject} into ${codeSpan(headRef)} applies ${what}:`;
 }
 
+/**
+ * The paragraph that says a suggestion was re-applied onto a rewritten head
+ * (contract §2.11), naming what it was rewritten after: "that commit" in the
+ * suggestion's own body, whose first line names it, "the reviewed commit" in
+ * the review. Empty when it was not re-applied.
+ */
+function reappliedParagraph(target: ISuggestionContext, after: string): string {
+  if (target.reappliedOnto === undefined) return '';
+  const pull = `#${String(target.pullNumber)}`;
+  return `The history of ${pull} was rewritten after ${after}, so this change is re-applied onto commit ${target.reappliedOnto}, `
+    + `the head of ${pull} when it was proposed, where everything it changes is still exactly as reviewed.\n\n`;
+}
+
 /** A suggestion pull request's section of the review body, once its number is known. */
 function renderSuggestionSection(companion: IPreparedCompanion, number: number, target: ISuggestionContext): string {
   const link = `https://${GITHUB_HOST}/${encodeLinkSegment(target.owner)}/${encodeLinkSegment(target.repo)}/pull/${String(number)}`;
-  return `**Suggestion pull request:** [#${String(number)}](${link})\n\n${mergeSentence(companion, 'it', target.headRef)}`
-    + `\n\n${companion.changeLines}\n\n${companion.items}`;
+  return `**Suggestion pull request:** [#${String(number)}](${link})\n\n${reappliedParagraph(target, 'the reviewed commit')}`
+    + `${mergeSentence(companion, 'it', target.headRef)}\n\n${companion.changeLines}\n\n${companion.items}`;
+}
+
+/**
+ * The review-body section of a suggestion that is not created because it
+ * could not be re-applied onto a rewritten head (contract §2.5.1, §2.11):
+ * every reason, then the change and the findings, at the section's place.
+ */
+function renderNotCreatedSection(companion: IPreparedCompanion, reasons: readonly string[], head: string, target: ISuggestionContext): string {
+  const pull = `#${String(target.pullNumber)}`;
+  const what = companion.changeCount === 1 ? 'this change' : `these ${String(companion.changeCount)} changes together`;
+  return `**Suggestion pull request not created:** the history of ${pull} was rewritten after the reviewed commit, `
+    + `and this change cannot be re-applied onto commit ${head}, the head of ${pull}, because there:\n\n${reasons.map((r) => `- ${r}`).join('\n')}`
+    + `\n\nIt would have proposed ${what}:\n\n${companion.changeLines}\n\n${companion.items}`;
 }
 
 /**
@@ -2935,7 +3209,7 @@ function lifecycleNote(target: ISuggestionContext): string {
 /** A suggestion pull request's body, ending with its structured marker line. */
 function renderSuggestionPullBody(companion: IPreparedCompanion, marker: string, target: ISuggestionContext): string {
   return `Suggested in a review of #${String(target.pullNumber)} at commit ${target.reviewedCommit}.`
-    + `\n\n${mergeSentence(companion, 'this pull request', target.headRef)}\n\n${companion.changeLines}\n\n${lifecycleNote(target)}`
+    + `\n\n${reappliedParagraph(target, 'that commit')}${mergeSentence(companion, 'this pull request', target.headRef)}\n\n${companion.changeLines}\n\n${lifecycleNote(target)}`
     + `${SEPARATOR}${companion.items}\n\n${marker}`;
 }
 

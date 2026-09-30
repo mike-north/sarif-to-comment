@@ -21,6 +21,11 @@
  * markers' `batch`), every suggestion (id, branch, title, body, commit
  * message, exact changes, rendered section parts) and the review's body
  * sections and inline comments, bound by a fingerprint over all of it.
+ * Version 2 adds `reappliedOnto`: the commit every proposal is based on
+ * instead of the reviewed commit, because the pull request's history was
+ * rewritten (docs/companion-suggestion-pr-contract.md §2.5.1); its markers
+ * are then version 2 of the convention. It is decided once, when planned,
+ * and never again.
  * Each step that a person could see has its own record beside it,
  * `<statePath>.suggestion-<n>-branch|pull|labels` (format
  * 'sarif-to-comment.companion-step', version 1), claimed exclusively
@@ -51,7 +56,13 @@
  *   (src/github.cts's client).
  * continueCompanionPublication(identity, internals?) -> Promise<Outcome>
  *   For an existing plan: identity mismatches are refused locally
- *   (PublicationStateError 'state-mismatch') before any request.
+ *   (PublicationStateError 'state-mismatch') before any request. When a
+ *   suggestion's steps are not all complete, the pull request's head is read
+ *   (read-only) and compared with the plan's base (reappliedOnto, else the
+ *   reviewed commit): a base that is no longer part of the branch is
+ *   reported as `baseCheck` on the outcome, and nothing is re-decided
+ *   (docs/companion-suggestion-pr-contract.md §2.10). A failed read is
+ *   reported the same way, as unknown, never as a failure.
  * hasCompanionPlan(statePath, internals?) -> boolean
  *   Whether the file at the state path is a plan (never guessed further:
  *   anything else is for the version-1 reader to accept or refuse).
@@ -128,7 +139,21 @@ export interface ICompanionTransport {
   listBranchPullRequests(request: { readonly owner: string; readonly repo: string; readonly branch: string }): Promise<readonly IBranchPullRequest[]>;
   addLabels(request: { readonly owner: string; readonly repo: string; readonly number: number; readonly labels: readonly string[] }): Promise<void>;
   listLabels(request: { readonly owner: string; readonly repo: string; readonly number: number }): Promise<readonly string[]>;
+  /** Read only on a retry with work left, to say whether the branch changed since planning. */
+  readSuggestionTarget?(request: { readonly owner: string; readonly repo: string; readonly pullNumber: number }): Promise<{ readonly headSha: string }>;
+  /** Read only on a retry with work left, when the head is not the plan's base. */
+  compareCommits?(request: { readonly owner: string; readonly repo: string; readonly base: string; readonly head: string }): Promise<string>;
 }
+
+/**
+ * On a retry, whether the plan's base is still part of the pull request's
+ * branch: `changed` when it is not (its current head named), `unknown` when
+ * that could not be read. Absent when the base is still part of it, or when
+ * nothing is left to create.
+ */
+export type BaseCheck =
+  | { readonly kind: 'changed'; readonly base: string; readonly head: string }
+  | { readonly kind: 'unknown'; readonly base: string; readonly detail: string };
 
 /** The identity every call is checked against. */
 export interface ICompanionIdentity {
@@ -149,6 +174,8 @@ export interface IStartCompanionInput extends ICompanionIdentity {
   readonly labels: readonly string[];
   /** Whether the pull requests are created ready for review instead of as drafts. */
   readonly ready: boolean;
+  /** The commit the suggestions are re-applied onto after a rewritten history; absent when they are based on the reviewed commit. */
+  readonly reappliedOnto?: string;
 }
 
 /** One planned suggestion: its prepared texts plus the identity chosen for it. */
@@ -161,7 +188,8 @@ interface IPlanSuggestion extends IPreparedCompanion {
 /** The plan record (see the module documentation). */
 interface IPlanRecord {
   readonly format: typeof PLAN_FORMAT;
-  readonly version: typeof RECORD_VERSION;
+  /** 1, or 2 exactly when `reappliedOnto` is present. */
+  readonly version: typeof RECORD_VERSION | typeof REAPPLIED_PLAN_VERSION;
   readonly publication: string;
   readonly destination: IDestination;
   readonly reviewedCommit: string;
@@ -171,6 +199,8 @@ interface IPlanRecord {
   readonly headRef: string;
   readonly labels: readonly string[];
   readonly ready: boolean;
+  /** The commit every proposal is based on after a rewritten history (version 2 only). */
+  readonly reappliedOnto?: string;
   readonly suggestions: readonly IPlanSuggestion[];
   readonly review: { readonly sections: readonly (string | number)[]; readonly comments: readonly PreparedComment[] };
   readonly planFingerprint: string;
@@ -245,6 +275,9 @@ export interface ICompanionPublished {
   readonly headRef: string;
   readonly labels: readonly string[];
   readonly ready: boolean;
+  /** The commit the suggestions were re-applied onto, when they were. */
+  readonly reappliedOnto?: string;
+  readonly baseCheck?: BaseCheck;
 }
 
 export interface ICompanionUncertain {
@@ -254,6 +287,7 @@ export interface ICompanionUncertain {
   readonly detail: string;
   readonly established: readonly IEstablished[];
   readonly cause?: unknown;
+  readonly baseCheck?: BaseCheck;
 }
 
 export interface ICompanionRejected {
@@ -264,6 +298,7 @@ export interface ICompanionRejected {
   readonly via: 'response' | 'record';
   readonly detail: string;
   readonly established: readonly IEstablished[];
+  readonly baseCheck?: BaseCheck;
 }
 
 export type CompanionOutcome = ICompanionPublished | ICompanionUncertain | ICompanionRejected;
@@ -280,6 +315,8 @@ type UnknownObject = Readonly<Record<string, unknown>>;
 const PLAN_FORMAT = 'sarif-to-comment.companion-publication-state';
 const STEP_FORMAT = 'sarif-to-comment.companion-step';
 const RECORD_VERSION = 1;
+/** The plan version whose suggestions are re-applied onto a rewritten head. */
+const REAPPLIED_PLAN_VERSION = 2;
 
 const FULL_SHA = /^[0-9a-f]{40}$/;
 const FINGERPRINT = /^sha256:[0-9a-f]{64}$/;
@@ -344,8 +381,9 @@ function isPreparedComment(value: unknown): value is PreparedComment {
 /** Why a parsed value is not a consistent plan, or null. */
 function planProblem(record: unknown): string | null {
   if (!isPlainObject(record) || record['format'] !== PLAN_FORMAT) return 'not a companion publication plan';
-  if (record['version'] !== RECORD_VERSION) return 'unsupported plan version';
-  if (!hasExactKeys(record, PLAN_KEYS)) return 'plan fields are not the expected set';
+  const version = record['version'];
+  if (version !== RECORD_VERSION && version !== REAPPLIED_PLAN_VERSION) return 'unsupported plan version';
+  if (!hasExactKeys(record, version === RECORD_VERSION ? PLAN_KEYS : [...PLAN_KEYS, 'reappliedOnto'])) return 'plan fields are not the expected set';
   const destination = record['destination'];
   if (!isPlainObject(destination) || !hasExactKeys(destination, ['owner', 'pullNumber', 'repo'])
     || !isNonEmptyString(destination['owner']) || !isNonEmptyString(destination['repo']) || !isPositiveInteger(destination['pullNumber'])) {
@@ -353,6 +391,10 @@ function planProblem(record: unknown): string | null {
   }
   if (typeof record['publication'] !== 'string' || !UUID.test(record['publication'])) return 'malformed publication id';
   if (typeof record['reviewedCommit'] !== 'string' || !FULL_SHA.test(record['reviewedCommit'])) return 'malformed reviewedCommit';
+  const reappliedOnto = record['reappliedOnto'];
+  if (version === REAPPLIED_PLAN_VERSION && (typeof reappliedOnto !== 'string' || !FULL_SHA.test(reappliedOnto) || reappliedOnto === record['reviewedCommit'])) {
+    return 'malformed reappliedOnto';
+  }
   if (typeof record['inputFingerprint'] !== 'string' || !FINGERPRINT.test(record['inputFingerprint'])) return 'malformed inputFingerprint';
   if (!isPositiveInteger(record['authorId'])) return 'malformed authorId';
   if (typeof record['submit'] !== 'boolean') return 'malformed mode';
@@ -489,10 +531,11 @@ export async function startCompanionPublication(input: IStartCompanionInput, int
   const authorId = await authenticatedUserId(input.transport);
   const publication = crypto.randomUUID();
   const { owner, repo, pullNumber } = input.destination;
-  const target: ISuggestionContext = { owner, repo, pullNumber, reviewedCommit: input.reviewedCommit, headRef: input.headRef, ready: input.ready };
+  const reapplied = input.reappliedOnto === undefined ? {} : { reappliedOnto: input.reappliedOnto };
+  const target: ISuggestionContext = { owner, repo, pullNumber, reviewedCommit: input.reviewedCommit, headRef: input.headRef, ready: input.ready, ...reapplied };
   const suggestions = input.suggestions.companions.map((companion): IPlanSuggestion => {
     const id = crypto.randomUUID();
-    const marker = formatSuggestionMarker({ id, batch: publication, owner, repo, pullNumber, reviewedCommit: input.reviewedCommit });
+    const marker = formatSuggestionMarker({ id, batch: publication, owner, repo, pullNumber, reviewedCommit: input.reviewedCommit, ...reapplied });
     return {
       title: companion.title,
       commitMessage: companion.commitMessage,
@@ -507,7 +550,7 @@ export async function startCompanionPublication(input: IStartCompanionInput, int
   });
   const unsigned = {
     format: PLAN_FORMAT,
-    version: RECORD_VERSION,
+    version: input.reappliedOnto === undefined ? RECORD_VERSION : REAPPLIED_PLAN_VERSION,
     publication,
     destination: { owner, repo, pullNumber },
     reviewedCommit: input.reviewedCommit,
@@ -517,6 +560,7 @@ export async function startCompanionPublication(input: IStartCompanionInput, int
     headRef: input.headRef,
     labels: [...input.labels],
     ready: input.ready,
+    ...reapplied,
     suggestions,
     review: { sections: input.suggestions.sections, comments: input.comments },
   } as const;
@@ -533,7 +577,29 @@ export async function continueCompanionPublication(identity: ICompanionIdentity,
   const fs = internals.fs || nodeFs;
   const plan = readPlan(fs, identity.statePath);
   assertSameIdentity(plan, identity);
-  return drive(new Publication(fs, identity, plan, null));
+  const publication = new Publication(fs, identity, plan, null);
+  const baseCheck = publication.hasSuggestionWorkLeft() ? await checkPlannedBase(plan, identity.transport) : undefined;
+  const outcome = await drive(publication);
+  return baseCheck === undefined ? outcome : { ...outcome, baseCheck };
+}
+
+/**
+ * Whether the plan's base (reappliedOnto, else the reviewed commit) is still
+ * part of the pull request's branch; read-only, and never a reason to stop:
+ * a failed read is reported as unknown. Nothing is re-decided either way.
+ */
+async function checkPlannedBase(plan: IPlanRecord, transport: ICompanionTransport): Promise<BaseCheck | undefined> {
+  const base = plan.reappliedOnto ?? plan.reviewedCommit;
+  const { owner, repo, pullNumber } = plan.destination;
+  if (transport.readSuggestionTarget === undefined || transport.compareCommits === undefined) return undefined;
+  try {
+    const { headSha: head } = await transport.readSuggestionTarget({ owner, repo, pullNumber });
+    if (head === base) return undefined;
+    const comparison = await transport.compareCommits({ owner, repo, base, head });
+    return comparison === 'ahead' || comparison === 'identical' ? undefined : { kind: 'changed', base, head };
+  } catch (err) {
+    return { kind: 'unknown', base, detail: String(thrownMessage(err)) };
+  }
 }
 
 /** Refuses a plan for another destination, commit, mode or original input (the version-1 wording). */
@@ -621,6 +687,17 @@ class Publication {
     replaceFileDurably(this.fs, stepPath(this.identity.statePath, index, record.step), serialize(record), 'step receipt');
   }
 
+  /**
+   * Whether this call may still create something for a suggestion: some
+   * suggestion's steps are not all complete, and no step was refused (a
+   * recorded refusal ends the publication). Read from the local records only.
+   */
+  hasSuggestionWorkLeft(): boolean {
+    const steps: readonly StepName[] = ['branch', 'pull', 'labels'];
+    const refused = this.plan.suggestions.some((_, index) => steps.some((step) => this.readStep(index, step)?.phase === 'rejected'));
+    return !refused && this.plan.suggestions.some((_, index) => this.readStep<ILabelsStep>(index, 'labels')?.phase !== 'completed');
+  }
+
   base(index: number): IStepBase {
     return { format: STEP_FORMAT, version: RECORD_VERSION, publication: this.plan.publication, suggestion: this.suggestion(index).id };
   }
@@ -667,7 +744,7 @@ class Publication {
     if (record === undefined) {
       await this.requireAuthor();
       const { commit } = await this.transport.createProposalCommit({
-        ...this.where, parent: this.plan.reviewedCommit, message: s.commitMessage, changes: s.changes,
+        ...this.where, parent: this.plan.reappliedOnto ?? this.plan.reviewedCommit, message: s.commitMessage, changes: s.changes,
       });
       const intent: IBranchStep = { ...this.base(index), step: 'branch', commit, phase: 'sending' };
       if (this.claim(index, intent)) {
@@ -754,7 +831,10 @@ class Publication {
     } catch (err) {
       return this.lookupFailed('pull', index, `the pull requests from \`${s.branch}\``, err);
     }
-    const marker = formatSuggestionMarker({ ...this.where, pullNumber: this.plan.destination.pullNumber, id: s.id, batch: this.plan.publication, reviewedCommit: this.plan.reviewedCommit });
+    const marker = formatSuggestionMarker({
+      ...this.where, pullNumber: this.plan.destination.pullNumber, id: s.id, batch: this.plan.publication, reviewedCommit: this.plan.reviewedCommit,
+      ...(this.plan.reappliedOnto === undefined ? {} : { reappliedOnto: this.plan.reappliedOnto }),
+    });
     const byNumber = new Map<number, IBranchPullRequest>();
     for (const pr of listed) {
       if (typeof pr.body === 'string' && pr.body.split(/\r?\n/).includes(marker)) byNumber.set(pr.number, pr);
@@ -857,7 +937,10 @@ async function review(publication: Publication, pulls: readonly { readonly numbe
   };
   let result = await recoverPublication(identity);
   if (result.status === 'missing') {
-    const target: ISuggestionContext = { ...plan.destination, reviewedCommit: plan.reviewedCommit, headRef: plan.headRef, ready: plan.ready };
+    const target: ISuggestionContext = {
+      ...plan.destination, reviewedCommit: plan.reviewedCommit, headRef: plan.headRef, ready: plan.ready,
+      ...(plan.reappliedOnto === undefined ? {} : { reappliedOnto: plan.reappliedOnto }),
+    };
     const body = renderReviewBody({ companions: plan.suggestions, sections: plan.review.sections }, pulls.map((p) => p.number), target);
     result = await publishPreparedReview({ ...identity, preparedReview: { body, comments: plan.review.comments } });
   }
@@ -870,7 +953,7 @@ async function review(publication: Publication, pulls: readonly { readonly numbe
     case 'published':
       return {
         status: 'published', review: result.review, via: result.via, receiptPersisted: result.receiptPersisted, suggestions,
-        headRef: plan.headRef, labels: plan.labels, ready: plan.ready,
+        headRef: plan.headRef, labels: plan.labels, ready: plan.ready, ...(plan.reappliedOnto === undefined ? {} : { reappliedOnto: plan.reappliedOnto }),
       };
     case 'uncertain':
       return { status: 'uncertain', step: 'review', detail: result.detail, established: publication.established, ...(result.cause === undefined ? {} : { cause: result.cause }) };

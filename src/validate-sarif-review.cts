@@ -69,7 +69,7 @@ import {
   redact,
   withoutCredential,
 } from './review-preflight.cjs';
-import type { ICapturedReview, IContextClient, IDestinationReady, IReviewInputSpec } from './review-preflight.cjs';
+import type { ICapturedReview, IContextClient, IDestinationReady, IReadySuggestionPullRequests, IReviewInputSpec } from './review-preflight.cjs';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -206,7 +206,7 @@ function readyMarkdown(prepared: IDestinationReady, captured: ICapturedReview): 
     ? `${String(count)} suggestion pull request${plural}, ready for review, into`
     : `${String(count)} draft suggestion pull request${plural} into`;
   const suggestions = count === 0 || target === undefined ? [] : [
-    `Publication would also create ${created} ${code(target.headRef)}, labeled ${labelList(target.labels)}.`,
+    `Publication would also create ${created} ${code(target.headRef)}, labeled ${labelList(target.labels)}.${reappliedSentence(target, captured, count)}`,
     '',
   ];
   return [
@@ -221,6 +221,17 @@ function readyMarkdown(prepared: IDestinationReady, captured: ICapturedReview): 
     '',
     'This is not an approval: publication repeats every check against the pull request as it is then. GitHub can still refuse the review, for example when this account already has a pending review on the pull request.',
   ].join('\n');
+}
+
+/**
+ * After a rewritten history, the sentence that says the suggestion pull
+ * requests are re-applied onto the head (contract §2.8, §2.5.1); empty
+ * otherwise.
+ */
+function reappliedSentence(target: IReadySuggestionPullRequests, captured: ICapturedReview, count: number): string {
+  if (target.reappliedOnto === undefined) return '';
+  const [they, change] = count === 1 ? ['it is', 'it changes'] : ['they are', 'they change'];
+  return ` The history of #${String(captured.destination.pullNumber)} was rewritten after the reviewed commit, so ${they} re-applied onto commit ${code(target.reappliedOnto)}, where everything ${change} is still exactly as reviewed.`;
 }
 
 function incompleteMarkdown(err: unknown): string {
@@ -286,6 +297,7 @@ class OperationalFailures {
           context: fetched.context,
           readSource: this.observeReader(fetched.readSource),
           ...(fetched.fileExists === undefined ? {} : { fileExists: this.observeReader(fetched.fileExists) }),
+          ...(fetched.readEntry === undefined ? {} : { readEntry: this.observeReader(fetched.readEntry) }),
         };
       },
       getAuthenticatedUser: async () => {
@@ -296,6 +308,7 @@ class OperationalFailures {
         }
       },
       ...(client.readSuggestionTarget === undefined ? {} : { readSuggestionTarget: this.observeCall(client.readSuggestionTarget) }),
+      ...(client.compareCommits === undefined ? {} : { compareCommits: this.observeCall(client.compareCommits) }),
       ...(client.findLabel === undefined ? {} : { findLabel: this.observeCall(client.findLabel) }),
       ...(client.readDefaultBranchFile === undefined ? {} : { readDefaultBranchFile: this.observeCall(client.readDefaultBranchFile) }),
     };

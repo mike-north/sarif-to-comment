@@ -10,7 +10,14 @@
  *   GET  /user
  *   GET  /repos/{o}/{r}/pulls/{n}                  head/base/changed_files
  *   GET  /repos/{o}/{r}/pulls/{n}/files            the authored patch
- *   GET  /repos/{o}/{r}/compare/{base}...{head}    merge base = base commit
+ *   GET  /repos/{o}/{r}/compare/{base}...{head}    merge base = base commit; status
+ *                                                  `ahead`
+ *   GET  /repos/{o}/{r}/compare/{a}...{b}          any two snapshot commits, related
+ *                                                  by the repository's `parents`:
+ *                                                  status identical | ahead | behind |
+ *                                                  diverged and their merge base, as
+ *                                                  GitHub reports them (404 for a
+ *                                                  commit the host does not have)
  *   GET  /repos/{o}/{r}/git/commits|trees|blobs/*  real git object ids (blob
  *                                                  SHA-1 over "blob <n>\0")
  *   POST /repos/{o}/{r}/pulls/{n}/reviews          stores a pending review, or a
@@ -59,6 +66,9 @@
  *                                    attached with another token is refused)
  *   failBlobReads?: boolean          answer 502 to every Git blob read (an
  *                                    operational source-read failure)
+ *   failAncestryCompare?: number     answer this status to every comparison
+ *                                    that is not the pull request's own
+ *                                    base...head (an ancestry read that fails)
  *   failTreeReads?: boolean          answer 502 to every Git tree read (an
  *                                    operational failure of any source read
  *                                    or existence check)
@@ -149,6 +159,12 @@ export interface IHttpRepository {
   readonly push?: boolean | undefined;
   /** The repository's labels (default: `suggestion-pr`). */
   readonly labels?: readonly string[] | undefined;
+  /**
+   * Each snapshot commit's parents, for comparisons of any two commits
+   * (issue #28: ancestry after a force-push). Without it, only the pull
+   * request's own base...head comparison is served.
+   */
+  readonly parents?: Readonly<Record<string, readonly string[]>> | undefined;
   /** Hand-authored expectations for tests (repository.json only); the host does not read them. */
   readonly expected?: unknown;
 }
@@ -173,6 +189,7 @@ export interface IHttpHostConfig {
   readonly onlyCredential?: string | undefined;
   readonly failBlobReads?: boolean | undefined;
   readonly failTreeReads?: boolean | undefined;
+  readonly failAncestryCompare?: number | undefined;
   readonly companion?: ICompanionConfig | undefined;
 }
 
@@ -247,6 +264,7 @@ const isHttpRepository: Guard<IHttpRepository> = isShape({
   defaultBranchCommit: isOptional(isString),
   push: isOptional(isBoolean),
   labels: isOptional(isArrayOf(isString)),
+  parents: isOptional(isRecordOf(isArrayOf(isString))),
   expected: isUnknown,
 });
 
@@ -256,6 +274,7 @@ const isHostConfig: Guard<IHttpHostConfig> = isShape({
   onlyCredential: isOptional(isString),
   failBlobReads: isOptional(isBoolean),
   failTreeReads: isOptional(isBoolean),
+  failAncestryCompare: isOptional(isNumber),
   companion: isOptional(isCompanionConfig),
 });
 
@@ -479,7 +498,14 @@ export class FakeHttpGitHub {
     if (method === 'GET' && p === `${pull}/files`) {
       return json(repository.pullFiles.map((f) => ({ ...f, patch: f.patch.join('') })));
     }
-    if (method === 'GET' && p === `${repoPath}/compare/${base}...${head}`) return json({ merge_base_commit: { sha: base } });
+    if (method === 'GET' && p === `${repoPath}/compare/${base}...${head}` && repository.parents === undefined) {
+      return json({ status: 'ahead', merge_base_commit: { sha: base } });
+    }
+    if (method === 'GET' && (m = new RegExp(`^${repoPath}/compare/([0-9a-f]{40})\\.\\.\\.([0-9a-f]{40})$`).exec(p))) {
+      const failure = this.config().failAncestryCompare;
+      if (failure !== undefined && captured(m) !== base) return json({ message: 'Not Found' }, failure);
+      return this.compare(captured(m), m[2] ?? '', json);
+    }
     if (method === 'GET' && (m = new RegExp(`^${repoPath}/git/commits/([0-9a-f]{40})$`).exec(p))) {
       const sha = captured(m);
       const tree = objects.commits[sha];
@@ -596,6 +622,48 @@ export class FakeHttpGitHub {
     const state = this.companion();
     const refs = Object.fromEntries(Object.entries(state.refs).filter(([name]) => name !== branch));
     this.write('companion.json', { ...state, refs: sha === null ? refs : { ...refs, [branch]: sha } });
+  }
+
+  /**
+   * The author force-pushes or pushes: from now on the host serves `repository`
+   * (for example the same pull request at another head). A child process
+   * attached to this host directory reads it too.
+   */
+  replaceRepository(repository: IHttpRepository): void {
+    this.write('repository.json', repository);
+    this.cached = undefined;
+  }
+
+  /**
+   * GitHub's three-dot comparison of two snapshot commits through the
+   * repository's `parents`: identical, ahead (a is an ancestor of b), behind
+   * (b is an ancestor of a) or diverged, with their nearest common ancestor.
+   */
+  compare(a: string, b: string, json: (body: unknown, status?: number) => Response): Response {
+    const { repository, objects } = this.served();
+    const parents = repository.parents ?? {};
+    if (objects.commits[a] === undefined || objects.commits[b] === undefined) return json({ message: 'Not Found' }, 404);
+    /** Every commit reachable from `start`, itself included, nearest first. */
+    const ancestry = (start: string): string[] => {
+      const order: string[] = [];
+      const queue = [start];
+      for (let next = queue.shift(); next !== undefined; next = queue.shift()) {
+        if (order.includes(next)) continue;
+        order.push(next);
+        queue.push(...(parents[next] ?? []));
+      }
+      return order;
+    };
+    const ofA = ancestry(a);
+    const ofB = ancestry(b);
+    const mergeBase = ofB.find((c) => ofA.includes(c));
+    const status = a === b ? 'identical' : ofB.includes(a) ? 'ahead' : ofA.includes(b) ? 'behind' : 'diverged';
+    return json({
+      status,
+      ahead_by: ofB.filter((c) => !ofA.includes(c)).length,
+      behind_by: ofA.filter((c) => !ofB.includes(c)).length,
+      ...(mergeBase === undefined ? {} : { merge_base_commit: { sha: mergeBase } }),
+    });
   }
 
   /** Adds pull requests (originals, suggestions, ordinary pull requests or issues) as if people had opened them. */

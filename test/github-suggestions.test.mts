@@ -369,6 +369,58 @@ describe('readSuggestionTarget', () => {
   });
 });
 
+/**
+ * Ancestry (docs/companion-suggestion-pr-contract.md §2.5; issue #28): GitHub's
+ * three-dot comparison of the reviewed commit with the pull request's head.
+ * Its `status` is `identical`, `ahead` (the base is an ancestor of the head),
+ * `behind` (the head is an ancestor of the base) or `diverged`, and its merge
+ * base must agree with what the status claims.
+ *
+ * @see https://docs.github.com/en/rest/commits/commits#compare-two-commits
+ */
+describe('compareCommits (issue #28)', () => {
+  const REVIEWED = 'c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1';
+  const HEAD = 'feedfeedfeedfeedfeedfeedfeedfeedfeedfeed';
+  const OTHER = '0000000000000000000000000000000000000c0c';
+  const url = `${REPO}/compare/${REVIEWED}...${HEAD}`;
+  const request = { owner: 'octo', repo: 'widgets', base: REVIEWED, head: HEAD };
+  const answer = (status: unknown, mergeBase: unknown): Answer => json({ status, ahead_by: 1, behind_by: 0, merge_base_commit: { sha: mergeBase } });
+
+  for (const [status, mergeBase] of [['ahead', REVIEWED], ['identical', REVIEWED], ['behind', HEAD], ['diverged', OTHER]] as const) {
+    test(`answers ${status} from one read of the three-dot comparison`, async () => {
+      const script = new Script().on('GET', url, answer(status, mergeBase));
+      assert.equal(await script.client().compareCommits(request), status);
+      assert.deepEqual(script.sent.map((r) => `${r.method} ${r.url}`), [`GET ${url}`]);
+    });
+  }
+
+  test('an unknown status is malformed, never guessed', async () => {
+    for (const status of ['unrelated', 'AHEAD', null, 3]) {
+      await rejectsWith(new Script().on('GET', url, answer(status, REVIEWED)).client().compareCommits(request), 'malformed-response');
+    }
+  });
+
+  test('a merge base that contradicts the status is malformed: ahead and identical name the base, behind the head', async () => {
+    for (const [status, mergeBase] of [['ahead', OTHER], ['identical', HEAD], ['behind', REVIEWED], ['ahead', undefined]] as const) {
+      await rejectsWith(new Script().on('GET', url, answer(status, mergeBase)).client().compareCommits(request), 'malformed-response');
+    }
+  });
+
+  test('a refused read is an operational failure, never a verdict', async () => {
+    await rejectsWith(new Script().on('GET', url, json({ message: 'Not Found' }, 404)).client().compareCommits(request), 'http-status', false);
+    await rejectsWith(new Script().on('GET', url, json({ message: 'Server Error' }, 502)).client().compareCommits(request), 'http-status', false);
+  });
+
+  test('refuses malformed commits or names before any request', async () => {
+    const script = new Script();
+    const c = script.client();
+    await assert.rejects(c.compareCommits({ ...request, base: REVIEWED.slice(0, 7) }), TypeError);
+    await assert.rejects(c.compareCommits({ ...request, head: HEAD.toUpperCase() }), TypeError);
+    await assert.rejects(c.compareCommits({ ...request, owner: 'octo/x' }), TypeError);
+    assert.deepEqual(script.sent, []);
+  });
+});
+
 describe('readDefaultBranchFile (docs/suggestion-pr-convention.md §4)', () => {
   const DEFAULT_HEAD = '7777777777777777777777777777777777777777';
   const DEFAULT_ROOT = '8888888888888888888888888888888888888888';

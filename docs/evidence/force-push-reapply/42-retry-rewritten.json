@@ -1,0 +1,17 @@
+{
+  "command": "publish",
+  "status": "published",
+  "review": {
+    "id": 5361383437,
+    "url": "https://github.com/mike-north/doc-linter/pull/64#pullrequestreview-5361383437"
+  },
+  "suggestions": [
+    {
+      "number": 71,
+      "url": "https://github.com/mike-north/doc-linter/pull/71",
+      "branch": "suggestion-pr/64/db27ee45-de28-454c-b521-f46bdafef733"
+    }
+  ],
+  "statePath": "<evidence>/state/rewritten.json",
+  "message": "## Draft review published\n\nThe draft [review 5361383437](https://github.com/mike-north/doc-linter/pull/64#pullrequestreview-5361383437) on mike-north/doc-linter#64 at commit `5ebfe7da336d6e1ad6de8b5a04f73924de5d0a5b` was already published; its completion is recorded at `<evidence>/state/rewritten.json`. Nothing was sent.\n\nSuggestion pull requests (drafts into `exp-reapply-20260929-rewritten`, labeled `suggestion-pr`, re-applied onto commit `080ce5eb7dfa54049e44510f51fe41b83abb4ae3`):\n\n- [#71](https://github.com/mike-north/doc-linter/pull/71) from `suggestion-pr/64/db27ee45-de28-454c-b521-f46bdafef733`"
+}

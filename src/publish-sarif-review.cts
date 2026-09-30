@@ -103,7 +103,7 @@ import * as crypto from 'node:crypto';
 import * as path from 'node:path';
 
 import { continueCompanionPublication, hasCompanionPlan, startCompanionPublication } from './companion-publication.cjs';
-import type { CompanionOutcome, ICompanionTransport, IEstablished } from './companion-publication.cjs';
+import type { BaseCheck, CompanionOutcome, ICompanionTransport, IEstablished } from './companion-publication.cjs';
 import { createGitHubClient as defaultCreateGitHubClient } from './github.cjs';
 import type { ICreateGitHubClientOptions } from './github.cjs';
 import type { IReadyOutcome } from './prepare-review.cjs';
@@ -612,6 +612,22 @@ function establishedMarkdown(established: readonly IEstablished[]): string[] {
   return lines.length === 0 ? [] : ['Already on GitHub for this publication:', '', ...lines, ''];
 }
 
+/**
+ * On a retry, the paragraph saying the branch changed since the suggestions
+ * were planned, or that this could not be read (contract §2.10), as Markdown
+ * lines; none otherwise.
+ */
+function baseCheckMarkdown(check: BaseCheck | undefined, captured: ICapturedInput): string[] {
+  if (check === undefined) return [];
+  const pull = `#${String(captured.destination.pullNumber)}`;
+  const text = check.kind === 'changed'
+    ? `**The branch of ${pull} changed since these suggestions were planned:** they are based on commit ${code(check.base)}, which is no longer part of it `
+      + `(its head is now ${code(check.head)}). The suggestion pull requests still to be created are created on that commit, as planned; nothing is re-decided.`
+    : `**Whether the branch of ${pull} changed since these suggestions were planned is not known:** they are based on commit ${code(check.base)}, `
+      + `and the branch could not be read (${check.detail}). Nothing is re-decided.`;
+  return [text, ''];
+}
+
 function presentCompanion(outcome: CompanionOutcome, captured: ICapturedInput, prepared?: IReadyOutcome): PublishSarifReviewOutcome {
   const { statePath } = captured;
   switch (outcome.status) {
@@ -619,10 +635,12 @@ function presentCompanion(outcome: CompanionOutcome, captured: ICapturedInput, p
       const suggestions = outcome.suggestions.map((s) => ({ number: s.number, url: s.htmlUrl, branch: s.branch }));
       const listed = suggestions.map((s) => `- [#${String(s.number)}](${s.url}) from ${code(s.branch)}`);
       const form = outcome.ready ? `ready for review, into ${code(outcome.headRef)}` : `drafts into ${code(outcome.headRef)}`;
+      const reapplied = outcome.reappliedOnto === undefined ? '' : `, re-applied onto commit ${code(outcome.reappliedOnto)}`;
       const markdown = [
         publishedMarkdown(outcome, captured, prepared),
         '',
-        `Suggestion pull requests (${form}, labeled ${labelList(outcome.labels)}):`,
+        ...baseCheckMarkdown(outcome.baseCheck, captured),
+        `Suggestion pull requests (${form}, labeled ${labelList(outcome.labels)}${reapplied}):`,
         '',
         ...listed,
       ].join('\n');
@@ -637,6 +655,7 @@ function presentCompanion(outcome: CompanionOutcome, captured: ICapturedInput, p
           '',
           outcome.detail,
           '',
+          ...baseCheckMarkdown(outcome.baseCheck, captured),
           ...establishedMarkdown(outcome.established),
           `The publication state is preserved at ${code(statePath)} and in the files beside it that share its name.`,
           '',
@@ -659,6 +678,7 @@ function presentCompanion(outcome: CompanionOutcome, captured: ICapturedInput, p
             ? `The request is never resent. The refusal is tied to the state path ${code(statePath)}.`
             : `It is never resent, and the review was not published: it would link a suggestion that does not exist. The refusal is tied to the state path ${code(statePath)}.`,
           '',
+          ...baseCheckMarkdown(outcome.baseCheck, captured),
           ...establishedMarkdown(outcome.established),
           'After resolving the cause, publish again with a new state path. Anything already created is left as it is.',
         ].join('\n'),
@@ -708,6 +728,7 @@ async function run(captured: ICapturedInput, createGitHubClient: CreatePublishin
       headRef: prepared.suggestionPullRequests.headRef,
       labels: prepared.suggestionPullRequests.labels,
       ready: prepared.suggestionPullRequests.ready,
+      ...(prepared.suggestionPullRequests.reappliedOnto === undefined ? {} : { reappliedOnto: prepared.suggestionPullRequests.reappliedOnto }),
     });
     return presentCompanion(outcome, captured, prepared);
   }

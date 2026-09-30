@@ -121,7 +121,8 @@
  * Review context
  *
  *   fetchContext({ destination: { owner, repo, pullNumber }, reviewedCommit,
- *                  oldSourceCommit? }) -> { context, readSource, fileExists }
+ *                  oldSourceCommit? }) -> { context, readSource, fileExists,
+ *                                           readEntry }
  *
  *   Requests, in order: GET pull; every GET pull files page; GET pull again
  *   (its head must equal the first, else 'head-race'); then, only when no
@@ -152,6 +153,17 @@
  *     'not-a-file'. Reads at every full commit are direct, including the
  *     diff base: a commit's own trees decide what exists in it. Used to
  *     confirm whole-file proposals (docs/file-operation-publication-contract.md).
+ *
+ *   readEntry(commit, path) -> { kind: 'file', blob, mode } | { kind: 'absent' }
+ *                              | { kind: 'not-a-file', entry, path }
+ *     The same tree walk and validation as fileExists, answering what stands
+ *     there instead of refusing it: a regular file's blob id and mode
+ *     (100644, 100755); absent when a complete listing shows the path absent
+ *     (or below a regular file); otherwise 'a directory', 'a symbolic link'
+ *     or 'a submodule' with the path where it stands (the path itself, or a
+ *     link or submodule on the way, never followed). No blob is read. Used to
+ *     re-apply suggestions onto a rewritten head
+ *     (docs/companion-suggestion-pr-contract.md §2.5.1).
  *
  *   readSource(commit, path) -> string | null
  *     commit: full lowercase 40-hex. path: repository-relative, "/" separated;
@@ -213,6 +225,13 @@
  *     Any failed read is an error, never absence.
  *   findLabel({ owner, repo, name }) -> the label's name as GitHub reports
  *     it, or null for 404 (GET labels/{name}, name percent-encoded)
+ *   compareCommits({ owner, repo, base, head })
+ *       -> 'identical' | 'ahead' | 'behind' | 'diverged'
+ *     GET compare/{base}...{head}: its `status`, where `ahead` means `base`
+ *     is an ancestor of `head` (contract §2.5). The merge base must agree:
+ *     `base` for identical and ahead, `head` for behind; any other status or
+ *     a contradicting merge base is 'malformed-response'. A refused read is
+ *     'http-status', never a verdict.
  *   createProposalCommit({ owner, repo, parent, message, changes })
  *       -> { commit }
  *     changes: [{ operation: 'create', path, text, fileMode } |
@@ -555,11 +574,28 @@ export type ReadSource = (commit: string, path: string) => Promise<string | null
  */
 export type FileExists = (commit: string, path: string) => Promise<boolean>;
 
+/**
+ * What stands at a path in a full commit, decided from Git trees alone: a
+ * regular file's blob id and mode, nothing, or something that is not a file
+ * (and where it stands: the path itself, or a link or submodule on the way).
+ */
+export type PathEntry =
+  | { readonly kind: 'file'; readonly blob: string; readonly mode: '100644' | '100755' }
+  | { readonly kind: 'absent' }
+  | { readonly kind: 'not-a-file'; readonly entry: 'a directory' | 'a symbolic link' | 'a submodule'; readonly path: string };
+
+/** What stands at a path in a full commit (see PathEntry). */
+export type ReadEntry = (commit: string, path: string) => Promise<PathEntry>;
+
+/** GitHub's comparison of two commits: `ahead` means the base is an ancestor of the head. */
+export type CommitComparison = 'identical' | 'ahead' | 'behind' | 'diverged';
+
 /** The review context and the snapshot readers bound to it. */
 export interface IFetchedContext {
   readonly context: IReviewContext;
   readonly readSource: ReadSource;
   readonly fileExists: FileExists;
+  readonly readEntry: ReadEntry;
 }
 
 /** The branches and permissions a suggestion pull request depends on (read only when one is needed). */
@@ -684,6 +720,7 @@ export interface IGitHubClient {
   readonly fetchContext: (request: IFetchContextRequest) => Promise<IFetchedContext>;
   readonly readSuggestionTarget: (request: IPullRequestDestination) => Promise<ISuggestionTarget>;
   readonly findLabel: (request: { readonly owner: string; readonly repo: string; readonly name: string }) => Promise<string | null>;
+  readonly compareCommits: (request: { readonly owner: string; readonly repo: string; readonly base: string; readonly head: string }) => Promise<CommitComparison>;
   readonly readDefaultBranchFile: (request: {
     readonly owner: string;
     readonly repo: string;
@@ -1030,6 +1067,11 @@ function requireDestination(destination: UntrustedObject): asserts destination i
   requireInput(isRepoName(owner), 'owner must be a GitHub account name');
   requireInput(isRepoName(repo), 'repo must be a GitHub repository name');
   requireInput(isPositiveInteger(pullNumber), 'pullNumber must be a positive integer');
+}
+
+/** Whether a host value is one of the four statuses GitHub's commit comparison documents. */
+function isCommitComparison(value: unknown): value is CommitComparison {
+  return value === 'identical' || value === 'ahead' || value === 'behind' || value === 'diverged';
 }
 
 function requireFullSha(value: unknown, name: string): asserts value is string {
@@ -1988,6 +2030,14 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
       return (await regularFileAt(owner, repo, commit, filePath)) !== null;
     }
 
+    // Checked from unknown like readSource; answers what stands there
+    // rather than refusing anything that is not a regular file.
+    async function readEntry(commit: unknown, filePath: unknown): Promise<PathEntry> {
+      requireFullSha(commit, 'commit');
+      requireRepositoryPath(filePath);
+      return pathEntry(owner, repo, commit, filePath);
+    }
+
     const context: IReviewContext = {
       owner,
       repo,
@@ -1998,7 +2048,7 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
       diff: { baseCommit, headCommit: head, files },
       fileDiagnostics,
     };
-    return { context, readSource, fileExists };
+    return { context, readSource, fileExists, readEntry };
   }
 
   // ---------------------------------------------------------------------------
@@ -2063,10 +2113,35 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
   }
 
   /** How a tree entry that is not a regular file is named. */
-  function entryKind(mode: unknown): string {
+  function entryKind(mode: unknown): 'a directory' | 'a symbolic link' | 'a submodule' {
     if (mode === TREE_MODE) return 'a directory';
     if (mode === SYMLINK_MODE) return 'a symbolic link';
     return 'a submodule';
+  }
+
+  /** What stands at a path in a commit (see PathEntry), from its trees alone. */
+  async function pathEntry(owner: string, repo: string, commit: string, filePath: string): Promise<PathEntry> {
+    const walked = await walkTo(owner, repo, commit, filePath);
+    if (walked.kind === 'through') return { kind: 'not-a-file', entry: walked.entry, path: walked.at };
+    const { entry } = walked;
+    if (entry === null) return { kind: 'absent' };
+    if (!REGULAR_FILE_MODES.has(entry.mode)) return { kind: 'not-a-file', entry: entryKind(entry.mode), path: filePath };
+    return { kind: 'file', blob: hostSha(entry.sha, 'tree entry'), mode: entry.mode === '100755' ? '100755' : '100644' };
+  }
+
+  async function compareCommits({ owner, repo, base, head }: Unchecked<'owner' | 'repo' | 'base' | 'head'> = {}): Promise<CommitComparison> {
+    requireInput(isRepoName(owner) && isRepoName(repo), 'owner and repo must be GitHub names');
+    requireFullSha(base, 'base');
+    requireFullSha(head, 'head');
+    const { body } = await restGet(`${API_ORIGIN}${repoPath(owner, repo)}/compare/${base}...${head}`, 'commit comparison');
+    const status = optionalMember(body, 'status');
+    if (!isCommitComparison(status)) throw new GitHubError('malformed-response', 'The commit comparison has no known status.');
+    // The status is only trusted when the merge base agrees with what it claims.
+    const agreed = status === 'behind' ? head : status === 'diverged' ? null : base;
+    if (agreed !== null && optionalMember(body, 'merge_base_commit', 'sha') !== agreed) {
+      throw new GitHubError('malformed-response', `The commit comparison says ${status}, but names another merge base.`);
+    }
+    return status;
   }
 
   async function readDefaultBranchFile({
@@ -2430,6 +2505,7 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
     fetchContext,
     readSuggestionTarget,
     findLabel,
+    compareCommits,
     readDefaultBranchFile,
     createProposalCommit,
     getBranch,

@@ -1,0 +1,5 @@
+{
+  "command": "validate",
+  "status": "ready",
+  "message": "## Ready to publish\n\nThe complete document can be published faithfully to mike-north/doc-linter#62 at commit `35a245786cfbca5df5264ac0756962b725fabc8c`.\n\nPublication would also create 3 draft suggestion pull requests into `exp-reapply-20260929-amended`, labeled `suggestion-pr`. The history of #62 was rewritten after the reviewed commit, so they are re-applied onto commit `a27db7c7dfd4d55a15f119d970b93c403f8924fa`, where everything they change is still exactly as reviewed.\n\n**Review prepared:** 0 inline comment(s) and 4 general section(s) for commit `35a245786cfbca5df5264ac0756962b725fabc8c`.\n\nNothing was published and no publication state was written.\n\nThis is not an approval: publication repeats every check against the pull request as it is then. GitHub can still refuse the review, for example when this account already has a pending review on the pull request."
+}

@@ -1,0 +1,17 @@
+{
+  "command": "publish",
+  "status": "published",
+  "review": {
+    "id": 5361383437,
+    "url": "https://github.com/mike-north/doc-linter/pull/64#pullrequestreview-5361383437"
+  },
+  "suggestions": [
+    {
+      "number": 71,
+      "url": "https://github.com/mike-north/doc-linter/pull/71",
+      "branch": "suggestion-pr/64/db27ee45-de28-454c-b521-f46bdafef733"
+    }
+  ],
+  "statePath": "<evidence>/state/rewritten.json",
+  "message": "## Draft review published\n\nCreated the draft [review 5361383437](https://github.com/mike-north/doc-linter/pull/64#pullrequestreview-5361383437) on mike-north/doc-linter#64 at commit `5ebfe7da336d6e1ad6de8b5a04f73924de5d0a5b`. It stays a draft until someone submits it on GitHub.\n\n**Review prepared:** 0 inline comment(s) and 4 general section(s) for commit `5ebfe7da336d6e1ad6de8b5a04f73924de5d0a5b`.\n\n**Warnings:**\n\n- `suggestion-pr-not-reapplied` at `/runs/0/results/0`: The history of #64 was rewritten after the reviewed commit, so the suggestion pull request `Suggestion for #64: reword (2 changes)` would have to be re-applied onto commit `080ce5eb7dfa54049e44510f51fe41b83abb4ae3`, and it cannot be: `docs/experiments/reapply/sample-rewritten.md` line 6 differs from the reviewed text. It is not created; its change and findings are presented in the review body.\n- `suggestion-pr-not-reapplied` at `/runs/0/results/3`: The history of #64 was rewritten after the reviewed commit, so the suggestion pull request `Suggestion for #64: delete docs/experiments/reapply/obsolete-rewritten.txt` would have to be re-applied onto commit `080ce5eb7dfa54049e44510f51fe41b83abb4ae3`, and it cannot be: `docs/experiments/reapply/obsolete-rewritten.txt` differs from the reviewed file. It is not created; its change and findings are presented in the review body.\n\nSuggestion pull requests (drafts into `exp-reapply-20260929-rewritten`, labeled `suggestion-pr`, re-applied onto commit `080ce5eb7dfa54049e44510f51fe41b83abb4ae3`):\n\n- [#71](https://github.com/mike-north/doc-linter/pull/71) from `suggestion-pr/64/db27ee45-de28-454c-b521-f46bdafef733`"
+}

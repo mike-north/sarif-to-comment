@@ -742,17 +742,20 @@ describe('group rules (§2.3–§2.4), identical in validate and publish', () =>
 });
 
 describe('repository readiness (§2.5, §2.7, §2.8), identical in validate and publish', () => {
-  const capability = (code: string, message: string): string => `- \`${code}\`: ${message}`;
-
-  test('a historical reviewed commit', async () => {
+  test('a reviewed commit the branch has moved past (an ancestor of the head) proceeds on that commit (issue #28)', async () => {
     const world = makeWorld();
     const historical = {
       ...groupedAdditions(),
       runs: [{ ...asRecord(asArray(groupedAdditions()['runs'])[0]), versionControlProvenance: [{ repositoryUri: `https://github.com/${OWNER}/${REPO}`, revisionId: BASE }] }],
     };
-    await assertBlockedEverywhere(world, historical, [
-      capability('suggestion-pr-historical-unsupported', `The reviewed commit ${BASE} is no longer the pull request's head ${HEAD}. Proposing a suggestion on top of later commits needs a check that the reviewed commit is still part of the branch, which is not yet supported. Review the current head, or publish without suggestion pull requests.`),
-    ], ENABLED, BASE);
+    const assessed = await validate(world, historical, ENABLED, BASE);
+    assert.equal(status(assessed), 'ready', markdown(assessed));
+    assert.ok(markdown(assessed).includes('Publication would also create 1 draft suggestion pull request into `feature/retry`, labeled `suggestion-pr`.\n'), markdown(assessed));
+    const outcome = await publish(world, historical, ENABLED, BASE);
+    assert.equal(status(outcome), 'published', markdown(outcome));
+    const { pull } = onlyPull(world);
+    assert.ok(pull.body.startsWith(`Suggested in a review of #7 at commit ${BASE}.\n\nMerging this pull request`), pull.body);
+    assert.deepEqual(Object.values(world.host.companion().commits).map((c) => c.parents), [[BASE]]);
   });
 
   test('an extra label is matched as GitHub names it, and applied under that name', async () => {
