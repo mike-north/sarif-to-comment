@@ -1,0 +1,42 @@
+== 61/0c3a1dc6-be06-4665-bd1b-e31ebaac81f2 commit 0cb31c4e1379ec9c56f31d511c82985ac9751383 parents 053186500ab453900b51b4ccc9fb75e40bd5d164
+   | Suggestion for #61: delete docs/experiments/reapply/obsolete-advanced.txt
+   | 
+   | Suggested in a review of mike-north/doc-linter pull request 61 at commit 053186500ab453900b51b4ccc9fb75e40bd5d164.
+    docs/experiments/reapply/obsolete-advanced.txt | 2 --
+    1 file changed, 2 deletions(-)
+== 61/706c3c45-9ebf-4b47-942b-2e5ca6d8e44a commit 8ad87008d0141af0f74da18159d2d20ffec5b061 parents 053186500ab453900b51b4ccc9fb75e40bd5d164
+   | Suggestion for #61: reword (2 changes)
+   | 
+   | Suggested in a review of mike-north/doc-linter pull request 61 at commit 053186500ab453900b51b4ccc9fb75e40bd5d164.
+    docs/experiments/reapply/sample-advanced.md | 4 ++--
+    1 file changed, 2 insertions(+), 2 deletions(-)
+== 61/eab22112-1bc3-4bbc-9d81-6570e7127f74 commit 0cb3da3cb7ec3e2db651fd954a588422f76902c2 parents 053186500ab453900b51b4ccc9fb75e40bd5d164
+   | Suggestion for #61: create docs/experiments/reapply/new-advanced.md
+   | 
+   | Suggested in a review of mike-north/doc-linter pull request 61 at commit 053186500ab453900b51b4ccc9fb75e40bd5d164.
+    docs/experiments/reapply/new-advanced.md | 3 +++
+    1 file changed, 3 insertions(+)
+== 62/8563a35a-b14d-41f5-9d97-372034e64b9d commit f27c6552c480377601fb2fd79a6c7f511ac5b8c9 parents a27db7c7dfd4d55a15f119d970b93c403f8924fa
+   | Suggestion for #62: reword (2 changes)
+   | 
+   | Suggested in a review of mike-north/doc-linter pull request 62 at commit 35a245786cfbca5df5264ac0756962b725fabc8c, and re-applied onto commit a27db7c7dfd4d55a15f119d970b93c403f8924fa after the pull request's history was rewritten.
+    docs/experiments/reapply/sample-amended.md | 4 ++--
+    1 file changed, 2 insertions(+), 2 deletions(-)
+== 62/addcbe41-ba68-4858-b41e-f7f0e1527112 commit e9e8a09c15478deabff8d764af25611b6af31a41 parents a27db7c7dfd4d55a15f119d970b93c403f8924fa
+   | Suggestion for #62: create docs/experiments/reapply/new-amended.md
+   | 
+   | Suggested in a review of mike-north/doc-linter pull request 62 at commit 35a245786cfbca5df5264ac0756962b725fabc8c, and re-applied onto commit a27db7c7dfd4d55a15f119d970b93c403f8924fa after the pull request's history was rewritten.
+    docs/experiments/reapply/new-amended.md | 3 +++
+    1 file changed, 3 insertions(+)
+== 62/ca039fbc-33b7-45d2-b53f-33bbc71513e1 commit 29d49aea8ac03a74fa160ee3e6805e15e1003e54 parents a27db7c7dfd4d55a15f119d970b93c403f8924fa
+   | Suggestion for #62: delete docs/experiments/reapply/obsolete-amended.txt
+   | 
+   | Suggested in a review of mike-north/doc-linter pull request 62 at commit 35a245786cfbca5df5264ac0756962b725fabc8c, and re-applied onto commit a27db7c7dfd4d55a15f119d970b93c403f8924fa after the pull request's history was rewritten.
+    docs/experiments/reapply/obsolete-amended.txt | 2 --
+    1 file changed, 2 deletions(-)
+== 64/db27ee45-de28-454c-b521-f46bdafef733 commit e8392b53e073493aab3bdc60017c3706b33dd2bd parents 080ce5eb7dfa54049e44510f51fe41b83abb4ae3
+   | Suggestion for #64: create docs/experiments/reapply/new-rewritten.md
+   | 
+   | Suggested in a review of mike-north/doc-linter pull request 64 at commit 5ebfe7da336d6e1ad6de8b5a04f73924de5d0a5b, and re-applied onto commit 080ce5eb7dfa54049e44510f51fe41b83abb4ae3 after the pull request's history was rewritten.
+    docs/experiments/reapply/new-rewritten.md | 3 +++
+    1 file changed, 3 insertions(+)

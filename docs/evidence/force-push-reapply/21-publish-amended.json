@@ -1,0 +1,27 @@
+{
+  "command": "publish",
+  "status": "published",
+  "review": {
+    "id": 5361380422,
+    "url": "https://github.com/mike-north/doc-linter/pull/62#pullrequestreview-5361380422"
+  },
+  "suggestions": [
+    {
+      "number": 68,
+      "url": "https://github.com/mike-north/doc-linter/pull/68",
+      "branch": "suggestion-pr/62/8563a35a-b14d-41f5-9d97-372034e64b9d"
+    },
+    {
+      "number": 69,
+      "url": "https://github.com/mike-north/doc-linter/pull/69",
+      "branch": "suggestion-pr/62/addcbe41-ba68-4858-b41e-f7f0e1527112"
+    },
+    {
+      "number": 70,
+      "url": "https://github.com/mike-north/doc-linter/pull/70",
+      "branch": "suggestion-pr/62/ca039fbc-33b7-45d2-b53f-33bbc71513e1"
+    }
+  ],
+  "statePath": "<evidence>/state/amended.json",
+  "message": "## Draft review published\n\nCreated the draft [review 5361380422](https://github.com/mike-north/doc-linter/pull/62#pullrequestreview-5361380422) on mike-north/doc-linter#62 at commit `35a245786cfbca5df5264ac0756962b725fabc8c`. It stays a draft until someone submits it on GitHub.\n\nSuggestion pull requests (drafts into `exp-reapply-20260929-amended`, labeled `suggestion-pr`, re-applied onto commit `a27db7c7dfd4d55a15f119d970b93c403f8924fa`):\n\n- [#68](https://github.com/mike-north/doc-linter/pull/68) from `suggestion-pr/62/8563a35a-b14d-41f5-9d97-372034e64b9d`\n- [#69](https://github.com/mike-north/doc-linter/pull/69) from `suggestion-pr/62/addcbe41-ba68-4858-b41e-f7f0e1527112`\n- [#70](https://github.com/mike-north/doc-linter/pull/70) from `suggestion-pr/62/ca039fbc-33b7-45d2-b53f-33bbc71513e1`"
+}

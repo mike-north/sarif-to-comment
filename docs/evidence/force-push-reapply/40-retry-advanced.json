@@ -1,0 +1,27 @@
+{
+  "command": "publish",
+  "status": "published",
+  "review": {
+    "id": 5361377275,
+    "url": "https://github.com/mike-north/doc-linter/pull/61#pullrequestreview-5361377275"
+  },
+  "suggestions": [
+    {
+      "number": 65,
+      "url": "https://github.com/mike-north/doc-linter/pull/65",
+      "branch": "suggestion-pr/61/706c3c45-9ebf-4b47-942b-2e5ca6d8e44a"
+    },
+    {
+      "number": 66,
+      "url": "https://github.com/mike-north/doc-linter/pull/66",
+      "branch": "suggestion-pr/61/eab22112-1bc3-4bbc-9d81-6570e7127f74"
+    },
+    {
+      "number": 67,
+      "url": "https://github.com/mike-north/doc-linter/pull/67",
+      "branch": "suggestion-pr/61/0c3a1dc6-be06-4665-bd1b-e31ebaac81f2"
+    }
+  ],
+  "statePath": "<evidence>/state/advanced.json",
+  "message": "## Draft review published\n\nThe draft [review 5361377275](https://github.com/mike-north/doc-linter/pull/61#pullrequestreview-5361377275) on mike-north/doc-linter#61 at commit `053186500ab453900b51b4ccc9fb75e40bd5d164` was already published; its completion is recorded at `<evidence>/state/advanced.json`. Nothing was sent.\n\nSuggestion pull requests (drafts into `exp-reapply-20260929-advanced`, labeled `suggestion-pr`):\n\n- [#65](https://github.com/mike-north/doc-linter/pull/65) from `suggestion-pr/61/706c3c45-9ebf-4b47-942b-2e5ca6d8e44a`\n- [#66](https://github.com/mike-north/doc-linter/pull/66) from `suggestion-pr/61/eab22112-1bc3-4bbc-9d81-6570e7127f74`\n- [#67](https://github.com/mike-north/doc-linter/pull/67) from `suggestion-pr/61/0c3a1dc6-be06-4665-bd1b-e31ebaac81f2`"
+}

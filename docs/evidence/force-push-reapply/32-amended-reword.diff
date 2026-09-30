@@ -1,0 +1,18 @@
+diff --git a/docs/experiments/reapply/sample-amended.md b/docs/experiments/reapply/sample-amended.md
+index a88a00d..2daca24 100644
+--- a/docs/experiments/reapply/sample-amended.md
++++ b/docs/experiments/reapply/sample-amended.md
+@@ -3,11 +3,11 @@
+ Line 03: stable text of the re-application fixture.
+ Line 04: stable text of the re-application fixture.
+ Line 05: reviewed change one.
+-Line 06: reviewed change two.
++Line 06: reviewed change two, explained.
+ Line 07: stable text of the re-application fixture.
+ Line 08: stable text of the re-application fixture.
+ Line 09: stable text of the re-application fixture.
+-Line 10: stable text of the re-application fixture.
++Line 10: reworded with the change above.
+ Line 11: stable text of the re-application fixture.
+ Line 12: stable text of the re-application fixture.
+ Line 13: stable text of the re-application fixture.

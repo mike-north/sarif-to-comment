@@ -1,6 +1,6 @@
 # Reviews and suggestion pull requests after a force-push
 
-Run September 29, 2026 in `mike-north/doc-linter`, on draft pull requests [#41](https://github.com/mike-north/doc-linter/pull/41)–[#52](https://github.com/mike-north/doc-linter/pull/52), with sarif-to-comment at `6dade45`. The repository's `main` (`0a7b03f`) was never touched. The owner's decision on [issue #28](https://github.com/mike-north/sarif-to-comment/issues/28) rests on this experiment.
+Run September 29, 2026 in `mike-north/doc-linter`, on draft pull requests [#41](https://github.com/mike-north/doc-linter/pull/41)–[#52](https://github.com/mike-north/doc-linter/pull/52), with sarif-to-comment at `6dade45`. The repository's `main` (`0a7b03f`) was never touched. The owner's decision on [issue #28](https://github.com/mike-north/sarif-to-comment/issues/28) rests on this experiment; its implementation's live evidence is in [force-push re-application evidence](force-push-reapply-e2e-evidence.md).
 
 It asked four questions:
 
