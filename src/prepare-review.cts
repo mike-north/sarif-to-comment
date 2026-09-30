@@ -236,13 +236,14 @@
  *   suggestions are unchanged. Every unit must be
  *   acceptable on its own: overlapping edits across units, and any change to
  *   a path another unit creates or deletes, block. At most 10 suggestion
- *   pull requests, each body within the comment limit, each created file
- *   within 1,000,000 bytes. After a rewritten history, a unit that cannot be
- *   re-applied onto the head is not a suggestion pull request: a whole-file
- *   proposal is presented exactly as without the setting, with a
+ *   pull requests. A unit whose suggestion pull request cannot be made (the
+ *   pull request is not supported, the unit cannot be re-applied onto a
+ *   rewritten head, a created file is over 1,000,000 bytes, or its body is
+ *   over the comment limit) is handled as without the setting (issue #37):
+ *   a whole-file proposal is presented in the body, with a
  *   `suggestion-pr-fallback` warning, and a group or several-change fix
- *   blocks (`suggestion-group-not-reapplied`), since nothing else keeps its
- *   changes together (issue #37).
+ *   blocks (`suggestion-group-pr-unavailable`), since nothing else keeps its
+ *   changes together.
  *
  * Rendering:
  *   item      = message [ "\n\n**Fix:** " fix description ]
@@ -540,6 +541,13 @@ interface ISuggestionPullRequestsOption {
    * none never depends on it (§2.8). A rejection is operational.
    */
   readonly resolveRewrittenHead?: () => Promise<string | undefined>;
+  /**
+   * Why no suggestion pull request can be made for this pull request at all
+   * (for example a fork, or a base that is not the default branch), each a
+   * clause for a sentence; absent or empty when they can. Every unit is then
+   * handled as if suggestion pull requests were not allowed (issue #37).
+   */
+  readonly unavailable?: readonly string[];
 }
 
 /** Caller options; every limit defaults to PRODUCT_LIMITS. */
@@ -1342,6 +1350,10 @@ function validateCallerInput(input: unknown): asserts input is IPrepareReviewInp
       !(isPlainObject(suggestions) && typeof suggestions['headRef'] === 'string' && suggestions['headRef'] !== '' && typeof suggestions['ready'] === 'boolean')
     ) {
       fail('`options.suggestionPullRequests` must be { headRef, ready } naming the pull request\'s head branch and whether they are created ready for review.');
+    }
+    const unavailable = isPlainObject(suggestions) ? suggestions['unavailable'] : undefined;
+    if (unavailable !== undefined && !(Array.isArray(unavailable) && unavailable.every((r) => typeof r === 'string' && r !== ''))) {
+      fail('`options.suggestionPullRequests.unavailable` must list non-empty reasons.');
     }
     const resolve = isPlainObject(suggestions) ? suggestions['resolveRewrittenHead'] : undefined;
     if (resolve !== undefined && typeof resolve !== 'function') {
@@ -3309,86 +3321,80 @@ async function assembleWithSuggestions(items: readonly IPreparedItem[], state: I
 
   // Ancestry is resolved only now that suggestion units exist (§2.8), even
   // when another problem already blocks, so that the limit below counts what
-  // would be created and is reported with every other problem.
-  const head = units.length === 0 ? undefined : await rewrittenHeadOf(enabled, context, state);
+  // would be created and is reported with every other problem. A pull
+  // request suggestion pull requests do not support needs none.
+  const unavailable = enabled.unavailable ?? [];
+  const head = units.length === 0 || unavailable.length > 0 ? undefined : await rewrittenHeadOf(enabled, context, state);
   const target: ISuggestionContext = {
     owner: context.owner, repo: context.repo, pullNumber: context.pullNumber, reviewedCommit: context.reviewedCommit, headRef: enabled.headRef,
     ready: enabled.ready, ...(head === undefined ? {} : { reappliedOnto: head }),
   };
-  // After a rewritten history each unit is re-applied onto the head or it
-  // is not a suggestion pull request (contract §2.5.1); otherwise every unit
-  // is created as reviewed.
-  const decisions: UnitDecision[] = [];
-  for (const unit of units) decisions.push(head === undefined ? { kind: 'created', headTexts: new Map() } : await reapplication(unit, head, state));
-  // A unit that cannot be re-applied is handled as if suggestion pull
-  // requests were not allowed (issue #37): a whole-file proposal is presented
-  // in the body, announced by a warning; a group or several-change fix cannot
-  // be published at all, so the whole review is refused.
+  // Why each unit's suggestion pull request cannot be made (issue #37): the
+  // pull request is not supported, the history was rewritten and the unit
+  // cannot be re-applied onto the head (contract §2.5.1), a created file is
+  // over the per-file limit, or its description is over the body limit.
+  // A unit with no obstacle is created, with its companion.
+  const obstacles: Obstacle[][] = [];
+  const companionsByUnit = new Map<number, IPreparedCompanion>();
+  const sizingMarker = formatSuggestionMarker({ ...target, id: SIZING_UUID, batch: SIZING_UUID });
+  const { maxCommentBodyChars } = options;
+  for (const [i, unit] of units.entries()) {
+    const found: Obstacle[] = unavailable.map((reason): Obstacle => ({ kind: 'target', reason }));
+    let headTexts: ReadonlyMap<string, string> = new Map();
+    if (head !== undefined) {
+      const decision = await reapplication(unit, head, state);
+      if (decision.kind === 'created') headTexts = decision.headTexts;
+      else found.push({ kind: 'rewritten', head, reasons: decision.reasons });
+    }
+    for (const change of unit.changes.values()) {
+      if (change.kind !== 'operation' || change.operation.operation !== 'create') continue;
+      const bytes = Buffer.byteLength(change.operation.text, 'utf8');
+      if (bytes > MAX_SUGGESTION_FILE_BYTES) found.push({ kind: 'file-size', path: change.operation.path, bytes });
+    }
+    if (found.length === 0) {
+      const companion = prepareCompanion(unit, target, context, headTexts);
+      const characters = renderSuggestionPullBody(companion, sizingMarker, target).length;
+      if (maxCommentBodyChars !== undefined && characters > maxCommentBodyChars) found.push({ kind: 'description-size', characters, limit: maxCommentBodyChars });
+      else companionsByUnit.set(i, companion);
+    }
+    obstacles.push(found);
+  }
+  // A unit whose suggestion pull request cannot be made is handled as if
+  // suggestion pull requests were not allowed (issue #37): a whole-file
+  // proposal is presented in the body, announced by a warning; a group or
+  // several-change fix cannot be published at all, so the whole review is
+  // refused.
   /** Each whole-file proposal that falls back to the body, by unit index. */
   const fallbacks = new Map<number, PreparedFileOperation>();
-  for (const [i, decision] of decisions.entries()) {
-    if (decision.kind === 'created' || head === undefined) continue;
+  for (const [i, found] of obstacles.entries()) {
+    if (found.length === 0) continue;
     const unit = itemAt(units, i);
     const pointer = unit.items[0]?.pointer;
-    const reasons = decision.reasons.join('; ');
-    const rewritten = `the history of #${String(target.pullNumber)} was rewritten after the reviewed commit`;
     const operation = unit.kind === 'operation' ? standaloneOperation(unit) : undefined;
     if (operation !== undefined) {
       fallbacks.set(i, operation);
       report.warn('suggestion-pr-fallback', pointer,
         `Suggestion pull requests are allowed, but the ${operation.operation === 'create' ? 'creation' : 'deletion'} of ${codeSpan(operation.path)} is not proposed as one: `
-        + `${rewritten}, and it cannot be re-applied onto commit ${codeSpan(head)} because ${reasons}. `
+        + `${obstaclesText(found, 'it', target)}. `
         + 'It is handled as if suggestion pull requests were not allowed: the review body proposes it, with its findings.',
-        { path: operation.path });
+        { path: operation.path, remedies: fallbackRemedies(found) });
     } else {
       const [subject, whole] = unit.group !== undefined
         ? [`suggestion group ${JSON.stringify(unit.group)}`, 'a group cannot be published']
         : [`the fix with ${String(unit.changes.size)} changes`, 'a fix with several changes cannot be published'];
-      report.error('suggestion-group-not-reapplied', pointer,
-        `Suggestion pull requests are allowed, but ${subject} cannot become one: ${rewritten}, `
-        + `and its ${String(unit.changes.size)} changes cannot be re-applied onto commit ${codeSpan(head)} because ${reasons}. `
+      report.error('suggestion-group-pr-unavailable', pointer,
+        `Suggestion pull requests are allowed, but ${subject} cannot become one: ${obstaclesText(found, `its ${String(unit.changes.size)} changes`, target)}. `
         + `Without a suggestion pull request, ${whole}: its changes are accepted together or not at all, and are never split or published in part.`,
-        unit.group !== undefined ? {} : { remedies: SPLIT_FIX_REMEDIES });
+        { remedies: refusalRemedies(found, unit.group !== undefined) });
     }
   }
-  const created = units.flatMap((_, i) => (itemAt(decisions, i).kind === 'created' ? [i] : []));
-  // Only a suggestion pull request that would be created carries a file, so
-  // only its created files are held to the limit (a fallback is presented
-  // exactly as without suggestion pull requests).
-  for (const i of created) {
-    const unit = itemAt(units, i);
-    for (const change of unit.changes.values()) {
-      if (change.kind !== 'operation' || change.operation.operation !== 'create') continue;
-      const bytes = Buffer.byteLength(change.operation.text, 'utf8');
-      if (bytes > MAX_SUGGESTION_FILE_BYTES) {
-        const member = unit.items.find((item) => unitChangesOf(item).some((c) => changeKey(c) === changeKey(change))) ?? unit.items[0];
-        report.error('suggestion-file-too-large', member?.pointer,
-          `${change.operation.path}: the proposed file is ${String(bytes)} bytes; a suggestion pull request carries at most ${String(MAX_SUGGESTION_FILE_BYTES)} bytes per file.`);
-      }
-    }
-  }
+  const created = [...companionsByUnit.keys()];
   if (created.length > MAX_SUGGESTION_PULL_REQUESTS) report.error('too-many-suggestion-prs', undefined, tooManySuggestions(created.length));
   if (report.errors.length > 0) return blockedAssembly;
 
   /** Each created unit's companion index, in unit order. */
   const companionOf = new Map(created.map((unitIndex, companionIndex) => [unitIndex, companionIndex]));
-  const companions = created.map((i) => {
-    const decision = itemAt(decisions, i);
-    return prepareCompanion(itemAt(units, i), target, context, decision.kind === 'created' ? decision.headTexts : new Map<string, string>());
-  });
-  const sizingMarker = formatSuggestionMarker({ ...target, id: SIZING_UUID, batch: SIZING_UUID });
-  const { maxCommentBodyChars } = options;
-  for (const [companionIndex, i] of created.entries()) {
-    const companion = itemAt(companions, companionIndex);
-    const size = renderSuggestionPullBody(companion, sizingMarker, target).length;
-    const unit = itemAt(units, i);
-    if (maxCommentBodyChars !== undefined && size > maxCommentBodyChars) {
-      const subject = unit.group !== undefined ? `suggestion group ${JSON.stringify(unit.group)}` : `the proposed change to ${itemAt(companion.changes, 0).path}`;
-      report.error('suggestion-body-too-large', unit.items[0]?.pointer,
-        `The suggestion pull request for ${subject} would have a ${String(size)}-character body; the limit is ${String(maxCommentBodyChars)}. Nothing is truncated or split.`);
-    }
-  }
-  if (report.errors.length > 0) return blockedAssembly;
+  const companions = [...companionsByUnit.values()];
 
   /** Each fallen-back proposal's body section, as it is without suggestion pull requests, by unit index. */
   const fallbackSections = new Map<number, string>();
@@ -3497,20 +3503,69 @@ async function reapplication(unit: ISuggestionUnit, head: string, state: IPrepar
   return reasons.length === 0 ? { kind: 'created', headTexts } : { kind: 'not-created', reasons };
 }
 
-/**
- * The ways forward when a fix with several changes cannot be re-applied: the
- * catalog's first, and splitting the fix instead of removing a group.
- */
-const SPLIT_FIX_REMEDIES: readonly string[] = [
-  'Review the pull request\'s current head again, and publish that review.',
-  'Or split the fix into separate findings, one change each, so that its changes are published on their own.',
-];
-
 /** The whole-file proposal a standalone proposal unit carries (its only change). */
 function standaloneOperation(unit: ISuggestionUnit): PreparedFileOperation {
   const [change, ...others] = unit.changes.values();
   if (change?.kind !== 'operation' || others.length > 0) throw new Error('Internal error: a standalone proposal unit carries exactly one whole-file proposal.');
   return change.operation;
+}
+
+/**
+ * Why one suggestion pull request cannot be made (issue #37): the pull
+ * request is one suggestion pull requests do not support yet (`reason`
+ * names why), its history was rewritten and the unit cannot be re-applied
+ * onto the head (contract §2.5.1), a created file is over the per-file
+ * limit, or its description is over the body limit.
+ */
+type Obstacle =
+  | { readonly kind: 'target'; readonly reason: string }
+  | { readonly kind: 'rewritten'; readonly head: string; readonly reasons: readonly string[] }
+  | { readonly kind: 'file-size'; readonly path: string; readonly bytes: number }
+  | { readonly kind: 'description-size'; readonly characters: number; readonly limit: number };
+
+/** The obstacles as one clause, `subject` naming what cannot be re-applied ("it", "its 2 changes"). */
+function obstaclesText(obstacles: readonly Obstacle[], subject: string, target: ISuggestionContext): string {
+  return obstacles.map((o) => {
+    switch (o.kind) {
+      case 'target': return o.reason;
+      case 'rewritten':
+        return `the history of #${String(target.pullNumber)} was rewritten after the reviewed commit, and ${subject} cannot be re-applied onto commit ${codeSpan(o.head)} because ${o.reasons.join('; ')}`;
+      case 'file-size':
+        return `${codeSpan(o.path)} is ${String(o.bytes)} bytes, and a suggestion pull request carries at most ${String(MAX_SUGGESTION_FILE_BYTES)} bytes per file`;
+      case 'description-size':
+        return `its suggestion pull request's description would be ${String(o.characters)} characters, and the limit is ${String(o.limit)}`;
+      default: {
+        const unexpected: never = o;
+        throw new Error(`Internal error: unknown obstacle ${JSON.stringify(unexpected)}.`);
+      }
+    }
+  }).join('; ');
+}
+
+/** The ways, if any, to make the suggestion pull request of a proposal that fell back, one per kind of obstacle. */
+function fallbackRemedies(obstacles: readonly Obstacle[]): string[] {
+  const remedies = obstacles.flatMap((o): string[] => {
+    const lead = 'To propose the change as a suggestion pull request, ';
+    if (o.kind === 'rewritten') return [`${lead}review the pull request's current head again and publish that review.`];
+    if (o.kind === 'file-size') return [`${lead}reduce the proposed file to at most 1,000,000 bytes.`];
+    if (o.kind === 'description-size') return [`${lead}shorten its findings' messages.`];
+    return [];
+  });
+  return [...new Set(remedies)];
+}
+
+/** The ways forward for a group or several-change fix whose suggestion pull request cannot be made: remove each obstacle, or ungroup. */
+function refusalRemedies(obstacles: readonly Obstacle[], group: boolean): string[] {
+  const remedies = [...new Set(obstacles.flatMap((o): string[] => {
+    if (o.kind === 'rewritten') return ['Review the pull request\'s current head again, and publish that review.'];
+    if (o.kind === 'file-size') return ['Reduce the proposed file to at most 1,000,000 bytes.'];
+    if (o.kind === 'description-size') return ['Shorten the findings\' messages.'];
+    return [];
+  }))];
+  const last = group
+    ? 'remove the group (`ungroup-fixes`), so that its changes are published on their own.'
+    : 'split the fix into separate findings, one change each, so that its changes are published on their own.';
+  return [...remedies, remedies.length === 0 ? `${last.charAt(0).toUpperCase()}${last.slice(1)}` : `Or ${last}`];
 }
 
 /** The too-many-suggestion-prs problem for `count` suggestion pull requests (contract §2.8). */

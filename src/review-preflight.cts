@@ -534,10 +534,11 @@ export async function prepareForDestination(captured: ICapturedReview, client: I
     ancestry ??= readTarget === undefined ? Promise.resolve(undefined) : rewrittenHeadOf(readTarget, captured, client);
     return ancestry;
   };
+  const unavailable = target === undefined ? [] : unsupportedReasons(target, captured);
   const options = {
     ...(captured.ignoreApprovalHold === undefined ? {} : { ignoreApprovalHold: captured.ignoreApprovalHold }),
     ...(target === undefined || settings === undefined ? {} : {
-      suggestionPullRequests: { headRef: target.headRef, ready: settings.markReady, resolveRewrittenHead },
+      suggestionPullRequests: { headRef: target.headRef, ready: settings.markReady, resolveRewrittenHead, ...(unavailable.length === 0 ? {} : { unavailable }) },
     }),
   };
   const prepareInput = {
@@ -577,6 +578,30 @@ async function rewrittenHeadOf(target: ISuggestionTarget, captured: ICapturedRev
   return comparison === 'ahead' || comparison === 'identical' ? undefined : target.headSha;
 }
 
+/**
+ * Why no suggestion pull request can be made for this pull request, in a
+ * fixed order (contract §2.5; issue #37): its head is in a fork, or its head
+ * repository was deleted; its base is not the default branch. Each is a
+ * clause for the fallback and refusal sentences. Empty when suggestion pull
+ * requests are supported.
+ */
+function unsupportedReasons(target: ISuggestionTarget, captured: ICapturedReview): string[] {
+  const reasons: string[] = [];
+  // GitHub's own name for the pull request's repository decides sameness, whatever the caller's letter case.
+  if (target.headRepository === null) {
+    reasons.push("the pull request's head repository was deleted, so there is no branch to propose it into");
+  } else if (target.headRepository.toLowerCase() !== target.baseRepository.toLowerCase()) {
+    reasons.push(`the pull request's head branch ${codeSpan(target.headRef)} is in the fork ${target.headRepository}, `
+      + 'and suggestion pull requests are not yet supported for a pull request from a fork');
+  }
+  if (target.baseRef !== target.defaultBranch) {
+    const { owner, repo } = captured.destination;
+    reasons.push(`the pull request merges into ${codeSpan(target.baseRef)}, which is not the default branch ${codeSpan(target.defaultBranch)} of ${owner}/${repo}, `
+      + 'and suggestion pull requests are not yet supported for such a pull request');
+  }
+  return reasons;
+}
+
 /** A label a suggestion pull request must carry, and where it came from (for the missing-label problem). */
 interface IWantedLabel {
   readonly name: string;
@@ -585,11 +610,13 @@ interface IWantedLabel {
 
 /**
  * The repository facts suggestion pull requests need, all reported together
- * in a fixed order (contract §2.5, §2.7): the same repository, a base that is
- * the default branch, push permission, a valid repository configuration, and
- * every label. A head that moved is never among them (§2.5). Ready with the
- * head branch, the labels' own names, the ready setting and the commit they
- * are re-applied onto (if any), or blocked.
+ * in a fixed order (contract §2.5, §2.7): push permission, a valid
+ * repository configuration, and every label. A fork or a base other than
+ * the default branch never reaches here: preparation already handled every
+ * change as if suggestion pull requests were not allowed (issue #37). A head
+ * that moved is never among them (§2.5). Ready with the head branch, the
+ * labels' own names, the ready setting and the commit they are re-applied
+ * onto (if any), or blocked.
  */
 async function checkSuggestionTarget(
   prepared: IReadyOutcome,
@@ -613,17 +640,6 @@ async function checkSuggestionTarget(
   const problem = (code: DiagnosticCode, message: string): void => {
     problems.push(createDiagnostic(code, message, { subject: repository }));
   };
-  // GitHub's own name for the pull request's repository decides sameness, whatever the caller's letter case.
-  if (target.headRepository === null) {
-    problem('suggestion-pr-fork-unsupported', "The pull request's head repository was deleted, so there is no branch to propose a suggestion into.");
-  } else if (target.headRepository.toLowerCase() !== target.baseRepository.toLowerCase()) {
-    problem('suggestion-pr-fork-unsupported',
-      `Suggestion pull requests are not yet supported for a pull request from a fork: its head branch ${codeSpan(target.headRef)} is in ${target.headRepository}, so a suggestion would have to be opened there, as a pull request into that branch, and this tool opens suggestion pull requests only in ${target.baseRepository}.`);
-  }
-  if (target.baseRef !== target.defaultBranch) {
-    problem('suggestion-pr-base-unsupported',
-      `Suggestion pull requests are not yet supported for a pull request into ${codeSpan(target.baseRef)}, which is not the default branch ${codeSpan(target.defaultBranch)} of ${repository}: following a suggestion through a pull request that merges into another branch (for example one of a stack of pull requests, which GitHub retargets when the branch below it merges) is not built yet.`);
-  }
   if (!target.canPush) {
     problem('suggestion-pr-permission-missing', `The authenticated account cannot push to ${repository}, which creating proposal branches requires.`);
   }

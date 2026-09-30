@@ -672,16 +672,6 @@ export const DIAGNOSTIC_CATALOG = {
     title: 'A suggestion group holds fewer than two distinct changes',
     remedies: ['Remove the group, and the change is published on its own; or add another change to it.'],
   },
-  'suggestion-file-too-large': {
-    severity: 'error',
-    title: 'A proposed file is too large for a suggestion pull request',
-    remedies: ['Reduce the proposed file, or propose it outside the review.'],
-  },
-  'suggestion-body-too-large': {
-    severity: 'error',
-    title: 'A suggestion pull request\'s description would be too long',
-    remedies: ['Shorten the findings\' messages, or split the group.'],
-  },
   'too-many-suggestion-prs': {
     severity: 'error',
     title: 'The review would create too many suggestion pull requests',
@@ -692,23 +682,13 @@ export const DIAGNOSTIC_CATALOG = {
     title: 'A change is handled as if suggestion pull requests were not allowed',
     remedies: ['To propose the change as a suggestion pull request, review the pull request\'s current head again and publish that review.'],
   },
-  'suggestion-group-not-reapplied': {
+  'suggestion-group-pr-unavailable': {
     severity: 'error',
-    title: 'A group cannot be re-applied after a rewritten history',
+    title: 'A group\'s suggestion pull request cannot be made',
     remedies: [
       'Review the pull request\'s current head again, and publish that review.',
       'Or remove the group (`ungroup-fixes`), so that its changes are published on their own.',
     ],
-  },
-  'suggestion-pr-fork-unsupported': {
-    severity: 'error',
-    title: 'Suggestion pull requests are not supported for this pull request\'s head',
-    remedies: ['Publish without suggestion pull requests.'],
-  },
-  'suggestion-pr-base-unsupported': {
-    severity: 'error',
-    title: 'Suggestion pull requests need a pull request into the default branch',
-    remedies: ['Publish without suggestion pull requests.'],
   },
   'suggestion-pr-permission-missing': {
     severity: 'error',
