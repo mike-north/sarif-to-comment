@@ -25,7 +25,6 @@
 
 import * as assert from 'node:assert/strict';
 import * as fs from 'node:fs';
-import { createRequire } from 'node:module';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -108,11 +107,22 @@ export const ROOT = path.resolve(import.meta.dirname, '..', '..', '..');
 export const PKG: IPackageManifest = expectType(readJson(path.join(ROOT, 'package.json')), isPackageManifest, 'package.json');
 
 /**
- * Resolves `<name>/package.json` from a given directory. createRequire gives
- * require.resolve's `paths` option, which import.meta.resolve lacks: the
- * dependency walk must resolve each package from its dependent's directory.
+ * The installed `package.json` of package `name` as seen from `fromDir`: the
+ * nearest `node_modules/<name>/package.json` on Node's lookup path, which the
+ * dependency walk needs from each dependent's directory. It is located on
+ * disk rather than resolved as `<name>/package.json`, because a package whose
+ * `exports` map does not list `./package.json` (such as `@toon-format/toon`)
+ * refuses that specifier.
  */
-const requireFromHere = createRequire(import.meta.url);
+export function installedManifestPath(name: string, fromDir: string): string {
+  for (let current = path.resolve(fromDir); ; current = path.dirname(current)) {
+    if (path.basename(current) !== 'node_modules') {
+      const candidate = path.join(current, 'node_modules', name, 'package.json');
+      if (fs.existsSync(candidate)) return candidate;
+    }
+    if (path.dirname(current) === current) throw new Error(`${name} is not installed where ${fromDir} can load it.`);
+  }
+}
 
 /**
  * An npm environment isolated from the developer's machine: a private cache,
@@ -196,7 +206,7 @@ export function dependencyTarball(dir: string, destDir: string): string {
 export function runtimeDependencyDirs(): string[] {
   const dirs = new Map<string, string>();
   const visit = (name: string, fromDir: string): void => {
-    const manifestPath = requireFromHere.resolve(`${name}/package.json`, { paths: [fromDir] });
+    const manifestPath = installedManifestPath(name, fromDir);
     const dir = fs.realpathSync(path.dirname(manifestPath));
     const manifest = expectType(readJson(manifestPath), isPackageManifest, manifestPath);
     const key = `${name}@${manifest.version}`;

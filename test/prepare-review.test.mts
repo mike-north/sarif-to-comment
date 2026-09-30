@@ -36,7 +36,8 @@ import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 import { prepareReview, PRODUCT_LIMITS } from '../dist/prepare-review.cjs';
-import type { Evidence, IBlockedOutcome, IDiagnostic, IReadyOutcome, PrepareReviewOutcome } from '../dist/prepare-review.cjs';
+import type { IDiagnostic } from '../dist/diagnostics.cjs';
+import type { Evidence, IBlockedOutcome, IReadyOutcome, PrepareReviewOutcome } from '../dist/prepare-review.cjs';
 import { applyReplacement } from '../dist/replacements.cjs';
 import type { IReplacementRequest, ReplacementOutcome } from '../dist/replacements.cjs';
 import {
@@ -309,11 +310,12 @@ function assertBlocked(
     assert.ok(typeof d.message === 'string' && d.message.length > 0, `diagnostic ${d.code} has no message`);
     assert.ok(typeof outcome.markdown === 'string' && outcome.markdown.includes(d.code),
       `markdown report omits ${d.code}`);
-    if (d.pointer !== undefined) assert.ok(outcome.markdown.includes(d.pointer), `markdown report omits ${d.pointer}`);
+    const pointer = d.location?.pointer;
+    if (pointer !== undefined) assert.ok(outcome.markdown.includes(pointer), `markdown report omits ${pointer}`);
   }
   for (const e of expected) {
     const [code, pointer] = typeof e === 'string' ? [e] : e;
-    assert.ok(outcome.diagnostics.some((d) => d.code === code && (pointer === undefined || d.pointer === pointer)),
+    assert.ok(outcome.diagnostics.some((d) => d.code === code && (pointer === undefined || d.location?.pointer === pointer)),
       `missing diagnostic ${code}${pointer ? ` at ${pointer}` : ''}: ${JSON.stringify(outcome.diagnostics)}`);
   }
 }
@@ -741,7 +743,7 @@ describe('source revision binding', () => {
     const { outcome } = await prepare(sarifLog([result('x', at('src/app.js', { startLine: 7 }))], {
       versionControlProvenance: [{ repositoryUri: 'https://github.com/other/thing', revisionId: OTHER }],
     }), { reader });
-    assertBlocked(outcome, [['repository-mismatch', '/runs/0/results/0']]);
+    assertBlocked(outcome, [['provenance-repository-mismatch', '/runs/0/results/0']]);
     assert.deepStrictEqual(reader.calls, []);
   });
 
@@ -759,7 +761,7 @@ describe('source revision binding', () => {
         { repositoryUri: 'https://github.com/acme/widgets.git', revisionId: BASE },
       ],
     }));
-    assertBlocked(outcome, ['provenance-conflict']);
+    assertBlocked(outcome, ['provenance-revision-conflict']);
   });
 
   test('an ssh repository URI for the same repository is recognized', async () => {
@@ -837,7 +839,7 @@ describe('source revision binding', () => {
     const { outcome } = await prepare(sarifLog([result('x', at('src/app.js', { startLine: 3 }), {
       fixes: [fix({ startLine: 3, startColumn: 23, endColumn: 25 }, '20')],
     })]), { context: earlierReview(), replacements });
-    assertBlocked(outcome, [['suggestion-historical-unsupported', '/runs/0/results/0']]);
+    assertBlocked(outcome, [['suggestion-reviewed-commit-not-head', '/runs/0/results/0']]);
     assert.deepStrictEqual(replacements.calls, []);
   });
 
@@ -1757,15 +1759,15 @@ describe('regression: a failed analysis is never presented as a complete review 
   test('an unsuccessful invocation blocks and quotes its error notifications', async () => {
     const { outcome } = await prepare(sarifLog([result('partial')], { invocations: [{ executionSuccessful: false,
       toolExecutionNotifications: [{ level: 'error', message: { text: 'analyzer crashed on 40 files' } }] }] }));
-    assertBlocked(outcome, [['invocation-failed', '/runs/0/invocations/0']]);
-    assert.ok(outcome.diagnostics.find((d) => d.code === 'invocation-failed')?.message.includes('analyzer crashed on 40 files'));
+    assertBlocked(outcome, [['tool-invocation-failed', '/runs/0/invocations/0']]);
+    assert.ok(outcome.diagnostics.find((d) => d.code === 'tool-invocation-failed')?.message.includes('analyzer crashed on 40 files'));
   });
 
   test('error notifications in a successful invocation are reported as warnings', async () => {
     const { outcome } = await prepare(sarifLog([result('ok')], { invocations: [{ executionSuccessful: true,
       toolConfigurationNotifications: [{ level: 'error', message: { text: 'rule R9 disabled: bad config' } }] }] }));
     assertReady(outcome);
-    const warning = outcome.warnings.find((w) => w.code === 'tool-notification-error');
+    const warning = outcome.warnings.find((w) => w.code === 'tool-reported-errors');
     assert.ok(warning && warning.message.includes('rule R9 disabled: bad config'));
   });
 

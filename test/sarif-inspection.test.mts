@@ -209,7 +209,7 @@ describe('inspectSarif: a complete view of upstream SARIF', () => {
   test('the outcome is an inspection with exactly the contract\'s top-level fields', () => {
     const outcome = inspect();
     assert.equal(outcome.status, 'inspected');
-    assert.deepStrictEqual(Object.keys(outcome).sort(), ['status', 'view']);
+    assert.deepStrictEqual(Object.keys(outcome).sort(), ['diagnostics', 'status', 'view']);
     assert.deepStrictEqual(Object.keys(inspected(outcome).view).sort(), ['diagnostics', 'findings', 'format', 'runs', 'summary', 'version']);
     assert.equal(inspected(outcome).view.format, 'sarif-to-comment.inspection');
     assert.equal(inspected(outcome).view.version, 1);
@@ -224,7 +224,7 @@ describe('inspectSarif: a complete view of upstream SARIF', () => {
     // of 0.2.0, which the contract does not fix.
     const outcome = inspect();
     const { view } = inspected(outcome);
-    assert.deepStrictEqual(Object.keys(outcome), ['status', 'view']);
+    assert.deepStrictEqual(Object.keys(outcome), ['status', 'view', 'diagnostics']);
     assert.deepStrictEqual(Object.keys(view), ['format', 'version', 'summary', 'runs', 'findings', 'diagnostics']);
     assert.deepStrictEqual(Object.keys(view.summary), ['runs', 'findings', 'fixes', 'fileProposals', 'truncatedPreviews']);
     assert.deepStrictEqual(Object.keys(defined(view.runs[0], 'run 0')), ['index', 'ref', 'tool', 'source', 'columnKind', 'approval', 'otherContent']);
@@ -254,9 +254,10 @@ describe('inspectSarif: a complete view of upstream SARIF', () => {
       ['ref', 'operation', 'artifactIndex', 'path'],
       ['ref', 'operation', 'artifactIndex', 'path', 'otherContent'],
     ]);
-    assert.deepStrictEqual(Object.keys(defined(view.diagnostics[0], 'diagnostic 0')), ['severity', 'message', 'pointer']);
+    // docs/diagnostics.md: the 0.2.x fields first, then the diagnostic fields.
+    assert.deepStrictEqual(Object.keys(defined(view.diagnostics[0], 'diagnostic 0')), ['severity', 'message', 'pointer', 'code', 'title', 'location', 'remedies']);
     // The refusal outcome, in contract order (§3.3 InspectOutcome).
-    assert.deepStrictEqual(Object.keys(inspectSarif({ version: '2.1.0', runs: [{ results: [] }] })), ['status', 'problems', 'markdown']);
+    assert.deepStrictEqual(Object.keys(inspectSarif({ version: '2.1.0', runs: [{ results: [] }] })), ['status', 'problems', 'markdown', 'diagnostics']);
   });
 
   test('summary counts every run, finding, fix and file proposal', () => {
@@ -513,6 +514,9 @@ const VOCABULARY = new Set(['/format', 'state', 'severity']);
 function assertHumanShowsEveryString(view: ISarifInspection): string {
   const text = renderInspectionText(view);
   const missing = stringLeaves(view).filter(([pointer, value]) => {
+    // The view's warnings are diagnostics, which the CLI renders on stderr
+    // (docs/diagnostics.md); test/cli-diagnostics.test.mts checks them there.
+    if (pointer.startsWith('/diagnostics/')) return false;
     const key = pointer.slice(pointer.lastIndexOf('/') + 1);
     if (VOCABULARY.has(pointer) || VOCABULARY.has(key)) return false;
     return !shows(text, value);

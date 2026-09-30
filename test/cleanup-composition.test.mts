@@ -738,7 +738,7 @@ describe('CLI + real GitHub client over HTTP', () => {
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.equal(result.stderr, '');
     const doc = asRecord(parseJson(result.stdout));
-    assert.deepEqual(Object.keys(doc), ['command', 'status', 'dryRun', 'originals', 'suggestions', 'message']);
+    assert.deepEqual(Object.keys(doc), ['command', 'status', 'dryRun', 'originals', 'suggestions', 'message', 'diagnostics']);
     assert.equal(doc['command'], 'close-suggestion-prs');
     assert.equal(doc['status'], 'complete');
     assert.equal(doc['dryRun'], false);
@@ -798,7 +798,8 @@ describe('CLI + real GitHub client over HTTP', () => {
     const result = cli(world, ['close-suggestion-prs', '--repo', `${OWNER}/${REPO}`]);
     assert.equal(result.status, 1);
     assert.match(result.stderr, /HTTP 502/);
-    assert.match(result.stderr, /Nothing was closed/);
+    assert.match(result.stdout, /Nothing was closed/);
+    assert.match(result.stderr, /\[operation-failed\]/);
     assert.deepEqual(writes(world), []);
   });
 

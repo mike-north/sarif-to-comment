@@ -1180,7 +1180,7 @@ describe('CLI + real GitHub client over HTTP', () => {
     assert.equal(doc['status'], 'published');
     const { pull, branch } = onlyPull(world);
     assert.deepEqual(doc['suggestions'], [{ number: pull.number, url: pullUrl(pull.number), branch }]);
-    assert.deepEqual(Object.keys(doc), ['command', 'status', 'review', 'suggestions', 'statePath', 'message']);
+    assert.deepEqual(Object.keys(doc), ['command', 'status', 'review', 'suggestions', 'statePath', 'message', 'diagnostics']);
   });
 
   test('the legacy flag-only form accepts the same flags, and --pr-labels adds labels', () => {

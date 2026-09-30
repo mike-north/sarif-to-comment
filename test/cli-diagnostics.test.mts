@@ -160,7 +160,9 @@ describe('diagnostics in every CLI document', () => {
     const doc = jsonOf(run(['inspect', '--format', 'json'], { cwd: dir }));
     assert.deepEqual(Object.keys(doc), ['command', 'status', 'message', 'usage', 'diagnostics']);
     assert.equal(doc['status'], 'usage-error');
-    assertDiagnostics(doc['diagnostics'], [{ code: 'usage-error', subject: 'inspect', message: /missing required option --sarif/ }]);
+    assertDiagnostics(doc['diagnostics'], [{
+      code: 'usage-error', subject: 'inspect', message: /missing required option --sarif/, remedies: ['Run `sarif-to-comment inspect --help` for usage.'],
+    }]);
   });
 
   fs.writeFileSync(path.join(dir, 'not-json.txt'), 'not json');

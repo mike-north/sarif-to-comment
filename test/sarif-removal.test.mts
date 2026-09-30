@@ -281,7 +281,7 @@ describe('removeSarifComment removes exactly the selected finding and its attach
   test('the outcome and its finding serialize in contract order', () => {
     const sarif = findingsWithFixes();
     const outcome = removed(removeSarifComment(sarif, selectorAt(sarif, '/runs/0/results/2')));
-    assert.deepStrictEqual(Object.keys(outcome), ['status', 'sarif', 'finding']);
+    assert.deepStrictEqual(Object.keys(outcome), ['status', 'sarif', 'finding', 'diagnostics']);
     assert.deepStrictEqual(Object.keys(outcome.finding), ['ref', 'runIndex', 'resultIndex', 'tool', 'fixes', 'fileProposals']);
     assert.deepStrictEqual(outcome.finding, { ref: '/runs/0/results/2', runIndex: 0, resultIndex: 2, tool: 'Review agent', fixes: 0, fileProposals: 0 });
     assert.deepStrictEqual(outcome.sarif, without(sarif, 0, 2));
@@ -370,7 +370,7 @@ describe('stale or foreign selectors are refused and delete nothing (acceptance 
     const selector = selectorAt(sarif, '/runs/0/results/1');
     const once = removed(removeSarifComment(sarif, selectorAt(sarif, '/runs/0/results/0'))).sarif;
     const outcome = stale(removeSarifComment(once, selector));
-    assert.deepStrictEqual(Object.keys(outcome), ['status', 'selector', 'problems', 'markdown']);
+    assert.deepStrictEqual(Object.keys(outcome), ['status', 'selector', 'problems', 'markdown', 'diagnostics']);
     assert.equal(outcome.problems.length, 1);
     const [problem] = outcome.problems;
     if (!problem) throw new AssertionError({ message: 'the refusal has no problem' });
@@ -410,7 +410,7 @@ describe('malformed input', () => {
     const outcome = removeSarifComment({ version: '2.1.0', runs: [{ results: [] }] }, `/runs/0/results/0@${digest}`);
     if (outcome.status !== 'invalid') throw new AssertionError({ message: `expected invalid, got ${outcome.status}` });
     assert.ok(outcome.problems.length > 0);
-    assert.deepStrictEqual(Object.keys(outcome), ['status', 'problems', 'markdown']);
+    assert.deepStrictEqual(Object.keys(outcome), ['status', 'problems', 'markdown', 'diagnostics']);
   });
 });
 

@@ -584,7 +584,7 @@ describe('no approval stamp: publication checks everything again', () => {
   test('a ready outcome carries nothing publication accepts', async () => {
     const world = makeWorld();
     const raw = await validateRaw(world, assessmentInput(READY));
-    assert.deepEqual(Object.keys(asRecord(raw, 'the ready outcome')), ['status', 'markdown'], 'no stamp, fingerprint or identifier');
+    assert.deepEqual(Object.keys(asRecord(raw, 'the ready outcome')), ['status', 'markdown', 'diagnostics'], 'no stamp, fingerprint or identifier');
     const input = { ...assessmentInput(READY), statePath: world.statePath, readiness: raw };
     await assert.rejects(
       library.publishSarifReview(

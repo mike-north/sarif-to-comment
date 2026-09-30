@@ -119,7 +119,7 @@ describe('validateSarif: the vendored SARIF 2.1.0 errata01 schema, formats enfor
   test('refuses an invalid log as { status: "invalid", problems, markdown } with pointers', () => {
     const outcome = validateSarif(minimal([{ locations: [] }]));
     assert.equal(outcome?.status, 'invalid');
-    assert.deepStrictEqual(Object.keys(outcome).sort(), ['markdown', 'problems', 'status']);
+    assert.deepStrictEqual(Object.keys(outcome).sort(), ['diagnostics', 'markdown', 'problems', 'status']);
     assert.ok(outcome.problems.length > 0);
     for (const problem of outcome.problems) {
       assert.equal(typeof problem.message, 'string');

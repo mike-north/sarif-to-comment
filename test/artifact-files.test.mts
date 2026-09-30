@@ -185,18 +185,19 @@ describe('reading SARIF files', () => {
 });
 
 describe('ArtifactError runtime shape', () => {
-  test('a file problem is an ArtifactError with only the standard Error properties', () => {
-    // Characterization of 0.2.0: the class declares no fields and no name of
-    // its own, so it adds no own enumerable property and reports the
-    // inherited name "Error". The CLI branches on instanceof and shows only
-    // the message; a language conversion must not add fields or rename it.
+  test('a file problem is an ArtifactError carrying its diagnostic code and file', () => {
+    // The class reports the inherited name "Error" (as 0.2.0 did) and adds
+    // exactly two fields: the diagnostic code and the file the CLI reports
+    // it about (docs/diagnostics.md, "Command line and files").
     const missing = path.join(tempDir(), 'absent.sarif');
     assert.throws(() => readTextFile(missing, 'SARIF file'), (err) => {
       assert.ok(err instanceof ArtifactError);
       assert.ok(err instanceof Error);
       assert.equal(err.name, 'Error');
       assert.equal(Object.hasOwn(err, 'name'), false);
-      assert.deepEqual(Object.keys(err), []);
+      assert.deepEqual(Object.keys(err), ['code', 'file']);
+      assert.equal(err.code, 'file-unreadable');
+      assert.equal(err.file, missing);
       assert.equal(Object.hasOwn(err, 'cause'), false);
       assert.ok(err.message.startsWith(`cannot read SARIF file ${missing}: `), err.message);
       return true;

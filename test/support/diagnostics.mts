@@ -113,6 +113,8 @@ export interface IExpectedDiagnostic {
   readonly subject?: string;
   /** A pattern the message must match. */
   readonly message?: RegExp;
+  /** Concrete remedies this diagnostic carries instead of the catalog's typical ones. */
+  readonly remedies?: readonly string[];
 }
 
 /**
@@ -132,8 +134,9 @@ export function assertDiagnostics(value: unknown, expected: readonly IExpectedDi
     const entry = catalogEntry(want.code);
     assert.equal(d['severity'], entry.severity, `${want.code}: the documented severity`);
     assert.equal(d['title'], entry.title, `${want.code}: the documented title`);
-    if (entry.remedies.length === 0) assert.equal(Object.hasOwn(d, 'remedies'), false, `${want.code}: no remedies`);
-    else assert.deepEqual(d['remedies'], entry.remedies, `${want.code}: the documented remedies`);
+    const remedies = want.remedies ?? entry.remedies;
+    if (remedies.length === 0) assert.equal(Object.hasOwn(d, 'remedies'), false, `${want.code}: no remedies`);
+    else assert.deepEqual(d['remedies'], remedies, `${want.code}: its remedies`);
     if (want.location === undefined) assert.equal(Object.hasOwn(d, 'location'), false, `${want.code}: no location`);
     else assert.deepEqual(d['location'], want.location, `${want.code}: its location`);
     if (want.subject === undefined) assert.equal(Object.hasOwn(d, 'subject'), false, `${want.code}: no subject`);
@@ -168,4 +171,45 @@ export function assertProblemsExtend(problems: unknown, before: readonly Readonl
       assert.deepEqual(problem[key], diagnostic[key], `problem ${String(i)}: ${key} matches its diagnostic`);
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Expected values from the documented catalog
+
+/** What a diagnostic is about, as a test expects it. */
+export interface IExpectedDetails {
+  readonly location?: Readonly<Record<string, unknown>> | undefined;
+  readonly subject?: string | undefined;
+}
+
+/**
+ * The diagnostic docs/diagnostics.md defines for `code` with `message`: the
+ * documented severity, title and remedies, in the model's key order.
+ */
+export function expectedDiagnostic(code: string, message: string, { location, subject }: IExpectedDetails = {}): Record<string, unknown> {
+  const entry = catalogEntry(code);
+  return {
+    severity: entry.severity,
+    code,
+    title: entry.title,
+    message,
+    ...(location === undefined ? {} : { location }),
+    ...(subject === undefined ? {} : { subject }),
+    ...(entry.remedies.length === 0 ? {} : { remedies: [...entry.remedies] }),
+  };
+}
+
+/**
+ * The problem docs/diagnostics.md defines: the 0.2.x fields as given, then the
+ * diagnostic fields except the message; the location is the flat pointer and
+ * path unless given.
+ */
+export function expectedProblem(code: string, fields: Readonly<{ message: string; pointer?: string; path?: string }>, details: IExpectedDetails = {}): Record<string, unknown> {
+  const flat = {
+    ...(fields.pointer === undefined ? {} : { pointer: fields.pointer }),
+    ...(fields.path === undefined ? {} : { path: fields.path }),
+  };
+  const location = details.location ?? (Object.keys(flat).length === 0 ? undefined : flat);
+  // The flat fields keep their positions; the diagnostic's own fields follow.
+  return { ...fields, ...expectedDiagnostic(code, fields.message, { ...details, location }) };
 }

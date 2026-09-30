@@ -37,7 +37,7 @@ import * as path from 'node:path';
 import { describe, test } from 'node:test';
 
 import { UPSTREAM_SARIF_PATH, createGitWorld } from './fixtures/authoring-workflow/git-world.mts';
-import { PKG, ROOT, installIntoConsumer, npm, packProject, requirePackedProject } from './fixtures/package/installed-package.mts';
+import { PKG, ROOT, installIntoConsumer, installedManifestPath, npm, packProject, requirePackedProject } from './fixtures/package/installed-package.mts';
 import {
   asRecord,
   asString,
@@ -153,7 +153,7 @@ function runtimeDependencyClosure(required: ReadonlySet<string>): string[] {
   const names = new Set(required);
   for (const name of required) {
     const manifest = expectType(
-      readJson(require.resolve(`${name}/package.json`, { paths: [ROOT] })),
+      readJson(installedManifestPath(name, ROOT)),
       isShape({ peerDependencies: isOptional(isRecordOf(isString)) }),
       `${name}/package.json`,
     );

@@ -167,7 +167,7 @@ function assertReady(outcome: PrepareReviewOutcome): asserts outcome is IReadyOu
 function assertBlocked(outcome: PrepareReviewOutcome, code: string, pointer?: string): asserts outcome is IBlockedOutcome {
   assert.equal(outcome.status, 'blocked', JSON.stringify(outcome, null, 2));
   assert.ok(
-    outcome.diagnostics.some((d) => d.code === code && (pointer === undefined || d.pointer === pointer)),
+    outcome.diagnostics.some((d) => d.code === code && (pointer === undefined || d.location?.pointer === pointer)),
     `expected ${code}${pointer === undefined ? '' : ` at ${pointer}`}: ${JSON.stringify(outcome.diagnostics)}`,
   );
   assert.ok(outcome.markdown.includes(code), 'the blocked Markdown names the code');

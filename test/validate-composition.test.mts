@@ -160,7 +160,7 @@ describe('CLI validate + real GitHub client over HTTP', () => {
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.equal(result.stderr, '');
     const doc = asRecord(parseJson(result.stdout), 'the JSON document');
-    assert.deepEqual(Object.keys(doc), ['command', 'status', 'message']);
+    assert.deepEqual(Object.keys(doc), ['command', 'status', 'message', 'diagnostics']);
     assert.equal(doc['command'], 'validate');
     assert.equal(doc['status'], 'ready');
     assertReadOnly(world);
