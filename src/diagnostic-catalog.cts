@@ -82,6 +82,11 @@ export const DIAGNOSTIC_CATALOG = {
     title: 'The operation could not be completed',
     remedies: ['Resolve the cause the message names, then run the command again.'],
   },
+  'color-unavailable': {
+    severity: 'warning',
+    title: 'Color is unavailable',
+    remedies: ['Reinstall the package\'s dependencies, or use `--color never`.'],
+  },
   'sarif-schema-invalid': {
     severity: 'error',
     title: 'The document is not valid SARIF 2.1.0',

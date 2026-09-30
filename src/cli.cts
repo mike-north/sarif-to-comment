@@ -1835,7 +1835,10 @@ interface IOutputStream {
 /**
  * Writes human diagnostics to stderr: colored when color is on
  * (docs/diagnostics.md, "Color"), wrapped to the width of a terminal, plain
- * and unwrapped otherwise. Nothing is written when there are none.
+ * and unwrapped otherwise. Nothing is written when there are none. If the
+ * color library cannot be loaded (a broken installation), the diagnostics
+ * are written plain with a `color-unavailable` warning: color is
+ * presentation, so it never costs the outcome or its exit status.
  */
 async function writeDiagnostics(
   diagnostics: readonly IDiagnostic[],
@@ -1846,17 +1849,32 @@ async function writeDiagnostics(
 ): Promise<void> {
   if (diagnostics.length === 0) return;
   const isTTY = stderr.isTTY === true;
-  const style = shouldUseColor(color, env, isTTY) ? await loadColorStyle() : PLAIN_STYLE;
+  let style = PLAIN_STYLE;
+  let shown = diagnostics;
+  if (shouldUseColor(color, env, isTTY)) {
+    try {
+      style = await loadColorStyle();
+    } catch (err) {
+      const unavailable = createDiagnostic('color-unavailable', `The color library could not be loaded (${describeError(err)}), so diagnostics are shown as plain text.`);
+      shown = orderDiagnostics([...diagnostics, unavailable]);
+    }
+  }
   const width = isTTY && typeof stderr.columns === 'number' && stderr.columns > 0 ? stderr.columns : undefined;
-  stderr.write(safe(renderDiagnostics(diagnostics, { style, width })));
+  stderr.write(safe(renderDiagnostics(shown, { style, width })));
 }
 
-/** The TOON encoding of a JSON document (docs/diagnostics.md, "--format toon"), with a final newline. */
-async function toonText(document: OutcomeDocument): Promise<string> {
+/** Encodes a JSON document as TOON text with a final newline. */
+type ToonEncoder = (document: OutcomeDocument) => string;
+
+/**
+ * The TOON encoder (docs/diagnostics.md, "--format toon"). It is loaded
+ * before any work is done, so an installation that cannot load it fails
+ * before anything is read or written, never after an outcome.
+ */
+async function loadToonEncoder(): Promise<ToonEncoder> {
   const { encode } = await import('@toon-format/toon');
   // A JSON round trip first, so TOON carries exactly what the JSON document does.
-  const json: unknown = JSON.parse(JSON.stringify(document));
-  return `${encode(json)}\n`;
+  return (document) => `${encode(JSON.parse(JSON.stringify(document)))}\n`;
 }
 
 /**
@@ -1901,6 +1919,20 @@ async function main(
     return EXIT.usage;
   }
 
+  let toon: ToonEncoder | undefined;
+  if (format === 'toon') {
+    try {
+      toon = await loadToonEncoder();
+    } catch (err) {
+      // Without the encoder no TOON document can be printed; this is reported
+      // in human form, before any command has done anything.
+      const failure = createDiagnostic('operation-failed',
+        `The TOON encoder could not be loaded (${describeError(err)}), so nothing was done. Use --format json, or reinstall the package's dependencies.`);
+      await writeDiagnostics([failure], stderr, env, color, safe);
+      return EXIT.error;
+    }
+  }
+
   const first = args[0];
   const legacy = first === undefined || first.startsWith('-');
   const command = first === undefined || legacy ? 'publish' : isCommand(first) ? first : null;
@@ -1926,8 +1958,8 @@ async function main(
   const document: OutcomeDocument = { ...outcome.doc, diagnostics };
   if (format === 'json') {
     stdout.write(safe(`${JSON.stringify(document, null, 2)}\n`));
-  } else if (format === 'toon') {
-    stdout.write(safe(await toonText(document)));
+  } else if (toon !== undefined) {
+    stdout.write(safe(toon(document)));
   } else {
     if (outcome.out !== undefined) stdout.write(safe(outcome.out));
     await writeDiagnostics(diagnostics, stderr, env, color, safe);
