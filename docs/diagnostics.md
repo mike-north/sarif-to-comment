@@ -187,7 +187,7 @@ One entry per code: its severity, its title, what it means and its typical remed
 
 | Code | Severity | Title | Meaning | Typical remedies |
 |---|---|---|---|---|
-| `usage-error` | error | The command line is not valid | An option is unknown, missing, repeated or has a value the command does not accept, or the command is unknown. Nothing was read or written. | Correct the command line; run the command with `--help` for its usage. |
+| `usage-error` | error | The command line is not valid | An option is unknown, missing, repeated or has a value the command does not accept, or the command is unknown. Nothing was read or written. The CLI's remedy names the exact `--help` command. | Run the command with `--help` for its usage, and correct the command line. |
 | `github-token-missing` | error | No GitHub token is set | `validate`, `publish` and `close-suggestion-prs` read GitHub and need a token in `GH_TOKEN` or `GITHUB_TOKEN`. There is no token flag. | Set GH_TOKEN (or GITHUB_TOKEN) to a personal access token or user token. |
 | `file-unreadable` | error | A file could not be read | An input file does not exist, is not readable, or could not be read again before it was replaced. | Check the path and the file's permissions, then run the command again. |
 | `file-not-utf8` | error | A file is not UTF-8 text | SARIF and message files must be UTF-8 encoded. | Save the file as UTF-8, then run the command again. |

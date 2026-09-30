@@ -37,6 +37,27 @@ Description
 </th></tr></thead>
 <tbody><tr><td>
 
+[diagnostics](./sarif-to-comment.iincompleteassessment.diagnostics.md)
+
+
+</td><td>
+
+`readonly`
+
+
+</td><td>
+
+readonly [IDiagnostic](./sarif-to-comment.idiagnostic.md)<!-- -->\[\]
+
+
+</td><td>
+
+One `assessment-incomplete` error naming the cause.
+
+
+</td></tr>
+<tr><td>
+
 [markdown](./sarif-to-comment.iincompleteassessment.markdown.md)
 
 

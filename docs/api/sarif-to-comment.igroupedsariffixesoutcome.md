@@ -58,6 +58,27 @@ How many distinct changes the whole group now holds; identical changes count onc
 </td></tr>
 <tr><td>
 
+[diagnostics](./sarif-to-comment.igroupedsariffixesoutcome.diagnostics.md)
+
+
+</td><td>
+
+`readonly`
+
+
+</td><td>
+
+readonly [IDiagnostic](./sarif-to-comment.idiagnostic.md)<!-- -->\[\]
+
+
+</td><td>
+
+Always empty: grouping raises no warnings or notes.
+
+
+</td></tr>
+<tr><td>
+
 [extended](./sarif-to-comment.igroupedsariffixesoutcome.extended.md)
 
 

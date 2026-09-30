@@ -74,9 +74,9 @@ export type LegacyProblemFields = Readonly<{ message: string; pointer?: string |
  * pointer and path unless `details` gives one.
  */
 export function createProblem(code: DiagnosticCode, fields: LegacyProblemFields, details: IDiagnosticDetails = {}): IProblem {
-  const diagnostic = createDiagnostic(code, fields.message, { location: { pointer: fields.pointer, path: fields.path }, ...details });
-  const { message: _message, ...rest } = diagnostic;
-  return { ...fields, ...rest };
+  // Spreading the diagnostic after the flat fields keeps their positions
+  // (the message is the same value) and appends the diagnostic's own fields.
+  return { ...fields, ...createDiagnostic(code, fields.message, { location: { pointer: fields.pointer, path: fields.path }, ...details }) };
 }
 
 /** A problem for a diagnostic: its message and flat pointer and path, then the diagnostic fields. */
@@ -87,8 +87,7 @@ export function problemOfDiagnostic(diagnostic: IDiagnostic): IProblem {
     ...(location?.pointer === undefined ? {} : { pointer: location.pointer }),
     ...(location?.path === undefined ? {} : { path: location.path }),
   };
-  const { message: _message, ...rest } = diagnostic;
-  return { ...fields, ...rest };
+  return { ...fields, ...diagnostic };
 }
 
 /** The diagnostic a problem (or any diagnostic with extra fields) carries, in the model's key order and without the extra fields. */

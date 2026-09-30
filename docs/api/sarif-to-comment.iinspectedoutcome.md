@@ -37,6 +37,27 @@ Description
 </th></tr></thead>
 <tbody><tr><td>
 
+[diagnostics](./sarif-to-comment.iinspectedoutcome.diagnostics.md)
+
+
+</td><td>
+
+`readonly`
+
+
+</td><td>
+
+readonly [IDiagnostic](./sarif-to-comment.idiagnostic.md)<!-- -->\[\]
+
+
+</td><td>
+
+The view's warnings (`view.diagnostics`<!-- -->) as diagnostics.
+
+
+</td></tr>
+<tr><td>
+
 [status](./sarif-to-comment.iinspectedoutcome.status.md)
 
 

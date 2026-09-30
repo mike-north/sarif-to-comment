@@ -24,6 +24,8 @@ Nine operations work on ordinary in-memory SARIF values, and one cleans up after
 
 - [closeSuggestionPullRequests()](./sarif-to-comment.closesuggestionpullrequests.md) closes the companion suggestion pull  requests publication created once their original pull request has merged  or closed.
 
+Every outcome carries `diagnostics`<!-- -->: its errors, warnings and notes as[IDiagnostic](./sarif-to-comment.idiagnostic.md) values with stable codes, listed in the package's`docs/diagnostics.md`<!-- -->.
+
 Authoring is optional: SARIF from any producer can be inspected, extended and published directly, and no operation depends on how a document was made. There is no builder, session or private format; each operation that changes a document returns a new one and leaves its input untouched.
 
 The `sarif-to-comment` command-line interface provides the same operations for files (`init`<!-- -->, `add-comment`<!-- -->, `remove-comment`<!-- -->, `group-fixes`<!-- -->,`ungroup-fixes`<!-- -->, `inspect`<!-- -->, `add-staged-changes`<!-- -->, `validate`<!-- -->, `publish`<!-- -->), and `close-suggestion-prs`<!-- -->. These declarations describe the package's CommonJS runtime entry; they are generated from its TypeScript implementation, checked by API Extractor and compiled against CommonJS and ES module consumers by the package tests.
@@ -278,6 +280,28 @@ Options for [createSarifDocument()](./sarif-to-comment.createsarifdocument.md)<!
 </td></tr>
 <tr><td>
 
+[IDiagnostic](./sarif-to-comment.idiagnostic.md)
+
+
+</td><td>
+
+An error, warning or note, modelled once and rendered for each audience: as JSON or TOON for agents, as a colored block for people, and as the Markdown of an outcome's `markdown` field.
+
+
+</td></tr>
+<tr><td>
+
+[IDiagnosticLocation](./sarif-to-comment.idiagnosticlocation.md)
+
+
+</td><td>
+
+Where a diagnostic is. At least one field is present.
+
+
+</td></tr>
+<tr><td>
+
 [IFailedStagedChangesOutcome](./sarif-to-comment.ifailedstagedchangesoutcome.md)
 
 
@@ -371,7 +395,7 @@ The replacements a fix makes in one file.
 
 </td><td>
 
-Something inspection could not interpret, such as an unresolvable path.
+Something inspection could not interpret, such as an unresolvable path: a warning diagnostic that also carries its pointer directly.
 
 
 </td></tr>
@@ -525,7 +549,7 @@ An original pull request cleanup resolved.
 
 </td><td>
 
-A problem that prevented an operation, with where it is.
+A problem that prevented an operation, with where it is: a diagnostic that also carries its location's pointer and path directly, as problems always have.
 
 
 </td></tr>
@@ -851,6 +875,17 @@ Every outcome of [addStagedChangesToSarif()](./sarif-to-comment.addstagedchanges
 Whether cleanup established everything it set out to:
 
 - `complete`<!-- -->: every pull request checked has its final result (a dry run  too). - `permission-limited`<!-- -->: everything else is done, but some eligible  suggestion pull requests could not be closed with this account. - `incomplete`<!-- -->: an original could not be verified or an action failed;  running cleanup again is safe.
+
+
+</td></tr>
+<tr><td>
+
+[DiagnosticSeverity](./sarif-to-comment.diagnosticseverity.md)
+
+
+</td><td>
+
+How serious a diagnostic is: `error` (the operation did not do what was asked), `warning` (it did, or may have, and something needs attention) or`note` (information only).
 
 
 </td></tr>

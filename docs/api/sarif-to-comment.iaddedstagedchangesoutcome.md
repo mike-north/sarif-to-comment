@@ -37,6 +37,27 @@ Description
 </th></tr></thead>
 <tbody><tr><td>
 
+[diagnostics](./sarif-to-comment.iaddedstagedchangesoutcome.diagnostics.md)
+
+
+</td><td>
+
+`readonly`
+
+
+</td><td>
+
+readonly [IDiagnostic](./sarif-to-comment.idiagnostic.md)<!-- -->\[\]
+
+
+</td><td>
+
+The receipt's warnings as diagnostics.
+
+
+</td></tr>
+<tr><td>
+
 [receipt](./sarif-to-comment.iaddedstagedchangesoutcome.receipt.md)
 
 

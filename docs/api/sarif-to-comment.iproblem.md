@@ -4,13 +4,14 @@
 
 ## IProblem interface
 
-A problem that prevented an operation, with where it is.
+A problem that prevented an operation, with where it is: a diagnostic that also carries its location's pointer and path directly, as problems always have.
 
 **Signature:**
 
 ```typescript
-export interface IProblem 
+export interface IProblem extends IDiagnostic 
 ```
+**Extends:** [IDiagnostic](./sarif-to-comment.idiagnostic.md)
 
 ## Properties
 

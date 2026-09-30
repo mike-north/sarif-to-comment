@@ -853,11 +853,12 @@ function tokenMissing(): IDiagnostic {
 /** A usage error; `usage` is the command's help (or the top-level help). */
 function usageOutcome(command: CliCommand | null, message: string, legacy = false): IOutcome {
   const subject = legacy || command === null ? undefined : command;
+  const hint = subject === undefined ? 'sarif-to-comment --help' : `sarif-to-comment ${subject} --help`;
   return {
     exit: EXIT.usage,
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- every command has help text; the top-level fallback is kept as the durable guard it always was
     doc: { command, status: 'usage-error', message, usage: USAGE[command ?? 'top'] ?? USAGE.top },
-    diagnostics: [createDiagnostic('usage-error', message, { subject })],
+    diagnostics: [createDiagnostic('usage-error', message, { subject, remedies: [`Run \`${hint}\` for usage.`] })],
   };
 }
 
@@ -1895,7 +1896,8 @@ async function main(
   } catch (err) {
     if (!(err instanceof UsageError)) throw err;
     // The format (or the color) is unknown, so this is always human output.
-    await writeDiagnostics([createDiagnostic('usage-error', err.message)], stderr, env, 'auto', safe);
+    const failure = createDiagnostic('usage-error', err.message, { remedies: ['Run `sarif-to-comment --help` for usage.'] });
+    await writeDiagnostics([failure], stderr, env, 'auto', safe);
     return EXIT.usage;
   }
 

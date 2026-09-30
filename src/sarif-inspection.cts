@@ -743,8 +743,16 @@ type InspectionWarningCode =
  * (severity, message, pointer), then the rest of its diagnostic.
  */
 function warn(state: IInspectionState, code: InspectionWarningCode, pointer: string, message: string): void {
-  const { severity: _severity, message: _message, ...rest } = createDiagnostic(code, message, { location: { pointer } });
-  state.diagnostics.push({ severity: 'warning', message, pointer, ...rest });
+  const { code: catalogued, title, location, remedies } = createDiagnostic(code, message, { location: { pointer } });
+  state.diagnostics.push({
+    severity: 'warning',
+    message,
+    pointer,
+    code: catalogued,
+    title,
+    ...(location === undefined ? {} : { location }),
+    ...(remedies === undefined ? {} : { remedies }),
+  });
 }
 
 /** Message properties presented by named message-view fields; others go to its otherContent. */

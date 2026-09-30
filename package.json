@@ -40,6 +40,8 @@
     "!dist/public-types.cjs",
     "vendor/",
     "docs/getting-started.md",
+    "docs/diagnostics.md",
+    "docs/diagnostic.v1.schema.json",
     "docs/api/",
     "CHANGELOG.md",
     "README.md"

@@ -37,6 +37,27 @@ Description
 </th></tr></thead>
 <tbody><tr><td>
 
+[diagnostics](./sarif-to-comment.iaddedsarifcommentoutcome.diagnostics.md)
+
+
+</td><td>
+
+`readonly`
+
+
+</td><td>
+
+readonly [IDiagnostic](./sarif-to-comment.idiagnostic.md)<!-- -->\[\]
+
+
+</td><td>
+
+Always empty: adding a finding raises no warnings or notes.
+
+
+</td></tr>
+<tr><td>
+
 [finding](./sarif-to-comment.iaddedsarifcommentoutcome.finding.md)
 
 
