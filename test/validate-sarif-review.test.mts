@@ -136,10 +136,19 @@ const DOCUMENT_CASES: readonly IDocumentCase[] = [
   { name: 'schema-invalid SARIF', sarif: INVALID, expected: 'blocked', mentions: /schema/i },
   // Issue #30: the first fix is the suggestion and the others are listed as alternatives, so the review is not refused.
   { name: 'a finding offering alternative fixes', sarif: withFurtherFixes(lineFix(4, 'const MAX = 200;'), lineFix(6, 'module.exports = { LIMIT };')), expected: 'ready' },
-  // Issue #30: an alternative is listed only when it makes one replacement in one file; it is refused at its own pointer.
+  // Issue #30: an alternative changing several places is listed with one labelled part per replacement.
   {
-    name: 'an alternative fix changing several files',
-    sarif: withFurtherFixes({ artifactChanges: [...asArray(lineFix(4, 'const MAX = 200;')['artifactChanges'], 'changes'), ...asArray(lineFix(1, 'x', 'src/other.js')['artifactChanges'], 'changes')] }),
+    name: 'an alternative fix making two replacements',
+    sarif: withFurtherFixes({ artifactChanges: [{ artifactLocation: { uri: 'src/app.js' }, replacements: [
+      { deletedRegion: { startLine: 3 }, insertedContent: { text: 'const LIMIT = 50;' } },
+      { deletedRegion: { startLine: 4 }, insertedContent: { text: 'const MAX = 200;' } },
+    ] }] }),
+    expected: 'ready',
+  },
+  // Issue #30: an alternative that cannot be shown exactly is refused at its own pointer.
+  {
+    name: 'an alternative fix on a file the reviewed commit does not have',
+    sarif: withFurtherFixes(lineFix(1, 'x', 'src/missing.js')),
     expected: 'blocked',
     pointer: '/runs/0/results/0/fixes/1',
   },

@@ -51,6 +51,8 @@ const SNAPSHOT: Readonly<Record<string, string>> = {
   'src/other.js': 'export const parse = parseA;\n',
   // A file whose path Markdown cannot show exactly (it begins with a space).
   ' odd.js': 'odd\n',
+  // A file with CRLF line endings, outside the diff.
+  'src/crlf.js': 'one\r\ntwo\r\n',
 };
 const BASE_SNAPSHOT: Readonly<Record<string, string>> = {
   'src/app.js': 'const a = 1;\nconst b = oldParse(input);\nconst c = 3;\n',
@@ -192,8 +194,10 @@ describe('the first fix is the suggested change; every further fix is listed as 
     });
     assert.deepEqual(evidence.alternatives, [{
       fix: 1,
-      path: 'src/app.js',
-      replacement: { startLine: 2, endLine: 2, originalText: 'const b = parseA(input);\n', replacementText: 'const b = cachedParse(input);\n' },
+      changes: [{
+        path: 'src/app.js',
+        replacement: { startLine: 2, endLine: 2, originalText: 'const b = parseA(input);\n', replacementText: 'const b = cachedParse(input);\n' },
+      }],
     }]);
   });
 
@@ -238,8 +242,10 @@ describe('the first fix is the suggested change; every further fix is listed as 
     const [evidence] = outcome.evidence;
     assert.deepEqual(evidence?.alternatives, [{
       fix: 1,
-      path: 'src/other.js',
-      replacement: { startLine: 1, endLine: 1, originalText: 'export const parse = parseA;\n', replacementText: 'export const parse = parseB;\n' },
+      changes: [{
+        path: 'src/other.js',
+        replacement: { startLine: 1, endLine: 1, originalText: 'export const parse = parseA;\n', replacementText: 'export const parse = parseB;\n' },
+      }],
     }]);
   });
 
@@ -337,6 +343,12 @@ describe('no semantic judgment: the first fix is presented as a single fix would
     assertBlocked(outcome, [['suggestion-not-inline', POINTER]]);
   });
 
+  test('regression: a failed first fix adds no spurious path refusal for an alternative on the same file', async () => {
+    // ' odd.js' is outside the diff, so the first fix fails; its alternative on the same file names no path.
+    const outcome = await prepare(log([finding([lineFix('%20odd.js', 1, 'even'), lineFix('%20odd.js', 1, 'odder')], 'Odd.', '%20odd.js', 1)]));
+    assertBlocked(outcome, [['suggestion-not-inline', POINTER]]);
+  });
+
   test('the first fix\'s own problems and every alternative\'s problems are all reported at once', async () => {
     const outcome = await prepare(log([finding([
       lineFix('src/app.js', 2, 'const b = "```";'),
@@ -355,18 +367,26 @@ describe('an alternative that cannot be listed faithfully refuses the whole revi
     });
   };
 
-  blocked('an alternative changing several files', {
+  blocked('an alternative whose two replacements change the same line, which separate parts cannot show', {
+    artifactChanges: [{ artifactLocation: { uri: 'src/app.js' }, replacements: [
+      { deletedRegion: { startLine: 2, startColumn: 1, endColumn: 6 }, insertedContent: { text: 'let' } },
+      { deletedRegion: { startLine: 2, startColumn: 11, endColumn: 17 }, insertedContent: { text: 'parseB' } },
+    ] }],
+  }, 'alternative-overlapping-replacements');
+  blocked('a part of a multi-file alternative on a file the reviewed commit does not have', {
     artifactChanges: [
       { artifactLocation: { uri: 'src/app.js' }, replacements: [{ deletedRegion: { startLine: 2 }, insertedContent: { text: 'x' } }] },
-      { artifactLocation: { uri: 'src/other.js' }, replacements: [{ deletedRegion: { startLine: 1 }, insertedContent: { text: 'y' } }] },
+      { artifactLocation: { uri: 'src/missing.js' }, replacements: [{ deletedRegion: { startLine: 1 }, insertedContent: { text: 'y' } }] },
     ],
-  }, 'fix-multiple-files-unsupported');
-  blocked('an alternative with several replacements', {
-    artifactChanges: [{ artifactLocation: { uri: 'src/app.js' }, replacements: [
-      { deletedRegion: { startLine: 1 }, insertedContent: { text: 'x' } },
-      { deletedRegion: { startLine: 3 }, insertedContent: { text: 'y' } },
-    ] }],
-  }, 'fix-multiple-replacements-unsupported');
+  }, 'source-file-missing');
+  blocked('a part of a multi-file alternative whose path Markdown cannot show exactly', {
+    artifactChanges: [
+      { artifactLocation: { uri: 'src/app.js' }, replacements: [{ deletedRegion: { startLine: 2 }, insertedContent: { text: 'x' } }] },
+      { artifactLocation: { uri: '%20odd.js' }, replacements: [{ deletedRegion: { startLine: 1 }, insertedContent: { text: 'y' } }] },
+    ],
+  }, 'alternative-path-unrepresentable');
+  blocked('an alternative mixing CRLF and LF line endings, which one stated style cannot describe',
+    lineFix('src/crlf.js', 2, 'deux\ntrois'), 'alternative-content-unrepresentable');
   blocked('an alternative inserting binary content', {
     artifactChanges: [{ artifactLocation: { uri: 'src/app.js' }, replacements: [{ deletedRegion: { startLine: 2 }, insertedContent: { binary: 'AAAA' } }] }],
   }, 'fix-binary-unsupported');
@@ -382,6 +402,95 @@ describe('an alternative that cannot be listed faithfully refuses the whole revi
     assertBlocked(outcome, [['alternative-content-unrepresentable', `${POINTER}/fixes/1`]]);
     assert.equal(outcome.diagnostics[0]?.message,
       'Alternative fix (1) cannot be shown exactly: replacement line 1 contains U+202E, which a code block does not show.');
+  });
+});
+
+describe('an alternative with several parts is listed as one alternative with labelled parts', () => {
+  test('an alternative changing two files lists each file\'s part, in the producer\'s order', async () => {
+    const both: Json = {
+      description: { text: 'Switch both.' },
+      artifactChanges: [
+        { artifactLocation: { uri: 'src/app.js' }, replacements: [{ deletedRegion: { startLine: 2 }, insertedContent: { text: 'const b = parseAll(input);' } }] },
+        { artifactLocation: { uri: 'src/other.js' }, replacements: [{ deletedRegion: { startLine: 1 }, insertedContent: { text: 'export const parse = parseAll;' } }] },
+      ],
+    };
+    const outcome = await prepare(log([finding([PRIMARY, both])]));
+    assertReady(outcome);
+    assert.equal(outcome.review.comments[0]?.body, suggestionComment(item([[
+      '(1) Switch both.',
+      '',
+      'Changes 2 files together:',
+      '',
+      '`src/app.js` — replace line 2 with:',
+      '',
+      '```',
+      'const b = parseAll(input);',
+      '```',
+      '',
+      '`src/other.js` — replace line 1 with:',
+      '',
+      '```',
+      'export const parse = parseAll;',
+      '```',
+    ].join('\n')])));
+    assert.deepEqual(outcome.evidence[0]?.alternatives, [{
+      fix: 1,
+      changes: [
+        { path: 'src/app.js', replacement: { startLine: 2, endLine: 2, originalText: 'const b = parseA(input);\n', replacementText: 'const b = parseAll(input);\n' } },
+        { path: 'src/other.js', replacement: { startLine: 1, endLine: 1, originalText: 'export const parse = parseA;\n', replacementText: 'export const parse = parseAll;\n' } },
+      ],
+    }]);
+  });
+
+  test('an alternative with several replacements in one file lists each replacement, a deletion without a block', async () => {
+    const two: Json = {
+      artifactChanges: [{ artifactLocation: { uri: 'src/app.js' }, replacements: [
+        { deletedRegion: { startLine: 1 }, insertedContent: { text: 'const a = 2;' } },
+        // Deleting line 3 with its newline: the region ends at the end-of-file position (line 4, column 1).
+        { deletedRegion: { startLine: 3, startColumn: 1, endLine: 4, endColumn: 1 } },
+      ] }],
+    };
+    const outcome = await prepare(log([finding([PRIMARY, two])]));
+    assertReady(outcome);
+    assert.equal(outcome.review.comments[0]?.body, suggestionComment(item([[
+      '(1) Makes 2 replacements together:',
+      '',
+      '`src/app.js` — replace line 1 with:',
+      '',
+      '```',
+      'const a = 2;',
+      '```',
+      '',
+      '`src/app.js` — delete line 3.',
+    ].join('\n')])));
+  });
+});
+
+describe('CRLF alternatives: the line-ending style is stated, and the block holds the lines', () => {
+  test('a CRLF replacement is shown with LF line breaks and "CRLF line endings" stated; no carriage return reaches the body', async () => {
+    const outcome = await prepare(log([finding([PRIMARY, lineFix('src/crlf.js', 2, 'deux\r\ntrois')])]));
+    assertReady(outcome);
+    const body = present(outcome.review.comments[0]?.body);
+    assert.equal(body, suggestionComment(item([[
+      '(1) Replace line 2 of `src/crlf.js` with (CRLF line endings):',
+      '',
+      '```',
+      'deux',
+      'trois',
+      '```',
+    ].join('\n')])));
+    assert.equal(body.includes('\r'), false);
+    // The evidence keeps the exact replacement, terminators included.
+    assert.deepEqual(outcome.evidence[0]?.alternatives?.[0]?.changes[0]?.replacement,
+      { startLine: 2, endLine: 2, originalText: 'two\r\n', replacementText: 'deux\r\ntrois\r\n' });
+  });
+
+  test('a one-line CRLF replacement states the style of the terminator it keeps', async () => {
+    const outcome = await prepare(log([finding([PRIMARY, lineFix('src/crlf.js', 1, 'uno')])]));
+    assertReady(outcome);
+    assert.equal(outcome.review.comments[0]?.body, suggestionComment(item([
+      ['(1) Replace line 1 of `src/crlf.js` with (CRLF line endings):', '', '```', 'uno', '```'].join('\n'),
+    ])));
   });
 });
 
