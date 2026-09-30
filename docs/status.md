@@ -46,7 +46,7 @@ The shipped behavior is verified only within a documented profile. The full list
 
 - **Verified:** the recorded live GitHub fixture runs, the local and installed-package suites, and native application of the suggestion shapes named in the evidence reports.
 - **Host:** only `https://api.github.com`, with personal or user tokens. GitHub Enterprise Server, GitHub App installation tokens and other hosts are unsupported.
-- **SARIF:** a bounded profile. Multiple or related locations, code flows, graphs, stacks, attachments and suppressions are refused, never approximated; a fix with several changes is published only as a suggestion pull request. Alternative fixes are published (the first as the suggestion, the rest listed beside it) once [#30](https://github.com/mike-north/sarif-to-comment/issues/30) is released.
+- **SARIF:** a bounded profile. Multiple or related locations, code flows, graphs, stacks, attachments and suppressions are refused, never approximated; a fix with several changes is published only as a suggestion pull request. Alternative fixes, including multi-part ones, are published (the first as the suggestion, the rest listed beside it) once [#30](https://github.com/mike-north/sarif-to-comment/issues/30) is released.
 - **Not verified, and not claimed:**
   - arbitrary SARIF;
   - other providers or hosts;
@@ -139,7 +139,7 @@ These were found during reconciliation. They are recorded here rather than decid
    - `sourceFiles` in `docs/evidence/typescript-migration/accepted-identity.json` matches commit `dc5dfee`.
 
    Documents in those manifests were edited later, so they no longer match at the current head. They include `README.md`, `docs/getting-started.md`, `docs/second-milestone.md`, `docs/second-milestone-contract-proposal.md`, generated `docs/api/` pages and, since this reconciliation, `docs/second-milestone-goal.md`. To verify an entry, hash the file at its recorded commit: `git show <commit>:<path> | shasum -a 256`.
-5. **A fix that changes several files, without suggestion PRs.** *Resolved by [#29](https://github.com/mike-north/sarif-to-comment/issues/29), as [#30](https://github.com/mike-north/sarif-to-comment/issues/30) asked.* A single SARIF fix with several `artifactChanges` (or several replacements) is one change, accepted whole. As a result's first fix, whatever alternatives follow it, it becomes one suggestion pull request when suggestion PRs are allowed; without them it is refused (`fix-changes-require-suggestion-prs`, naming `--allow-suggestion-prs`) rather than split into piecemeal edits.
+5. **A fix that changes several files, without suggestion PRs.** *Resolved by [#29](https://github.com/mike-north/sarif-to-comment/issues/29), as [#30](https://github.com/mike-north/sarif-to-comment/issues/30) asked.* A single SARIF fix with several `artifactChanges` (or several replacements) is one change, accepted whole. As a result's first fix, whatever alternatives follow it, it becomes one suggestion pull request when suggestion PRs are allowed; without them it is refused (`fix-changes-require-suggestion-prs`, naming `--allow-suggestion-prs`) rather than split into piecemeal edits. As an alternative, such a fix is only listed, never applied, so it is shown with one labelled part per replacement.
 
 ## Editorial note
 
