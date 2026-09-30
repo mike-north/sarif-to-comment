@@ -1,6 +1,6 @@
 # Finding removal and correction: contract
 
-Proposal awaiting owner acceptance · September 28, 2026. The operation below is implemented under the conservative options recommended here; the selector decision in particular is provisional until the owner accepts or replaces it.
+Accepted by the owner · September 29, 2026 ([D34](design-decisions.md#d34-remove-findings-by-document-bound-selectors--owner-accepted), [issue #24](https://github.com/mike-north/sarif-to-comment/issues/24)), as merged in [PR #14](https://github.com/mike-north/sarif-to-comment/pull/14). First proposed September 28, 2026. The owner accepted the document-bound selector of §2 and its consequence: any change to the SARIF document requires a fresh inspection before the next removal.
 
 **Sources.** [Interface design: inspection requirements and deferred removal design](second-milestone-interface-design.md#inspection-requirements-and-deferred-removal-design), its selected vocabulary, conventions and acceptance examples 2, 3, 5 and 8; [D30–D32](design-decisions.md); [the milestone's deferral](second-milestone.md#deferred); the [engineering contract](second-milestone-contract-proposal.md) §1 and §3.2–§3.3 for shared conventions.
 
@@ -13,7 +13,7 @@ Proposal awaiting owner acceptance · September 28, 2026. The operation below is
 - Only the local artifact changes. No GitHub review or publication state is read or edited (D29 stays intact).
 - Correction is removal followed by the existing `add-comment` / `addSarifComment`. Enriched output is regenerated separately from the corrected authored input with `add-staged-changes`; removal never regenerates it.
 
-## 2. Selector decision (proposal)
+## 2. Selector decision
 
 The sources leave open whether selectors are persistent IDs or document-bound handles, and their spelling.
 
@@ -24,7 +24,7 @@ The sources leave open whether selectors are persistent IDs or document-bound ha
 | C. Pointer plus a digest of the whole document (**recommended, adopted**) | Yes | Any change to the document makes every earlier selector stale, so each removal needs a fresh inspection. |
 | D. Persistent IDs written into SARIF (`guid`) | Yes | Changes documents to make them removable, and upstream SARIF has no such IDs; D32 forbids helper-only markers as prerequisites. |
 
-**Recommendation: C.** It is the only option that is unambiguous for identical findings without writing anything into the document, and its cost (re-inspect after each change) is the safe default for a destructive edit. Batch removal and persistent IDs can be added later without breaking C.
+**Accepted: C** (recommended by this contract, accepted by the owner on September 29, 2026). It is the only option that is unambiguous for identical findings without writing anything into the document, and its cost (re-inspect after each change) is the safe default for a destructive edit. Batch removal and persistent IDs can be added later without breaking C.
 
 **Form.** A selector is `<ref>@<digest>`, for example `/runs/1/results/0@3f9c0a1b2c3d4e5f`. `<digest>` is 16 lowercase hexadecimal characters derived from the whole parsed document with object keys in sorted order, so formatting and key order do not matter but any change of value does. Callers treat the selector as opaque and copy it from inspection. Its derivation is not a public contract.
 

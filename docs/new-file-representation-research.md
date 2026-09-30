@@ -1,6 +1,6 @@
 # New-file proposals: encoding and GitHub action research
 
-> **Historical research record (reconciled September 28, 2026).** Whole-file creation and deletion are now extracted (0.2.0), and their publication in the review body is merged but unreleased, under a [provisional contract](file-operation-publication-contract.md). Editor links remain open. For current status, see [Current status and reconciliation](status.md).
+> **Historical research record (reconciled September 28, 2026; updated September 29, 2026).** Whole-file creation and deletion are now extracted (0.2.0), and their publication in the review body is merged but unreleased, under a [contract](file-operation-publication-contract.md) the owner accepted on September 29, 2026. Editor links remain open. For current status, see [Current status and reconciliation](status.md).
 
 Research date: September 27, 2026. This records findings and a candidate design, not an implemented feature or adopted public schema.
 

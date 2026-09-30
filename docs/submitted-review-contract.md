@@ -1,6 +1,6 @@
 # Immediately submitted reviews: contract
 
-Proposal awaiting owner acceptance · September 28, 2026. The behaviour below is implemented under the conservative options recommended here. The option name, the single `COMMENT` event and the state-record encoding are provisional until the owner accepts or replaces them.
+Accepted by the owner · September 29, 2026 ([D38](design-decisions.md#d38-submit-a-review-only-on-explicit-request-as-a-comment--owner-accepted), [issue #24](https://github.com/mike-north/sarif-to-comment/issues/24)), as merged in [PR #17](https://github.com/mike-north/sarif-to-comment/pull/17). First proposed September 28, 2026. The owner accepted explicit opt-in (`options.submit` / `--submit`), a draft when the option is omitted, `COMMENT` as the only submitted event, and the mode bound to the publication's durable state and recovery.
 
 **Sources.** [Issue #7](https://github.com/mike-north/sarif-to-comment/issues/7); [D16, D26 and D29](design-decisions.md); [specification](specification.md) R1, R13, R14 and open contract O6; the publication core (`src/publication.cts`) and its README contract.
 
@@ -12,13 +12,13 @@ Proposal awaiting owner acceptance · September 28, 2026. The behaviour below is
 - Whole-review readiness, approval holds and exact reviewed-commit targeting apply to both modes (D12, D16, R13). Submitted mode is not a bypass.
 - This is an initial-publication option only. It never submits, updates or maintains an existing draft, and recovery never becomes maintenance (D29, issue #7 scope).
 
-## 2. Decisions (proposal)
+## 2. Decisions
 
-### 2.1 Event: `COMMENT` only (recommended, adopted)
+### 2.1 Event: `COMMENT` only (accepted)
 
 | Option | Problem |
 | --- | --- |
-| A. `COMMENT` only (**adopted**) | None found. It is the only event that states no verdict, and GitHub accepts it on a review of one's own pull request. |
+| A. `COMMENT` only (**accepted**) | None found. It is the only event that states no verdict, and GitHub accepts it on a review of one's own pull request. |
 | B. Caller-selected `APPROVE` / `REQUEST_CHANGES` / `COMMENT` | A verdict is a human act of approval or blocking. The sources settle only publication mode, not verdict authority; `APPROVE` and `REQUEST_CHANGES` are also refused by GitHub on one's own pull request, so they would add a failure mode for no stated need. |
 | C. Event derived from severity (errors → `REQUEST_CHANGES`) | Forbidden by R1. |
 
@@ -28,7 +28,7 @@ A later explicit verdict option, if the owner wants one, would be a separate, ad
 
 | Option | Assessment |
 | --- | --- |
-| `options.submit: true` / `--submit` (**adopted**) | Matches the existing vocabulary: options are booleans named for what they do (`ignoreApprovalHold` / `--ignore-approval-hold`). It says exactly what differs from the default. |
+| `options.submit: true` / `--submit` (**accepted**) | Matches the existing vocabulary: options are booleans named for what they do (`ignoreApprovalHold` / `--ignore-approval-hold`). It says exactly what differs from the default. |
 | `options.mode: 'draft' \| 'submitted'` | Equally clear, but introduces a second style of option and a value (`'draft'`) that only restates the default. |
 | `options.event: 'COMMENT'` | Mirrors GitHub, but invites `APPROVE`, which 2.1 declines, and names the transport rather than the caller's intent. |
 

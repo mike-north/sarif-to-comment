@@ -1,6 +1,6 @@
 # Suggestion pull request cleanup: contract
 
-Partly owner-accepted · September 29, 2026. On-demand cleanup closes open suggestion pull requests that follow the tool-neutral [suggestion pull request convention](suggestion-pr-convention.md), whichever tool created them, once their original pull request has merged or closed. It is implemented under the options below and verified against live GitHub in the [live evidence](suggestion-cleanup-e2e-evidence.md) and the [convention evidence](suggestion-pr-convention-e2e-evidence.md). The owner's decisions on [issue #27](https://github.com/mike-north/sarif-to-comment/issues/27) (label resolution, the `--label` migration override, conforming pull requests) are marked as such; the decisions still listed in [Decisions awaiting acceptance](#4-decisions-awaiting-acceptance) are provisional until the owner accepts or replaces them.
+Partly owner-accepted · September 29, 2026. On-demand cleanup closes open suggestion pull requests that follow the tool-neutral [suggestion pull request convention](suggestion-pr-convention.md), whichever tool created them, once their original pull request has merged or closed. It is implemented under the options below and verified against live GitHub in the [live evidence](suggestion-cleanup-e2e-evidence.md) and the [convention evidence](suggestion-pr-convention-e2e-evidence.md). The owner's decisions on [issue #27](https://github.com/mike-north/sarif-to-comment/issues/27) (label resolution, the `--label` migration override, conforming pull requests), recorded in the decision log as [D41](design-decisions.md#d41-the-suggestion-pull-request-convention-and-options--owner-decisions), are marked as such; the decisions still listed in [Decisions awaiting acceptance](#4-decisions-awaiting-acceptance) are provisional until the owner accepts or replaces them.
 
 **Sources.** [Issue #6](https://github.com/mike-north/sarif-to-comment/issues/6); [issue #27](https://github.com/mike-north/sarif-to-comment/issues/27) and the [suggestion pull request convention](suggestion-pr-convention.md); [specification](specification.md) R16 (cleanup paragraph), A31 and A36, with R14 and the deferred fork case (A34); [decisions](design-decisions.md) D21, D25, D27, D28 and D29; the [companion suggestion PR contract](companion-suggestion-pr-contract.md), especially §2.6–§2.7 and §5 (what cleanup can rely on); the [lifecycle experiment](companion-pr-lifecycle-experiment.md); [status](status.md).
 
@@ -17,7 +17,7 @@ Partly owner-accepted · September 29, 2026. On-demand cleanup closes open sugge
 - No relationship store, no continuously running process and no scan of the history of closed originals (R16, D27).
 - Near-term support is the same repository only (D25).
 
-## 2. Decisions (proposal)
+## 2. Decisions
 
 ### 2.1 Names
 

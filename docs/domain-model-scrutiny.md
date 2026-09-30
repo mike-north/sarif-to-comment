@@ -1,6 +1,6 @@
 # Domain model scrutiny
 
-> **Historical design record (reconciled September 28, 2026).** This analysis predates implementation. For current status, see [Current status and reconciliation](status.md).
+> **Historical design record (reconciled September 28, 2026; updated September 29, 2026).** This analysis predates implementation. Its description of suggestion PRs as provisionally enabled by default is superseded: they are explicit opt-in and off by default ([D22](design-decisions.md#d22-gate-suggestion-prs-with-one-caller-setting--settled-direction), owner decision of September 29, 2026). For current status, see [Current status and reconciliation](status.md).
 
 Candidate reasoning record · September 27, 2026 · Before milestone or implementation design
 
