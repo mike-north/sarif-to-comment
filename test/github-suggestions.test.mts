@@ -408,6 +408,18 @@ describe('readDefaultBranchFile (docs/suggestion-pr-convention.md §4)', () => {
     assert.deepEqual(read.content.kind === 'file' ? [...read.content.bytes] : null, [0x7b, 0xff, 0x7d]);
   });
 
+  test('given the default branch already known, the repository is not read again', async () => {
+    const script = new Script()
+      .on('GET', `${REPO}/git/ref/heads/trunk`, json({ ref: 'refs/heads/trunk', object: { sha: DEFAULT_HEAD, type: 'commit' } }))
+      .on('GET', `${REPO}/git/commits/${DEFAULT_HEAD}`, json({ sha: DEFAULT_HEAD, tree: { sha: DEFAULT_ROOT } }))
+      .on('GET', `${REPO}/git/trees/${DEFAULT_ROOT}`, json({ sha: DEFAULT_ROOT, truncated: false, tree: [] }));
+    const read = await script.client().readDefaultBranchFile({ ...request, branch: 'trunk' });
+    assert.deepEqual(read, { branch: 'trunk', commit: DEFAULT_HEAD, content: { kind: 'absent' } });
+    assert.deepEqual(script.sent.map((r) => r.url), [
+      `${REPO}/git/ref/heads/trunk`, `${REPO}/git/commits/${DEFAULT_HEAD}`, `${REPO}/git/trees/${DEFAULT_ROOT}`,
+    ]);
+  });
+
   test('absent: a complete listing without the name', async () => {
     const read = await defaultBranch(new Script(), null).client().readDefaultBranchFile(request);
     assert.deepEqual(read, { branch: 'trunk', commit: DEFAULT_HEAD, content: { kind: 'absent' } });
@@ -430,17 +442,17 @@ describe('readDefaultBranchFile (docs/suggestion-pr-convention.md §4)', () => {
   for (const [entry, treeEntry] of notFiles) {
     test(`${entry} at the path is not a file, and is never followed`, async () => {
       const script = defaultBranch(new Script(), treeEntry);
-      assert.deepEqual((await script.client().readDefaultBranchFile(request)).content, { kind: 'not-a-file', entry });
+      assert.deepEqual((await script.client().readDefaultBranchFile(request)).content, { kind: 'not-a-file', entry, path: '.github/suggestion-prs.json' });
     });
   }
 
-  test('a symbolic link above the path is not followed either', async () => {
+  test('a symbolic link above the path is not followed either, and is named where it is', async () => {
     const script = new Script()
       .on('GET', REPO, json({ default_branch: 'trunk' }))
       .on('GET', `${REPO}/git/ref/heads/trunk`, json({ ref: 'refs/heads/trunk', object: { sha: DEFAULT_HEAD, type: 'commit' } }))
       .on('GET', `${REPO}/git/commits/${DEFAULT_HEAD}`, json({ sha: DEFAULT_HEAD, tree: { sha: DEFAULT_ROOT } }))
       .on('GET', `${REPO}/git/trees/${DEFAULT_ROOT}`, json({ sha: DEFAULT_ROOT, truncated: false, tree: [{ path: '.github', mode: '120000', type: 'blob', sha: OLD_BLOB, size: 7 }] }));
-    assert.deepEqual((await script.client().readDefaultBranchFile(request)).content, { kind: 'not-a-file', entry: 'a symbolic link' });
+    assert.deepEqual((await script.client().readDefaultBranchFile(request)).content, { kind: 'not-a-file', entry: 'a symbolic link', path: '.github' });
   });
 
   test('a file over the source limit is too large, and its blob is never downloaded', async () => {
@@ -474,7 +486,7 @@ describe('readDefaultBranchFile (docs/suggestion-pr-convention.md §4)', () => {
   test('its input is checked before any request', async () => {
     const script = new Script();
     const c = script.client();
-    for (const bad of [{ ...request, owner: 'bad owner' }, { ...request, path: '/abs' }, { ...request, path: '../x' }]) {
+    for (const bad of [{ ...request, owner: 'bad owner' }, { ...request, path: '/abs' }, { ...request, path: '../x' }, { ...request, branch: '' }, { ...request, branch: 7 }]) {
       await assert.rejects(async () => {
         const pending: unknown = Reflect.apply(c.readDefaultBranchFile, undefined, [bad]);
         await pending;

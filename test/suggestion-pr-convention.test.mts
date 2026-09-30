@@ -108,8 +108,10 @@ describe('the convention module (docs/suggestion-pr-convention.md)', () => {
     ['a padded label', file('{"label":" proposal"}'), `its \`label\` is not a label name (${LABEL_RULE})`],
     ['a label of 51 characters', file(`{"label":"${'x'.repeat(51)}"}`), `its \`label\` is not a label name (${LABEL_RULE})`],
     ['a label with a control character', file('{"label":"a\\u0007b"}'), `its \`label\` is not a label name (${LABEL_RULE})`],
-    ['a directory', { branch: 'main', content: { kind: 'not-a-file', entry: 'a directory' } }, 'it is a directory, not a file'],
-    ['a symbolic link', { branch: 'main', content: { kind: 'not-a-file', entry: 'a symbolic link' } }, 'it is a symbolic link, not a file'],
+    ['a directory', { branch: 'main', content: { kind: 'not-a-file', entry: 'a directory', path: '.github/suggestion-prs.json' } }, 'it is a directory, not a file'],
+    ['a symbolic link', { branch: 'main', content: { kind: 'not-a-file', entry: 'a symbolic link', path: '.github/suggestion-prs.json' } }, 'it is a symbolic link, not a file'],
+    ['a symbolic link on the way', { branch: 'main', content: { kind: 'not-a-file', entry: 'a symbolic link', path: '.github' } }, '`.github` is a symbolic link, which is never followed'],
+    ['a submodule on the way', { branch: 'main', content: { kind: 'not-a-file', entry: 'a submodule', path: '.github' } }, '`.github` is a submodule, which is never followed'],
     ['too large', { branch: 'main', content: { kind: 'too-large', size: 1_000_001 } }, 'it is larger than 1000000 bytes'],
   ];
   for (const [what, input, detail] of invalid) {
@@ -430,6 +432,20 @@ describe('label resolution (convention §4): publish, validate and cleanup resol
     ['a directory at the path', { directory: true }, 'it is a directory, not a file'],
     ['a symbolic link at the path', { base64: Buffer.from('elsewhere.json').toString('base64'), mode: '120000' }, 'it is a symbolic link, not a file'],
   ];
+  test('a symbolic link on the way to the file (`.github` itself): blocked, naming it, and cleanup refuses', async () => {
+    const link: IHttpRawFile = { base64: Buffer.from('elsewhere').toString('base64'), mode: '120000' };
+    const repo = repository();
+    const world = makeWorld({ ...repo, defaultBranchCommit: CONFIGURED, snapshots: { ...repo.snapshots, [CONFIGURED]: { 'README.md': ['# Widgets\n'] } }, rawFiles: { [CONFIGURED]: { '.github': link } } });
+    await assertBlockedEverywhere(world, [configurationInvalid('`.github` is a symbolic link, which is never followed')]);
+    await assert.rejects(cleanup(world), (err: unknown) => err instanceof Error && err.message === cleanupRefusal('`.github` is a symbolic link, which is never followed'));
+  });
+
+  test('the repository is read once per assessment: the default branch is not read twice', async () => {
+    const world = makeWorld();
+    assert.equal(status(await validate(world)), 'ready');
+    assert.equal(world.host.log().filter((r) => r.method === 'GET' && r.path === `/repos/${OWNER}/${REPO}`).length, 1);
+  });
+
   for (const [what, config, detail] of invalid) {
     test(`${what}: blocked before any write in publish and validate, and cleanup refuses`, async () => {
       const world = makeWorld(repository({}, config));
