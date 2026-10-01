@@ -52,11 +52,11 @@ The repository, credential and optional label, original, owner scope, candidate 
 
 Promise&lt;[ICloseSuggestionPullRequestsOutcome](./sarif-to-comment.iclosesuggestionpullrequestsoutcome.md)<!-- -->&gt;
 
-What was checked and done. The status is `complete`<!-- -->, or else `permission-limited` (some eligible suggestions could not be closed with this account), `incomplete` (an original could not be verified or an action failed), or `too-many-candidates` or `label-not-suggestion-prs` (a sweep stopped before evaluating anything).
+What was checked and done. The status is `complete`<!-- -->, or else `permission-limited` (some eligible suggestions could not be closed with this account), `incomplete` (an original could not be verified or an action failed), `too-many-candidates` or `label-not-suggestion-prs` (a sweep stopped before evaluating anything), or `original-not-abandoned` (a guarded run skipped).
 
 ## Exceptions
 
-A `TypeError` for invalid input, before any request, including`force: true` outside a label sweep and `maxCandidates` with`originalPullNumber`<!-- -->. An `Error` when the repository configuration is invalid (naming the file and field) or cannot be read, or when discovery or reading the account fails (GitHub, network, authentication), before anything was closed. Neither a result nor a rejection contains the token.
+A `TypeError` for invalid input, before any request, including`force: true` outside a label sweep, `maxCandidates` with`originalPullNumber`<!-- -->, and `requireAbandonedOriginal: true` without`originalPullNumber`<!-- -->. An `Error` when the repository configuration is invalid (naming the file and field) or cannot be read, when discovery or reading the account fails (GitHub, network, authentication), or when a guarded run's original cannot be read, before anything was closed. Neither a result nor a rejection contains the token.
 
 ## Remarks
 
@@ -65,6 +65,8 @@ Suggestion pull requests follow the tool-neutral suggestion pull request convent
 A sweep counts its candidates first, in one request. A label sweep whose first 20 pull requests show no suggestion marker and no suggestion branch stops there, unless `force` is set; then any sweep evaluates nothing when there are more than `maxCandidates` (default 500). So a mistyped or overly broad label costs one request, never a walk through the repository. The default sweep counts every branch under `suggestion-pr/`<!-- -->, including those of suggestions already closed (cleanup never deletes a branch), so an active repository can reach the limit over time; raise it with`maxCandidates`<!-- -->.
 
 A suggestion is closed only after its original has been read and found merged or closed, and after the suggestion itself has been read again and verified: an original that cannot be read is `unverified`<!-- -->, and one GitHub reports does not exist is `not-found`<!-- -->; neither is ever treated as ended. Everything is read before anything is closed.
+
+With `requireAbandonedOriginal` (targeted mode only), cleanup proceeds only if its own fresh read of the original, made before anything is listed, shows it closed without merging. An original that is open (for example, reopened), merged or not found is skipped with the status`original-not-abandoned` and a note, and nothing is listed or closed. This is the check of an automated abandonment cleanup; any grace period before it runs is the caller's.
 
 Closing is the only change made. Branches are never deleted, and nothing is edited, labeled, commented on or reopened; the original is never touched. Running cleanup again is safe: suggestions already closed are not listed again (or are reported `already-closed`<!-- -->).
 

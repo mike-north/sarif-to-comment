@@ -55,7 +55,8 @@
  * content was refused (`invalid` / `failed` / `stale` / `refused`). `publish` keeps the publisher's
  * statuses: 0 published, 2 blocked, 3 uncertain, 1 otherwise. `validate`
  * (docs/readiness-assessment-contract.md): 0 ready, 2 blocked, 1 incomplete
- * or otherwise. `close-suggestion-prs`: 0 complete (a dry run too), 2
+ * or otherwise. `close-suggestion-prs`: 0 complete (a dry run too) or a
+ * guarded run skipped because its original is not closed without merging, 2
  * permission-limited or a label that does not mark suggestion pull requests,
  * 3 incomplete, 1 more candidates than the limit, or a usage or operational
  * error (before anything was closed).
@@ -133,7 +134,8 @@ const VALIDATE_EXIT: Readonly<{ ready: 0; blocked: 2; incomplete: 1 }> = Object.
  * (docs/suggestion-cleanup-contract.md §2.10): a sweep over its candidate
  * limit is refused like any other failure before a write (1); a label that
  * does not look like a suggestion label is a warning that needs a decision,
- * like a permission limit (2).
+ * like a permission limit (2); an original that is not closed without merging
+ * under --if-abandoned is a skip, not a failure (0, §2.12).
  */
 const CLEANUP_EXIT: Readonly<Record<CloseSuggestionPullRequestsStatus, number>> = Object.freeze({
   complete: 0,
@@ -141,6 +143,7 @@ const CLEANUP_EXIT: Readonly<Record<CloseSuggestionPullRequestsStatus, number>> 
   incomplete: 3,
   'too-many-candidates': 1,
   'label-not-suggestion-prs': 2,
+  'original-not-abandoned': 0,
 });
 
 /** Exit statuses for publication, unchanged from the flag-only publisher. */
@@ -613,8 +616,9 @@ Usage:
                                         [--max-candidates N] [--dry-run]
                                         [--format human|json|toon]
   sarif-to-comment close-suggestion-prs --repo OWNER/REPO --original N
-                                        [--owner me|all] [--label NAME]
-                                        [--dry-run] [--format human|json|toon]
+                                        [--if-abandoned] [--owner me|all]
+                                        [--label NAME] [--dry-run]
+                                        [--format human|json|toon]
 
 Closes open suggestion pull requests (made by publish with a delivery list that
 names companion, or by any tool following the suggestion pull request
@@ -653,6 +657,13 @@ Options:
                                  original pull request N, instead of sweeping.
                                  If N does not exist, nothing can reference it:
                                  the cleanup is complete, with a warning.
+  --if-abandoned                 Requires --original: first read N, and go on
+                                 only if it is closed without merging. If N is
+                                 open (for example reopened), merged or not
+                                 found, nothing is checked or closed (exit 0,
+                                 with a note). If N cannot be read, it is an
+                                 error. It never waits: a delay before it runs
+                                 is the caller's, for example a workflow's.
   --max-candidates N             The most candidates a sweep checks: suggestion
                                  branches, or pull requests with the --label
                                  (default 500). More stops it before any check.
@@ -662,7 +673,8 @@ ${FORMAT_OPTION}
 ${CREDENTIALS}
 Exit status:
   0  complete: nothing left to do (also a dry run, and an --original pull
-     request that does not exist)
+     request that does not exist); or skipped by --if-abandoned: the original
+     is not closed without merging, so nothing was checked
   2  permission-limited: some suggestion pull requests could not be closed with
      this token; someone allowed to close them can finish. Also: the --label
      does not mark suggestion pull requests (nothing was checked; see --force)
@@ -2016,7 +2028,7 @@ async function closeSuggestionPrs(argv: readonly string[], { env }: IHandlerCont
   const command = 'close-suggestion-prs';
   const { values, flags } = parseOptions(argv, {
     values: ['--repo', '--label', '--original', '--owner', '--max-candidates'],
-    booleans: ['--dry-run', '--force'],
+    booleans: ['--dry-run', '--force', '--if-abandoned'],
     required: ['--repo'],
   });
   const repository = repositoryFlag(values);
@@ -2036,6 +2048,9 @@ async function closeSuggestionPrs(argv: readonly string[], { env }: IHandlerCont
   if (maxCandidates !== undefined && originalPullNumber !== undefined) {
     throw new UsageError('--max-candidates cannot be combined with --original (only a sweep has a candidate limit)');
   }
+  if (flags.has('--if-abandoned') && originalPullNumber === undefined) {
+    throw new UsageError('--if-abandoned requires --original (it checks that original pull request)');
+  }
   const token = tokenFrom(env);
   if (token === undefined) {
     return errorOutcome(command, tokenMissing());
@@ -2048,6 +2063,7 @@ async function closeSuggestionPrs(argv: readonly string[], { env }: IHandlerCont
     ...(owner === undefined ? {} : { owner }),
     ...(maxCandidates === undefined ? {} : { maxCandidates }),
     ...(flags.has('--force') ? { force: true } : {}),
+    ...(flags.has('--if-abandoned') ? { requireAbandonedOriginal: true } : {}),
     ...(flags.has('--dry-run') ? { dryRun: true } : {}),
   };
   let outcome;

@@ -184,6 +184,27 @@ The repository whose suggestion pull requests are checked.
 </td></tr>
 <tr><td>
 
+[requireAbandonedOriginal?](./sarif-to-comment.iclosesuggestionpullrequestsinput.requireabandonedoriginal.md)
+
+
+</td><td>
+
+`readonly`
+
+
+</td><td>
+
+boolean \| undefined
+
+
+</td><td>
+
+_(Optional)_ Proceed only if the original is abandoned: closed without merging. The original (`originalPullNumber`<!-- -->, which `true` requires; a `TypeError` otherwise) is read first, before anything is listed. When that fresh read shows it closed and not merged, targeted cleanup runs unchanged. When it is open (for example, reopened after it was closed), merged or not found, nothing is listed, checked or closed: the status is`original-not-abandoned`<!-- -->, with one note naming its state. When it cannot be read, the call rejects. Nothing waits: a grace period before the run is the caller's, for example a workflow's delay.
+
+
+</td></tr>
+<tr><td>
+
 [token](./sarif-to-comment.iclosesuggestionpullrequestsinput.token.md)
 
 

@@ -20,7 +20,7 @@ export function addStagedChangesToSarif(input: IAddStagedChangesInput): Promise<
 export function closeSuggestionPullRequests(input: ICloseSuggestionPullRequestsInput): Promise<ICloseSuggestionPullRequestsOutcome>;
 
 // @public
-export type CloseSuggestionPullRequestsStatus = 'complete' | 'permission-limited' | 'incomplete' | 'too-many-candidates' | 'label-not-suggestion-prs';
+export type CloseSuggestionPullRequestsStatus = 'complete' | 'permission-limited' | 'incomplete' | 'too-many-candidates' | 'label-not-suggestion-prs' | 'original-not-abandoned';
 
 // @public
 export type CompanionBundle = 'per-unit' | 'single';
@@ -142,6 +142,7 @@ export interface ICloseSuggestionPullRequestsInput {
     readonly originalPullNumber?: number | undefined;
     readonly owner?: SuggestionOwnerScope | undefined;
     readonly repository: IGitHubRepository;
+    readonly requireAbandonedOriginal?: boolean | undefined;
     readonly token: string;
 }
 

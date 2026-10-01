@@ -1,0 +1,68 @@
+# EXAMPLE ONLY: this file is documentation, not an active workflow.
+#
+# GitHub runs workflows only from .github/workflows/ in a repository, so this
+# copy under docs/examples/ never runs. Nothing in sarif-to-comment installs
+# it. To use it, a repository's maintainers copy it into their own
+# .github/workflows/, after reading docs/examples/abandonment-cleanup.md: it
+# explains the security trade-offs, repeat runs and the accepted reopening by
+# hand.
+#
+# What it does: when a pull request is closed without merging, it waits two
+# minutes and then runs targeted suggestion pull request cleanup with
+# --if-abandoned. The tool then reads the pull request itself. It goes on
+# only if that fresh read shows the pull request still closed and not merged.
+# So a quick close and reopen (for example, to retrigger checks) skips.
+#
+# The grace period belongs to this workflow (sleep 120), not to the tool.
+# Contract: docs/suggestion-cleanup-contract.md §2.12; decision: D54.
+name: Close suggestion pull requests of an abandoned pull request
+
+on:
+  pull_request:
+    types: [closed]
+
+# Narrow by design. pull-requests: write closes suggestion pull requests.
+# contents: read reads the repository and its .github/suggestion-prs.json.
+# issues: read lets the original's timeline show issues that reference it.
+permissions:
+  pull-requests: write
+  contents: read
+  issues: read
+
+jobs:
+  close-abandoned-suggestions:
+    # The event's merge flag is a first filter only. The tool's own read
+    # decides, after the wait.
+    if: github.event.pull_request.merged == false
+    runs-on: ubuntu-latest
+    # A second close of the same pull request (closed, reopened and closed
+    # again) cancels the earlier waiting run, so only the latest one checks.
+    concurrency:
+      group: abandonment-cleanup-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    steps:
+      - name: Wait two minutes, so that a quick close and reopen is not treated as abandonment
+        run: sleep 120
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      # No checkout: nothing from the pull request's branch is run. Only the
+      # repository name and the pull request number are interpolated, and
+      # neither can carry shell syntax. --owner all: the workflow's token did
+      # not open the suggestion pull requests, and cannot read GET /user.
+      # The workflow's token is an installation token, which sarif-to-comment
+      # does not yet claim to support; with --owner all, cleanup avoids the
+      # one request known to refuse it. Not yet run on GitHub: see the page.
+      # For a supported credential, use a personal access token secret.
+      - name: Close its suggestion pull requests if it is still closed without merging
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          npx --yes sarif-to-comment@0.3.0 close-suggestion-prs
+          --repo ${{ github.repository }}
+          --original ${{ github.event.pull_request.number }}
+          --if-abandoned
+          --owner all
