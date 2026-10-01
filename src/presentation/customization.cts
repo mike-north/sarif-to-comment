@@ -25,15 +25,25 @@
  *     producer's names in an attribution, a finding's attribution), the
  *     source association of a deletion (its permalink), and the findings a
  *     proposal carries — each listed in the context's `required` fragments,
- *     which the result must contain verbatim;
+ *     which the result must show as itself: verbatim, and not concealed or
+ *     turned into other code (src/presentation/markdown.cts, showsAsItself);
  *   - every size limit, which counts the customized Markdown.
  * A result is refused, before anything is written, when it is not a string,
  * is blank, omits a required fragment, could open a native suggestion block,
  * leaves a code fence or raw HTML open (either would swallow or hide what
  * follows, including a suggestion block or marker), contains text that reads
- * as a publication or suggestion marker, or — for an inline component —
- * spans more than one line. The refusal is a TypeError naming the component
- * and the rule. A callback's own exception propagates unchanged.
+ * as a publication or suggestion marker, adds an HTML comment, CDATA
+ * section, processing instruction, declaration or link reference definition
+ * of its own (one the presented content carries, and so the built-in
+ * Markdown contains, may pass through), hides a required fragment, or — for
+ * an inline component — spans more than one line. The refusal is a
+ * TypeError naming the component and the rule. A callback's own exception
+ * propagates unchanged. The context a callback receives is a deeply frozen
+ * copy, so a callback cannot change what preparation holds.
+ *
+ * The checks are a conservative reading of CommonMark and GitHub's HTML
+ * handling, not a renderer: an element that only collapses its content
+ * (`<details>`) is allowed, since a reader can expand it.
  *
  * Callbacks are explicitly supplied application code, not repository
  * configuration: nothing here evaluates template text or loads code (D60,
@@ -44,7 +54,8 @@
  * @see https://github.github.com/gfm/#raw-html
  */
 
-import { fenceProblem, unbalancedHtml } from './markdown.cjs';
+import { concealingConstructs, fenceProblem, showsAsItself, unbalancedHtml } from './markdown.cjs';
+import type { MarkdownRegionKind } from './markdown.cjs';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -70,6 +81,19 @@ export interface IPresentationContext {
 }
 
 /**
+ * The SARIF tool extension that defines a finding's rule, as an attribution
+ * names it.
+ *
+ * @public
+ */
+export interface IAttributionComponent {
+  /** The extension's name. */
+  readonly name: string;
+  /** The extension's version, when the SARIF states one. */
+  readonly version?: string;
+}
+
+/**
  * The producer attribution of one finding: who produced it according to the
  * SARIF document — the tool, the extension defining its rule, and the rule.
  * This is never the GitHub account that publishes the review.
@@ -86,7 +110,7 @@ export interface IAttributionPresentationContext extends IPresentationContext {
   /** The tool's version, when the SARIF states one. */
   readonly version?: string;
   /** The tool extension that defines the finding's rule, when it is not the driver. */
-  readonly component?: { readonly name: string; readonly version?: string };
+  readonly component?: IAttributionComponent;
   /** The finding's rule id, when it has one. */
   readonly ruleId?: string;
 }
@@ -354,17 +378,40 @@ export function present<Context extends IPresentationContext>(
   context: Context,
 ): string {
   if (callback === undefined) return context.markdown;
-  const result = callback(Object.freeze({ ...context, required: Object.freeze([...context.required]) }));
+  const result = callback(deepFrozenCopy(context));
   const refuse = (problem: string): TypeError => new TypeError(`Invalid presentation: options.presentation.${name} returned Markdown that ${problem}. `
     + 'A presentation callback may change how an element reads, never what is published or how it is identified.');
   if (typeof result !== 'string') throw refuse(`is not a string (it returned ${result === null ? 'null' : typeof result})`);
-  const problem = markdownProblem(name, result, context.required);
+  const problem = markdownProblem(name, result, context);
   if (problem !== null) throw refuse(problem);
   return result;
 }
 
+/** A deeply frozen structured copy of a context: plain data only, so the callback can change nothing preparation holds. */
+function deepFrozenCopy<Context extends IPresentationContext>(context: Context): Context {
+  return deepFreeze(structuredClone(context));
+}
+
+function deepFreeze<T>(value: T): T {
+  if (typeof value === 'object' && value !== null) {
+    for (const key of Reflect.ownKeys(value)) deepFreeze(Reflect.get(value, key));
+    Object.freeze(value);
+  }
+  return value;
+}
+
+/** How a refusal names a concealing construct a callback added. */
+const CONSTRUCT_NAMES: Partial<Record<MarkdownRegionKind, string>> = {
+  'html-comment': 'an HTML comment',
+  'html-cdata': 'a CDATA section',
+  'html-instruction': 'a processing instruction',
+  'html-declaration': 'a declaration',
+  'link-reference-definition': 'a link reference definition',
+};
+
 /** Why a callback's Markdown breaks a core guarantee, worded to follow "returned Markdown that", or null. */
-function markdownProblem(name: PresentationComponent, result: string, required: readonly string[]): string | null {
+function markdownProblem(name: PresentationComponent, result: string, context: IPresentationContext): string | null {
+  const { required } = context;
   if (result.trim() === '') return 'is blank, which would drop the element';
   const missing = required.find((fragment) => !result.includes(fragment));
   if (missing !== undefined) return `omits a required fragment, which must appear verbatim: ${JSON.stringify(missing)}`;
@@ -379,6 +426,17 @@ function markdownProblem(name: PresentationComponent, result: string, required: 
   const html = unbalancedHtml(result);
   if (html !== null) return `leaves ${html} open, which could hide what follows, including a suggestion block or marker`;
   if (MARKER_TEXT.test(result)) return 'contains text that reads as a publication or suggestion marker, which only the core writes';
+  const added = concealingConstructs(result).find((construct) => !context.markdown.includes(construct.text));
+  if (added !== undefined) {
+    return `adds ${CONSTRUCT_NAMES[added.kind] ?? 'a concealing construct'} of its own (${JSON.stringify(added.text)}), which is not rendered and could hide text; `
+      + 'only one that the presented content carries may pass through';
+  }
+  const concealed = required.find((fragment) => !showsAsItself(result, fragment));
+  if (concealed !== undefined) {
+    return `hides a required fragment, which must be shown as itself: ${JSON.stringify(concealed)} `
+      + '(not inside a comment, a code span or block it does not open itself, a tag, a link destination or title, an image description '
+      + 'or an element GitHub does not display)';
+  }
   if (INLINE_COMPONENTS.has(name) && /[\r\n]/.test(result)) return 'spans more than one line, but this component is inline';
   return null;
 }

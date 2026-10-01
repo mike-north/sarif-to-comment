@@ -307,9 +307,11 @@ A result is refused with a `TypeError`, before anything is written, when it:
 - omits one of its `required` fragments: the exact proposed content and file details, a deletion's permalink, a finding's attribution and alternatives, the producers' names, and the findings a proposal carries;
 - could open a `suggestion` block, or leaves a code fence or raw HTML (such as `<!--` or `<details>`) open, which would swallow or hide what follows;
 - contains text that reads as a publication or suggestion marker;
+- adds an HTML comment, CDATA section, processing instruction, declaration or link reference definition of its own (one that the presented content carries may pass through);
+- hides a `required` fragment: each must be shown as itself, not inside a comment, a code span or block it does not open itself, a tag, a link destination or title, an image description, or an element GitHub does not display (such as `<template>`, or one with a `hidden` or `style` attribute). A collapsed `<details>` is allowed, since a reader can expand it;
 - spans several lines, for `attribution`.
 
-An exception your callback throws propagates unchanged. Callbacks are not part of the publication identity: a retry with the same state path never re-renders what an earlier call already planned or sent. The review body's section linking each suggestion pull request is not customizable yet, and there is no command-line equivalent; repository-level templates are not supported.
+The context your callback receives is a deeply frozen copy. An exception your callback throws propagates unchanged. Callbacks are not part of the publication identity: a retry with the same state path never re-renders what an earlier call already planned or sent. The review body's section linking each suggestion pull request is not customizable yet, and there is no command-line equivalent; repository-level templates are not supported.
 
 ## One pending review per account
 

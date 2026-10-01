@@ -81,11 +81,14 @@ export interface IAlternativesPresentationContext extends IPresentationContext {
 }
 
 // @public
+export interface IAttributionComponent {
+    readonly name: string;
+    readonly version?: string;
+}
+
+// @public
 export interface IAttributionPresentationContext extends IPresentationContext {
-    readonly component?: {
-        readonly name: string;
-        readonly version?: string;
-    };
+    readonly component?: IAttributionComponent;
     readonly ruleId?: string;
     readonly tool: string;
     readonly version?: string;

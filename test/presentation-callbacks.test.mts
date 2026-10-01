@@ -251,6 +251,27 @@ describe('preparation with presentation callbacks', () => {
     });
   });
 
+  test('a context is a deeply frozen copy: nested component and alternatives cannot be changed', async () => {
+    const frozen: boolean[] = [];
+    const ready = await prepare(FINDINGS, {
+      presentation: {
+        attribution: (c: IAttributionPresentationContext) => {
+          if (c.component !== undefined) {
+            frozen.push(Object.isFrozen(c.component));
+            assert.equal(Reflect.set(c.component, 'name', 'someone else'), false, 'a frozen object refuses the write');
+          }
+          return c.markdown;
+        },
+        alternatives: (c: IAlternativesPresentationContext) => {
+          frozen.push(Object.isFrozen(c.alternatives), ...c.alternatives.map((a) => Object.isFrozen(a)));
+          return c.markdown;
+        },
+      },
+    });
+    assert.deepEqual(frozen, [true, true, true]);
+    assert.match(ready.review.body, /style-pack 0\.4/, 'the attribution still names the real component');
+  });
+
   const T = { driver: { name: 'T' } };
   const PROPOSALS = log(run(T, [
     carrying('Document the new option.', [{ operation: 'create', artifactIndex: 0 }], at('docs/guide.md', { startLine: 1 })),

@@ -52,7 +52,7 @@ Description
 
 </td><td>
 
-{ readonly name: string; readonly version?: string; }
+[IAttributionComponent](./sarif-to-comment.iattributioncomponent.md)
 
 
 </td><td>

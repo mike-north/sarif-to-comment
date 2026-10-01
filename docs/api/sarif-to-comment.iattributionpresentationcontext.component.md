@@ -9,8 +9,5 @@ The tool extension that defines the finding's rule, when it is not the driver.
 **Signature:**
 
 ```typescript
-readonly component?: {
-        readonly name: string;
-        readonly version?: string;
-    };
+readonly component?: IAttributionComponent;
 ```

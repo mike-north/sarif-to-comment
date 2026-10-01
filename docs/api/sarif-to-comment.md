@@ -236,6 +236,17 @@ The further fixes of one finding, listed as alternatives to consider. Nothing is
 </td></tr>
 <tr><td>
 
+[IAttributionComponent](./sarif-to-comment.iattributioncomponent.md)
+
+
+</td><td>
+
+The SARIF tool extension that defines a finding's rule, as an attribution names it.
+
+
+</td></tr>
+<tr><td>
+
 [IAttributionPresentationContext](./sarif-to-comment.iattributionpresentationcontext.md)
 
 

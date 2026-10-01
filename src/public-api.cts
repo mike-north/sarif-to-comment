@@ -98,6 +98,7 @@ export type {
   IPresentationContext,
   IFindingPresentationContext,
   IAttributionPresentationContext,
+  IAttributionComponent,
   IAlternativesPresentationContext,
   IAlternativePresentation,
   IFileAdditionPresentationContext,

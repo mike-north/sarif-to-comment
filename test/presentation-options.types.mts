@@ -10,6 +10,7 @@
  */
 import type {
   IAlternativesPresentationContext,
+  IAttributionComponent,
   IAttributionPresentationContext,
   IFileAdditionPresentationContext,
   IFindingPresentationContext,
@@ -29,6 +30,7 @@ export const shapes: readonly true[] = [
   true satisfies IsMutuallyAssignable<ReturnType<NonNullable<IReviewPresentation['attribution']>>, string>,
   true satisfies IsMutuallyAssignable<IFileAdditionPresentationContext['content'], string | undefined>,
   true satisfies IsMutuallyAssignable<IPresentationContext['required'], readonly string[]>,
+  true satisfies IsMutuallyAssignable<IAttributionPresentationContext['component'], IAttributionComponent | undefined>,
 ];
 
 export const none: IReviewPresentation = {};
