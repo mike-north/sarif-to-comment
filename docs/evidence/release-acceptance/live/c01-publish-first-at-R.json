@@ -1,0 +1,11 @@
+{
+  "command": "publish",
+  "status": "published",
+  "review": {
+    "id": 5377549452,
+    "url": "https://github.com/mike-north/doc-linter/pull/105#pullrequestreview-5377549452"
+  },
+  "statePath": "<evidence>/state/review-105-first.json",
+  "message": "## Review submitted\n\nCreated and submitted the comment [review 5377549452](https://github.com/mike-north/doc-linter/pull/105#pullrequestreview-5377549452) on mike-north/doc-linter#105 at commit `bd76c7b51f895276df4d0c6f0418f5a4d24072a8`. It is visible on the pull request now.",
+  "diagnostics": []
+}

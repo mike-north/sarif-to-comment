@@ -1,0 +1,86 @@
+# 034 `--delivery original-pr`: native where possible, the rest by hand, never a companion
+feature: delivery: preset original-pr
+
+$ GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-sFw4SC/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/delivery-composition-sFw4SC/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --delivery original-pr --state <tmp>/delivery-composition-sFw4SC/state/review.json --format json
+exit status: 0
+
+checks:
+  PASS  the token never appears in stdout or stderr
+  PASS  exit 0, published
+  PASS  two delivery-fallback warnings (the edit and the group)
+  PASS  README line 2 is an inline native suggestion
+  PASS  the group is a manual group section and the edit a manual edit
+  PASS  no companion pull request
+  PASS  the recorded policy names the preset as its source (caller-preset)
+
+--- stdout
+{
+  "command": "publish",
+  "status": "published",
+  "review": {
+    "id": 5000,
+    "url": "https://github.com/octo/widgets/pull/7#pullrequestreview-5000"
+  },
+  "statePath": "<tmp>/delivery-composition-sFw4SC/state/review.json",
+  "message": "## Draft review published\n\n**Published with 2 warnings:** A proposal is delivered by a later mechanism of its delivery list (2 times).\n\nCreated the draft [review 5000](https://github.com/octo/widgets/pull/7#pullrequestreview-5000) on octo/widgets#7 at commit `feedfeedfeedfeedfeedfeedfeedfeedfeedfeed`. It stays a draft until someone submits it on GitHub.\n\n**Warnings:**\n\n- `delivery-fallback` at `/runs/0/results/1`: The edit of `src/client.ts` line 2 is delivered as `review-body`. `edits` is `[native, review-body]`, set by the caller's preset `original-pr` (`--delivery`, `delivery.preset`), and the mechanisms listed before it are unavailable:\n\n- `native`: Lines 2-2 of src/client.ts cannot carry a native suggestion (file-not-in-diff).\n- `delivery-fallback` at `/runs/0/results/2`: The group `notes` is delivered as `manual-group`. `groupedEdits` is `[native-batch, manual-group]`, set by the caller's preset `original-pr` (`--delivery`, `delivery.preset`), and the mechanisms listed before it are unavailable:\n\n- `native-batch`: The edit of `notes.txt` line 3: Lines 3-3 of notes.txt cannot carry a native suggestion (file-not-in-diff). The edit of `notes.txt` line 5: Lines 5-5 of notes.txt cannot carry a native suggestion (file-not-in-diff).",
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "code": "delivery-fallback",
+      "title": "A proposal is delivered by a later mechanism of its delivery list",
+      "message": "The edit of `src/client.ts` line 2 is delivered as `review-body`. `edits` is `[native, review-body]`, set by the caller's preset `original-pr` (`--delivery`, `delivery.preset`), and the mechanisms listed before it are unavailable:\n\n- `native`: Lines 2-2 of src/client.ts cannot carry a native suggestion (file-not-in-diff).",
+      "location": {
+        "pointer": "/runs/0/results/1"
+      },
+      "remedies": [
+        "Remove the fix.",
+        "To use an earlier mechanism, remove the obstacle the message names, then publish again.",
+        "To refuse rather than fall back, list only the mechanism you require."
+      ]
+    },
+    {
+      "severity": "warning",
+      "code": "delivery-fallback",
+      "title": "A proposal is delivered by a later mechanism of its delivery list",
+      "message": "The group `notes` is delivered as `manual-group`. `groupedEdits` is `[native-batch, manual-group]`, set by the caller's preset `original-pr` (`--delivery`, `delivery.preset`), and the mechanisms listed before it are unavailable:\n\n- `native-batch`: The edit of `notes.txt` line 3: Lines 3-3 of notes.txt cannot carry a native suggestion (file-not-in-diff). The edit of `notes.txt` line 5: Lines 5-5 of notes.txt cannot carry a native suggestion (file-not-in-diff).",
+      "location": {
+        "pointer": "/runs/0/results/2"
+      },
+      "remedies": [
+        "Remove the fix.",
+        "To use an earlier mechanism, remove the obstacle the message names, then publish again.",
+        "To refuse rather than fall back, list only the mechanism you require."
+      ]
+    }
+  ]
+}
+
+--- stderr
+
+--- input SARIF (as given to --sarif, before the command)
+{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"Review bot","version":"1.0.0"}},"columnKind":"utf16CodeUnits","versionControlProvenance":[{"repositoryUri":"https://github.com/octo/widgets","revisionId":"feedfeedfeedfeedfeedfeedfeedfeedfeedfeed"}],"artifacts":[],"results":[{"message":{"text":"Fix the typo."},"locations":[{"physicalLocation":{"artifactLocation":{"uri":"README.md"},"region":{"startLine":2}}}],"fixes":[{"artifactChanges":[{"artifactLocation":{"uri":"README.md"},"replacements":[{"deletedRegion":{"startLine":2},"insertedContent":{"text":"The widget client."}}]}]}]},{"message":{"text":"Retry once on timeout."},"locations":[{"physicalLocation":{"artifactLocation":{"uri":"src/client.ts"},"region":{"startLine":2}}}],"fixes":[{"artifactChanges":[{"artifactLocation":{"uri":"src/client.ts"},"replacements":[{"deletedRegion":{"startLine":2},"insertedContent":{"text":"  const response = await request(id).catch(() => request(id));"}}]}]}]},{"message":{"text":"Revise note 3."},"locations":[{"physicalLocation":{"artifactLocation":{"uri":"notes.txt"},"region":{"startLine":3}}}],"fixes":[{"artifactChanges":[{"artifactLocation":{"uri":"notes.txt"},"replacements":[{"deletedRegion":{"startLine":3},"insertedContent":{"text":"Note 3, revised."}}]}]}],"properties":{"sarifToComment":{"suggestionGroup":"notes"}}},{"message":{"text":"Revise note 5."},"locations":[{"physicalLocation":{"artifactLocation":{"uri":"notes.txt"},"region":{"startLine":5}}}],"fixes":[{"artifactChanges":[{"artifactLocation":{"uri":"notes.txt"},"replacements":[{"deletedRegion":{"startLine":5},"insertedContent":{"text":"Note 5, revised."}}]}]}],"properties":{"sarifToComment":{"suggestionGroup":"notes"}}}]}]}
+--- fake host after the command (writes so far, review requests, pull requests)
+{
+  "writesSoFar": [
+    "POST /repos/octo/widgets/pulls/7/reviews"
+  ],
+  "reviews": [
+    {
+      "id": 5000,
+      "state": "PENDING",
+      "request": {
+        "commit_id": "feedfeedfeedfeedfeedfeedfeedfeedfeedfeed",
+        "body": "**Proposed edit, to make by hand:** replace [src/client.ts line 2 at feedfee](https://github.com/octo/widgets/blob/feedfeedfeedfeedfeedfeedfeedfeedfeedfeed/src/client.ts?plain=1#L2) with:\n\n```\n  const response = await request(id).catch(() => request(id));\n```\n\n**Source:** [src/client.ts line 2 at feedfee](https://github.com/octo/widgets/blob/feedfeedfeedfeedfeedfeedfeedfeedfeedfeed/src/client.ts?plain=1#L2)\n\n```\n  const response = await request(id);\n```\n\nRetry once on timeout.\n\n<sub>— Review bot 1.0.0</sub>\n\n---\n\n**Suggestion group `notes`:** apply these 2 changes together, by hand, in one commit: make every change below in a local copy of the pull request's branch, then commit them together. They are not offered as suggestions, and nothing checks that they are applied together.\n\n- `notes.txt` line 3\n- `notes.txt` line 5\n\n---\n\n**Suggestion group `notes` — change 1 of 2**\n\n**Proposed edit, to make by hand:** replace [notes.txt line 3 at feedfee](https://github.com/octo/widgets/blob/feedfeedfeedfeedfeedfeedfeedfeedfeedfeed/notes.txt?plain=1#L3) with:\n\n```\nNote 3, revised.\n```\n\n**Source:** [notes.txt line 3 at feedfee](https://github.com/octo/widgets/blob/feedfeedfeedfeedfeedfeedfeedfeedfeedfeed/notes.txt?plain=1#L3)\n\n```\nNote 3.\n```\n\nRevise note 3.\n\n<sub>— Review bot 1.0.0</sub>\n\n---\n\n**Suggestion group `notes` — change 2 of 2**\n\n**Proposed edit, to make by hand:** replace [notes.txt line 5 at feedfee](https://github.com/octo/widgets/blob/feedfeedfeedfeedfeedfeedfeedfeedfeedfeed/notes.txt?plain=1#L5) with:\n\n```\nNote 5, revised.\n```\n\n**Source:** [notes.txt line 5 at feedfee](https://github.com/octo/widgets/blob/feedfeedfeedfeedfeedfeedfeedfeedfeedfeed/notes.txt?plain=1#L5)\n\n```\nNote 5.\n```\n\nRevise note 5.\n\n<sub>— Review bot 1.0.0</sub>\n\n<!-- sarif-to-comment:review:61bdf547-99ac-4e4b-85df-8811e0eb6e9e -->",
+        "comments": [
+          {
+            "path": "README.md",
+            "body": "Fix the typo.\n\n<sub>— Review bot 1.0.0</sub>\n\n```suggestion\nThe widget client.\n```",
+            "line": 2,
+            "side": "RIGHT"
+          }
+        ]
+      }
+    }
+  ],
+  "pulls": []
+}

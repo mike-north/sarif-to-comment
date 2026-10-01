@@ -1,0 +1,14 @@
+query($owner: String!, $repo: String!, $number: Int!) {
+  repository(owner: $owner, name: $repo) {
+    pullRequest(number: $number) {
+      headRefOid
+      timelineItems(itemTypes: [HEAD_REF_FORCE_PUSHED_EVENT], first: 20) {
+        filteredCount
+        nodes { ... on HeadRefForcePushedEvent { beforeCommit { oid } afterCommit { oid } } }
+      }
+      reviewThreads(first: 20) {
+        nodes { isOutdated path line originalLine comments(first: 5) { nodes { databaseId outdated commit { oid } originalCommit { oid } path line originalLine } } }
+      }
+    }
+  }
+}

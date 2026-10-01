@@ -1,0 +1,7 @@
+0a7b03fe399255a62118311cbc3e1bd6fe64cb23	refs/heads/main
+0a7b03fe399255a62118311cbc3e1bd6fe64cb23	refs/heads/sarif-u8-acceptance-20261001-base
+58d916eb43f1a4ef96670632f97fd25737c75df2	refs/heads/sarif-u8-acceptance-20261001-into-main
+58d916eb43f1a4ef96670632f97fd25737c75df2	refs/heads/sarif-u8-acceptance-20261001-reviewed
+d17de751d8cb4f72fa8558b9522c3f76f212e03c	refs/heads/sarif-u8-forcepush-20261001
+28821cae771555bcff2b1ff81d9eadad96d98bc9	refs/heads/suggestion-pr/103/ba6241f2-a68e-4810-9812-919cb089e19d
+88efe39228cdfe1f1f5d002ba8b010693ac7f5e8	refs/heads/suggestion-pr/105/87324e76-9889-4cd0-9d95-d13cb808ea05

@@ -1,0 +1,33 @@
+{
+  "command": "publish",
+  "status": "published",
+  "review": {
+    "id": 5377519897,
+    "url": "https://github.com/mike-north/doc-linter/pull/103#pullrequestreview-5377519897"
+  },
+  "suggestions": [
+    {
+      "number": 104,
+      "url": "https://github.com/mike-north/doc-linter/pull/104",
+      "branch": "suggestion-pr/103/ba6241f2-a68e-4810-9812-919cb089e19d"
+    }
+  ],
+  "statePath": "<evidence>/state/review-103.json",
+  "message": "## Draft review published\n\n**Published with 1 warning:** A proposal is delivered by a later mechanism of its delivery list.\n\nCreated the draft [review 5377519897](https://github.com/mike-north/doc-linter/pull/103#pullrequestreview-5377519897) on mike-north/doc-linter#103 at commit `58d916eb43f1a4ef96670632f97fd25737c75df2`. It stays a draft until someone submits it on GitHub.\n\n**Warnings:**\n\n- `delivery-fallback` at `/runs/0/results/7`: The group `readme-pointer` is delivered as `companion`. `groupedEdits` is `[native-batch, companion]`, set by the caller (`--grouped-edits`, `delivery.groupedEdits`), and the mechanisms listed before it are unavailable:\n\n- `native-batch`: The edit of `README.md` line 5: Lines 5-5 of README.md cannot carry a native suggestion (file-not-in-diff).\n\nSuggestion pull requests (drafts into `sarif-u8-acceptance-20261001-into-main`, labeled `suggestion-pr`):\n\n- [#104](https://github.com/mike-north/doc-linter/pull/104) from `suggestion-pr/103/ba6241f2-a68e-4810-9812-919cb089e19d`",
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "code": "delivery-fallback",
+      "title": "A proposal is delivered by a later mechanism of its delivery list",
+      "message": "The group `readme-pointer` is delivered as `companion`. `groupedEdits` is `[native-batch, companion]`, set by the caller (`--grouped-edits`, `delivery.groupedEdits`), and the mechanisms listed before it are unavailable:\n\n- `native-batch`: The edit of `README.md` line 5: Lines 5-5 of README.md cannot carry a native suggestion (file-not-in-diff).",
+      "location": {
+        "pointer": "/runs/0/results/7"
+      },
+      "remedies": [
+        "Remove the fix.",
+        "To use an earlier mechanism, remove the obstacle the message names, then publish again.",
+        "To refuse rather than fall back, list only the mechanism you require."
+      ]
+    }
+  ]
+}

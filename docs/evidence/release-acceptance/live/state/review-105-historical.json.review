@@ -1,0 +1,41 @@
+{
+  "format": "sarif-to-comment.publication-state",
+  "version": 1,
+  "phase": "completed",
+  "marker": "<!-- sarif-to-comment:review:9932b57a-154b-4846-89f5-19f0abf0e397 -->",
+  "destination": {
+    "owner": "mike-north",
+    "repo": "doc-linter",
+    "pullNumber": 105
+  },
+  "reviewedCommit": "bd76c7b51f895276df4d0c6f0418f5a4d24072a8",
+  "inputFingerprint": "sha256:928e680eca36a723d13ee169fb9543c3fba4f1771c8a3d944d6ac9311e339f1f",
+  "authorId": 558005,
+  "request": {
+    "owner": "mike-north",
+    "repo": "doc-linter",
+    "pullNumber": 105,
+    "commitId": "bd76c7b51f895276df4d0c6f0418f5a4d24072a8",
+    "body": "**Companion pull requests of this review:**\n\n- [#106](https://github.com/mike-north/doc-linter/pull/106): `Suggestion for #105: tail (2 changes)` — created with this review\n\n---\n\n**Suggestion pull request:** [#106](https://github.com/mike-north/doc-linter/pull/106)\n\nMerging it into `sarif-u8-forcepush-20261001` applies these 2 changes together:\n\n- Edited [docs/experiments/u8-forcepush/sample.md line 9 at bd76c7b](https://github.com/mike-north/doc-linter/blob/bd76c7b51f895276df4d0c6f0418f5a4d24072a8/docs/experiments/u8-forcepush/sample.md?plain=1#L9)\n- Edited [docs/experiments/u8-forcepush/sample.md line 10 at bd76c7b](https://github.com/mike-north/doc-linter/blob/bd76c7b51f895276df4d0c6f0418f5a4d24072a8/docs/experiments/u8-forcepush/sample.md?plain=1#L10)\n\n**Source:** [docs/experiments/u8-forcepush/sample.md line 9 at bd76c7b](https://github.com/mike-north/doc-linter/blob/bd76c7b51f895276df4d0c6f0418f5a4d24072a8/docs/experiments/u8-forcepush/sample.md?plain=1#L9)\n\n```\nLine 9.\n```\n\nName line 9 in the tail.\n\n<sub>— Release acceptance reviewer 1.0.0</sub>\n\n---\n\n**Source:** [docs/experiments/u8-forcepush/sample.md line 10 at bd76c7b](https://github.com/mike-north/doc-linter/blob/bd76c7b51f895276df4d0c6f0418f5a4d24072a8/docs/experiments/u8-forcepush/sample.md?plain=1#L10)\n\n```\nLine 10.\n```\n\nName line 10 in the tail; apply with line 9.\n\n<sub>— Release acceptance reviewer 1.0.0</sub>\n\n<!-- sarif-to-comment:review:9932b57a-154b-4846-89f5-19f0abf0e397 -->",
+    "comments": [
+      {
+        "path": "docs/experiments/u8-forcepush/sample.md",
+        "side": "RIGHT",
+        "line": 3,
+        "body": "Line 3 is context the review keeps at the reviewed commit.\n\n<sub>— Release acceptance reviewer 1.0.0</sub>"
+      },
+      {
+        "path": "docs/experiments/u8-forcepush/sample.md",
+        "side": "RIGHT",
+        "line": 12,
+        "body": "Spell out line 12.\n\n<sub>— Release acceptance reviewer 1.0.0</sub>\n\n```suggestion\nLine twelve.\n```"
+      }
+    ]
+  },
+  "requestFingerprint": "sha256:0b179a6f39bf9b67acb8c03246f1618ee01206d1a57dfc0385e6c65016138099",
+  "receipt": {
+    "reviewId": 5377558120,
+    "htmlUrl": "https://github.com/mike-north/doc-linter/pull/105#pullrequestreview-5377558120",
+    "via": "created"
+  }
+}

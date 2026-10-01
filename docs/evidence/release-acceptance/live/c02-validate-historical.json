@@ -1,0 +1,6 @@
+{
+  "command": "validate",
+  "status": "ready",
+  "message": "## Ready to publish\n\nThe complete document can be published faithfully to mike-north/doc-linter#105 at commit `bd76c7b51f895276df4d0c6f0418f5a4d24072a8`.\n\nPublication would also create 1 draft suggestion pull request into `sarif-u8-forcepush-20261001`, labeled `suggestion-pr`. The history of #105 was rewritten after the reviewed commit, so it is proposed on that commit and was projected onto the head `d17de751d8cb4f72fa8558b9522c3f76f212e03c`: merging it applies only its own changes.\n\n**Review prepared:** 2 inline comment(s) and 1 general section(s) for commit `bd76c7b51f895276df4d0c6f0418f5a4d24072a8`.\n\nNothing was published and no publication state was written.\n\nNo pending review of this account was found on the pull request. This is not an approval: publication repeats every check against the pull request as it is then. GitHub can still refuse the review, for example if this account starts a pending review on the pull request before publication.",
+  "diagnostics": []
+}

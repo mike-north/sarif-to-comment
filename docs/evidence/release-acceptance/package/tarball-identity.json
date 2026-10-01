@@ -1,0 +1,2161 @@
+{
+  "attestsTo": {
+    "commit": "89826ad",
+    "packedBy": "npm pack --json (npm 11.18.0, node v24.14.0)"
+  },
+  "filename": "sarif-to-comment-0.2.1.tgz",
+  "name": "sarif-to-comment",
+  "version": "0.2.1",
+  "size": 495345,
+  "unpackedSize": 2116933,
+  "entryCount": 536,
+  "sha1": "feed55ccbfd246b0cdcf84c61bdbb70bae763068",
+  "integrity": "sha512-vv/sb8ECHsilrZNqa9BOUCW0prPDE5n5mpsFeyiMcDgbiq9S2a74HxRKQ7FmvmG0JmREfVYFtKwb5VQdGsVfqg==",
+  "tarballSha256": "314fd9a4e05c23ecfa7f0904c1707f9975c77a8d7bda5b6eb20bdc3deaeb1158",
+  "files": [
+    {
+      "path": "CHANGELOG.md",
+      "size": 3197
+    },
+    {
+      "path": "README.md",
+      "size": 82226
+    },
+    {
+      "path": "dist/artifact-files.cjs",
+      "size": 11389
+    },
+    {
+      "path": "dist/cli.cjs",
+      "size": 99263
+    },
+    {
+      "path": "dist/close-suggestion-pull-requests.cjs",
+      "size": 46840
+    },
+    {
+      "path": "dist/companion-fidelity.cjs",
+      "size": 19545
+    },
+    {
+      "path": "dist/companion-publication.cjs",
+      "size": 52195
+    },
+    {
+      "path": "dist/delivery-policy.cjs",
+      "size": 32884
+    },
+    {
+      "path": "dist/diagnostic-catalog.cjs",
+      "size": 34611
+    },
+    {
+      "path": "dist/diagnostic-rendering.cjs",
+      "size": 8728
+    },
+    {
+      "path": "dist/diagnostics.cjs",
+      "size": 8089
+    },
+    {
+      "path": "dist/existing-companions.cjs",
+      "size": 6201
+    },
+    {
+      "path": "dist/finding-selectors.cjs",
+      "size": 2827
+    },
+    {
+      "path": "dist/git-attributes.cjs",
+      "size": 17657
+    },
+    {
+      "path": "dist/github-urls.cjs",
+      "size": 8354
+    },
+    {
+      "path": "dist/github.cjs",
+      "size": 137244
+    },
+    {
+      "path": "dist/index.cjs",
+      "size": 3599
+    },
+    {
+      "path": "dist/placement.cjs",
+      "size": 29542
+    },
+    {
+      "path": "dist/prepare-review.cjs",
+      "size": 217050
+    },
+    {
+      "path": "dist/presentation/alternatives.cjs",
+      "size": 4047
+    },
+    {
+      "path": "dist/presentation/attribution.cjs",
+      "size": 1878
+    },
+    {
+      "path": "dist/presentation/companion-changes.cjs",
+      "size": 3692
+    },
+    {
+      "path": "dist/presentation/companion-description.cjs",
+      "size": 4611
+    },
+    {
+      "path": "dist/presentation/companion-index.cjs",
+      "size": 3364
+    },
+    {
+      "path": "dist/presentation/companion-projection.cjs",
+      "size": 4538
+    },
+    {
+      "path": "dist/presentation/companion-reference.cjs",
+      "size": 3111
+    },
+    {
+      "path": "dist/presentation/customization.cjs",
+      "size": 18906
+    },
+    {
+      "path": "dist/presentation/file-addition.cjs",
+      "size": 4238
+    },
+    {
+      "path": "dist/presentation/file-deletion.cjs",
+      "size": 1464
+    },
+    {
+      "path": "dist/presentation/finding.cjs",
+      "size": 3729
+    },
+    {
+      "path": "dist/presentation/group-label.cjs",
+      "size": 1517
+    },
+    {
+      "path": "dist/presentation/lifecycle-note.cjs",
+      "size": 2228
+    },
+    {
+      "path": "dist/presentation/manual-edit.cjs",
+      "size": 3895
+    },
+    {
+      "path": "dist/presentation/manual-group.cjs",
+      "size": 3952
+    },
+    {
+      "path": "dist/presentation/markdown-tree.cjs",
+      "size": 27307
+    },
+    {
+      "path": "dist/presentation/markdown.cjs",
+      "size": 5341
+    },
+    {
+      "path": "dist/presentation/native-batch.cjs",
+      "size": 2862
+    },
+    {
+      "path": "dist/presentation/warnings-list.cjs",
+      "size": 1674
+    },
+    {
+      "path": "dist/publication.cjs",
+      "size": 62745
+    },
+    {
+      "path": "dist/publish-sarif-review.cjs",
+      "size": 36364
+    },
+    {
+      "path": "dist/replacements.cjs",
+      "size": 24012
+    },
+    {
+      "path": "dist/review-preflight.cjs",
+      "size": 48603
+    },
+    {
+      "path": "dist/reviewed-commit-association.cjs",
+      "size": 7377
+    },
+    {
+      "path": "dist/sarif-authoring.cjs",
+      "size": 23004
+    },
+    {
+      "path": "dist/sarif-common.cjs",
+      "size": 32414
+    },
+    {
+      "path": "dist/sarif-inspection.cjs",
+      "size": 43436
+    },
+    {
+      "path": "dist/sarif-to-comment.cjs",
+      "size": 1596
+    },
+    {
+      "path": "dist/sarif-to-comment.d.ts",
+      "size": 104933
+    },
+    {
+      "path": "dist/staged-changes.cjs",
+      "size": 61738
+    },
+    {
+      "path": "dist/staged-git.cjs",
+      "size": 17750
+    },
+    {
+      "path": "dist/suggestion-groups.cjs",
+      "size": 27881
+    },
+    {
+      "path": "dist/suggestion-marker.cjs",
+      "size": 7165
+    },
+    {
+      "path": "dist/suggestion-pr-convention.cjs",
+      "size": 8299
+    },
+    {
+      "path": "dist/three-way-merge.cjs",
+      "size": 32801
+    },
+    {
+      "path": "dist/validate-sarif-review.cjs",
+      "size": 23810
+    },
+    {
+      "path": "docs/api/index.md",
+      "size": 442
+    },
+    {
+      "path": "docs/api/sarif-to-comment.addsarifcomment.md",
+      "size": 1971
+    },
+    {
+      "path": "docs/api/sarif-to-comment.addsarifcommentoutcome.md",
+      "size": 684
+    },
+    {
+      "path": "docs/api/sarif-to-comment.addstagedchangesoutcome.md",
+      "size": 827
+    },
+    {
+      "path": "docs/api/sarif-to-comment.addstagedchangestosarif.md",
+      "size": 2065
+    },
+    {
+      "path": "docs/api/sarif-to-comment.closesuggestionpullrequests.md",
+      "size": 4351
+    },
+    {
+      "path": "docs/api/sarif-to-comment.closesuggestionpullrequestsstatus.md",
+      "size": 1162
+    },
+    {
+      "path": "docs/api/sarif-to-comment.companionbundle.md",
+      "size": 568
+    },
+    {
+      "path": "docs/api/sarif-to-comment.createsarifdocument.md",
+      "size": 1502
+    },
+    {
+      "path": "docs/api/sarif-to-comment.deliverypreset.md",
+      "size": 639
+    },
+    {
+      "path": "docs/api/sarif-to-comment.diagnosticseverity.md",
+      "size": 528
+    },
+    {
+      "path": "docs/api/sarif-to-comment.editdeliverymechanism.md",
+      "size": 593
+    },
+    {
+      "path": "docs/api/sarif-to-comment.fileoperationdeliverymechanism.md",
+      "size": 686
+    },
+    {
+      "path": "docs/api/sarif-to-comment.groupededitdeliverymechanism.md",
+      "size": 817
+    },
+    {
+      "path": "docs/api/sarif-to-comment.groupsariffixes.md",
+      "size": 2940
+    },
+    {
+      "path": "docs/api/sarif-to-comment.groupsariffixesoutcome.md",
+      "size": 930
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iaddedfinding.md",
+      "size": 1419
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iaddedfinding.ref.md",
+      "size": 518
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iaddedfinding.resultindex.md",
+      "size": 429
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iaddedfinding.runindex.md",
+      "size": 424
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iaddedfinding.tool.md",
+      "size": 395
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iaddedsarifcommentoutcome.diagnostics.md",
+      "size": 516
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iaddedsarifcommentoutcome.finding.md",
+      "size": 472
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iaddedsarifcommentoutcome.md",
+      "size": 1634
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iaddedsarifcommentoutcome.sarif.md",
+      "size": 490
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iaddedsarifcommentoutcome.status.md",
+      "size": 458
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iaddedstagedchangesoutcome.diagnostics.md",
+      "size": 499
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iaddedstagedchangesoutcome.md",
+      "size": 1599
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iaddedstagedchangesoutcome.receipt.md",
+      "size": 458
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iaddedstagedchangesoutcome.sarif.md",
+      "size": 466
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iaddedstagedchangesoutcome.status.md",
+      "size": 470
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iaddstagedchangesinput.md",
+      "size": 2070
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iaddstagedchangesinput.repository.md",
+      "size": 488
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iaddstagedchangesinput.reviewedcommit.md",
+      "size": 525
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iaddstagedchangesinput.sarif.md",
+      "size": 489
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iaddstagedchangesinput.sourcerooturi.md",
+      "size": 554
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iaddstagedchangesinput.worktree.md",
+      "size": 563
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ialternativepresentation.changes.md",
+      "size": 546
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ialternativepresentation.description.md",
+      "size": 489
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ialternativepresentation.markdown.md",
+      "size": 500
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ialternativepresentation.md",
+      "size": 1592
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ialternativepresentation.number.md",
+      "size": 475
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ialternativespresentationcontext.alternatives.md",
+      "size": 558
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ialternativespresentationcontext.md",
+      "size": 1224
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iattributioncomponent.md",
+      "size": 1028
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iattributioncomponent.name.md",
+      "size": 418
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iattributioncomponent.version.md",
+      "size": 461
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iattributionpresentationcontext.component.md",
+      "size": 551
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iattributionpresentationcontext.md",
+      "size": 2048
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iattributionpresentationcontext.ruleid.md",
+      "size": 485
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iattributionpresentationcontext.tool.md",
+      "size": 470
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iattributionpresentationcontext.version.md",
+      "size": 496
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iblockedassessment.diagnostics.md",
+      "size": 480
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iblockedassessment.markdown.md",
+      "size": 506
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iblockedassessment.md",
+      "size": 1787
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iblockedassessment.problems.md",
+      "size": 494
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iblockedassessment.status.md",
+      "size": 454
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iblockedoutcome.diagnostics.md",
+      "size": 469
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iblockedoutcome.markdown.md",
+      "size": 443
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iblockedoutcome.md",
+      "size": 1309
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iblockedoutcome.status.md",
+      "size": 420
+    },
+    {
+      "path": "docs/api/sarif-to-comment.icheckedsuggestionpullrequest.md",
+      "size": 1800
+    },
+    {
+      "path": "docs/api/sarif-to-comment.icheckedsuggestionpullrequest.number.md",
+      "size": 463
+    },
+    {
+      "path": "docs/api/sarif-to-comment.icheckedsuggestionpullrequest.original.md",
+      "size": 533
+    },
+    {
+      "path": "docs/api/sarif-to-comment.icheckedsuggestionpullrequest.reason.md",
+      "size": 537
+    },
+    {
+      "path": "docs/api/sarif-to-comment.icheckedsuggestionpullrequest.result.md",
+      "size": 479
+    },
+    {
+      "path": "docs/api/sarif-to-comment.icheckedsuggestionpullrequest.url.md",
+      "size": 453
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iclosesuggestionpullrequestsinput.dryrun.md",
+      "size": 573
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iclosesuggestionpullrequestsinput.force.md",
+      "size": 788
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iclosesuggestionpullrequestsinput.label.md",
+      "size": 1123
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iclosesuggestionpullrequestsinput.maxcandidates.md",
+      "size": 823
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iclosesuggestionpullrequestsinput.md",
+      "size": 4401
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iclosesuggestionpullrequestsinput.originalpullnumber.md",
+      "size": 637
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iclosesuggestionpullrequestsinput.owner.md",
+      "size": 657
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iclosesuggestionpullrequestsinput.repository.md",
+      "size": 538
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iclosesuggestionpullrequestsinput.token.md",
+      "size": 640
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iclosesuggestionpullrequestsoutcome.counts.md",
+      "size": 598
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iclosesuggestionpullrequestsoutcome.diagnostics.md",
+      "size": 877
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iclosesuggestionpullrequestsoutcome.dryrun.md",
+      "size": 511
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iclosesuggestionpullrequestsoutcome.markdown.md",
+      "size": 550
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iclosesuggestionpullrequestsoutcome.md",
+      "size": 3691
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iclosesuggestionpullrequestsoutcome.originals.md",
+      "size": 555
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iclosesuggestionpullrequestsoutcome.owner.md",
+      "size": 598
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iclosesuggestionpullrequestsoutcome.status.md",
+      "size": 633
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iclosesuggestionpullrequestsoutcome.suggestions.md",
+      "size": 649
+    },
+    {
+      "path": "docs/api/sarif-to-comment.icompanionindexpresentationcontext.companions.md",
+      "size": 535
+    },
+    {
+      "path": "docs/api/sarif-to-comment.icompanionindexpresentationcontext.md",
+      "size": 1799
+    },
+    {
+      "path": "docs/api/sarif-to-comment.icompanionindexpresentationcontext.pullnumber.md",
+      "size": 508
+    },
+    {
+      "path": "docs/api/sarif-to-comment.icompanionpresentation.link.md",
+      "size": 483
+    },
+    {
+      "path": "docs/api/sarif-to-comment.icompanionpresentation.md",
+      "size": 2148
+    },
+    {
+      "path": "docs/api/sarif-to-comment.icompanionpresentation.number.md",
+      "size": 435
+    },
+    {
+      "path": "docs/api/sarif-to-comment.icompanionpresentation.origin.md",
+      "size": 527
+    },
+    {
+      "path": "docs/api/sarif-to-comment.icompanionpresentation.state.md",
+      "size": 532
+    },
+    {
+      "path": "docs/api/sarif-to-comment.icompanionpresentation.title.md",
+      "size": 552
+    },
+    {
+      "path": "docs/api/sarif-to-comment.icompanionpresentation.url.md",
+      "size": 409
+    },
+    {
+      "path": "docs/api/sarif-to-comment.icompanionreferencepresentationcontext.changecount.md",
+      "size": 530
+    },
+    {
+      "path": "docs/api/sarif-to-comment.icompanionreferencepresentationcontext.changes.md",
+      "size": 526
+    },
+    {
+      "path": "docs/api/sarif-to-comment.icompanionreferencepresentationcontext.companion.md",
+      "size": 560
+    },
+    {
+      "path": "docs/api/sarif-to-comment.icompanionreferencepresentationcontext.findings.md",
+      "size": 543
+    },
+    {
+      "path": "docs/api/sarif-to-comment.icompanionreferencepresentationcontext.headref.md",
+      "size": 546
+    },
+    {
+      "path": "docs/api/sarif-to-comment.icompanionreferencepresentationcontext.md",
+      "size": 3059
+    },
+    {
+      "path": "docs/api/sarif-to-comment.icompanionreferencepresentationcontext.proposal.md",
+      "size": 565
+    },
+    {
+      "path": "docs/api/sarif-to-comment.icompanionreferencepresentationcontext.proposals.md",
+      "size": 526
+    },
+    {
+      "path": "docs/api/sarif-to-comment.icompanionreferencepresentationcontext.pullnumber.md",
+      "size": 524
+    },
+    {
+      "path": "docs/api/sarif-to-comment.icreatesarifdocumentoptions.md",
+      "size": 1529
+    },
+    {
+      "path": "docs/api/sarif-to-comment.icreatesarifdocumentoptions.source.md",
+      "size": 610
+    },
+    {
+      "path": "docs/api/sarif-to-comment.icreatesarifdocumentoptions.tool.md",
+      "size": 644
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ideliveryoptions.companionbundle.md",
+      "size": 478
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ideliveryoptions.edits.md",
+      "size": 458
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ideliveryoptions.fileoperations.md",
+      "size": 535
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ideliveryoptions.groupededits.md",
+      "size": 477
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ideliveryoptions.md",
+      "size": 2381
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ideliveryoptions.preset.md",
+      "size": 461
+    },
+    {
+      "path": "docs/api/sarif-to-comment.idiagnostic.code.md",
+      "size": 430
+    },
+    {
+      "path": "docs/api/sarif-to-comment.idiagnostic.location.md",
+      "size": 451
+    },
+    {
+      "path": "docs/api/sarif-to-comment.idiagnostic.md",
+      "size": 2729
+    },
+    {
+      "path": "docs/api/sarif-to-comment.idiagnostic.message.md",
+      "size": 403
+    },
+    {
+      "path": "docs/api/sarif-to-comment.idiagnostic.remedies.md",
+      "size": 448
+    },
+    {
+      "path": "docs/api/sarif-to-comment.idiagnostic.severity.md",
+      "size": 431
+    },
+    {
+      "path": "docs/api/sarif-to-comment.idiagnostic.subject.md",
+      "size": 475
+    },
+    {
+      "path": "docs/api/sarif-to-comment.idiagnostic.title.md",
+      "size": 424
+    },
+    {
+      "path": "docs/api/sarif-to-comment.idiagnosticlocation.endline.md",
+      "size": 442
+    },
+    {
+      "path": "docs/api/sarif-to-comment.idiagnosticlocation.md",
+      "size": 1488
+    },
+    {
+      "path": "docs/api/sarif-to-comment.idiagnosticlocation.path.md",
+      "size": 437
+    },
+    {
+      "path": "docs/api/sarif-to-comment.idiagnosticlocation.pointer.md",
+      "size": 476
+    },
+    {
+      "path": "docs/api/sarif-to-comment.idiagnosticlocation.startline.md",
+      "size": 451
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ifailedstagedchangesoutcome.diagnostics.md",
+      "size": 498
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ifailedstagedchangesoutcome.markdown.md",
+      "size": 487
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ifailedstagedchangesoutcome.md",
+      "size": 1757
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ifailedstagedchangesoutcome.problems.md",
+      "size": 481
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ifailedstagedchangesoutcome.status.md",
+      "size": 466
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ifileadditionpresentationcontext.bytelength.md",
+      "size": 497
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ifileadditionpresentationcontext.content.md",
+      "size": 579
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ifileadditionpresentationcontext.details.md",
+      "size": 580
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ifileadditionpresentationcontext.filemode.md",
+      "size": 483
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ifileadditionpresentationcontext.findings.md",
+      "size": 519
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ifileadditionpresentationcontext.md",
+      "size": 2447
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ifileadditionpresentationcontext.path.md",
+      "size": 472
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ifiledeletionpresentationcontext.commit.md",
+      "size": 488
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ifiledeletionpresentationcontext.findings.md",
+      "size": 519
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ifiledeletionpresentationcontext.md",
+      "size": 1754
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ifiledeletionpresentationcontext.path.md",
+      "size": 468
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ifiledeletionpresentationcontext.url.md",
+      "size": 484
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ifindingpresentationcontext.alternatives.md",
+      "size": 511
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ifindingpresentationcontext.attribution.md",
+      "size": 488
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ifindingpresentationcontext.baselinestate.md",
+      "size": 496
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ifindingpresentationcontext.fixdescription.md",
+      "size": 546
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ifindingpresentationcontext.kind.md",
+      "size": 457
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ifindingpresentationcontext.level.md",
+      "size": 525
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ifindingpresentationcontext.locationmessage.md",
+      "size": 533
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ifindingpresentationcontext.md",
+      "size": 3123
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ifindingpresentationcontext.message.md",
+      "size": 471
+    },
+    {
+      "path": "docs/api/sarif-to-comment.igithubrepository.md",
+      "size": 975
+    },
+    {
+      "path": "docs/api/sarif-to-comment.igithubrepository.owner.md",
+      "size": 462
+    },
+    {
+      "path": "docs/api/sarif-to-comment.igithubrepository.repo.md",
+      "size": 428
+    },
+    {
+      "path": "docs/api/sarif-to-comment.igroupedfinding.changes.md",
+      "size": 504
+    },
+    {
+      "path": "docs/api/sarif-to-comment.igroupedfinding.md",
+      "size": 1643
+    },
+    {
+      "path": "docs/api/sarif-to-comment.igroupedfinding.ref.md",
+      "size": 434
+    },
+    {
+      "path": "docs/api/sarif-to-comment.igroupedfinding.resultindex.md",
+      "size": 433
+    },
+    {
+      "path": "docs/api/sarif-to-comment.igroupedfinding.runindex.md",
+      "size": 406
+    },
+    {
+      "path": "docs/api/sarif-to-comment.igroupedfinding.tool.md",
+      "size": 393
+    },
+    {
+      "path": "docs/api/sarif-to-comment.igroupedsariffixesoutcome.changes.md",
+      "size": 507
+    },
+    {
+      "path": "docs/api/sarif-to-comment.igroupedsariffixesoutcome.diagnostics.md",
+      "size": 508
+    },
+    {
+      "path": "docs/api/sarif-to-comment.igroupedsariffixesoutcome.extended.md",
+      "size": 497
+    },
+    {
+      "path": "docs/api/sarif-to-comment.igroupedsariffixesoutcome.findings.md",
+      "size": 500
+    },
+    {
+      "path": "docs/api/sarif-to-comment.igroupedsariffixesoutcome.group.md",
+      "size": 434
+    },
+    {
+      "path": "docs/api/sarif-to-comment.igroupedsariffixesoutcome.md",
+      "size": 2346
+    },
+    {
+      "path": "docs/api/sarif-to-comment.igroupedsariffixesoutcome.sarif.md",
+      "size": 490
+    },
+    {
+      "path": "docs/api/sarif-to-comment.igroupedsariffixesoutcome.status.md",
+      "size": 464
+    },
+    {
+      "path": "docs/api/sarif-to-comment.igroupsariffixesoptions.findings.md",
+      "size": 878
+    },
+    {
+      "path": "docs/api/sarif-to-comment.igroupsariffixesoptions.group.md",
+      "size": 637
+    },
+    {
+      "path": "docs/api/sarif-to-comment.igroupsariffixesoptions.md",
+      "size": 1669
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iincompleteassessment.diagnostics.md",
+      "size": 492
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iincompleteassessment.markdown.md",
+      "size": 471
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iincompleteassessment.md",
+      "size": 1555
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iincompleteassessment.status.md",
+      "size": 453
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectedoutcome.diagnostics.md",
+      "size": 489
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectedoutcome.md",
+      "size": 1263
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectedoutcome.status.md",
+      "size": 435
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectedoutcome.view.md",
+      "size": 400
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionartifactchange.artifactlocation.md",
+      "size": 503
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionartifactchange.md",
+      "size": 1823
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionartifactchange.othercontent.md",
+      "size": 535
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionartifactchange.path.md",
+      "size": 483
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionartifactchange.replacements.md",
+      "size": 500
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionartifactchange.uri.md",
+      "size": 429
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectiondiagnostic.md",
+      "size": 1362
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectiondiagnostic.message.md",
+      "size": 439
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectiondiagnostic.pointer.md",
+      "size": 428
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectiondiagnostic.severity.md",
+      "size": 479
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionexternalproperties.content.md",
+      "size": 529
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionexternalproperties.md",
+      "size": 1663
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionexternalproperties.ref.md",
+      "size": 498
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionexternalproperties.results.md",
+      "size": 475
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionfileproposal.artifactindex.md",
+      "size": 493
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionfileproposal.content.md",
+      "size": 481
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionfileproposal.filemode.md",
+      "size": 490
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionfileproposal.md",
+      "size": 2452
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionfileproposal.operation.md",
+      "size": 532
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionfileproposal.othercontent.md",
+      "size": 529
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionfileproposal.path.md",
+      "size": 473
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionfileproposal.ref.md",
+      "size": 430
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionfinding.approval.md",
+      "size": 451
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionfinding.baselinestate.md",
+      "size": 455
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionfinding.fileproposals.md",
+      "size": 485
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionfinding.fixes.md",
+      "size": 442
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionfinding.kind.md",
+      "size": 409
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionfinding.level.md",
+      "size": 414
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionfinding.locations.md",
+      "size": 483
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionfinding.md",
+      "size": 4858
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionfinding.message.md",
+      "size": 426
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionfinding.othercontent.md",
+      "size": 532
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionfinding.ref.md",
+      "size": 445
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionfinding.relatedlocations.md",
+      "size": 490
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionfinding.resultindex.md",
+      "size": 444
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionfinding.ruleid.md",
+      "size": 422
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionfinding.runindex.md",
+      "size": 418
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionfinding.selector.md",
+      "size": 774
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionfinding.suggestiongroup.md",
+      "size": 654
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionfix.changes.md",
+      "size": 439
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionfix.description.md",
+      "size": 461
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionfix.descriptioncontent.md",
+      "size": 580
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionfix.md",
+      "size": 1950
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionfix.othercontent.md",
+      "size": 488
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionfix.ref.md",
+      "size": 389
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionlocation.artifactlocation.md",
+      "size": 492
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionlocation.charlength.md",
+      "size": 443
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionlocation.charoffset.md",
+      "size": 443
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionlocation.endcolumn.md",
+      "size": 448
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionlocation.endline.md",
+      "size": 436
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionlocation.logical.md",
+      "size": 463
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionlocation.md",
+      "size": 4217
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionlocation.message.md",
+      "size": 470
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionlocation.messagecontent.md",
+      "size": 591
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionlocation.othercontent.md",
+      "size": 513
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionlocation.path.md",
+      "size": 459
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionlocation.snippet.md",
+      "size": 440
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionlocation.startcolumn.md",
+      "size": 443
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionlocation.startline.md",
+      "size": 445
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionlocation.uri.md",
+      "size": 418
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionlocation.uribaseid.md",
+      "size": 454
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionmessage.arguments.md",
+      "size": 535
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionmessage.id.md",
+      "size": 445
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionmessage.markdown.md",
+      "size": 423
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionmessage.md",
+      "size": 2023
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionmessage.othercontent.md",
+      "size": 519
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionmessage.resolved.md",
+      "size": 457
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionmessage.text.md",
+      "size": 409
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionpreview.bytelength.md",
+      "size": 467
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionpreview.md",
+      "size": 2817
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionpreview.othercontent.md",
+      "size": 664
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionpreview.shownchars.md",
+      "size": 446
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionpreview.shownlines.md",
+      "size": 450
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionpreview.state.md",
+      "size": 598
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionpreview.text.md",
+      "size": 413
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionpreview.totalchars.md",
+      "size": 461
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionpreview.totallines.md",
+      "size": 449
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionreplacement.deletedregion.md",
+      "size": 543
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionreplacement.inserted.md",
+      "size": 447
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionreplacement.md",
+      "size": 1403
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionreplacement.othercontent.md",
+      "size": 528
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionrun.approval.md",
+      "size": 435
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionrun.columnkind.md",
+      "size": 428
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionrun.index.md",
+      "size": 390
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionrun.md",
+      "size": 2172
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionrun.othercontent.md",
+      "size": 475
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionrun.ref.md",
+      "size": 389
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionrun.source.md",
+      "size": 605
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectionrun.tool.md",
+      "size": 466
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectsarifoptions.md",
+      "size": 1578
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectsarifoptions.previewchars.md",
+      "size": 537
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectsarifoptions.previewlines.md",
+      "size": 530
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinspectsarifoptions.sourcerooturi.md",
+      "size": 590
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinvalidsarifoutcome.diagnostics.md",
+      "size": 470
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinvalidsarifoutcome.markdown.md",
+      "size": 459
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinvalidsarifoutcome.md",
+      "size": 1566
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinvalidsarifoutcome.problems.md",
+      "size": 442
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iinvalidsarifoutcome.status.md",
+      "size": 446
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ilifecyclenotepresentationcontext.headref.md",
+      "size": 540
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ilifecyclenotepresentationcontext.md",
+      "size": 1555
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ilifecyclenotepresentationcontext.pullnumber.md",
+      "size": 515
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ilifecyclenotepresentationcontext.ready.md",
+      "size": 534
+    },
+    {
+      "path": "docs/api/sarif-to-comment.imanualeditpresentationcontext.commit.md",
+      "size": 483
+    },
+    {
+      "path": "docs/api/sarif-to-comment.imanualeditpresentationcontext.details.md",
+      "size": 555
+    },
+    {
+      "path": "docs/api/sarif-to-comment.imanualeditpresentationcontext.endline.md",
+      "size": 489
+    },
+    {
+      "path": "docs/api/sarif-to-comment.imanualeditpresentationcontext.findings.md",
+      "size": 507
+    },
+    {
+      "path": "docs/api/sarif-to-comment.imanualeditpresentationcontext.location.md",
+      "size": 616
+    },
+    {
+      "path": "docs/api/sarif-to-comment.imanualeditpresentationcontext.md",
+      "size": 3589
+    },
+    {
+      "path": "docs/api/sarif-to-comment.imanualeditpresentationcontext.path.md",
+      "size": 467
+    },
+    {
+      "path": "docs/api/sarif-to-comment.imanualeditpresentationcontext.replacement.md",
+      "size": 622
+    },
+    {
+      "path": "docs/api/sarif-to-comment.imanualeditpresentationcontext.startline.md",
+      "size": 498
+    },
+    {
+      "path": "docs/api/sarif-to-comment.imanualeditpresentationcontext.url.md",
+      "size": 480
+    },
+    {
+      "path": "docs/api/sarif-to-comment.inewsarifrun.md",
+      "size": 1337
+    },
+    {
+      "path": "docs/api/sarif-to-comment.inewsarifrun.source.md",
+      "size": 448
+    },
+    {
+      "path": "docs/api/sarif-to-comment.inewsarifrun.toolname.md",
+      "size": 401
+    },
+    {
+      "path": "docs/api/sarif-to-comment.inewsarifrun.toolversion.md",
+      "size": 429
+    },
+    {
+      "path": "docs/api/sarif-to-comment.inspectsarif.md",
+      "size": 1455
+    },
+    {
+      "path": "docs/api/sarif-to-comment.inspectsarifoutcome.md",
+      "size": 642
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ioriginalpullrequest.md",
+      "size": 1301
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ioriginalpullrequest.number.md",
+      "size": 436
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ioriginalpullrequest.reason.md",
+      "size": 456
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ioriginalpullrequest.state.md",
+      "size": 488
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ipresentationcontext.markdown.md",
+      "size": 505
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ipresentationcontext.md",
+      "size": 1333
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ipresentationcontext.required.md",
+      "size": 710
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iproblem.md",
+      "size": 1396
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iproblem.message.md",
+      "size": 406
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iproblem.path.md",
+      "size": 417
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iproblem.pointer.md",
+      "size": 434
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ipublishedoutcome.diagnostics.md",
+      "size": 946
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ipublishedoutcome.markdown.md",
+      "size": 451
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ipublishedoutcome.md",
+      "size": 3004
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ipublishedoutcome.review.md",
+      "size": 451
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ipublishedoutcome.statepath.md",
+      "size": 443
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ipublishedoutcome.status.md",
+      "size": 436
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ipublishedoutcome.suggestions.md",
+      "size": 560
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ipublishedreview.id.md",
+      "size": 396
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ipublishedreview.md",
+      "size": 887
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ipublishedreview.url.md",
+      "size": 395
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ipublishedsuggestion.branch.md",
+      "size": 476
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ipublishedsuggestion.md",
+      "size": 1927
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ipublishedsuggestion.mergeable.md",
+      "size": 957
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ipublishedsuggestion.number.md",
+      "size": 427
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ipublishedsuggestion.url.md",
+      "size": 417
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ipublishsarifreviewinput.destination.md",
+      "size": 496
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ipublishsarifreviewinput.md",
+      "size": 3713
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ipublishsarifreviewinput.oldsourcecommit.md",
+      "size": 647
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ipublishsarifreviewinput.options.md",
+      "size": 554
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ipublishsarifreviewinput.reviewedcommit.md",
+      "size": 661
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ipublishsarifreviewinput.sarif.md",
+      "size": 694
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ipublishsarifreviewinput.sourcerooturi.md",
+      "size": 617
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ipublishsarifreviewinput.statepath.md",
+      "size": 628
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ipublishsarifreviewinput.token.md",
+      "size": 686
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ipublishsarifreviewoptions.delivery.md",
+      "size": 1297
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ipublishsarifreviewoptions.existingcompanions.md",
+      "size": 1262
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ipublishsarifreviewoptions.ignoreapprovalhold.md",
+      "size": 697
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ipublishsarifreviewoptions.marksuggestionpullrequestsready.md",
+      "size": 819
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ipublishsarifreviewoptions.md",
+      "size": 6055
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ipublishsarifreviewoptions.presentation.md",
+      "size": 1135
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ipublishsarifreviewoptions.pullrequestlabels.md",
+      "size": 1112
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ipublishsarifreviewoptions.submit.md",
+      "size": 838
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ipullrequestdestination.md",
+      "size": 1247
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ipullrequestdestination.owner.md",
+      "size": 486
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ipullrequestdestination.pullnumber.md",
+      "size": 470
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ipullrequestdestination.repo.md",
+      "size": 452
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ireadyassessment.diagnostics.md",
+      "size": 554
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ireadyassessment.markdown.md",
+      "size": 462
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ireadyassessment.md",
+      "size": 1793
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ireadyassessment.status.md",
+      "size": 450
+    },
+    {
+      "path": "docs/api/sarif-to-comment.irefusedsuggestiongroupoutcome.diagnostics.md",
+      "size": 510
+    },
+    {
+      "path": "docs/api/sarif-to-comment.irefusedsuggestiongroupoutcome.markdown.md",
+      "size": 482
+    },
+    {
+      "path": "docs/api/sarif-to-comment.irefusedsuggestiongroupoutcome.md",
+      "size": 1728
+    },
+    {
+      "path": "docs/api/sarif-to-comment.irefusedsuggestiongroupoutcome.problems.md",
+      "size": 532
+    },
+    {
+      "path": "docs/api/sarif-to-comment.irefusedsuggestiongroupoutcome.status.md",
+      "size": 482
+    },
+    {
+      "path": "docs/api/sarif-to-comment.irejectedoutcome.diagnostics.md",
+      "size": 509
+    },
+    {
+      "path": "docs/api/sarif-to-comment.irejectedoutcome.markdown.md",
+      "size": 429
+    },
+    {
+      "path": "docs/api/sarif-to-comment.irejectedoutcome.md",
+      "size": 1659
+    },
+    {
+      "path": "docs/api/sarif-to-comment.irejectedoutcome.statepath.md",
+      "size": 437
+    },
+    {
+      "path": "docs/api/sarif-to-comment.irejectedoutcome.status.md",
+      "size": 430
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iremovedfinding.fileproposals.md",
+      "size": 470
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iremovedfinding.fixes.md",
+      "size": 413
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iremovedfinding.md",
+      "size": 1832
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iremovedfinding.ref.md",
+      "size": 448
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iremovedfinding.resultindex.md",
+      "size": 466
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iremovedfinding.runindex.md",
+      "size": 406
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iremovedfinding.tool.md",
+      "size": 393
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iremovedsarifcommentoutcome.diagnostics.md",
+      "size": 526
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iremovedsarifcommentoutcome.finding.md",
+      "size": 459
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iremovedsarifcommentoutcome.md",
+      "size": 1665
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iremovedsarifcommentoutcome.sarif.md",
+      "size": 498
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iremovedsarifcommentoutcome.status.md",
+      "size": 470
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ireviewpresentation.alternatives.md",
+      "size": 618
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ireviewpresentation.attribution.md",
+      "size": 614
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ireviewpresentation.companionindex.md",
+      "size": 631
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ireviewpresentation.companionreference.md",
+      "size": 671
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ireviewpresentation.fileaddition.md",
+      "size": 608
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ireviewpresentation.filedeletion.md",
+      "size": 613
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ireviewpresentation.finding.md",
+      "size": 565
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ireviewpresentation.lifecyclenote.md",
+      "size": 638
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ireviewpresentation.manualedit.md",
+      "size": 614
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ireviewpresentation.md",
+      "size": 6929
+    },
+    {
+      "path": "docs/api/sarif-to-comment.isarifcomment.endline.md",
+      "size": 471
+    },
+    {
+      "path": "docs/api/sarif-to-comment.isarifcomment.file.md",
+      "size": 508
+    },
+    {
+      "path": "docs/api/sarif-to-comment.isarifcomment.level.md",
+      "size": 459
+    },
+    {
+      "path": "docs/api/sarif-to-comment.isarifcomment.line.md",
+      "size": 511
+    },
+    {
+      "path": "docs/api/sarif-to-comment.isarifcomment.md",
+      "size": 2787
+    },
+    {
+      "path": "docs/api/sarif-to-comment.isarifcomment.message.md",
+      "size": 430
+    },
+    {
+      "path": "docs/api/sarif-to-comment.isarifcomment.messageformat.md",
+      "size": 481
+    },
+    {
+      "path": "docs/api/sarif-to-comment.isarifcomment.ruleid.md",
+      "size": 414
+    },
+    {
+      "path": "docs/api/sarif-to-comment.isarifcomment.run.md",
+      "size": 532
+    },
+    {
+      "path": "docs/api/sarif-to-comment.isarifinspection.diagnostics.md",
+      "size": 472
+    },
+    {
+      "path": "docs/api/sarif-to-comment.isarifinspection.externalproperties.md",
+      "size": 565
+    },
+    {
+      "path": "docs/api/sarif-to-comment.isarifinspection.findings.md",
+      "size": 462
+    },
+    {
+      "path": "docs/api/sarif-to-comment.isarifinspection.format.md",
+      "size": 436
+    },
+    {
+      "path": "docs/api/sarif-to-comment.isarifinspection.log.md",
+      "size": 663
+    },
+    {
+      "path": "docs/api/sarif-to-comment.isarifinspection.md",
+      "size": 3115
+    },
+    {
+      "path": "docs/api/sarif-to-comment.isarifinspection.runs.md",
+      "size": 406
+    },
+    {
+      "path": "docs/api/sarif-to-comment.isarifinspection.summary.md",
+      "size": 668
+    },
+    {
+      "path": "docs/api/sarif-to-comment.isarifinspection.version.md",
+      "size": 412
+    },
+    {
+      "path": "docs/api/sarif-to-comment.isariflog._schema.md",
+      "size": 388
+    },
+    {
+      "path": "docs/api/sarif-to-comment.isariflog.md",
+      "size": 1284
+    },
+    {
+      "path": "docs/api/sarif-to-comment.isariflog.runs.md",
+      "size": 387
+    },
+    {
+      "path": "docs/api/sarif-to-comment.isariflog.version.md",
+      "size": 378
+    },
+    {
+      "path": "docs/api/sarif-to-comment.isarifsourcebinding.commit.md",
+      "size": 436
+    },
+    {
+      "path": "docs/api/sarif-to-comment.isarifsourcebinding.md",
+      "size": 999
+    },
+    {
+      "path": "docs/api/sarif-to-comment.isariftoolidentity.md",
+      "size": 1019
+    },
+    {
+      "path": "docs/api/sarif-to-comment.isariftoolidentity.name.md",
+      "size": 450
+    },
+    {
+      "path": "docs/api/sarif-to-comment.isariftoolidentity.version.md",
+      "size": 447
+    },
+    {
+      "path": "docs/api/sarif-to-comment.istagedchangereceipt.associated.md",
+      "size": 517
+    },
+    {
+      "path": "docs/api/sarif-to-comment.istagedchangereceipt.explainedby.md",
+      "size": 526
+    },
+    {
+      "path": "docs/api/sarif-to-comment.istagedchangereceipt.md",
+      "size": 1863
+    },
+    {
+      "path": "docs/api/sarif-to-comment.istagedchangereceipt.operation.md",
+      "size": 462
+    },
+    {
+      "path": "docs/api/sarif-to-comment.istagedchangereceipt.path.md",
+      "size": 418
+    },
+    {
+      "path": "docs/api/sarif-to-comment.istagedchangereceipt.replacements.md",
+      "size": 499
+    },
+    {
+      "path": "docs/api/sarif-to-comment.istagedchangesreceipt.addedrun.md",
+      "size": 470
+    },
+    {
+      "path": "docs/api/sarif-to-comment.istagedchangesreceipt.boundruns.md",
+      "size": 485
+    },
+    {
+      "path": "docs/api/sarif-to-comment.istagedchangesreceipt.changes.md",
+      "size": 493
+    },
+    {
+      "path": "docs/api/sarif-to-comment.istagedchangesreceipt.md",
+      "size": 1907
+    },
+    {
+      "path": "docs/api/sarif-to-comment.istagedchangesreceipt.reviewedcommit.md",
+      "size": 457
+    },
+    {
+      "path": "docs/api/sarif-to-comment.istagedchangesreceipt.warnings.md",
+      "size": 522
+    },
+    {
+      "path": "docs/api/sarif-to-comment.istagedreplacementreceipt.associated.md",
+      "size": 486
+    },
+    {
+      "path": "docs/api/sarif-to-comment.istagedreplacementreceipt.endline.md",
+      "size": 507
+    },
+    {
+      "path": "docs/api/sarif-to-comment.istagedreplacementreceipt.explainedby.md",
+      "size": 675
+    },
+    {
+      "path": "docs/api/sarif-to-comment.istagedreplacementreceipt.insertion.md",
+      "size": 489
+    },
+    {
+      "path": "docs/api/sarif-to-comment.istagedreplacementreceipt.md",
+      "size": 2528
+    },
+    {
+      "path": "docs/api/sarif-to-comment.istagedreplacementreceipt.startline.md",
+      "size": 513
+    },
+    {
+      "path": "docs/api/sarif-to-comment.istalesarifselectoroutcome.diagnostics.md",
+      "size": 519
+    },
+    {
+      "path": "docs/api/sarif-to-comment.istalesarifselectoroutcome.markdown.md",
+      "size": 466
+    },
+    {
+      "path": "docs/api/sarif-to-comment.istalesarifselectoroutcome.md",
+      "size": 2193
+    },
+    {
+      "path": "docs/api/sarif-to-comment.istalesarifselectoroutcome.problems.md",
+      "size": 503
+    },
+    {
+      "path": "docs/api/sarif-to-comment.istalesarifselectoroutcome.selector.md",
+      "size": 511
+    },
+    {
+      "path": "docs/api/sarif-to-comment.istalesarifselectoroutcome.status.md",
+      "size": 465
+    },
+    {
+      "path": "docs/api/sarif-to-comment.isuggestioncleanupcounts.candidates.md",
+      "size": 740
+    },
+    {
+      "path": "docs/api/sarif-to-comment.isuggestioncleanupcounts.checked.md",
+      "size": 486
+    },
+    {
+      "path": "docs/api/sarif-to-comment.isuggestioncleanupcounts.conforming.md",
+      "size": 530
+    },
+    {
+      "path": "docs/api/sarif-to-comment.isuggestioncleanupcounts.labeled.md",
+      "size": 484
+    },
+    {
+      "path": "docs/api/sarif-to-comment.isuggestioncleanupcounts.md",
+      "size": 1800
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iuncertainoutcome.diagnostics.md",
+      "size": 573
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iuncertainoutcome.markdown.md",
+      "size": 431
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iuncertainoutcome.md",
+      "size": 1666
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iuncertainoutcome.statepath.md",
+      "size": 440
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iuncertainoutcome.status.md",
+      "size": 440
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iungroupedfinding.group.md",
+      "size": 461
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iungroupedfinding.md",
+      "size": 1621
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iungroupedfinding.ref.md",
+      "size": 442
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iungroupedfinding.resultindex.md",
+      "size": 441
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iungroupedfinding.runindex.md",
+      "size": 414
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iungroupedfinding.tool.md",
+      "size": 401
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iungroupedsariffixesoutcome.diagnostics.md",
+      "size": 518
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iungroupedsariffixesoutcome.findings.md",
+      "size": 491
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iungroupedsariffixesoutcome.md",
+      "size": 1699
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iungroupedsariffixesoutcome.sarif.md",
+      "size": 498
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iungroupedsariffixesoutcome.status.md",
+      "size": 476
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iungroupsariffixesoptions.findings.md",
+      "size": 604
+    },
+    {
+      "path": "docs/api/sarif-to-comment.iungroupsariffixesoptions.md",
+      "size": 1010
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ivalidatesarifreviewinput.destination.md",
+      "size": 502
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ivalidatesarifreviewinput.md",
+      "size": 3014
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ivalidatesarifreviewinput.oldsourcecommit.md",
+      "size": 590
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ivalidatesarifreviewinput.options.md",
+      "size": 594
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ivalidatesarifreviewinput.reviewedcommit.md",
+      "size": 512
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ivalidatesarifreviewinput.sarif.md",
+      "size": 614
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ivalidatesarifreviewinput.sourcerooturi.md",
+      "size": 566
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ivalidatesarifreviewinput.token.md",
+      "size": 576
+    },
+    {
+      "path": "docs/api/sarif-to-comment.md",
+      "size": 30372
+    },
+    {
+      "path": "docs/api/sarif-to-comment.originalpullrequeststate.md",
+      "size": 772
+    },
+    {
+      "path": "docs/api/sarif-to-comment.publishsarifreview.md",
+      "size": 2361
+    },
+    {
+      "path": "docs/api/sarif-to-comment.publishsarifreviewoutcome.md",
+      "size": 840
+    },
+    {
+      "path": "docs/api/sarif-to-comment.removesarifcomment.md",
+      "size": 2665
+    },
+    {
+      "path": "docs/api/sarif-to-comment.removesarifcommentoutcome.md",
+      "size": 825
+    },
+    {
+      "path": "docs/api/sarif-to-comment.suggestioncleanupresult.md",
+      "size": 1460
+    },
+    {
+      "path": "docs/api/sarif-to-comment.suggestionownerscope.md",
+      "size": 527
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ungroupsariffixes.md",
+      "size": 2111
+    },
+    {
+      "path": "docs/api/sarif-to-comment.ungroupsariffixesoutcome.md",
+      "size": 948
+    },
+    {
+      "path": "docs/api/sarif-to-comment.validatesarifreview.md",
+      "size": 2883
+    },
+    {
+      "path": "docs/api/sarif-to-comment.validatesarifreviewoutcome.md",
+      "size": 777
+    },
+    {
+      "path": "docs/diagnostic.v1.schema.json",
+      "size": 3233
+    },
+    {
+      "path": "docs/diagnostics.md",
+      "size": 63189
+    },
+    {
+      "path": "docs/getting-started.md",
+      "size": 27209
+    },
+    {
+      "path": "package.json",
+      "size": 2777
+    },
+    {
+      "path": "vendor/README.md",
+      "size": 722
+    },
+    {
+      "path": "vendor/sarif-schema-2.1.0.json",
+      "size": 112768
+    }
+  ]
+}

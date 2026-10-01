@@ -1,0 +1,47 @@
+# 027 publish a creation and a deletion under the defaults (fileOperations [manual])
+feature: whole-file proposals
+
+$ GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-4Df8Kr/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/delivery-composition-4Df8Kr/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --state <tmp>/delivery-composition-4Df8Kr/state/review.json --format json
+exit status: 0
+
+checks:
+  PASS  the token never appears in stdout or stderr
+  PASS  exit 0, published, no diagnostics
+  PASS  the review body proposes docs/guide.md with its exact content, and the deletion of obsolete.txt
+  PASS  no inline comment, no suggestion block, no companion pull request
+
+--- stdout
+{
+  "command": "publish",
+  "status": "published",
+  "review": {
+    "id": 5000,
+    "url": "https://github.com/octo/widgets/pull/7#pullrequestreview-5000"
+  },
+  "statePath": "<tmp>/delivery-composition-4Df8Kr/state/review.json",
+  "message": "## Draft review published\n\nCreated the draft [review 5000](https://github.com/octo/widgets/pull/7#pullrequestreview-5000) on octo/widgets#7 at commit `feedfeedfeedfeedfeedfeedfeedfeedfeedfeed`. It stays a draft until someone submits it on GitHub.",
+  "diagnostics": []
+}
+
+--- stderr
+
+--- input SARIF (as given to --sarif, before the command)
+{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"Review bot","version":"1.0.0"}},"columnKind":"utf16CodeUnits","versionControlProvenance":[{"repositoryUri":"https://github.com/octo/widgets","revisionId":"feedfeedfeedfeedfeedfeedfeedfeedfeedfeed"}],"artifacts":[{"location":{"uri":"docs/guide.md"},"contents":{"text":"# Guide\n\nUse the client.\n"},"encoding":"utf-8"},{"location":{"uri":"obsolete.txt"}}],"results":[{"message":{"text":"Add a guide."},"locations":[{"physicalLocation":{"artifactLocation":{"uri":"docs/guide.md"},"region":{"startLine":1}}}],"properties":{"sarifToComment":{"proposedFileChanges":[{"operation":"create","artifactIndex":0}]}}},{"message":{"text":"Remove the obsolete file."},"locations":[{"physicalLocation":{"artifactLocation":{"uri":"obsolete.txt"}}}],"properties":{"sarifToComment":{"proposedFileChanges":[{"operation":"delete","artifactIndex":1}]}}}]}]}
+--- fake host after the command (writes so far, review requests, pull requests)
+{
+  "writesSoFar": [
+    "POST /repos/octo/widgets/pulls/7/reviews"
+  ],
+  "reviews": [
+    {
+      "id": 5000,
+      "state": "PENDING",
+      "request": {
+        "commit_id": "feedfeedfeedfeedfeedfeedfeedfeedfeedfeed",
+        "body": "**Proposed new file:** `docs/guide.md`\n\n**File details:** 25 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644\n\n```\n# Guide\n\nUse the client.\n```\n\n**Location:** line 1 of the proposed file\n\nAdd a guide.\n\n<sub>— Review bot 1.0.0</sub>\n\n---\n\n**Proposed file deletion:** [obsolete.txt at feedfee](https://github.com/octo/widgets/blob/feedfeedfeedfeedfeedfeedfeedfeedfeedfeed/obsolete.txt)\n\nThe whole file is removed; this is not a proposal to empty it.\n\nRemove the obsolete file.\n\n<sub>— Review bot 1.0.0</sub>\n\n<!-- sarif-to-comment:review:cf910175-f81f-4e7f-8111-fcf60a0c37b9 -->",
+        "comments": []
+      }
+    }
+  ],
+  "pulls": []
+}

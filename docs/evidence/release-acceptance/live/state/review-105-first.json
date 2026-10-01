@@ -1,0 +1,60 @@
+{
+  "format": "sarif-to-comment.publication-state",
+  "version": 3,
+  "phase": "completed",
+  "marker": "<!-- sarif-to-comment:review:6ab13bce-c421-4fe4-b78e-0bb1107c2619 -->",
+  "destination": {
+    "owner": "mike-north",
+    "repo": "doc-linter",
+    "pullNumber": 105
+  },
+  "reviewedCommit": "bd76c7b51f895276df4d0c6f0418f5a4d24072a8",
+  "inputFingerprint": "sha256:72cb45bdb5338836f89c47f65fea38a1ba91c46d616f812dcc1675042ff3e98e",
+  "authorId": 558005,
+  "request": {
+    "owner": "mike-north",
+    "repo": "doc-linter",
+    "pullNumber": 105,
+    "commitId": "bd76c7b51f895276df4d0c6f0418f5a4d24072a8",
+    "body": "\n\n<!-- sarif-to-comment:review:6ab13bce-c421-4fe4-b78e-0bb1107c2619 -->",
+    "comments": [
+      {
+        "path": "docs/experiments/u8-forcepush/sample.md",
+        "side": "RIGHT",
+        "line": 5,
+        "body": "Line 5 reads well as reviewed.\n\n<sub>— Release acceptance reviewer 1.0.0</sub>"
+      }
+    ],
+    "event": "COMMENT"
+  },
+  "requestFingerprint": "sha256:73a9a4458fd52f40251b83058f7720ad050b9e2423dd7bb3288090e5035ed369",
+  "delivery": {
+    "edits": {
+      "value": [
+        "native"
+      ],
+      "source": "default"
+    },
+    "groupedEdits": {
+      "value": [
+        "native-batch"
+      ],
+      "source": "default"
+    },
+    "fileOperations": {
+      "value": [
+        "manual"
+      ],
+      "source": "default"
+    },
+    "companionBundle": {
+      "value": "per-unit",
+      "source": "default"
+    }
+  },
+  "receipt": {
+    "reviewId": 5377549452,
+    "htmlUrl": "https://github.com/mike-north/doc-linter/pull/105#pullrequestreview-5377549452",
+    "via": "created"
+  }
+}

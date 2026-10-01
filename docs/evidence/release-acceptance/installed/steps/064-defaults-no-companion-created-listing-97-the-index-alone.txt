@@ -1,0 +1,73 @@
+# 064 defaults (no companion created) listing #97: the index alone
+feature: --existing-companion
+
+$ GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-Sq0iBl/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/delivery-composition-Sq0iBl/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --existing-companion 97 --state <tmp>/delivery-composition-Sq0iBl/state/review.json --format json
+exit status: 0
+
+checks:
+  PASS  the token never appears in stdout or stderr
+  PASS  exit 0; body begins with the index listing #97 as reused; no companion-options-unused
+
+--- stdout
+{
+  "command": "publish",
+  "status": "published",
+  "review": {
+    "id": 5000,
+    "url": "https://github.com/octo/widgets/pull/7#pullrequestreview-5000"
+  },
+  "statePath": "<tmp>/delivery-composition-Sq0iBl/state/review.json",
+  "message": "## Draft review published\n\nCreated the draft [review 5000](https://github.com/octo/widgets/pull/7#pullrequestreview-5000) on octo/widgets#7 at commit `feedfeedfeedfeedfeedfeedfeedfeedfeedfeed`. It stays a draft until someone submits it on GitHub.\n\n**Warnings:**\n\n- `companion-reused`: #97 is listed in the review's companion index as an existing companion; it was open when the review was prepared.",
+  "diagnostics": [
+    {
+      "severity": "note",
+      "code": "companion-reused",
+      "title": "An existing companion pull request is listed in the review",
+      "message": "#97 is listed in the review's companion index as an existing companion; it was open when the review was prepared.",
+      "subject": "octo/widgets#97"
+    }
+  ]
+}
+
+--- stderr
+
+--- input SARIF (as given to --sarif, before the command)
+{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"Review bot","version":"1.0.0"}},"columnKind":"utf16CodeUnits","versionControlProvenance":[{"repositoryUri":"https://github.com/octo/widgets","revisionId":"feedfeedfeedfeedfeedfeedfeedfeedfeedfeed"}],"artifacts":[],"results":[{"message":{"text":"Fix the typo."},"locations":[{"physicalLocation":{"artifactLocation":{"uri":"README.md"},"region":{"startLine":2}}}],"fixes":[{"artifactChanges":[{"artifactLocation":{"uri":"README.md"},"replacements":[{"deletedRegion":{"startLine":2},"insertedContent":{"text":"The widget client."}}]}]}]}]}]}
+--- fake host after the command (writes so far, review requests, pull requests)
+{
+  "writesSoFar": [
+    "POST /repos/octo/widgets/pulls/7/reviews"
+  ],
+  "reviews": [
+    {
+      "id": 5000,
+      "state": "PENDING",
+      "request": {
+        "commit_id": "feedfeedfeedfeedfeedfeedfeedfeedfeedfeed",
+        "body": "**Companion pull requests of this review:**\n\n- [#97](https://github.com/octo/widgets/pull/97): `Suggestion for #7: edit notes.txt` — reused; it was open when this review was prepared\n\n<!-- sarif-to-comment:review:1229cedf-70d1-44fd-9190-e1412d4d3fd9 -->",
+        "comments": [
+          {
+            "path": "README.md",
+            "body": "Fix the typo.\n\n<sub>— Review bot 1.0.0</sub>\n\n```suggestion\nThe widget client.\n```",
+            "line": 2,
+            "side": "RIGHT"
+          }
+        ]
+      }
+    }
+  ],
+  "pulls": [
+    {
+      "number": 97,
+      "title": "Suggestion for #7: edit notes.txt",
+      "head": "suggestion-pr/7/earlier-97",
+      "base": "feature/retry",
+      "draft": false,
+      "state": "open",
+      "labels": [
+        "suggestion-pr"
+      ],
+      "body": "Suggested in a review of #7.\n\n<!-- suggestion-pr {\"version\":1,\"original\":{\"owner\":\"octo\",\"repo\":\"widgets\",\"pullNumber\":7},\"reviewedCommit\":\"ba5eba5eba5eba5eba5eba5eba5eba5eba5eba5e\",\"id\":\"earlier-97\",\"batch\":\"earlier\"} -->"
+    }
+  ]
+}
