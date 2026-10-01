@@ -84,7 +84,7 @@ One more setting is not a delivery dimension but packages what companions delive
 
 ## 5. Defaults
 
-Every dimension has an explicit default. The defaults never create a companion pull request, as before (D22, [companion contract §2.1](companion-suggestion-pr-contract.md#21-the-setting-and-why-it-is-off-by-default)).
+Every dimension has an explicit default. The defaults never create a companion pull request, as before (D22, [companion contract §2.1](companion-suggestion-pr-contract.md#21-off-by-default-and-why)).
 
 | Dimension | Default |
 | --- | --- |

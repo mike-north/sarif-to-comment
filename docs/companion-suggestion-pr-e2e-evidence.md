@@ -38,7 +38,7 @@ A Node script drove the built `publishSarifReview` (through its private client s
 
 ## Triggered automation
 
-[`triggered-checks.txt`](evidence/companion-suggestion-pr/triggered-checks.txt): each suggestion pull request (#38, #39, #40) ran the repository's `Version guard` workflow twice, once for the `push` of its proposal branch and once for its `pull_request`, although every one is a draft. This is the cost the [off-by-default decision](companion-suggestion-pr-contract.md#21-the-setting-and-why-it-is-off-by-default) weighs: in this small repository, three suggestions produced six workflow runs beyond the originals' own.
+[`triggered-checks.txt`](evidence/companion-suggestion-pr/triggered-checks.txt): each suggestion pull request (#38, #39, #40) ran the repository's `Version guard` workflow twice, once for the `push` of its proposal branch and once for its `pull_request`, although every one is a draft. This is the cost the [off-by-default decision](companion-suggestion-pr-contract.md#21-off-by-default-and-why) weighs: in this small repository, three suggestions produced six workflow runs beyond the originals' own.
 
 ## What this does not establish
 
