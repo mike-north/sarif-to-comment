@@ -21,6 +21,7 @@ import { renderCompanionIndex } from '../dist/presentation/companion-index.cjs';
 import type { ICompanionIndexEntry } from '../dist/presentation/companion-index.cjs';
 import { composedProblem, linksIn, loadMarkdownParser, showsAsItself } from '../dist/presentation/markdown-tree.cjs';
 import { renderReviewBody } from '../dist/prepare-review.cjs';
+import { present } from '../dist/presentation/customization.cjs';
 
 await loadMarkdownParser();
 
@@ -150,5 +151,67 @@ describe('a plan without an index section renders without one (companion contrac
       '',
       `**Suggestion pull request:** [#101](${url(101)})`,
     ].join('\n')), body);
+  });
+});
+
+describe('companion callbacks: checks the adversarial re-check pinned (review presentation contract §7)', () => {
+  const entries: ICompanionIndexEntry[] = [
+    created(101, 'Suggestion for #7: retry-with-test (2 changes)'),
+    existing(97, 'Suggestion for #7: edit README.md', 'draft'),
+  ];
+  /** The index callback's context and identity links for `list`, as preparation builds them. */
+  function indexContext(list: readonly ICompanionIndexEntry[]) {
+    const companions = list.map((e) => ({
+      number: e.number, url: e.url, title: e.title, origin: e.origin === 'created' ? 'created' : 'reused',
+      ...(e.origin === 'existing' ? { state: e.state } : {}), link: `[#${String(e.number)}](${e.url})`,
+    }));
+    return {
+      context: { pullNumber: 7, companions, markdown: renderCompanionIndex(list), required: companions.map((c) => c.link) },
+      identity: companions.map((c) => ({ text: `#${String(c.number)}`, url: c.url })),
+    };
+  }
+  const run = (list: readonly ICompanionIndexEntry[], callback: (context: { readonly markdown: string }) => string): string => {
+    const { context, identity } = indexContext(list);
+    return present('companionIndex', callback, context, identity);
+  };
+  const refused = (rule: RegExp) => (err: unknown): boolean => err instanceof TypeError && rule.test(err.message);
+
+  // The probe's exact titles (scratch/u6-probe.mjs): a suggestionGroup name or a GitHub title may hold marker-like text.
+  for (const title of ['<!-- sarif-to-comment:x', '<!-- suggestion-pr {}']) {
+    test(`regression: a title ${JSON.stringify(title)} does not block an identity callback, created or reused`, () => {
+      const list = [created(101, title), existing(97, title, 'open')];
+      assert.equal(run(list, (c) => c.markdown), renderCompanionIndex(list));
+    });
+  }
+
+  test('a callback that adds a real marker is still refused, and so is one that shows a marker-like title outside code', () => {
+    assert.throws(() => run(entries, (c) => `${c.markdown}\n\n<!-- suggestion-pr {"version":1} -->`), refused(/reads as a publication or suggestion marker/));
+    assert.throws(() => run(entries, (c) => `${c.markdown}\n\n<!-- sarif-to-comment:review:x -->`), refused(/reads as a publication or suggestion marker/));
+    const list = [created(101, '<!-- suggestion-pr {}')];
+    assert.throws(() => run(list, () => `- [#101](${url(101)}): <!-- suggestion-pr {}`), refused(/reads as a publication or suggestion marker/));
+  });
+
+  const lookAlikes: readonly (readonly [string, string])[] = [
+    ['a fullwidth number sign', `[＃101](${url(97)})`],
+    ['a fullwidth number sign, linking elsewhere', '[＃101](https://evil.example)'],
+    ['a fullwidth digit', `[#１01](${url(97)})`],
+  ];
+  for (const [what, link] of lookAlikes) {
+    test(`a link text with ${what} reads as the companion's number (NFKC), so it may not lead elsewhere`, () => {
+      assert.throws(() => run(entries, (c) => `${c.markdown}\n\n${link}`), refused(/links the text/));
+    });
+  }
+
+  test('documented limit: a visibly different look-alike (the letter O for zero) is not recognized as the number', () => {
+    assert.ok(run(entries, (c) => `${c.markdown}\n\n[#1O1](${url(97)})`).endsWith(`[#1O1](${url(97)})`));
+  });
+
+  test('an image is refused: it fetches from elsewhere, and its alt text could read as a number', () => {
+    assert.throws(() => run(entries, (c) => `${c.markdown}\n\n![](https://evil.example/pixel.png)`), refused(/adds an image/));
+    assert.throws(() => run(entries, (c) => `${c.markdown}\n\n[![#101](https://evil.example/101.png)](${url(97)})`), refused(/links the text "#101"|adds an image/));
+  });
+
+  test('an image link\'s alt text is its text', () => {
+    assert.deepEqual(linksIn(`[![#101](https://x.example/a.png)](${url(97)})`).map((l) => l.text), ['#101']);
   });
 });

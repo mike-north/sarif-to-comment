@@ -28,7 +28,7 @@ import type { ICreateGitHubClientOptions, IGitHubClient } from '../dist/github.c
 import library from '../dist/index.cjs';
 import type { IStoredPull } from './fixtures/composition/fake-http-companion.mts';
 import {
-  ATTRIBUTION, BASE, GUIDE, HEAD, HEAD_REF, OWNER, PULL, REPO, TYPO,
+  ATTRIBUTION, BASE, GUIDE, HEAD, HEAD_REF, OWNER, PULL, REPO, SPELLING, TYPO,
   blockedMarkdown, cli, coded, create, created, diagnostics, document, input, makeWorld, markdown, onlyReview, publish, pullUrl, result,
   stateRecord, status, target, validate, writes,
 } from './support/delivery-world.mts';
@@ -621,6 +621,34 @@ describe('companion index and companion section callbacks (D60, §2.13.3)', () =
     assert.ok(pull);
     assert.deepEqual(seen.map((c) => c.companions.map((x) => x.number)), [[pull.number]], 'not prepared again: called once, with the real number');
     assert.ok(onlyReview(world).body.startsWith(`${index(createdEntry(pull.number, 'Suggestion for #7: create docs/guide.md'))}\n\n_Resumed._${SEPARATOR}`), onlyReview(world).body);
+  });
+
+  test('regression: marker-like text in a group name and in an existing title does not block an identity callback', async () => {
+    const world = makeWorld();
+    world.host.seedPulls([existing(97, { title: '<!-- suggestion-pr {}' })]);
+    const group = '<!-- sarif-to-comment:x';
+    const sarif = document([TYPO(group), SPELLING(group)]);
+    const identityCallbacks = { companionIndex: (c: IIndexSeen): string => c.markdown, companionReference: (c: IReferenceSeen): string => c.markdown };
+    const outcome = await publish(world, sarif, withExisting([97], { delivery: { groupedEdits: ['companion'] }, presentation: identityCallbacks }));
+    assert.equal(status(outcome), 'published', markdown(outcome));
+    const [pull] = createdPulls(world, [97]);
+    assert.ok(pull);
+    assert.ok(onlyReview(world).body.startsWith(index(
+      `- [#${String(pull.number)}](${pullUrl(pull.number)}): \`Suggestion for #7: <!-- sarif-to-comment:x (2 changes)\` — created with this review`,
+      `- [#97](${pullUrl(97)}): \`<!-- suggestion-pr {}\` — reused; it was a draft when this review was prepared`,
+    )), onlyReview(world).body);
+  });
+
+  test('a callback whose real-number result is over the size limit is refused late, with the presentation TypeError, never sent', async () => {
+    const world = makeWorld();
+    const sarif = document([note(), guide()], [GUIDE_ARTIFACT]);
+    const swelling = { companionIndex: (c: IIndexSeen) => (c.companions.every((x) => x.number === PLACEHOLDER) ? c.markdown : `${c.markdown}\n\n${'x'.repeat(70_000)}`) };
+    await assert.rejects(publish(world, sarif, { ...COMPANIONS, presentation: swelling }), (err: unknown) =>
+      err instanceof TypeError && /^Invalid presentation: the review body composed with options\.presentation\.companionIndex and companionReference is \d+ characters; the limit is 60000/.test(err.message));
+    assert.equal(createdPulls(world, []).length, 1, 'its suggestion pull request exists');
+    assert.equal(world.host.reviews().length, 0, 'the review was never sent');
+    const retry = await publish(world, sarif, COMPANIONS);
+    assert.equal(status(retry), 'published', markdown(retry));
   });
 
   for (const [what, existingOnly] of [['with only existing companions', true], ['with created companions', false]] as const) {
