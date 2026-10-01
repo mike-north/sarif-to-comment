@@ -147,10 +147,8 @@
  *   its two-dot patch from B and from T alike. A withholding list of 300
  *   files (GitHub's most per comparison) withholds every patch. A first
  *   comparison of 300 files is 'files-incomplete'. The pull files are not
- *   read. A withheld file's patch still verifies old-side reads when B is
- *   an ancestor of R (its old side is then B). A file only those lists name
- *   (no change of R's) is read at B directly, as B's own file: nothing is
- *   anchored on it.
+ *   read. A withheld file is never anchored, so a read of it at B is B's
+ *   own file, read directly (see readSource).
  *
  *   context: {
  *     owner, repo, pullNumber, reviewedCommit,
@@ -214,8 +212,11 @@
  *     file at the reviewed commit, must reproduce the candidate's file exactly
  *     (absence included); a file the reviewed diff does not change must be
  *     identical at both commits. Renamed files refuse under either
- *     name ('rename-unsupported'), files without a usable patch refuse
- *     ('patch-unavailable'), a changed file missing where its patch says it
+ *     name ('rename-unsupported'). A withheld file ('base-changed': another
+ *     side changed it, so it is never anchored) is read directly at the
+ *     diff base, as that commit's own file. Any other changed file whose
+ *     patch GitHub omitted or truncated ('patch-omitted',
+ *     'patch-inconsistent') refuses ('patch-unavailable'), a changed file missing where its patch says it
  *     exists is 'source-inconsistent', and any other disagreement —
  *     incompatible hunks, missing "\ No newline at end of file" markers,
  *     different text — is 'old-source-unverified'. Reads at any other full
@@ -2179,14 +2180,9 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
     // list is not read.
     let entries: readonly IPullFileEntry[];
     let baseCommit: unknown = oldSourceCommit;
+    // Files another side changed: listed without a patch, never placed, and
+    // read at the diff base as its own file (see readVerifiedBase).
     let withheld: ReadonlySet<string> = new Set();
-    // Whether a withheld file's patch still describes the diff base exactly
-    // (its old side is the diff base), so it can verify old-side reads even
-    // though no line is placed on it.
-    let withheldVerifies = false;
-    // Files only another side changed: listed without a patch, never placed,
-    // and read at the diff base as its own file (see readVerifiedBase).
-    let onlyElsewhere: ReadonlySet<string> = new Set();
     if (head === reviewedCommit) {
       entries = await readPullFiles(owner, repo, pullNumber, first.changedFiles);
       const second = await readPull(owner, repo, pullNumber);
@@ -2196,34 +2192,35 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
       baseCommit ??= await mergeBaseOf(owner, repo, first.base, head);
     } else {
       baseCommit ??= await mergeBaseOf(owner, repo, first.base, head);
-      ({ entries, withheld, withheldVerifies, onlyElsewhere } = await readReviewedComparison(owner, repo, baseCommit, reviewedCommit, first.base));
+      ({ entries, withheld } = await readReviewedComparison(owner, repo, baseCommit, reviewedCommit, first.base));
     }
 
     const files: IPullFile[] = [];
     const fileDiagnostics: IFileDiagnostic[] = [];
     const changes = new Map<string, { readonly patch: string | undefined; readonly renamedFrom: string | undefined }>();
+    // Every name of a withheld file: read at the diff base as its own file.
+    const readAtBase = new Set<string>();
     for (const entry of entries) {
       const file: { path: string; previousPath?: string; patch?: string } = { path: entry.filename };
       if (entry.previous_filename !== undefined) file.previousPath = entry.previous_filename;
-      // `patch` verifies old-side reads; `file.patch` is what placement may anchor on.
       let patch: string | undefined;
-      const isWithheld = withheld.has(entry.filename) || (entry.previous_filename !== undefined && withheld.has(entry.previous_filename));
-      if (entry.patch === undefined) {
-        fileDiagnostics.push({ path: entry.filename, reason: isWithheld ? 'base-changed' : 'patch-omitted' });
+      if (withheld.has(entry.filename) || (entry.previous_filename !== undefined && withheld.has(entry.previous_filename))) {
+        fileDiagnostics.push({ path: entry.filename, reason: 'base-changed' });
+        readAtBase.add(entry.filename);
+        if (entry.previous_filename !== undefined) readAtBase.add(entry.previous_filename);
+      } else if (entry.patch === undefined) {
+        fileDiagnostics.push({ path: entry.filename, reason: 'patch-omitted' });
       } else {
         const counts = patchCounts(entry.patch);
         if (counts.additions !== entry.additions || counts.deletions !== entry.deletions) {
-          fileDiagnostics.push({ path: entry.filename, reason: isWithheld ? 'base-changed' : 'patch-inconsistent' });
-        } else if (isWithheld) {
-          fileDiagnostics.push({ path: entry.filename, reason: 'base-changed' });
-          if (withheldVerifies) patch = entry.patch;
+          fileDiagnostics.push({ path: entry.filename, reason: 'patch-inconsistent' });
         } else {
           patch = entry.patch;
           file.patch = patch;
         }
       }
       files.push(file);
-      if (!onlyElsewhere.has(entry.filename)) changes.set(entry.filename, { patch, renamedFrom: file.previousPath });
+      changes.set(entry.filename, { patch, renamedFrom: file.previousPath });
     }
     const renamedPaths = new Set<string>();
     for (const [filePath, change] of changes) {
@@ -2242,10 +2239,11 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
       if (renamedPaths.has(filePath)) {
         throw new GitHubError('rename-unsupported', redact(`${filePath} is renamed by the pull request; its old side is not read.`));
       }
-      // A file only another side changed has no patch of the reviewed diff
-      // to verify against, and nothing is anchored on it: its old-side text
-      // is the diff base's own file, read exactly from that commit.
-      if (onlyElsewhere.has(filePath)) return readBlob(owner, repo, baseCommit, filePath);
+      // A withheld file (another side changed it) is never anchored, so its
+      // old-side text needs no patch: it is the diff base's own file, read
+      // exactly from that commit with every integrity check of readBlob.
+      // Verifying through a patch is kept for files placement may anchor on.
+      if (readAtBase.has(filePath)) return readBlob(owner, repo, baseCommit, filePath);
       const change = changes.get(filePath);
       if (change === undefined) {
         const [newText, baseText] = [await readBlob(owner, repo, reviewedCommit, filePath), await readBlob(owner, repo, baseCommit, filePath)];
@@ -2363,12 +2361,7 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
     base: unknown,
     reviewed: string,
     tip: unknown,
-  ): Promise<{
-    readonly entries: readonly IPullFileEntry[];
-    readonly withheld: ReadonlySet<string>;
-    readonly withheldVerifies: boolean;
-    readonly onlyElsewhere: ReadonlySet<string>;
-  }> {
+  ): Promise<{ readonly entries: readonly IPullFileEntry[]; readonly withheld: ReadonlySet<string> }> {
     const what = 'reviewed-diff comparison';
     const reviewedSide = await comparison(owner, repo, base, reviewed, what);
     if (reviewedSide.mayBeIncomplete) {
@@ -2388,7 +2381,6 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
 
     const entries = [...reviewedSide.entries];
     const listed = new Set(entries.map((e) => e.filename));
-    const onlyElsewhere = new Set<string>();
     // A file only another side changed is in the two-dot diff too, listed here
     // without a patch under each name it has on either side (a rename on
     // another side runs the other way in the reviewed diff, so it is not
@@ -2398,7 +2390,6 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
         if (filename === undefined || listed.has(filename)) continue;
         entries.push({ filename, additions: 0, deletions: 0 });
         listed.add(filename);
-        onlyElsewhere.add(filename);
       }
     }
     const withheld = new Set<string>();
@@ -2407,8 +2398,7 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
       withheld.add(entry.filename);
       if (entry.previous_filename !== undefined) withheld.add(entry.previous_filename);
     }
-    // With `base` an ancestor of the reviewed commit, every patch's old side is `base` itself.
-    return { entries, withheld, withheldVerifies: containsBase(reviewedSide.status), onlyElsewhere };
+    return { entries, withheld };
   }
 
   /** One comparison's status and changed files: GET compare/{from}...{to}. */
