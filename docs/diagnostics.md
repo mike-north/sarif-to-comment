@@ -232,7 +232,7 @@ One entry per code: its severity, its title, what it means and its typical remed
 | `file-changed-during-edit` | error | The file changed while the command ran | An in-place edit found different content when it was about to replace the file, so it did not overwrite it. | Run the command again. |
 | `output-archive-failed` | error | The existing output could not be preserved | `add-staged-changes` moves an existing output aside before writing a new one; that failed, so nothing was written. | Check the output directory's permissions, then run the command again. |
 | `message-not-utf8` | error | The message on standard input is not UTF-8 | `add-comment --message-file -` reads the finding's text from standard input, which must be UTF-8. | Provide the message as UTF-8 text. |
-| `operation-failed` | error | The operation could not be completed | The operation stopped for a reason outside the document: for example the network, GitHub, Git, or a publication state file that is corrupt or belongs to other input. The message names the cause. | Resolve the cause the message names, then run the command again. |
+| `operation-failed` | error | The operation could not be completed | The operation stopped for a reason outside the document: for example the network, GitHub, Git, or a publication state file that is corrupt or belongs to other input. One such GitHub cause is a finding on the old side (the diff base) of a changed file whose patch GitHub omitted or truncated: its old-side text cannot be verified (`patch-unavailable`, [specification R13.1](specification.md#r131-the-reviewed-diff-historical-placement-and-native-suggestions)). The message names the cause. | Resolve the cause the message names, then run the command again. |
 | `color-unavailable` | warning | Color is unavailable | Color was asked for, but the color library (chalk) could not be loaded, so the diagnostics are shown as plain text. The outcome and its exit status are unaffected. | Reinstall the package's dependencies, or use `--color never`. |
 
 ### SARIF documents, authoring and grouping
@@ -416,7 +416,7 @@ These codes belong to the [delivery policy contract](delivery-policy-contract.md
 | Code | Severity | Title | Meaning | Typical remedies |
 |---|---|---|---|---|
 | `pending-review-exists` | error | The account already has a pending review on the pull request | GitHub allows one pending review per account on a pull request, so it refuses another review, draft or submitted. This tool never submits, edits or deletes it. | Submit or delete that pending review on GitHub.<br>If it is this tool's own earlier publication, retry publish with that publication's state path. |
-| `assessment-incomplete` | error | Readiness could not be assessed | The assessment could not be completed (for example the credential, the network, a source read or the review list failed). This is not a verdict on the document. | Resolve the cause, then validate again. |
+| `assessment-incomplete` | error | Readiness could not be assessed | The assessment could not be completed (for example the credential, the network, a source read or the review list failed, including an old-side read that cannot be verified because GitHub omitted the file's patch, `patch-unavailable`). This is not a verdict on the document. | Resolve the cause, then validate again. |
 
 ### Publication
 
