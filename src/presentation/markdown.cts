@@ -122,3 +122,38 @@ const UNSEEN = /(?<!\p{Extended_Pictographic}️?)‍|‍(?!\p{Extended_Pictogra
 export function visibleText(text: string): string {
   return text.replace(UNSEEN, (character) => `{${codePointName(character)}}`);
 }
+
+/**
+ * Characters a rendered code block does not show as themselves: C0 controls
+ * other than tab, LF and CR; DEL and C1 controls; every format character
+ * (Unicode category Cf: a byte-order mark, the bidirectional marks,
+ * embeddings, overrides and isolates, which reorder text invisibly,
+ * zero-width spaces and joiners, the word joiner, the soft hyphen, tag
+ * characters, …); U+00A0, which renders as an ordinary space; and the line
+ * and paragraph separators. The one rule for every block of content: a
+ * proposed file, an alternative and an edit made by hand refuse such a
+ * character (docs/delivery-policy-contract.md §8.10), and a suggestion pull
+ * request's own diff writes it as a visible escape (visibleCodeLine).
+ */
+export const UNSHOWN_IN_CODE_BLOCK = /[\p{Cf}\u00A0\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u2028\u2029]/u;
+
+/**
+ * What visibleCodeLine escapes: UNSHOWN_IN_CODE_BLOCK, a carriage return
+ * (inside a line it does not end one), an unpaired surrogate (not text), and
+ * a `{` that begins text reading as an escape.
+ */
+const ESCAPED_IN_CODE_LINE = new RegExp(`${UNSHOWN_IN_CODE_BLOCK.source}|\\r|[\\uD800-\\uDFFF]|\\{(?=U\\+[0-9A-F]{4,6}\\})`, 'gu');
+
+/**
+ * One line of content for a code block whose bytes are carried elsewhere
+ * exactly (a suggestion pull request's commit), with every character the
+ * block would not show as itself written as a visible escape, `{U+XXXX}`.
+ * A `{` that begins literal text of that form is written `{U+007B}`, so
+ * every escape in the result stands for exactly one character and the line
+ * maps back to its characters without ambiguity. Unlike visibleText, a
+ * zero-width joiner in an emoji sequence is escaped too: this is content,
+ * where exactness outranks how a title reads.
+ */
+export function visibleCodeLine(line: string): string {
+  return line.replace(ESCAPED_IN_CODE_LINE, (character) => `{${codePointName(character)}}`);
+}
