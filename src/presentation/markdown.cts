@@ -69,11 +69,12 @@ function escapeInline(text: string): string {
 /**
  * A fenced code block showing `text` literally: its backtick fence is one
  * longer than the longest backtick run inside, and never shorter than three,
- * so no line of the text can close it (GFM §4.5).
+ * so no line of the text can close it (GFM §4.5). `info`, when given, is the
+ * fence's info string (a language name such as `diff`).
  */
-export function fenced(text: string): string {
+export function fenced(text: string, info = ''): string {
   const fence = '`'.repeat(Math.max(3, longestRun(text, '`') + 1));
-  return `${fence}\n${text}\n${fence}`;
+  return `${fence}${info}\n${text}\n${fence}`;
 }
 
 /**

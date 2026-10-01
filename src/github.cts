@@ -121,8 +121,7 @@
  * Review context
  *
  *   fetchContext({ destination: { owner, repo, pullNumber }, reviewedCommit,
- *                  oldSourceCommit? }) -> { context, readSource, fileExists,
- *                                           readEntry }
+ *                  oldSourceCommit? }) -> { context, readSource, fileExists }
  *
  *   The returned diff is the REVIEWED DIFF (docs/specification.md R13.1):
  *   from the diff base B to the reviewed commit R. B is the caller's
@@ -174,17 +173,6 @@
  *     diff base: a commit's own trees decide what exists in it. Used to
  *     confirm whole-file proposals (docs/file-operation-publication-contract.md).
  *
- *   readEntry(commit, path) -> { kind: 'file', blob, mode } | { kind: 'absent' }
- *                              | { kind: 'not-a-file', entry, path }
- *     The same tree walk and validation as fileExists, answering what stands
- *     there instead of refusing it: a regular file's blob id and mode
- *     (100644, 100755); absent when a complete listing shows the path absent
- *     (or below a regular file); otherwise 'a directory', 'a symbolic link'
- *     or 'a submodule' with the path where it stands (the path itself, or a
- *     link or submodule on the way, never followed). No blob is read. Used to
- *     re-apply suggestions onto a rewritten head
- *     (docs/companion-suggestion-pr-contract.md §2.5.1).
- *
  *   readSource(commit, path) -> string | null
  *     commit: full lowercase 40-hex. path: repository-relative, "/" separated;
  *     empty, ".", ".." segments, leading "/", backslash and NUL are refused.
@@ -196,7 +184,7 @@
  *     client. Every answer must name exactly the requested object; a tree
  *     must be complete (truncated false) with unique names and known
  *     mode/type pairs (040000 tree, 100644/100755 blob, 120000 blob, 160000
- *     commit). Only directories are traversed and only regular files
+ *     commit). Each blob is read once per client, whichever read asks first. Only directories are traversed and only regular files
  *     (100644, 100755) are source: a directory, symlink or submodule at or
  *     above the path is 'not-a-file'. A name missing from a complete listing
  *     (or below a regular file) means absent (null); an HTTP 404 for a commit,
@@ -258,6 +246,29 @@
  *     `base` for identical and ahead, `head` for behind; any other status or
  *     a contradicting merge base is 'malformed-response'. A refused read is
  *     'http-status', never a verdict.
+ *   readComparison({ owner, repo, base, head })
+ *       -> { status, mergeBase: string | null }
+ *     The same comparison with its `merge_base_commit` (null when GitHub
+ *     names none), checked the same way. Both read each comparison once per
+ *     client: a successful answer is shared, a failed read is asked again.
+ *     Its file list is never used, so GitHub's 300-file limit on it does not
+ *     matter here.
+ *   readTreeRecursive({ owner, repo, commit })
+ *       -> { truncated, entries: [{ path, mode, type, sha, size? }] }
+ *     The commit's root tree (the cached commit read), then GET
+ *     git/trees/{tree}?recursive=1: every entry with its full path, of a
+ *     known mode/type pair (040000 tree, 100644/100755/120000 blob, 160000
+ *     commit), each path once. `truncated` is GitHub's flag (beyond 100,000
+ *     entries or 7 MB): such a listing is incomplete and is reported as such,
+ *     never used as complete (docs/companion-suggestion-pr-contract.md §2.5.1).
+ *   readBlobBytes({ owner, repo, blob }) -> exact bytes
+ *     GET git/blobs/{sha}, verified like readSource's blobs (strict base64,
+ *     its declared size, hashing to the requested id, within maxSourceBytes:
+ *     'source-too-large' beyond it), never decoded. Each blob is read once
+ *     per client.
+ *   readPullMergeability({ owner, repo, pullNumber }) -> { mergeable }
+ *     GET pulls/{n}: GitHub's `mergeable`, true, false, or null while GitHub
+ *     has not computed it. Any other value is 'malformed-response'.
  *   createProposalCommit({ owner, repo, parent, message, changes })
  *       -> { commit }
  *     changes: [{ operation: 'create', path, text, fileMode } |
@@ -661,21 +672,31 @@ export type ReadSource = (commit: string, path: string) => Promise<string | null
  */
 export type FileExists = (commit: string, path: string) => Promise<boolean>;
 
-/**
- * What stands at a path in a full commit, decided from Git trees alone: a
- * regular file's blob id and mode, nothing, or something that is not a file
- * (and where it stands: the path itself, or a link or submodule on the way).
- */
-export type PathEntry =
-  | { readonly kind: 'file'; readonly blob: string; readonly mode: '100644' | '100755' }
-  | { readonly kind: 'absent' }
-  | { readonly kind: 'not-a-file'; readonly entry: 'a directory' | 'a symbolic link' | 'a submodule'; readonly path: string };
-
-/** What stands at a path in a full commit (see PathEntry). */
-export type ReadEntry = (commit: string, path: string) => Promise<PathEntry>;
-
 /** GitHub's comparison of two commits: `ahead` means the base is an ancestor of the head. */
 export type CommitComparison = 'identical' | 'ahead' | 'behind' | 'diverged';
+
+/** A comparison of two commits with the merge base GitHub names (null when it names none). */
+export interface ICommitComparisonWithBase {
+  readonly status: CommitComparison;
+  readonly mergeBase: string | null;
+}
+
+/** One entry of a recursive tree listing, by its full path. */
+export interface IRecursiveTreeEntry {
+  readonly path: string;
+  /** 040000 (a directory), 100644 or 100755 (a regular file), 120000 (a symbolic link) or 160000 (a submodule). */
+  readonly mode: string;
+  readonly type: 'tree' | 'blob' | 'commit';
+  readonly sha: string;
+  /** A blob's size in bytes, when GitHub gives it. */
+  readonly size?: number;
+}
+
+/** A commit's whole tree, listed recursively; `truncated` when GitHub left entries out. */
+export interface IRecursiveTree {
+  readonly truncated: boolean;
+  readonly entries: readonly IRecursiveTreeEntry[];
+}
 
 /**
  * The heads a force-push replaced on a pull request's branch: the
@@ -695,7 +716,6 @@ export interface IFetchedContext {
   readonly context: IReviewContext;
   readonly readSource: ReadSource;
   readonly fileExists: FileExists;
-  readonly readEntry: ReadEntry;
 }
 
 /** The branches and permissions a suggestion pull request depends on (read only when one is needed). */
@@ -854,6 +874,10 @@ export interface IGitHubClient {
   readonly readSuggestionTarget: (request: IPullRequestDestination) => Promise<ISuggestionTarget>;
   readonly findLabel: (request: { readonly owner: string; readonly repo: string; readonly name: string }) => Promise<string | null>;
   readonly compareCommits: (request: { readonly owner: string; readonly repo: string; readonly base: string; readonly head: string }) => Promise<CommitComparison>;
+  readonly readComparison: (request: { readonly owner: string; readonly repo: string; readonly base: string; readonly head: string }) => Promise<ICommitComparisonWithBase>;
+  readonly readTreeRecursive: (request: { readonly owner: string; readonly repo: string; readonly commit: string }) => Promise<IRecursiveTree>;
+  readonly readBlobBytes: (request: { readonly owner: string; readonly repo: string; readonly blob: string }) => Promise<Uint8Array>;
+  readonly readPullMergeability: (request: IPullRequestDestination) => Promise<{ readonly mergeable: boolean | null }>;
   readonly listHeadRefForcePushes: (request: IPullRequestDestination) => Promise<IHeadRefForcePushes>;
   readonly readDefaultBranchFile: (request: {
     readonly owner: string;
@@ -1984,6 +2008,19 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
   const commitCache = new Map<string, Promise<unknown>>();
   const treeCache = new Map<string, Promise<ReadonlyMap<string, ITreeEntry>>>();
 
+  /**
+   * Blob answers, per repository and id: a blob never changes, so source
+   * reads, configuration reads and the projection's blob reads share one
+   * read of each (each caller still verifies the answer for itself). A
+   * failed read is forgotten.
+   */
+  const blobAnswers = new Map<string, Promise<unknown>>();
+
+  function blobAnswer(owner: string, repo: string, blobSha: unknown): Promise<unknown> {
+    return cached(blobAnswers, `${owner}/${repo}:${String(blobSha)}`, async () =>
+      (await restGet(`${API_ORIGIN}${repoPath(owner, repo)}/git/blobs/${String(blobSha)}`, 'blob request')).body);
+  }
+
   /** Memoizes an immutable-object read; a failed read is forgotten. */
   function cached<T>(objectCache: Map<string, Promise<T>>, key: string, read: () => Promise<T>): Promise<T> {
     const existing = objectCache.get(key);
@@ -2157,7 +2194,7 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
     if (entry.size !== undefined && entry.size > limits.maxSourceBytes) {
       throw new GitHubError('source-too-large', redact(`${filePath} exceeds the ${String(limits.maxSourceBytes)}-byte source limit.`));
     }
-    const { body } = await restGet(`${API_ORIGIN}${repoPath(owner, repo)}/git/blobs/${String(entry.sha)}`, 'blob request');
+    const body = await blobAnswer(owner, repo, entry.sha);
     return decodeBlob(body, entry.sha, entry.size, filePath);
   }
 
@@ -2288,12 +2325,6 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
 
     // Checked from unknown like readSource; answers what stands there
     // rather than refusing anything that is not a regular file.
-    async function readEntry(commit: unknown, filePath: unknown): Promise<PathEntry> {
-      requireFullSha(commit, 'commit');
-      requireRepositoryPath(filePath);
-      return pathEntry(owner, repo, commit, filePath);
-    }
-
     const context: IReviewContext = {
       owner,
       repo,
@@ -2304,7 +2335,7 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
       diff: { baseCommit, headCommit: reviewedCommit, files },
       fileDiagnostics,
     };
-    return { context, readSource, fileExists, readEntry };
+    return { context, readSource, fileExists };
   }
 
   /**
@@ -2500,29 +2531,109 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
     return 'a submodule';
   }
 
-  /** What stands at a path in a commit (see PathEntry), from its trees alone. */
-  async function pathEntry(owner: string, repo: string, commit: string, filePath: string): Promise<PathEntry> {
-    const walked = await walkTo(owner, repo, commit, filePath);
-    if (walked.kind === 'through') return { kind: 'not-a-file', entry: walked.entry, path: walked.at };
-    const { entry } = walked;
-    if (entry === null) return { kind: 'absent' };
-    if (!REGULAR_FILE_MODES.has(entry.mode)) return { kind: 'not-a-file', entry: entryKind(entry.mode), path: filePath };
-    return { kind: 'file', blob: hostSha(entry.sha, 'tree entry'), mode: entry.mode === '100755' ? '100755' : '100644' };
-  }
+  /**
+   * Comparison answers, per repository and base...head: a comparison of two
+   * full commits never changes, so compareCommits and readComparison share
+   * one read. A failed read is not remembered.
+   */
+  const comparisons = new Map<string, Promise<unknown>>();
 
-  async function compareCommits({ owner, repo, base, head }: Unchecked<'owner' | 'repo' | 'base' | 'head'> = {}): Promise<CommitComparison> {
+  /** The checked status and merge base of GET compare/{base}...{head}. */
+  async function comparisonOf(owner: unknown, repo: unknown, base: unknown, head: unknown): Promise<ICommitComparisonWithBase> {
     requireInput(isRepoName(owner) && isRepoName(repo), 'owner and repo must be GitHub names');
     requireFullSha(base, 'base');
     requireFullSha(head, 'head');
-    const { body } = await restGet(`${API_ORIGIN}${repoPath(owner, repo)}/compare/${base}...${head}`, 'commit comparison');
+    const body = await cached(comparisons, `${owner}/${repo}:${base}...${head}`.toLowerCase(), async () =>
+      (await restGet(`${API_ORIGIN}${repoPath(owner, repo)}/compare/${base}...${head}`, 'commit comparison')).body);
     const status = optionalMember(body, 'status');
     if (!isCommitComparison(status)) throw new GitHubError('malformed-response', 'The commit comparison has no known status.');
+    const named = optionalMember(body, 'merge_base_commit', 'sha');
+    let mergeBase: string | null = null;
+    if (named !== undefined && named !== null) {
+      if (typeof named !== 'string' || !hasFullShaForm(named)) throw new GitHubError('malformed-response', 'The commit comparison names a malformed merge base.');
+      mergeBase = named;
+    }
     // The status is only trusted when the merge base agrees with what it claims.
     const agreed = status === 'behind' ? head : status === 'diverged' ? null : base;
-    if (agreed !== null && optionalMember(body, 'merge_base_commit', 'sha') !== agreed) {
+    if (agreed !== null && mergeBase !== agreed) {
       throw new GitHubError('malformed-response', `The commit comparison says ${status}, but names another merge base.`);
     }
-    return status;
+    return { status, mergeBase };
+  }
+
+  async function compareCommits({ owner, repo, base, head }: Unchecked<'owner' | 'repo' | 'base' | 'head'> = {}): Promise<CommitComparison> {
+    return (await comparisonOf(owner, repo, base, head)).status;
+  }
+
+  async function readComparison({ owner, repo, base, head }: Unchecked<'owner' | 'repo' | 'base' | 'head'> = {}): Promise<ICommitComparisonWithBase> {
+    return comparisonOf(owner, repo, base, head);
+  }
+
+  /** Recursive listings, per repository and tree; immutable, so read once per client. */
+  const recursiveTrees = new Map<string, Promise<IRecursiveTree>>();
+
+  async function readTreeRecursive({ owner, repo, commit }: Unchecked<'owner' | 'repo' | 'commit'> = {}): Promise<IRecursiveTree> {
+    requireInput(isRepoName(owner) && isRepoName(repo), 'owner and repo must be GitHub names');
+    requireFullSha(commit, 'commit');
+    const treeSha = await commitTree(owner, repo, commit);
+    return cached(recursiveTrees, `${owner}/${repo}:${String(treeSha)}`, async () => {
+      const { body } = await restGet(`${API_ORIGIN}${repoPath(owner, repo)}/git/trees/${String(treeSha)}?recursive=1`, 'recursive tree request');
+      if (!isPlainObject(body)) throw new GitHubError('malformed-response', 'The tree answer is not an object.');
+      if (body['sha'] !== treeSha) throw identityError('tree', treeSha);
+      const truncated = body['truncated'];
+      if (typeof truncated !== 'boolean' || !isList(body['tree'])) {
+        throw new GitHubError('malformed-response', `Tree ${String(treeSha)} is not a listing.`);
+      }
+      const entries: IRecursiveTreeEntry[] = [];
+      const seen = new Set<string>();
+      for (const entry of body['tree']) {
+        const listed = recursiveEntry(entry);
+        if (listed === null) throw new GitHubError('malformed-response', `Tree ${String(treeSha)} has an entry of unknown or inconsistent kind.`);
+        if (seen.has(listed.path)) throw new GitHubError('malformed-response', `Tree ${String(treeSha)} lists one path more than once.`);
+        seen.add(listed.path);
+        entries.push(listed);
+      }
+      return { truncated, entries };
+    });
+  }
+
+  /** One recursive listing entry, validated, or null. */
+  function recursiveEntry(entry: unknown): IRecursiveTreeEntry | null {
+    if (!isPlainObject(entry)) return null;
+    const { path: entryPath, mode, type, sha, size } = entry;
+    if (typeof entryPath !== 'string' || entryPath === '' || entryPath.startsWith('/') || entryPath.endsWith('/')) return null;
+    if (entryPath.split('/').some((segment) => segment === '' || segment === '.' || segment === '..')) return null;
+    // An unknown mode maps to no type, so it can never match.
+    if (typeof mode !== 'string' || TREE_ENTRY_TYPES.get(mode) !== type || (type !== 'tree' && type !== 'blob' && type !== 'commit')) return null;
+    if (!hasFullShaForm(sha)) return null;
+    if (size !== undefined && !(isSafeInteger(size) && size >= 0)) return null;
+    return { path: entryPath, mode, type, sha: String(sha), ...(typeof size === 'number' ? { size } : {}) };
+  }
+
+  /** Verified blob bytes, per repository and id; immutable, so read once per client. */
+  const blobReads = new Map<string, Promise<Uint8Array>>();
+
+  async function readBlobBytes({ owner, repo, blob }: Unchecked<'owner' | 'repo' | 'blob'> = {}): Promise<Uint8Array> {
+    requireInput(isRepoName(owner) && isRepoName(repo), 'owner and repo must be GitHub names');
+    requireFullSha(blob, 'blob');
+    return cached(blobReads, `${owner}/${repo}:${blob}`, async () => new Uint8Array(blobBytes(await blobAnswer(owner, repo, blob), blob, undefined, `blob ${blob}`)));
+  }
+
+  async function readPullMergeability({
+    owner: ownerInput,
+    repo: repoInput,
+    pullNumber: pullNumberInput,
+  }: Unchecked<'owner' | 'repo' | 'pullNumber'> = {}): Promise<{ readonly mergeable: boolean | null }> {
+    const destination = { owner: ownerInput, repo: repoInput, pullNumber: pullNumberInput };
+    requireDestination(destination);
+    const { owner, repo, pullNumber } = destination;
+    const { body: pull } = await restGet(`${API_ORIGIN}${repoPath(owner, repo)}/pulls/${String(pullNumber)}`, 'pull request read');
+    if (optionalMember(pull, 'number') !== pullNumber) throw new GitHubError('malformed-response', `The pull request ${String(pullNumber)} answer names another pull request.`);
+    const mergeable = optionalMember(pull, 'mergeable');
+    if (mergeable !== null && typeof mergeable !== 'boolean') {
+      throw new GitHubError('malformed-response', `The pull request ${String(pullNumber)} answer has no valid mergeable value.`);
+    }
+    return { mergeable };
   }
 
   async function readDefaultBranchFile({
@@ -2547,7 +2658,7 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
     if (entry === null) return { branch, commit, content: { kind: 'absent' } };
     if (!REGULAR_FILE_MODES.has(entry.mode)) return { branch, commit, content: { kind: 'not-a-file', entry: entryKind(entry.mode), path: filePath } };
     if (entry.size !== undefined && entry.size > limits.maxSourceBytes) return { branch, commit, content: { kind: 'too-large', size: entry.size } };
-    const { body } = await restGet(`${API_ORIGIN}${repoPath(owner, repo)}/git/blobs/${String(entry.sha)}`, 'blob request');
+    const body = await blobAnswer(owner, repo, entry.sha);
     return { branch, commit, content: { kind: 'file', bytes: new Uint8Array(blobBytes(body, entry.sha, entry.size, filePath)) } };
   }
 
@@ -3049,6 +3160,10 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
     readSuggestionTarget,
     findLabel,
     compareCommits,
+    readComparison,
+    readTreeRecursive,
+    readBlobBytes,
+    readPullMergeability,
     listHeadRefForcePushes,
     readDefaultBranchFile,
     createProposalCommit,

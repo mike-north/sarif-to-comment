@@ -1,0 +1,18 @@
+{
+  "command": "publish",
+  "status": "published",
+  "review": {
+    "id": 5375523422,
+    "url": "https://github.com/mike-north/doc-linter/pull/96#pullrequestreview-5375523422"
+  },
+  "suggestions": [
+    {
+      "number": 97,
+      "url": "https://github.com/mike-north/doc-linter/pull/97",
+      "branch": "suggestion-pr/96/05494b98-1051-40ea-8456-ffbac8b0fb8f"
+    }
+  ],
+  "statePath": "<evidence>/state/faithful.json",
+  "message": "## Draft review published\n\nThe draft [review 5375523422](https://github.com/mike-north/doc-linter/pull/96#pullrequestreview-5375523422) on mike-north/doc-linter#96 at commit `07791aafa89b9ae60a1ffdd4cdf887e7167c0d89` was already published; its completion is recorded at `<evidence>/state/faithful.json`. Nothing was sent.\n\nSuggestion pull requests (drafts into `exp-fidelity-20261001`, labeled `suggestion-pr`, proposed on the reviewed commit and projected onto the head `e001d679e49071743cd336a07ce7fc10d8e29a61`):\n\n- [#97](https://github.com/mike-north/doc-linter/pull/97) from `suggestion-pr/96/05494b98-1051-40ea-8456-ffbac8b0fb8f`",
+  "diagnostics": []
+}

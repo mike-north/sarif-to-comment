@@ -22,7 +22,12 @@
  *                                                  merge base to b (unified-diff.mts;
  *                                                  none without a merge base)
  *   GET  /repos/{o}/{r}/git/commits|trees|blobs/*  real git object ids (blob
- *                                                  SHA-1 over "blob <n>\0")
+ *                                                  SHA-1 over "blob <n>\0"); a tree
+ *                                                  read with ?recursive=1 lists every
+ *                                                  entry below it by full path,
+ *                                                  directories included, and says
+ *                                                  `truncated` for the root tree of a
+ *                                                  commit in `truncatedTrees`
  *   POST /repos/{o}/{r}/pulls/{n}/reviews          stores a pending review, or a
  *                                                  COMMENTED one for event COMMENT.
  *                                                  Modelling GH-16, it resolves
@@ -76,8 +81,9 @@
  *
  * State (reviews, request log, behavior) lives in files under `dir`, written
  * atomically, so a CLI child process and the test share one host. The log
- * records method, path and whether the Authorization header carried exactly
- * the expected credential — never the credential itself.
+ * records method, path, the query string when there is one, and whether the
+ * Authorization header carried exactly the expected credential — never the
+ * credential itself.
  *
  * Behavior (config.json):
  *   create: 'ok' | 'lose-response'   lose-response stores the review, then
@@ -103,6 +109,9 @@
  *   failForcePushes?: boolean        answer the force-push query with a
  *                                    GraphQL error, as GitHub does when it
  *                                    cannot serve it
+ *   truncatedTrees?: string[]        commits whose root tree, read
+ *                                    recursively, GitHub lists as truncated
+ *                                    (beyond 100,000 entries or 7 MB)
  *   companion?: see fake-http-companion.mts
  *
  * Every document the host reads back (its repository, config, reviews, log
@@ -177,7 +186,10 @@ export interface IHttpRepository {
   readonly snapshots: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>>;
   /**
    * Files given as exact bytes (base64) by commit, then by path, with an
-   * optional Git mode (default 100644): binary, non-UTF-8 or executable files.
+   * optional Git mode (default 100644): binary, non-UTF-8 or executable
+   * files, and symbolic links (120000, the bytes being the target). A
+   * submodule (160000) is given by its commit id as ASCII bytes and has no
+   * blob.
    */
   readonly rawFiles?: Readonly<Record<string, Readonly<Record<string, IHttpRawFile>>>> | undefined;
   readonly pullFiles: readonly IHttpPullFile[];
@@ -230,6 +242,7 @@ export interface IHttpHostConfig {
   readonly failAncestryCompare?: number | undefined;
   readonly forcePushPageSize?: number | undefined;
   readonly failForcePushes?: boolean | undefined;
+  readonly truncatedTrees?: readonly string[] | undefined;
   readonly companion?: ICompanionConfig | undefined;
 }
 
@@ -259,10 +272,11 @@ export interface IStoredHttpReview {
   readonly state: string;
 }
 
-/** One received request: method, path and whether it carried exactly the expected credential. */
+/** One received request: method, path, its query string when it had one, and whether it carried exactly the expected credential. */
 export interface IHttpLogEntry {
   readonly method: string;
   readonly path: string;
+  readonly query?: string | undefined;
   readonly authorized: boolean;
 }
 
@@ -272,7 +286,7 @@ export type FakeFetch = (input: string | URL | Request, init?: RequestInit) => P
 /** One entry of a Git tree object. */
 interface ITreeEntry {
   readonly mode: string;
-  readonly type: 'tree' | 'blob';
+  readonly type: 'tree' | 'blob' | 'commit';
   readonly sha: string;
   readonly size?: number;
 }
@@ -318,6 +332,7 @@ const isHostConfig: Guard<IHttpHostConfig> = isShape({
   failAncestryCompare: isOptional(isNumber),
   forcePushPageSize: isOptional(isNumber),
   failForcePushes: isOptional(isBoolean),
+  truncatedTrees: isOptional(isArrayOf(isString)),
   companion: isOptional(isCompanionConfig),
 });
 
@@ -344,7 +359,7 @@ const isStoredHttpReview: Guard<IStoredHttpReview> = isShape({
   state: isString,
 });
 
-const isLogEntry: Guard<IHttpLogEntry> = isShape({ method: isString, path: isString, authorized: isBoolean });
+const isLogEntry: Guard<IHttpLogEntry> = isShape({ method: isString, path: isString, query: isOptional(isString), authorized: isBoolean });
 
 export const REPOSITORY: IHttpRepository = expectType(
   readJson(path.join(import.meta.dirname, 'repository.json')),
@@ -387,7 +402,8 @@ function buildObjects(repository: IHttpRepository): IGitObjects {
     };
     for (const [filePath, bytes, mode] of files) {
       const sha = gitBlobSha(bytes);
-      blobs[sha] = bytes;
+      // A submodule's entry names a commit of another repository; it has no blob.
+      if (mode !== '160000') blobs[sha] = bytes;
       const parts = filePath.split('/');
       let dir = '';
       for (const part of parts.slice(0, -1)) {
@@ -400,6 +416,10 @@ function buildObjects(repository: IHttpRepository): IGitObjects {
       }
       const name = parts[parts.length - 1];
       if (name === undefined) throw new Error(`fake host: empty path in snapshot ${commit}`);
+      if (mode === '160000') {
+        entriesOf(dir).set(name, { mode, type: 'commit', sha: bytes.toString('ascii') });
+        continue;
+      }
       entriesOf(dir).set(name, { mode, type: 'blob', sha, size: bytes.length });
     }
     for (const [dir, entries] of dirs) {
@@ -496,7 +516,7 @@ export class FakeHttpGitHub {
     const method = init.method || 'GET';
     const auth = new Headers(init.headers).get('authorization');
     const authorized = this.expectedToken === null ? auth !== null : auth === `Bearer ${this.expectedToken}`;
-    this.write('log.json', [...this.log(), { method, path: u.pathname, authorized }]);
+    this.write('log.json', [...this.log(), { method, path: u.pathname, ...(u.search === '' ? {} : { query: u.search.slice(1) }), authorized }]);
     if (u.origin !== API) throw new Error(`fake host: unexpected origin ${u.origin}`);
     const onlyCredential = this.config().onlyCredential;
     if (onlyCredential !== undefined && auth !== `Bearer ${onlyCredential}`) {
@@ -523,6 +543,10 @@ export class FakeHttpGitHub {
     // A test may seed a stored pull request under this number (for example the
     // original, once merged, for cleanup); the stored one is then served.
     if (method === 'GET' && p === pull && !this.companion().pulls.some((pr) => pr.number === pullNumber)) {
+      // The same read failures a stored pull request can be given (companion.pullReads).
+      const failure = this.config().companion?.pullReads?.[String(pullNumber)];
+      if (failure === 'forbidden') return json({ message: 'Resource not accessible by personal access token' }, 403);
+      if (failure === 'server-error') return json({ message: 'Server Error' }, 502);
       const branches = repository.pull ?? {};
       const fullName = `${owner}/${repo}`;
       const headRepo = branches.headRepo === undefined ? fullName : branches.headRepo;
@@ -562,7 +586,10 @@ export class FakeHttpGitHub {
       if (this.config().failTreeReads === true) return json({ message: 'Server Error' }, 502);
       const sha = captured(m);
       const tree = objects.trees[sha] ?? this.companion().trees[sha];
-      return tree ? json({ sha, truncated: false, tree }) : json({ message: 'Not Found' }, 404);
+      if (!tree) return json({ message: 'Not Found' }, 404);
+      if (u.searchParams.get('recursive') === null) return json({ sha, truncated: false, tree });
+      const truncated = (this.config().truncatedTrees ?? []).some((commit) => (objects.commits[commit] ?? this.companion().commits[commit]?.tree) === sha);
+      return json({ sha, truncated, tree: this.recursiveListing(sha) });
     }
     if (method === 'GET' && (m = new RegExp(`^${repoPath}/git/blobs/([0-9a-f]{40})$`).exec(p))) {
       if (this.config().failBlobReads === true) return json({ message: 'Server Error' }, 502);
@@ -712,6 +739,21 @@ export class FakeHttpGitHub {
       behind_by: ofA.filter((c) => !ofB.includes(c)).length,
       ...(mergeBase === undefined ? {} : { merge_base_commit: { sha: mergeBase } }),
       files: files.map((f) => ({ ...f, patch: f.patch.join('') })),
+    });
+  }
+
+  /**
+   * Every entry below a tree, by full path, as GitHub's recursive tree read
+   * lists them: each directory's entry, then its contents.
+   */
+  recursiveListing(sha: string, prefix = ''): readonly object[] {
+    const { objects } = this.served();
+    const tree = objects.trees[sha] ?? this.companion().trees[sha];
+    if (tree === undefined) throw new Error(`fake host: unknown tree ${sha}`);
+    return tree.flatMap((entry) => {
+      const full = prefix === '' ? entry.path : `${prefix}/${entry.path}`;
+      const listed = { ...entry, path: full };
+      return entry.type === 'tree' ? [listed, ...this.recursiveListing(entry.sha, full)] : [listed];
     });
   }
 

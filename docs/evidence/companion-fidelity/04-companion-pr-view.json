@@ -1,0 +1,60 @@
+{
+  "additions": 3,
+  "baseRefName": "exp-fidelity-20261001",
+  "body": "Suggested in a review of #96 at commit 07791aafa89b9ae60a1ffdd4cdf887e7167c0d89.\n\n**The reviewed commit is not part of the branch of #96:** the branch was rewritten after commit 07791aafa89b9ae60a1ffdd4cdf887e7167c0d89 (its head was e001d679e49071743cd336a07ce7fc10d8e29a61 when this was proposed). GitHub shows this pull request's changes from an older merge base, so they also list changes of the reviewed commit itself. Projected onto that head before this pull request was created, merging it applies only its own changes, which are these:\n\n```diff\n--- a/docs/experiments/fidelity/sample.md\n+++ b/docs/experiments/fidelity/sample.md\n@@ -7,7 +7,7 @@\n Line 7.\n Line 8.\n Line 9.\n-Line 10.\n+Line 10, suggested.\n Line 11.\n Line 12.\n Line 13.\n```\n\nMerging this pull request into `exp-fidelity-20261001` applies this change:\n\n- Edited [docs/experiments/fidelity/sample.md line 10 at 07791aa](https://github.com/mike-north/doc-linter/blob/07791aafa89b9ae60a1ffdd4cdf887e7167c0d89/docs/experiments/fidelity/sample.md#L10)\n\n**How this suggestion is accepted:** it is a draft pull request into `exp-fidelity-20261001`, the branch of #96. A draft cannot be merged: someone with write access first marks it ready for review. The author of #96 then decides whether to merge it, and #96 carries the change to its base. Once #96 is merged or closed, this pull request can be closed.\n\n---\n\n**Source:** [docs/experiments/fidelity/sample.md line 10 at 07791aa](https://github.com/mike-north/doc-linter/blob/07791aafa89b9ae60a1ffdd4cdf887e7167c0d89/docs/experiments/fidelity/sample.md#L10)\n\n```\nLine 10.\n```\n\nLine 10 could say what it is for.\n\n<sub>— Fidelity probe 1.0.0</sub>\n\n<!-- suggestion-pr {\"version\":1,\"original\":{\"owner\":\"mike-north\",\"repo\":\"doc-linter\",\"pullNumber\":96},\"reviewedCommit\":\"07791aafa89b9ae60a1ffdd4cdf887e7167c0d89\",\"id\":\"05494b98-1051-40ea-8456-ffbac8b0fb8f\",\"batch\":\"248057a2-aec2-4f0b-969d-a924538720f8\"} -->",
+  "commits": [
+    {
+      "authoredDate": "2026-10-01T06:00:37Z",
+      "authors": [
+        {
+          "email": "<redacted-email>",
+          "id": "MDQ6VXNlcjU1ODAwNQ==",
+          "login": "mike-north",
+          "name": "Mike North"
+        }
+      ],
+      "committedDate": "2026-10-01T06:00:37Z",
+      "messageBody": "",
+      "messageHeadline": "Fidelity fixture: change lines 5 and 6",
+      "oid": "07791aafa89b9ae60a1ffdd4cdf887e7167c0d89"
+    },
+    {
+      "authoredDate": "2026-10-01T06:02:11Z",
+      "authors": [
+        {
+          "email": "<redacted-email>",
+          "id": "MDQ6VXNlcjU1ODAwNQ==",
+          "login": "mike-north",
+          "name": "Mike North"
+        }
+      ],
+      "committedDate": "2026-10-01T06:02:11Z",
+      "messageBody": "Suggested in a review of mike-north/doc-linter pull request 96 at commit 07791aafa89b9ae60a1ffdd4cdf887e7167c0d89.",
+      "messageHeadline": "Suggestion for #96: edit docs/experiments/fidelity/sample.md",
+      "oid": "fa6f7418d2edd8c4fec5004cb0e8041f6d2ea5da"
+    }
+  ],
+  "deletions": 3,
+  "files": [
+    {
+      "path": "docs/experiments/fidelity/sample.md",
+      "additions": 3,
+      "deletions": 3,
+      "changeType": "MODIFIED"
+    }
+  ],
+  "headRefName": "suggestion-pr/96/05494b98-1051-40ea-8456-ffbac8b0fb8f",
+  "headRefOid": "fa6f7418d2edd8c4fec5004cb0e8041f6d2ea5da",
+  "isDraft": true,
+  "labels": [
+    {
+      "id": "LA_kwDOUuyy7s8AAAAC5s9B3A",
+      "name": "suggestion-pr",
+      "description": "A suggestion pull request (suggestion pull request convention)",
+      "color": "ededed"
+    }
+  ],
+  "mergeStateStatus": "UNSTABLE",
+  "mergeable": "MERGEABLE",
+  "number": 97
+}

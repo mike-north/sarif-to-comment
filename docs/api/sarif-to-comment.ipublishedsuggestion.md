@@ -58,6 +58,27 @@ Its proposal branch, which targets the reviewed pull request's head branch.
 </td></tr>
 <tr><td>
 
+[mergeable?](./sarif-to-comment.ipublishedsuggestion.mergeable.md)
+
+
+</td><td>
+
+`readonly`
+
+
+</td><td>
+
+'mergeable' \| 'conflicting' \| 'unknown'
+
+
+</td><td>
+
+_(Optional)_ GitHub's own report of whether it can be merged, read back once it exists, present only for a suggestion pull request that was projected to conflict with the pull request's head after a rewritten history (the`companion-conflicts-at-head` warning): `'mergeable'`<!-- -->, `'conflicting'`<!-- -->, or `'unknown'` when GitHub had not computed it after a bounded wait, or could not be read. It is an observation made on each call that reports the publication, reported beside the projection and never in its place.
+
+
+</td></tr>
+<tr><td>
+
 [number](./sarif-to-comment.ipublishedsuggestion.number.md)
 
 

@@ -1,0 +1,86 @@
+{
+  "format": "sarif-to-comment.companion-publication-state",
+  "version": 3,
+  "publication": "248057a2-aec2-4f0b-969d-a924538720f8",
+  "destination": {
+    "owner": "mike-north",
+    "repo": "doc-linter",
+    "pullNumber": 96
+  },
+  "reviewedCommit": "07791aafa89b9ae60a1ffdd4cdf887e7167c0d89",
+  "inputFingerprint": "sha256:1b7f500e4455ffacbc23e134421dedeeea87f24deae1b83666c893abd85c3dcc",
+  "authorId": 558005,
+  "submit": false,
+  "headRef": "exp-fidelity-20261001",
+  "labels": [
+    "suggestion-pr"
+  ],
+  "ready": false,
+  "projection": {
+    "head": "e001d679e49071743cd336a07ce7fc10d8e29a61",
+    "mergeBase": "ac4038d0e7438dd67beba5706c2e7921a5b6976d",
+    "suggestions": [
+      {
+        "verdict": "faithful",
+        "conflicts": []
+      }
+    ]
+  },
+  "delivery": {
+    "edits": {
+      "value": [
+        "companion"
+      ],
+      "source": "caller"
+    },
+    "groupedEdits": {
+      "value": [
+        "native-batch"
+      ],
+      "source": "default"
+    },
+    "fileOperations": {
+      "value": [
+        "manual"
+      ],
+      "source": "default"
+    },
+    "companionBundle": {
+      "value": "per-unit",
+      "source": "default"
+    }
+  },
+  "suggestions": [
+    {
+      "title": "Suggestion for #96: edit docs/experiments/fidelity/sample.md",
+      "commitMessage": "Suggestion for #96: edit docs/experiments/fidelity/sample.md\n\nSuggested in a review of mike-north/doc-linter pull request 96 at commit 07791aafa89b9ae60a1ffdd4cdf887e7167c0d89.",
+      "changes": [
+        {
+          "operation": "edit",
+          "path": "docs/experiments/fidelity/sample.md",
+          "text": "Line 1.\nLine 2.\nLine 3.\nLine 4.\nLine 5, reviewed.\nLine 6, reviewed.\nLine 7.\nLine 8.\nLine 9.\nLine 10, suggested.\nLine 11.\nLine 12.\nLine 13.\nLine 14.\nLine 15.\nLine 16.\nLine 17.\nLine 18.\nLine 19.\nLine 20.\n"
+        }
+      ],
+      "sections": [
+        {
+          "changeCount": 1,
+          "changeLines": "- Edited [docs/experiments/fidelity/sample.md line 10 at 07791aa](https://github.com/mike-north/doc-linter/blob/07791aafa89b9ae60a1ffdd4cdf887e7167c0d89/docs/experiments/fidelity/sample.md#L10)",
+          "items": "**Source:** [docs/experiments/fidelity/sample.md line 10 at 07791aa](https://github.com/mike-north/doc-linter/blob/07791aafa89b9ae60a1ffdd4cdf887e7167c0d89/docs/experiments/fidelity/sample.md#L10)\n\n```\nLine 10.\n```\n\nLine 10 could say what it is for.\n\n<sub>— Fidelity probe 1.0.0</sub>"
+        }
+      ],
+      "id": "05494b98-1051-40ea-8456-ffbac8b0fb8f",
+      "branch": "suggestion-pr/96/05494b98-1051-40ea-8456-ffbac8b0fb8f",
+      "body": "Suggested in a review of #96 at commit 07791aafa89b9ae60a1ffdd4cdf887e7167c0d89.\n\n**The reviewed commit is not part of the branch of #96:** the branch was rewritten after commit 07791aafa89b9ae60a1ffdd4cdf887e7167c0d89 (its head was e001d679e49071743cd336a07ce7fc10d8e29a61 when this was proposed). GitHub shows this pull request's changes from an older merge base, so they also list changes of the reviewed commit itself. Projected onto that head before this pull request was created, merging it applies only its own changes, which are these:\n\n```diff\n--- a/docs/experiments/fidelity/sample.md\n+++ b/docs/experiments/fidelity/sample.md\n@@ -7,7 +7,7 @@\n Line 7.\n Line 8.\n Line 9.\n-Line 10.\n+Line 10, suggested.\n Line 11.\n Line 12.\n Line 13.\n```\n\nMerging this pull request into `exp-fidelity-20261001` applies this change:\n\n- Edited [docs/experiments/fidelity/sample.md line 10 at 07791aa](https://github.com/mike-north/doc-linter/blob/07791aafa89b9ae60a1ffdd4cdf887e7167c0d89/docs/experiments/fidelity/sample.md#L10)\n\n**How this suggestion is accepted:** it is a draft pull request into `exp-fidelity-20261001`, the branch of #96. A draft cannot be merged: someone with write access first marks it ready for review. The author of #96 then decides whether to merge it, and #96 carries the change to its base. Once #96 is merged or closed, this pull request can be closed.\n\n---\n\n**Source:** [docs/experiments/fidelity/sample.md line 10 at 07791aa](https://github.com/mike-north/doc-linter/blob/07791aafa89b9ae60a1ffdd4cdf887e7167c0d89/docs/experiments/fidelity/sample.md#L10)\n\n```\nLine 10.\n```\n\nLine 10 could say what it is for.\n\n<sub>— Fidelity probe 1.0.0</sub>\n\n<!-- suggestion-pr {\"version\":1,\"original\":{\"owner\":\"mike-north\",\"repo\":\"doc-linter\",\"pullNumber\":96},\"reviewedCommit\":\"07791aafa89b9ae60a1ffdd4cdf887e7167c0d89\",\"id\":\"05494b98-1051-40ea-8456-ffbac8b0fb8f\",\"batch\":\"248057a2-aec2-4f0b-969d-a924538720f8\"} -->"
+    }
+  ],
+  "review": {
+    "sections": [
+      {
+        "companion": 0,
+        "section": 0
+      }
+    ],
+    "comments": []
+  },
+  "planFingerprint": "sha256:598d0a92f6b5960ed05b1d1672ce435767b9a32b9750deda0a95d2bcb43f73f4"
+}

@@ -1,0 +1,28 @@
+{
+  "format": "sarif-to-comment.publication-state",
+  "version": 1,
+  "phase": "completed",
+  "marker": "<!-- sarif-to-comment:review:dc80f00b-0cc3-4804-af32-5b3f1b5055eb -->",
+  "destination": {
+    "owner": "mike-north",
+    "repo": "doc-linter",
+    "pullNumber": 96
+  },
+  "reviewedCommit": "07791aafa89b9ae60a1ffdd4cdf887e7167c0d89",
+  "inputFingerprint": "sha256:1b7f500e4455ffacbc23e134421dedeeea87f24deae1b83666c893abd85c3dcc",
+  "authorId": 558005,
+  "request": {
+    "owner": "mike-north",
+    "repo": "doc-linter",
+    "pullNumber": 96,
+    "commitId": "07791aafa89b9ae60a1ffdd4cdf887e7167c0d89",
+    "body": "**Suggestion pull request:** [#97](https://github.com/mike-north/doc-linter/pull/97)\n\nMerging it into `exp-fidelity-20261001` applies this change:\n\n- Edited [docs/experiments/fidelity/sample.md line 10 at 07791aa](https://github.com/mike-north/doc-linter/blob/07791aafa89b9ae60a1ffdd4cdf887e7167c0d89/docs/experiments/fidelity/sample.md#L10)\n\n**Source:** [docs/experiments/fidelity/sample.md line 10 at 07791aa](https://github.com/mike-north/doc-linter/blob/07791aafa89b9ae60a1ffdd4cdf887e7167c0d89/docs/experiments/fidelity/sample.md#L10)\n\n```\nLine 10.\n```\n\nLine 10 could say what it is for.\n\n<sub>— Fidelity probe 1.0.0</sub>\n\n<!-- sarif-to-comment:review:dc80f00b-0cc3-4804-af32-5b3f1b5055eb -->",
+    "comments": []
+  },
+  "requestFingerprint": "sha256:2c1623e3d8419b9b78dac16782200510af1b2d86bfaada6e7bceb8d8641b5c75",
+  "receipt": {
+    "reviewId": 5375523422,
+    "htmlUrl": "https://github.com/mike-north/doc-linter/pull/96#pullrequestreview-5375523422",
+    "via": "created"
+  }
+}

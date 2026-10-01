@@ -1,6 +1,6 @@
 # Observed GitHub behavior
 
-This is the project's starting point for questions about what GitHub actually does. It consolidates existing experiments so that established observations do not have to be rediscovered in a conversation. Seeded September 30, 2026 from the reports and evidence below; no new experiment was performed to create this register. GH-14 was added the same day from the existing force-push report. GH-15 and GH-16 were added October 1, 2026 from new, bounded experiments on the same fixtures. GH-17, GH-18 and GH-19 were added the same day: GH-17 from a new fixture, GH-18 from readbacks of the same fixtures plus two commits with no ref, and GH-19 from a new, bounded experiment on two new fixtures.
+This is the project's starting point for questions about what GitHub actually does. It consolidates existing experiments so that established observations do not have to be rediscovered in a conversation. Seeded September 30, 2026 from the reports and evidence below; no new experiment was performed to create this register. GH-14 was added the same day from the existing force-push report. GH-15 and GH-16 were added October 1, 2026 from new, bounded experiments on the same fixtures. GH-17, GH-18 and GH-19 were added the same day: GH-17 from a new fixture, GH-18 from readbacks of the same fixtures plus two commits with no ref, and GH-19 from a new, bounded experiment on two new fixtures. GH-20 was added the same day from a bounded product run on a new fixture.
 
 An observation establishes the recorded case, with its conditions. It is not a universal guarantee, an implementation requirement, or proof that this library currently supports the behavior. GitHub documentation describes advertised behavior; keep it distinct from observed outcomes, especially when the two appear to disagree. Product choices belong in the [decision log](design-decisions.md).
 
@@ -285,6 +285,36 @@ The results:
 - Why the interface judges the post-push line-6 suggestion outdated is not established.
 - Nothing was merged.
 
+### GH-20 — A companion built on a discarded commit was reported mergeable while showing the merge-base diff
+
+**Observed October 1, 2026:** A product run of sarif-to-comment on a new draft PR, [#96](https://github.com/mike-north/doc-linter/pull/96), into `main` from `exp-fidelity-20261001`. `main` was not changed.
+
+- **The fixture.** C0 `ac4038d` adds a 20-line file. C1 `07791aa`, the reviewed commit, changes lines 5 and 6.
+- **The rewrites.** The branch was force-pushed to `78d69c0` (C0 plus line 15: C1's lines dropped), then to `e001d67` (C0 plus C1's lines 5 and 6, and line 15). C1 was in neither head.
+- **The companion.** At head `e001d67` the tool created the draft companion [#97](https://github.com/mike-north/doc-linter/pull/97). It is one commit, `fa6f741`, whose parent is C1 and which edits line 10.
+
+The results:
+
+- **GitHub listed the discarded commit and showed the merge-base diff.** `gh pr view` and `GET …/pulls/97/files` listed C1 and the proposal commit. They showed the file +3 −3, at lines 5, 6 and 10: the diff from the merge base C0, the same shape as GH-18.
+- **GitHub reported #97 mergeable.** `gh pr view` gave `MERGEABLE`, and REST gave `mergeable: true`, `mergeable_state: clean`.
+- **The companion's description held what GitHub stored.** It held its own one-line hunk at line 10, separately from GitHub's diff, and a version 1 marker naming C1.
+
+**Local projection, not a merge:** `git merge-tree --write-tree` (Git 2.54.0, renames off) merged `fa6f741` into each head.
+
+- **Into `e001d67`:** clean, and equal to the head plus only line 10.
+- **Into `78d69c0`:** clean, and would bring back lines 5 and 6.
+
+The tool's own projection reached the same two verdicts before #97 existed. That is product behavior, not a host observation: at `78d69c0`, `validate` was blocked and nothing was written; at `e001d67`, the companion was created.
+
+**Evidence:** [companion fidelity record](evidence/companion-fidelity/README.md), with the GitHub readbacks in `04-companion-pr-view.json`, `05-companion-files.json` and `06-companion-pull-rest.json`, and the local projection in `07-local-merge-tree.txt`.
+
+**Limits:**
+
+- Nothing was merged, so GitHub's merged content was not observed. `mergeable` says GitHub found no conflict; it does not show what a merge would contain.
+- One account, which also authored #96; same-repository draft PRs; one modified file.
+- No case GitHub reported conflicting.
+- No mergeability was read at `78d69c0`: no companion existed while that was the head.
+
 ## Existing summaries whose primary evidence needs a repository home
 
 **Product boundary:** The [settled force-push decisions](design-decisions.md#settled-force-push-boundary--september-30-2026) distinguish host review lifecycle, upstream follow-up and this project's faithful-publication responsibilities. Capability gaps below are experiment questions, not authority to invent a review-maintenance service.
@@ -293,14 +323,14 @@ The force-push experiment now has a repository home. Its report is [force-push-e
 
 Two working summaries of the experiment, a briefing and a responsibility review, exist only in the maintainer's uncommitted working logs. GH-14 keeps their distinctions between observed, inferred and untested results, and nothing in this register depends on them.
 
-Keep the established limits attached. The removed-content restoration case was a local `merge-tree` projection plus a live mergeability verdict, **not a live merge**. A retry after a second rewrite remains untested. Newly published historical inline comments and the submission of a pending review after a rewrite were later recorded in GH-16 and GH-15. GH-19 later recorded native-suggestion application after the branch moved, on new fixtures and within its limits. GH-18 repeated the projection at the current heads, with a control, and it is still a projection. Do not promote the projection to an observed GitHub merge outcome.
+Keep the established limits attached. The removed-content restoration case was a local `merge-tree` projection plus a live mergeability verdict, **not a live merge**. A retry after a second rewrite remains untested. Newly published historical inline comments and the submission of a pending review after a rewrite were later recorded in GH-16 and GH-15. GH-19 later recorded native-suggestion application after the branch moved, on new fixtures and within its limits. GH-18 repeated the projection at the current heads, with a control, and it is still a projection. GH-20 added a mergeability verdict for a companion the tool itself built on a discarded commit, again with a local projection and no merge. Do not promote the projection to an observed GitHub merge outcome.
 
 ## Cases this register does not establish
 
 - Sibling alternatives automatically closing when the merged referencing companion targets the original feature branch (GH-01 only established a default-branch source).
 - An optional Actions workflow performing abandonment cleanup (GH-02 established the condition motivating it).
 - Rendering, link navigation and batch application of a cross-linked native-suggestion group. GH-17 covers only the API steps: pending-comment discovery, editing, and the links' targets after submission.
-- Native-suggestion application after the branch moved, beyond GH-19's one-line LF replacements applied from Files changed after one ordinary push or one force-push; an actual merge of a companion built on a discarded commit (GH-14 records it as untested).
+- Native-suggestion application after the branch moved, beyond GH-19's one-line LF replacements applied from Files changed after one ordinary push or one force-push; an actual merge of a companion built on a discarded commit (GH-14 records it as untested; GH-18 and GH-20 have only mergeability verdicts and local projections).
 - Whether GitHub resolves a line at a historical `commit_id` against the base branch's tip or against the merge base of the base and the head. GH-16 observed resolution against the pull request's current base commit, but in its fixtures the two were the same commit (`13fddb7` on #42, whose base had advanced), so they cannot tell which one GitHub uses; GH-16's inferences record this. **Tool design, not a host observation:** the tool does not depend on the answer. When the base tip has moved past the merge base, it withholds inline placement from every file the tip changed since then, so a finding there is general feedback and every line it does place is valid under either reading ([specification R13.1](specification.md#r131-the-reviewed-diff-historical-placement-and-native-suggestions)). That design was tested only against a simulated host.
 - How the web interface renders the reviews and comments in GH-15 and GH-16; only API state was recorded. GH-19 observed where new suggestion comments at a historical `commit_id` rendered on its own fixtures, not GH-16's plain comments.
 - Any broader behavior excluded by an entry's stated limits.

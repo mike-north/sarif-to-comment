@@ -1,0 +1,38 @@
+{
+  "command": "validate",
+  "status": "blocked",
+  "problems": [
+    {
+      "message": "The edit of `docs/experiments/fidelity/sample.md` line 10 cannot be delivered. `edits` is `[companion]`, set by the caller (`--edits`, `delivery.edits`), and no mechanism it lists is available:\n\n- `companion`: The history of #96 was rewritten after the reviewed commit, and projected onto its head `78d69c031922d07bfe53438c8d7b1f45666d4252`, merging its suggestion pull request would not apply exactly its own changes: `docs/experiments/fidelity/sample.md` would bring back content the head no longer has.",
+      "pointer": "/runs/0/results/0",
+      "severity": "error",
+      "code": "delivery-unavailable",
+      "title": "No delivery mechanism the policy lists is available for a proposal",
+      "location": {
+        "pointer": "/runs/0/results/0"
+      },
+      "remedies": [
+        "Review the pull request's current head again, and publish that review.",
+        "Remove the obstacle the message names, then publish again.",
+        "Or list a mechanism that is available for this kind of proposal (`--edits`, `--grouped-edits`, `--file-operations`, the `delivery` option, or `.github/sarif-to-comment.json`)."
+      ]
+    }
+  ],
+  "message": "## Review blocked\n\nNothing was published and no publication state was written.\n\n**Review blocked:** 1 problem must be resolved before publication; nothing was published.\n\n- `delivery-unavailable` at `/runs/0/results/0`: The edit of `docs/experiments/fidelity/sample.md` line 10 cannot be delivered. `edits` is `[companion]`, set by the caller (`--edits`, `delivery.edits`), and no mechanism it lists is available:\n\n- `companion`: The history of #96 was rewritten after the reviewed commit, and projected onto its head `78d69c031922d07bfe53438c8d7b1f45666d4252`, merging its suggestion pull request would not apply exactly its own changes: `docs/experiments/fidelity/sample.md` would bring back content the head no longer has.",
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "delivery-unavailable",
+      "title": "No delivery mechanism the policy lists is available for a proposal",
+      "message": "The edit of `docs/experiments/fidelity/sample.md` line 10 cannot be delivered. `edits` is `[companion]`, set by the caller (`--edits`, `delivery.edits`), and no mechanism it lists is available:\n\n- `companion`: The history of #96 was rewritten after the reviewed commit, and projected onto its head `78d69c031922d07bfe53438c8d7b1f45666d4252`, merging its suggestion pull request would not apply exactly its own changes: `docs/experiments/fidelity/sample.md` would bring back content the head no longer has.",
+      "location": {
+        "pointer": "/runs/0/results/0"
+      },
+      "remedies": [
+        "Review the pull request's current head again, and publish that review.",
+        "Remove the obstacle the message names, then publish again.",
+        "Or list a mechanism that is available for this kind of proposal (`--edits`, `--grouped-edits`, `--file-operations`, the `delivery` option, or `.github/sarif-to-comment.json`)."
+      ]
+    }
+  ]
+}

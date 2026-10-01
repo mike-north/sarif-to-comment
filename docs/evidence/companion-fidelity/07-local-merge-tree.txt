@@ -1,0 +1,61 @@
+# Local projection with git 2.54.0 (renames off), not a merge GitHub performed
+
+## merge-tree --write-tree e001d679e49071743cd336a07ce7fc10d8e29a61 fa6f7418d2edd8c4fec5004cb0e8041f6d2ea5da
+merge base: ac4038d0e7438dd67beba5706c2e7921a5b6976d
+exit: 0  tree: c29d25d75df19e4879c53b506947ef216cda0fcd
+diff(head -> merge):
+diff --git a/docs/experiments/fidelity/sample.md b/docs/experiments/fidelity/sample.md
+index 5d97750..c5ba125 100644
+--- a/docs/experiments/fidelity/sample.md
++++ b/docs/experiments/fidelity/sample.md
+@@ -7,7 +7,7 @@ Line 6, reviewed.
+ Line 7.
+ Line 8.
+ Line 9.
+-Line 10.
++Line 10, suggested.
+ Line 11.
+ Line 12.
+ Line 13.
+diff(head + only the proposal's change, cherry-pick target -> merge):
+
+## merge-tree --write-tree 78d69c031922d07bfe53438c8d7b1f45666d4252 fa6f7418d2edd8c4fec5004cb0e8041f6d2ea5da
+merge base: ac4038d0e7438dd67beba5706c2e7921a5b6976d
+exit: 0  tree: c29d25d75df19e4879c53b506947ef216cda0fcd
+diff(head -> merge):
+diff --git a/docs/experiments/fidelity/sample.md b/docs/experiments/fidelity/sample.md
+index efb0202..c5ba125 100644
+--- a/docs/experiments/fidelity/sample.md
++++ b/docs/experiments/fidelity/sample.md
+@@ -2,12 +2,12 @@ Line 1.
+ Line 2.
+ Line 3.
+ Line 4.
+-Line 5.
+-Line 6.
++Line 5, reviewed.
++Line 6, reviewed.
+ Line 7.
+ Line 8.
+ Line 9.
+-Line 10.
++Line 10, suggested.
+ Line 11.
+ Line 12.
+ Line 13.
+diff(head + only the proposal's change, cherry-pick target -> merge):
+  diff --git a/docs/experiments/fidelity/sample.md b/docs/experiments/fidelity/sample.md
+  index 342738b..c5ba125 100644
+  --- a/docs/experiments/fidelity/sample.md
+  +++ b/docs/experiments/fidelity/sample.md
+  @@ -2,8 +2,8 @@ Line 1.
+   Line 2.
+   Line 3.
+   Line 4.
+  -Line 5.
+  -Line 6.
+  +Line 5, reviewed.
+  +Line 6, reviewed.
+   Line 7.
+   Line 8.
+   Line 9.

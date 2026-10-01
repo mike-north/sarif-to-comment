@@ -63,9 +63,13 @@
  *   client's readSuggestionTarget (its head branch is named in the
  *   suggestion texts), and — when the head is not the reviewed commit and
  *   the pull request is one suggestion pull requests support — the client's
- *   compareCommits, whose answer makes preparation re-apply each companion
- *   onto a rewritten head or report it unavailable
- *   (docs/companion-suggestion-pr-contract.md §2.5, §2.5.1). A ready review
+ *   readComparison: when the reviewed commit is not an ancestor of the head,
+ *   preparation projects each companion's fidelity onto the head from the
+ *   merge base it names, through the client's readTreeRecursive and
+ *   readBlobBytes (src/companion-fidelity.cts;
+ *   docs/companion-suggestion-pr-contract.md §2.5, §2.5.1). Companions stay
+ *   on the reviewed commit; an unfaithful projection makes `companion`
+ *   unavailable for its unit. A ready review
  *   that plans companion pull requests is then checked against the
  *   repository — push permission, the label configuration read through
  *   readDefaultBranchFile (docs/suggestion-pr-convention.md §4), and every
@@ -76,7 +80,7 @@
  *   configuration read's answer. Ready carries the resolved policy and, with
  *   companions, the head branch, the labels as GitHub names them (the
  *   canonical label first), whether to create them ready for review, and
- *   the commit they are re-applied onto, if they are.
+ *   the head and merge base they were projected onto, if they were.
  *   Operational failures (GitHub, network, source reads, existence checks,
  *   repository, configuration and label reads, a context for another pull
  *   request or commit) reject.
@@ -84,7 +88,17 @@
 
 import * as util from 'node:util';
 
-import type { CommitComparison, IDefaultBranchFile, IFetchContextRequest, IHeadRefForcePushes, IPullRequestDestination, ISuggestionTarget } from './github.cjs';
+import type {
+  CommitComparison,
+  ICommitComparisonWithBase,
+  IDefaultBranchFile,
+  IFetchContextRequest,
+  IHeadRefForcePushes,
+  IPullRequestDestination,
+  IRecursiveTree,
+  ISuggestionTarget,
+} from './github.cjs';
+import type { IProjectedEntry, IProjectionTree } from './companion-fidelity.cjs';
 import {
   DELIVERY_CONFIGURATION_PATH,
   deliveryConfigurationDiagnostics,
@@ -191,7 +205,7 @@ export interface IReviewInputSpec<Own extends object> {
 export interface IContextClient {
   readonly fetchContext: (
     request: IFetchContextRequest,
-  ) => Promise<{ readonly context: unknown; readonly readSource: unknown; readonly fileExists?: unknown; readonly readEntry?: unknown }>;
+  ) => Promise<{ readonly context: unknown; readonly readSource: unknown; readonly fileExists?: unknown }>;
   /** Read only when a unit's `companion` availability is asked; a client without it cannot publish them. */
   readonly readSuggestionTarget?: ((request: IPullRequestDestination) => Promise<ISuggestionTarget>) | undefined;
   /**
@@ -207,6 +221,18 @@ export interface IContextClient {
    * it: the heads force-pushes replaced (docs/specification.md R17).
    */
   readonly listHeadRefForcePushes?: ((request: IPullRequestDestination) => Promise<IHeadRefForcePushes>) | undefined;
+  /**
+   * Read only when a companion is asked for and the head is not the reviewed
+   * commit: the comparison's status and merge base (the client shares it
+   * with compareCommits), then, when the reviewed commit is not an ancestor
+   * of the head, the trees and blobs of each companion's projection
+   * (docs/companion-suggestion-pr-contract.md §2.5.1).
+   */
+  readonly readComparison?:
+    | ((request: { readonly owner: string; readonly repo: string; readonly base: string; readonly head: string }) => Promise<ICommitComparisonWithBase>)
+    | undefined;
+  readonly readTreeRecursive?: ((request: { readonly owner: string; readonly repo: string; readonly commit: string }) => Promise<IRecursiveTree>) | undefined;
+  readonly readBlobBytes?: ((request: { readonly owner: string; readonly repo: string; readonly blob: string }) => Promise<Uint8Array>) | undefined;
   /** Read only when a ready review needs suggestion pull requests. */
   readonly findLabel?: ((request: { readonly owner: string; readonly repo: string; readonly name: string }) => Promise<string | null>) | undefined;
   /**
@@ -228,11 +254,12 @@ export interface IReadySuggestionPullRequests {
   /** Whether they are created ready for review instead of as drafts. */
   readonly ready: boolean;
   /**
-   * The pull request's head they are re-applied onto, because the reviewed
-   * commit is not its ancestor (contract §2.5.1); absent when they are
-   * proposed on the reviewed commit.
+   * The head they were projected onto, and the merge base the projection
+   * started from, because the reviewed commit is not an ancestor of the head
+   * (contract §2.5.1); absent when nothing was projected. They are proposed
+   * on the reviewed commit either way.
    */
-  readonly reappliedOnto?: string;
+  readonly projection?: { readonly head: string; readonly mergeBase: string };
 }
 
 /**
@@ -650,7 +677,7 @@ export async function prepareForDestination(captured: ICapturedReview, client: I
     reviewedCommit: captured.reviewedCommit,
     ...(captured.oldSourceCommit === undefined ? {} : { oldSourceCommit: captured.oldSourceCommit }),
   };
-  const { context, readSource, fileExists, readEntry } = await client.fetchContext(contextRequest);
+  const { context, readSource, fileExists } = await client.fetchContext(contextRequest);
   verifyContext(context, captured);
   // The reviewed commit must belong to the pull request before any source is
   // read or anything is prepared or written (docs/specification.md R17): a
@@ -659,7 +686,7 @@ export async function prepareForDestination(captured: ICapturedReview, client: I
   const association = { destination: captured.destination, reviewedCommit: captured.reviewedCommit, head: pullHeadOf(context, captured) };
   const diagnostic = associationDiagnostic(await associateReviewedCommit(association, client), association);
   if (diagnostic?.severity === 'error') return blockedBy([diagnostic], []);
-  const outcome = await prepareVerified(captured, client, { context, readSource, fileExists, readEntry });
+  const outcome = await prepareVerified(captured, client, { context, readSource, fileExists });
   return diagnostic === undefined ? outcome : withPreparationNote(outcome, diagnostic);
 }
 
@@ -678,7 +705,7 @@ function withPreparationNote(outcome: DestinationOutcome, note: IDiagnostic): De
 async function prepareVerified(
   captured: ICapturedReview,
   client: IContextClient,
-  { context, readSource, fileExists, readEntry }: { readonly context: IPlainObject; readonly readSource: unknown; readonly fileExists?: unknown; readonly readEntry?: unknown },
+  { context, readSource, fileExists }: { readonly context: IPlainObject; readonly readSource: unknown; readonly fileExists?: unknown },
 ): Promise<DestinationOutcome> {
 
   const configuration = await readConfigurationLayer(captured, client);
@@ -688,16 +715,16 @@ async function prepareVerified(
   // The companion target is read at most once, and only when preparation
   // first asks whether a companion can deliver a unit (§8.7).
   let target: ISuggestionTarget | undefined;
-  let ancestry: Promise<string | undefined> | undefined;
-  const companionTarget = async (): Promise<{ readonly headRef: string; readonly ready: boolean; readonly unavailable: readonly string[]; readonly resolveRewrittenHead: () => Promise<string | undefined> }> => {
+  let basis: Promise<IProjectionBasisFacts | undefined> | undefined;
+  const companionTarget = async (): Promise<{ readonly headRef: string; readonly ready: boolean; readonly unavailable: readonly string[]; readonly resolveProjection: () => Promise<IProjectionBasisFacts | undefined> }> => {
     if (client.readSuggestionTarget === undefined) throw new Error('This GitHub client cannot publish suggestion pull requests.');
     const read = target ?? await client.readSuggestionTarget(captured.destination);
     target = read;
-    const resolveRewrittenHead = (): Promise<string | undefined> => {
-      ancestry ??= rewrittenHeadOf(read, captured, client);
-      return ancestry;
+    const resolveProjection = (): Promise<IProjectionBasisFacts | undefined> => {
+      basis ??= projectionBasisOf(read, captured, client);
+      return basis;
     };
-    return { headRef: read.headRef, ready: captured.companionOptions.markReady, unavailable: unsupportedObstacles(read, captured), resolveRewrittenHead };
+    return { headRef: read.headRef, ready: captured.companionOptions.markReady, unavailable: unsupportedObstacles(read, captured), resolveProjection };
   };
   const options = {
     ...(captured.ignoreApprovalHold === undefined ? {} : { ignoreApprovalHold: captured.ignoreApprovalHold }),
@@ -709,7 +736,6 @@ async function prepareVerified(
     context: captured.sourceRootUri === undefined ? context : { ...context, sourceRootUri: captured.sourceRootUri },
     readSource,
     ...(fileExists === undefined ? {} : { fileExists }),
-    ...(readEntry === undefined ? {} : { readEntry }),
     options,
   };
   const prepared = await prepareReview(prepareInput);
@@ -720,8 +746,9 @@ async function prepareVerified(
   }
   if (prepared.suggestions === undefined) return { ...prepared, delivery: policy };
   if (target === undefined) throw new Error('Internal error: suggestion pull requests were prepared without reading their target.');
-  const rewrittenHead = ancestry === undefined ? undefined : await ancestry;
-  return checkSuggestionTarget({ ...prepared, delivery: policy }, target, captured, client, rewrittenHead);
+  const projected = basis === undefined ? undefined : await basis;
+  const projection = projected === undefined || projected.mergeBase === null ? undefined : { head: projected.head, mergeBase: projected.mergeBase };
+  return checkSuggestionTarget({ ...prepared, delivery: policy }, target, captured, client, projection);
 }
 
 /** The configuration layer: absent or valid (with its layer), or invalid with its diagnostics. */
@@ -749,31 +776,63 @@ async function readConfigurationLayer(captured: ICapturedReview, client: IContex
 }
 
 /**
- * The pull request's head when the reviewed commit is not its ancestor, so
- * that companions must be re-applied onto it or reported unavailable
- * (contract §2.5, §2.5.1); undefined when the head is the reviewed commit or
- * has only moved forward from it. Read only for a pull request suggestion
- * pull requests support (same repository, default-branch base): the others
- * have an obstacle already. A failed read is operational.
- *
- * This comparison overlaps the reviewed commit's association check
- * (src/reviewed-commit-association.cts), which has already compared the
- * reviewed commit with the head before preparation began: the same two
- * commits are compared twice, once to decide whether the review belongs to
- * the pull request (docs/specification.md R17) and once to decide whether
- * companions must be re-applied. The overlap is deliberate and lasts until
- * re-application after a rewritten history is removed (D58, D59), which
- * removes this read; until then each check keeps its own read, so neither
- * depends on how the other is ordered or cached.
+ * The largest blob a projection reads to merge: the GitHub client's
+ * source-read limit (src/github.cts `maxSourceBytes`), which the
+ * projection names when a file it would have to merge is larger.
  */
-async function rewrittenHeadOf(target: ISuggestionTarget, captured: ICapturedReview, client: IContextClient): Promise<string | undefined> {
+const PROJECTION_BLOB_LIMIT = 1_000_000;
+
+/** What preparation projects each companion on (src/companion-fidelity.cts IProjectionBasis, without the reviewed commit). */
+interface IProjectionBasisFacts {
+  readonly head: string;
+  readonly mergeBase: string | null;
+  readonly sources: {
+    readonly tree: (commit: string) => Promise<IProjectionTree>;
+    readonly blob: (oid: string) => Promise<Uint8Array>;
+  };
+  readonly maxBlobBytes: number;
+}
+
+/**
+ * The basis on which each companion's fidelity is projected (contract
+ * §2.5.1), when the reviewed commit is not an ancestor of the pull request's
+ * head; undefined when the head is the reviewed commit or has only moved
+ * forward from it. Read only for a pull request suggestion pull requests
+ * support (same repository, default-branch base): the others have an
+ * obstacle already. Its comparison is the one the reviewed commit's
+ * association check read (src/reviewed-commit-association.cts), which the
+ * client reads once. A failed read is operational.
+ */
+async function projectionBasisOf(target: ISuggestionTarget, captured: ICapturedReview, client: IContextClient): Promise<IProjectionBasisFacts | undefined> {
   const supported = target.headRepository !== null && target.headRepository.toLowerCase() === target.baseRepository.toLowerCase()
     && target.baseRef === target.defaultBranch;
   if (target.headSha === captured.reviewedCommit || !supported) return undefined;
-  if (client.compareCommits === undefined) throw new Error('This GitHub client cannot publish suggestion pull requests.');
+  const { readComparison, readTreeRecursive, readBlobBytes } = client;
+  if (readComparison === undefined || readTreeRecursive === undefined || readBlobBytes === undefined) {
+    throw new Error('This GitHub client cannot publish suggestion pull requests.');
+  }
   const { owner, repo } = captured.destination;
-  const comparison = await client.compareCommits({ owner, repo, base: captured.reviewedCommit, head: target.headSha });
-  return comparison === 'ahead' || comparison === 'identical' ? undefined : target.headSha;
+  const comparison = await readComparison({ owner, repo, base: captured.reviewedCommit, head: target.headSha });
+  if (comparison.status === 'ahead' || comparison.status === 'identical') return undefined;
+  return {
+    head: target.headSha,
+    mergeBase: comparison.mergeBase,
+    maxBlobBytes: PROJECTION_BLOB_LIMIT,
+    sources: {
+      tree: async (commit) => projectionTree(await readTreeRecursive({ owner, repo, commit })),
+      blob: (oid) => readBlobBytes({ owner, repo, blob: oid }),
+    },
+  };
+}
+
+/** A recursive listing as the projection reads it: files, links and submodules by path (directories are implied by paths). */
+function projectionTree(tree: IRecursiveTree): IProjectionTree {
+  const entries = new Map<string, IProjectedEntry>();
+  for (const entry of tree.entries) {
+    if (entry.type === 'tree') continue;
+    entries.set(entry.path, { mode: entry.mode, oid: entry.sha, ...(entry.size === undefined ? {} : { size: entry.size }) });
+  }
+  return { truncated: tree.truncated, entries };
 }
 
 /**
@@ -813,7 +872,7 @@ interface IWantedLabel {
  * the default branch never reaches here: they are obstacles of `companion`,
  * so preparation planned no companion for them. A head that moved is never
  * among them (§2.5). Ready with the head branch, the
- * labels' own names, the ready setting and the commit they are re-applied
+ * labels' own names, the ready setting and the head they were projected
  * onto (if any), or blocked.
  */
 async function checkSuggestionTarget(
@@ -821,7 +880,7 @@ async function checkSuggestionTarget(
   target: ISuggestionTarget,
   captured: ICapturedReview,
   client: IContextClient,
-  rewrittenHead: string | undefined,
+  projection: { readonly head: string; readonly mergeBase: string } | undefined,
 ): Promise<DestinationOutcome> {
   const settings = captured.companionOptions;
   const { owner, repo } = captured.destination;
@@ -870,7 +929,7 @@ async function checkSuggestionTarget(
   return {
     ...prepared,
     suggestionPullRequests: {
-      headRef: target.headRef, labels: uniqueLabels(found), ready: settings.markReady, ...(rewrittenHead === undefined ? {} : { reappliedOnto: rewrittenHead }),
+      headRef: target.headRef, labels: uniqueLabels(found), ready: settings.markReady, ...(projection === undefined ? {} : { projection }),
     },
   };
 }

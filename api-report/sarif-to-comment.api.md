@@ -477,6 +477,7 @@ export interface IPublishedReview {
 // @public
 export interface IPublishedSuggestion {
     readonly branch: string;
+    readonly mergeable?: 'mergeable' | 'conflicting' | 'unknown';
     readonly number: number;
     readonly url: string;
 }

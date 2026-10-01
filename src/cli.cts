@@ -1951,7 +1951,7 @@ async function publish(argv: readonly string[], { env }: IHandlerContext, intern
     status: outcome.status,
     ...('review' in outcome ? { review: { id: outcome.review.id, url: outcome.review.url } } : {}),
     ...(outcome.status === 'published' && outcome.suggestions !== undefined
-      ? { suggestions: outcome.suggestions.map((s) => ({ number: s.number, url: s.url, branch: s.branch })) }
+      ? { suggestions: outcome.suggestions.map((s) => ({ number: s.number, url: s.url, branch: s.branch, ...(s.mergeable === undefined ? {} : { mergeable: s.mergeable }) })) }
       : {}),
     ...('statePath' in outcome && outcome.statePath ? { statePath: outcome.statePath } : {}),
     message: outcome.markdown,

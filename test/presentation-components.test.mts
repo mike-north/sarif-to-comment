@@ -8,7 +8,8 @@
  * finding sections and the warnings list),
  * docs/file-operation-publication-contract.md §2 (additions, deletions and
  * file details), docs/companion-suggestion-pr-contract.md §2.11 (companion
- * change lists, references, descriptions and lifecycle notes) and the
+ * change lists, references, descriptions, the projection section and
+ * lifecycle notes) and the
  * alternatives grammar of issue #30; docs/diagnostics.md for the warnings
  * list of an outcome report; docs/delivery-policy-contract.md §8.8 and §9
  * (a native batch's guidance and note, and a companion bundle).
@@ -31,6 +32,8 @@ import type { IAlternative, IAlternativeChange } from '../dist/presentation/alte
 import { renderAttribution } from '../dist/presentation/attribution.cjs';
 import { mergeSentence, reappliedParagraph, renderCompanionChange } from '../dist/presentation/companion-changes.cjs';
 import { renderCompanionBundleDescription, renderCompanionDescription } from '../dist/presentation/companion-description.cjs';
+import { renderCompanionProjection } from '../dist/presentation/companion-projection.cjs';
+import type { ICompanionProjectionView } from '../dist/presentation/companion-projection.cjs';
 import { renderBundledCompanionReference, renderCompanionReference } from '../dist/presentation/companion-reference.cjs';
 import { fileDetails, proposedContentBlock, renderFileAddition, renderProposedFileFinding } from '../dist/presentation/file-addition.cjs';
 import { renderFileDeletion } from '../dist/presentation/file-deletion.cjs';
@@ -222,7 +225,7 @@ describe('companion pieces', () => {
     assert.equal(renderCompanionChange({ kind: 'delete', path: 'o.txt', commit: C, url: 'U' }), '- Deleted file [o.txt at 2222222](U): the whole file is removed');
   });
 
-  test('the merge sentence counts changes, and the re-applied paragraph appears only when re-applied', () => {
+  test('the merge sentence counts changes, and the re-applied paragraph appears only for a version-2 plan that re-applied', () => {
     assert.equal(mergeSentence(1, 'it', 'main'), 'Merging it into `main` applies this change:');
     assert.equal(mergeSentence(3, 'it', 'main'), 'Merging it into `main` applies these 3 changes together:');
     assert.equal(reappliedParagraph(target, 'that commit'), '');
@@ -230,16 +233,17 @@ describe('companion pieces', () => {
       'The history of #7 was rewritten after that commit, so this change is re-applied onto commit H, the head of #7 when it was proposed, where everything it changes is still exactly as reviewed.\n\n');
   });
 
-  test('the companion reference in the review body', () => {
+  test('the companion reference in the review body; a version-2 plan\'s keeps the paragraph it was planned with', () => {
     assert.equal(renderCompanionReference(content, { number: 12, url: 'U' }, target),
       '**Suggestion pull request:** [#12](U)\n\nMerging it into `feature/x` applies these 2 changes together:\n\n- one\n- two\n\nITEMS');
+    assert.equal(renderCompanionReference(content, { number: 12, url: 'U' }, { ...target, reappliedOnto: 'H' }),
+      '**Suggestion pull request:** [#12](U)\n\nThe history of #7 was rewritten after the reviewed commit, so this change is re-applied onto commit H, the head of #7 when it was proposed, '
+      + 'where everything it changes is still exactly as reviewed.\n\nMerging it into `feature/x` applies these 2 changes together:\n\n- one\n- two\n\nITEMS');
   });
 
-  test('the companion description places the supplied lifecycle note and ends with the supplied marker verbatim', () => {
+  test('the companion description places the supplied lifecycle note and ends with the supplied marker verbatim; it never re-applies', () => {
     assert.equal(renderCompanionDescription(content, { ...target, reappliedOnto: 'H' }, 'NOTE', '<!-- m -->'), [
       `Suggested in a review of #7 at commit ${C}.`,
-      '',
-      'The history of #7 was rewritten after that commit, so this change is re-applied onto commit H, the head of #7 when it was proposed, where everything it changes is still exactly as reviewed.',
       '',
       'Merging this pull request into `feature/x` applies these 2 changes together:',
       '',
@@ -303,9 +307,10 @@ describe('companion bundles (delivery policy §9; companion contract §2.11)', (
     ].join('\n'));
   });
 
-  test('a re-applied bundle states it once, after the reference', () => {
-    assert.ok(renderCompanionBundleDescription([group, single], { ...target, reappliedOnto: 'H' }, 'NOTE', 'M').startsWith(
-      `Suggested in a review of #7 at commit ${C}.\n\nThe history of #7 was rewritten after that commit, so this change is re-applied onto commit H,`));
+  test('a projected bundle states its projection once, after the reference', () => {
+    const view: ICompanionProjectionView = { head: 'H', verdict: 'faithful', conflicts: [], files: [] };
+    assert.ok(renderCompanionBundleDescription([group, single], target, 'NOTE', 'M', view).startsWith(
+      `Suggested in a review of #7 at commit ${C}.\n\n${renderCompanionProjection(view, target)}\n\nThis pull request bundles 2 proposals`));
   });
 
   test('each proposal of a bundle keeps its own section of the review, naming which proposal it is', () => {
@@ -313,6 +318,46 @@ describe('companion bundles (delivery policy §9; companion contract §2.11)', (
       '**Suggestion pull request:** [#12](U), proposal 2 of 2\n\nMerging it into `feature/x` applies this change, with the 1 other proposal it bundles:\n\n- three\n\nEDIT');
     assert.equal(renderBundledCompanionReference(group, { number: 12, url: 'U' }, target, 1, 3),
       '**Suggestion pull request:** [#12](U), proposal 1 of 3\n\nMerging it into `feature/x` applies these 2 changes together, with the 2 other proposals it bundles:\n\n- one\n- two\n\nGROUP');
+  });
+});
+
+describe('the projection section of a companion\'s description (companion contract §2.5.1, §2.11)', () => {
+  const target = { pullNumber: 7, reviewedCommit: C, headRef: 'feature/x', ready: false } as const;
+  const LEAD = `**The reviewed commit is not part of the branch of #7:** the branch was rewritten after commit ${C} (its head was H when this was proposed). `
+    + 'GitHub shows this pull request\'s changes from an older merge base, so they also list changes of the reviewed commit itself. '
+    + 'Projected onto that head before this pull request was created, merging it ';
+  const hunk = { oldStart: 2, oldLines: 3, newStart: 2, newLines: 3, lines: [
+    { text: ' b', noNewline: false }, { text: '-c', noNewline: false }, { text: '+C', noNewline: false }, { text: ' d', noNewline: false },
+  ] };
+
+  test('faithful, with its own changes shown as a unified diff', () => {
+    assert.equal(renderCompanionProjection({ head: 'H', verdict: 'faithful', conflicts: [], files: [{ path: 'f.md', hunks: [hunk] }] }, target),
+      `${LEAD}applies only its own changes, which are these:\n\n\`\`\`diff\n--- a/f.md\n+++ b/f.md\n@@ -2,3 +2,3 @@\n b\n-c\n+C\n d\n\`\`\``);
+  });
+
+  test('conflicting in several paths; whole-file changes only, so the changes are listed below', () => {
+    assert.equal(renderCompanionProjection({ head: 'H', verdict: 'conflicts', conflicts: ['a', 'b', 'c'], files: [] }, target),
+      `${LEAD}conflicts in \`a\`, \`b\` and \`c\`; its own changes are listed below.`);
+    assert.equal(renderCompanionProjection({ head: 'H', verdict: 'faithful', conflicts: [], files: [] }, target), `${LEAD}applies only its own changes, which are listed below.`);
+  });
+
+  test('faithful where the head already has its own changes: merging it changes nothing', () => {
+    assert.equal(renderCompanionProjection({ head: 'H', verdict: 'faithful', alreadyAtHead: true, conflicts: [], files: [{ path: 'f.md', hunks: [hunk] }] }, target),
+      `${LEAD}changes nothing, because the head already has its own changes, which are these:\n\n\`\`\`diff\n--- a/f.md\n+++ b/f.md\n@@ -2,3 +2,3 @@\n b\n-c\n+C\n d\n\`\`\``);
+    assert.equal(renderCompanionProjection({ head: 'H', verdict: 'faithful', alreadyAtHead: true, conflicts: [], files: [] }, target),
+      `${LEAD}changes nothing, because the head already has its own changes, which are listed below.`);
+  });
+
+  test('a range of one line has no count, a line without a final newline is marked, and a carriage return before a newline is not shown', () => {
+    const lines = [{ text: '-x\r', noNewline: false }, { text: '+y', noNewline: true }];
+    assert.equal(renderCompanionProjection({ head: 'H', verdict: 'faithful', conflicts: [], files: [{ path: 'f', hunks: [{ oldStart: 4, oldLines: 1, newStart: 4, newLines: 1, lines }] }] }, target),
+      `${LEAD}applies only its own changes, which are these:\n\n\`\`\`diff\n--- a/f\n+++ b/f\n@@ -4 +4 @@\n-x\n+y\n\\ No newline at end of file\n\`\`\``);
+  });
+
+  test('the fence is longer than any backtick run in the changes, so nothing can close it early', () => {
+    const lines = [{ text: '+````', noNewline: false }];
+    const text = renderCompanionProjection({ head: 'H', verdict: 'faithful', conflicts: [], files: [{ path: 'f', hunks: [{ oldStart: 0, oldLines: 0, newStart: 1, newLines: 1, lines }] }] }, target);
+    assert.ok(text.endsWith('\n\n`````diff\n--- a/f\n+++ b/f\n@@ -0,0 +1 @@\n+````\n`````'), text);
   });
 });
 

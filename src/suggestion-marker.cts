@@ -7,10 +7,15 @@
  *
  *   <!-- suggestion-pr {"version":1,"original":{"owner":…,"repo":…,"pullNumber":…},"reviewedCommit":…,"id":…,"batch":…} -->
  *
- * or, for a suggestion re-applied onto a later commit after the original's
- * history was rewritten (convention §5.1, version 2):
+ * or, for a suggestion an earlier producer re-applied onto a later commit
+ * after the original's history was rewritten (convention §7, version 2):
  *
  *   <!-- suggestion-pr {"version":2,"original":{…},"reviewedCommit":…,"reappliedOnto":…,"id":…,"batch":…} -->
+ *
+ * New suggestions are never re-applied (convention §5.1), so publication
+ * writes version 2 only to continue a plan that unreleased builds wrote with
+ * it (docs/companion-suggestion-pr-contract.md §2.9); cleanup keeps
+ * recognizing it.
  *
  * The JSON is canonical: exactly these members, in exactly this order, with
  * no whitespace, so the line is a pure function of its fields and recovery
