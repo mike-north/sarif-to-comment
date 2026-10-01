@@ -204,12 +204,14 @@ These codes were never released. The [delivery policy](delivery-policy-contract.
 | `suggestion-group-pr-unavailable` | `delivery-unavailable`: a group or fix with several changes that no listed mechanism can deliver. |
 | `suggestion-group-requires-suggestion-prs` | `delivery-unavailable` |
 | `fix-changes-require-suggestion-prs` | `delivery-unavailable` |
-| `suggestion-reviewed-commit-not-head` | `delivery-unavailable`, whose `native` obstacle states the condition. |
-| `suggestion-not-inline` | `delivery-unavailable`, whose `native` obstacle states the condition. |
-| `suggestion-fence-unverified` | `delivery-unavailable`, whose `native` obstacle states the condition. |
-| `suggestion-blank-only-unverified` | `delivery-unavailable`, whose `native` obstacle states the condition. |
-| `suggestion-crlf-unverified` | `delivery-unavailable`, whose `native` obstacle states the condition. |
-| `suggestion-final-newline-unverified` | `delivery-unavailable`, whose `native` obstacle states the condition. |
+| `suggestion-reviewed-commit-not-head` | `delivery-unavailable`, whose `native` obstacle states the condition; its remedies start with `Review the pull request's head commit, and publish that review.` |
+| `suggestion-not-inline` | `delivery-unavailable`, whose `native` obstacle states the condition; its remedies start with `Remove the fix.` |
+| `suggestion-fence-unverified` | `delivery-unavailable`, whose `native` obstacle states the condition; its remedies start with `Change the replacement.` |
+| `suggestion-blank-only-unverified` | `delivery-unavailable`, whose `native` obstacle states the condition; its remedies start with `Change the replacement.` |
+| `suggestion-crlf-unverified` | `delivery-unavailable`, whose `native` obstacle states the condition; its remedies start with `Change the replacement.` |
+| `suggestion-final-newline-unverified` | `delivery-unavailable`, whose `native` obstacle states the condition; its remedies start with `Change the replacement.` |
+
+Each retired code's specific remedy now appears in the remedies of the `delivery-unavailable` (or `delivery-fallback`) diagnostic whose obstacle it relates to, before the code's catalogued remedies, each once ([delivery policy §8.9, §10.1](delivery-policy-contract.md#89-native-eligibility-of-an-edit)); the part that said to enable suggestion pull requests is the catalogued remedy of listing another mechanism. The remedies of `suggestion-group-pr-unavailable` for a rewritten history, a file over the limit and a long description appear the same way, with the `companion` obstacles.
 
 ## Code catalog
 
@@ -393,7 +395,7 @@ These codes belong to the [delivery policy contract](delivery-policy-contract.md
 
 | Code | Severity | Title | Meaning | Typical remedies |
 |---|---|---|---|---|
-| `delivery-unavailable` | error | No delivery mechanism the policy lists is available for a proposal | No mechanism in the proposal's delivery list can deliver it, and nothing unlisted is substituted, so the whole review is blocked before anything is written (D55). The message names the proposal, the list, where the list was set, and each listed mechanism's obstacles. A group is never split to deliver part of it. | Remove the obstacle the message names, then publish again.<br>Or list a mechanism that is available for this kind of proposal (`--edits`, `--grouped-edits`, `--file-operations`, the `delivery` option, or `.github/sarif-to-comment.json`). |
+| `delivery-unavailable` | error | No delivery mechanism the policy lists is available for a proposal | No mechanism in the proposal's delivery list can deliver it, and nothing unlisted is substituted, so the whole review is blocked before anything is written (D55). The message names the proposal, the list, where the list was set, and each listed mechanism's obstacles. A group is never split to deliver part of it. The obstacles' own remedies, if any, come before the typical ones. | Remove the obstacle the message names, then publish again.<br>Or list a mechanism that is available for this kind of proposal (`--edits`, `--grouped-edits`, `--file-operations`, the `delivery` option, or `.github/sarif-to-comment.json`). |
 | `delivery-fallback` | warning | A proposal is delivered by a later mechanism of its delivery list | The first mechanism of the proposal's delivery list cannot deliver it, so a later one the list authorizes does. The message names the proposal, the mechanism used, the list, where the list was set, and each earlier mechanism's obstacles. | To use an earlier mechanism, remove the obstacle the message names, then publish again.<br>To refuse rather than fall back, list only the mechanism you require. |
 | `delivery-configuration-invalid` | error | The delivery configuration is not valid | `.github/sarif-to-comment.json` on the default branch cannot be used: it is not a valid JSON object, holds an unknown member, or a list or value outside its vocabulary, an empty list or a repeated mechanism. Nothing is taken from it, and the review is blocked before anything is written. Each problem is reported, naming its member. | Fix `.github/sarif-to-comment.json` on the default branch. |
 | `companion-options-unused` | note | Companion pull request options have no effect | No companion pull request is planned, so the given `--pr-labels` (`pullRequestLabels`) or `--mark-suggestion-prs-ready` (`markSuggestionPullRequestsReady`) apply to nothing. The message names them. Publication proceeds. | — |
@@ -404,7 +406,7 @@ These codes belong to the [delivery policy contract](delivery-policy-contract.md
 |---|---|---|---|---|
 | `too-many-comments` | error | The review needs too many inline comments | Nothing is split or dropped. | Publish fewer findings in one review. |
 | `comment-too-large` | error | An inline comment would be too long | Nothing is truncated. | Shorten the finding's message or its fix. |
-| `body-too-large` | error | The review body would be too long | Nothing is truncated; the message lists the whole-file proposals in the body. | Publish fewer general findings, or deliver whole-file proposals as companion pull requests (`--file-operations companion`). |
+| `body-too-large` | error | The review body would be too long | Nothing is truncated; the message lists the whole-file proposals in the body, and names any proposal a delivery fallback put there ([delivery policy §10.1](delivery-policy-contract.md#101-blocked-no-listed-mechanism-is-available-d55)). | Publish fewer general findings, or deliver whole-file proposals as companion pull requests (`--file-operations companion`). |
 | `payload-too-large` | error | The review would be too large to send | Nothing is truncated or split. | Publish fewer findings in one review. |
 
 ### Readiness assessment

@@ -55,12 +55,12 @@ Each dimension has a fixed vocabulary. No other value is valid.
 | Dimension | Mechanism | Meaning |
 | --- | --- | --- |
 | `edits` | `native` | A native suggestion on the original pull request, in an inline review comment. |
-| | `review-body` | The exact replacement shown on the original pull request in the review body, for the author to apply by hand. It is not an applicable suggestion. |
+| | `review-body` | The exact replacement shown on the original pull request in the review body, for the author to apply by hand. It is not an applicable suggestion. *Specified; this version reports the mechanism unavailable until its presentation exists (§8.8).* |
 | | `companion` | One companion pull request holding the edit (D48: companion pull requests for all proposed changes). |
 | `groupedEdits` | `native-batch` | Every member as a native suggestion on the original pull request, in the same review, with guidance that lists the members by path and line so the author can add all of them to one GitHub suggestion batch (D49). |
 | | `companion` | The whole group in one companion pull request. |
-| | `manual-group` | One review-body section on the original pull request holding every member's replacement, to be applied together by hand in one commit (D49's manual route). |
-| `fileOperations` | `manual` | On the original pull request, by hand. A file operation is its review-body section ([file-operation contract](file-operation-publication-contract.md)). A file-operation group is the **mixed manual group**: one review-body section holding every member, edits as replacements and file operations as their proposals, to be assembled into one commit (D49, D51). |
+| | `manual-group` | One review-body section on the original pull request holding every member's replacement, to be applied together by hand in one commit (D49's manual route). *Specified; this version reports the mechanism unavailable until its presentation exists (§8.8).* |
+| `fileOperations` | `manual` | On the original pull request, by hand. A file operation is its review-body section ([file-operation contract](file-operation-publication-contract.md)). A file-operation group is the **mixed manual group**: one review-body section holding every member, edits as replacements and file operations as their proposals, to be assembled into one commit (D49, D51). For the mixed manual group: Specified; this version reports the mechanism unavailable until its presentation exists (§8.8). |
 | | `companion` | One companion pull request holding the operation, or the whole group. |
 
 One more setting is not a delivery dimension but packages what companions deliver:
@@ -164,7 +164,7 @@ Alternatives (§2) are presented with their finding (D44). They are never placed
 
 ### 8.7 Availability is an input
 
-Whether each mechanism is available for each unit is decided by preparation and validation: the native-suggestion eligibility rules (R8, [companion contract §2.4](companion-suggestion-pr-contract.md#24-presentation-form-selection)), what prevents a companion pull request ([companion contract §2.5](companion-suggestion-pr-contract.md#25-repository-target-branch-and-revision): a fork, another base, a size limit, a description limit, …), and the limits of the review-body forms. An unavailable mechanism always carries at least one **obstacle**: a concrete Markdown sentence saying what prevents it. A mechanism is never reported unavailable without one.
+Whether each mechanism is available for each unit is decided by preparation and validation: the native-suggestion eligibility rules (R8, [companion contract §2.4](companion-suggestion-pr-contract.md#24-presentation-form-selection)), what prevents a companion pull request ([companion contract §2.5](companion-suggestion-pr-contract.md#25-repository-target-branch-and-revision): a fork, another base, a size limit, a description limit, …), and the limits of the review-body forms. An unavailable mechanism always carries at least one **obstacle**: a concrete Markdown sentence saying what prevents it. A mechanism is never reported unavailable without one. An obstacle may come with a **remedy**: one sentence saying how to remove that obstacle (§8.9, §10.1).
 
 Availability is asked for **lazily**, so preparation never works out obstacles nobody needs (for example a companion body under the defaults, which list no companion). For each unit, it is asked only for mechanisms the resolved list names, in list order, at most once each, and never after the first available one. A group member's native eligibility is asked only when `native-batch` is asked for. In particular, the pull request's branches and repositories are read for companion pull requests only when a unit's `companion` availability is first asked, and the ancestry of a moved head only then too ([companion contract §2.8](companion-suggestion-pr-contract.md#28-readiness)): a publication whose lists never reach `companion` never reads them, so their failure can never refuse it.
 
@@ -175,13 +175,13 @@ Every mechanism of §3 is accepted in every layer. Some are **not yet supported 
 | Mechanism | Unit | This version |
 | --- | --- | --- |
 | `native` | edit | Supported. Unavailable when the edit cannot be a native suggestion; each obstacle is the condition's sentence (§8.9). |
-| `review-body` | edit | Not yet supported. Obstacle: `Delivering an edit in the review body is not yet supported by this version.` |
+| `review-body` | edit | Specified; this version reports the mechanism unavailable until its presentation exists. Obstacle: `Delivering an edit in the review body is not yet supported by this version.` |
 | `companion` | edit | Supported: a companion pull request holding the one edit. |
 | `native-batch` | edit group | Supported for an explicit group whose every member's primary fix makes one change. Unavailable, with the group's obstacle ``The finding at `POINTER` makes K changes with one fix; a fix with several changes is not yet offered in a native batch by this version.`` for each such member, or ``Offering a fix with several changes as a native batch is not yet supported by this version.`` for a fix with several changes that is not in a group. A member that cannot be a native suggestion adds its own obstacles (§8.3). |
 | `companion` | edit group | Supported. |
-| `manual-group` | edit group | Not yet supported. Obstacle: `Delivering a group in the review body for manual application is not yet supported by this version.` |
+| `manual-group` | edit group | Specified; this version reports the mechanism unavailable until its presentation exists. Obstacle: `Delivering a group in the review body for manual application is not yet supported by this version.` |
 | `manual` | file operation | Supported: the file-operation contract's review-body section. |
-| `manual` | file-operation group | Not yet supported (the mixed manual group). Obstacle: `Delivering a group with a whole-file creation or deletion on the original pull request is not yet supported by this version.` |
+| `manual` | file-operation group | The mixed manual group: specified; this version reports the mechanism unavailable until its presentation exists. Obstacle: `Delivering a group with a whole-file creation or deletion on the original pull request is not yet supported by this version.` |
 | `companion` | file operation, file-operation group | Supported. |
 
 So, in this version, the defaults deliver an explicit group of one-change edits as a native batch, and block a group containing a whole-file operation and a fix with several changes (`delivery-unavailable`), as they were refused before this policy.
@@ -199,14 +199,18 @@ with one line per change, in the order the changes first appear. The tool commun
 
 ### 8.9 Native eligibility of an edit
 
-An edit can be a native suggestion exactly when the rules that previously refused it hold: the reviewed commit is the pull request's head, its replacement can be reproduced exactly by GitHub's application of a suggestion, and its lines are on the new side of the pull request's diff. Each failed rule is an obstacle of `native` with the sentence it always had:
+An edit can be a native suggestion exactly when the rules that previously refused it hold: the reviewed commit is the pull request's head, its replacement can be reproduced exactly by GitHub's application of a suggestion, and its lines are on the new side of the pull request's diff. Each failed rule is an obstacle of `native` with the sentence it always had, and with the specific remedy its retired code carried (§10.3), without that code's "enable suggestion pull requests", which is now the general remedy of listing another mechanism:
 
-- `The reviewed commit is not the pull request head, so a native suggestion could not be applied to the reviewed text.`
-- ``GitHub applied a nested ``` suggestion as a deletion; this replacement cannot be a native suggestion.``
-- `GitHub applied a blank-only suggestion as zero lines; this replacement cannot be a native suggestion.`
-- `A CR in suggestion text is doubled by GitHub; this replacement cannot be a native suggestion.`, or `GitHub's observed application would not reproduce the intended line endings.`
-- `GitHub's observed application would not reproduce the intended end of the file.`
-- `Lines A-B of PATH cannot carry a native suggestion (REASON).`, where REASON is the placement's reason.
+| Obstacle | Remedy | Retired code |
+| --- | --- | --- |
+| `The reviewed commit is not the pull request head, so a native suggestion could not be applied to the reviewed text.` | `Review the pull request's head commit, and publish that review.` | `suggestion-reviewed-commit-not-head` |
+| ``GitHub applied a nested ``` suggestion as a deletion; this replacement cannot be a native suggestion.`` | `Change the replacement.` | `suggestion-fence-unverified` |
+| `GitHub applied a blank-only suggestion as zero lines; this replacement cannot be a native suggestion.` | `Change the replacement.` | `suggestion-blank-only-unverified` |
+| `A CR in suggestion text is doubled by GitHub; this replacement cannot be a native suggestion.`, or `GitHub's observed application would not reproduce the intended line endings.` | `Change the replacement.` | `suggestion-crlf-unverified` |
+| `GitHub's observed application would not reproduce the intended end of the file.` | `Change the replacement.` | `suggestion-final-newline-unverified` |
+| `Lines A-B of PATH cannot carry a native suggestion (REASON).`, where REASON is the placement's reason | `Remove the fix.` | `suggestion-not-inline` |
+
+The obstacles of `companion` ([companion contract §2.5.1](companion-suggestion-pr-contract.md#251-re-application-after-a-rewritten-history)) carry the remedies the retired `suggestion-group-pr-unavailable` gave them: a rewritten history it cannot be re-applied onto, `Review the pull request's current head again, and publish that review.`; a created file over the per-file limit, `Reduce the proposed file to at most 1,000,000 bytes.`; a description over the body limit, `Shorten the findings' messages.` A fork, another base and a mechanism this version does not support have no remedy of their own.
 
 A problem with the fix itself (a replacement that does not apply, a fix of another revision, a diff inconsistent with the source) is not an obstacle: it blocks the review with its own code, whatever the policy.
 
@@ -268,7 +272,15 @@ with one bullet per listed mechanism, in list order, where:
   where `FLAG` is `--edits`, `--grouped-edits` or `--file-operations`;
 - `OBSTACLES` is the mechanism's obstacles, each a sentence, joined by single spaces. For `native-batch`, any obstacle of the group as a whole comes first, then, for each ineligible member in order, ``MEMBER: OBSTACLES`` with that member's description and its own obstacles.
 
-The diagnostic's location is the unit's location (its SARIF pointer) when it has one.
+The diagnostic's location is the unit's location (its SARIF pointer) when it has one. Its **remedies** are the remedies of the obstacles it names (§8.9), in the order of those obstacles, each once, followed by the code's catalogued remedies.
+
+**A block after a fallback.** A review can also be blocked after its plan was made: by a limit of the review (`too-many-comments`, `comment-too-large`, `body-too-large`, `payload-too-large`) or by a repository check of its companion pull requests (`suggestion-pr-permission-missing`, `suggestion-pr-configuration-invalid`, `suggestion-label-missing`). Such a block, too, carries no `delivery-fallback` warning. When a unit delivered by a fallback contributed to it, the blocking error's message names that cause instead, ending with one paragraph per such unit, in plan order:
+
+```text
+This includes a proposal delivered by a fallback: UNIT is delivered as `MECHANISM`, because `DIMENSION` is LIST and the mechanisms listed before it (EARLIER) are unavailable.
+```
+
+where `UNIT` is the unit's description starting with a lowercase letter, `EARLIER` the earlier mechanisms as code spans joined by `, `, and the other parts as above. A unit contributes when the fallback put it where the blocking check looks: `manual` (a review-body section) to `body-too-large` and `payload-too-large`; `native` and `native-batch` (inline comments) to `too-many-comments`, `comment-too-large` and `payload-too-large`; `companion` to the repository checks.
 
 ### 10.2 Announced fallback
 
@@ -280,7 +292,7 @@ UNIT is delivered as `MECHANISM`. `DIMENSION` is LIST, SOURCE, and the mechanism
 - `EARLIER`: OBSTACLES
 ```
 
-with one bullet per earlier mechanism, in list order, and the other parts as in §10.1. Delivering an edit as a native suggestion, or a group as a native batch, when it is first in its list is the requested delivery, not a fallback.
+with one bullet per earlier mechanism, in list order, and the other parts and the remedies as in §10.1. Delivering an edit as a native suggestion, or a group as a native batch, when it is first in its list is the requested delivery, not a fallback.
 
 ### 10.3 Diagnostic codes
 
@@ -295,7 +307,7 @@ with one bullet per earlier mechanism, in list order, and the other parts as in 
 
 - **`suggestion-pr-fallback` is retired in favour of `delivery-fallback`.** Its case (a whole-file operation whose companion pull request cannot be made, published in the review body) is, under this contract, `fileOperations: [companion, manual]` falling back to `manual`. Every list-driven fallback has one code, whatever the mechanisms; a separate code for one pair would describe the mechanism instead of the condition.
 - **`suggestion-group-pr-unavailable`**, **`suggestion-group-requires-suggestion-prs`** and **`fix-changes-require-suggestion-prs`** are retired in favour of `delivery-unavailable`: a group, or a fix with several changes, that no listed mechanism can deliver is one case of §10.1.
-- The native-suggestion eligibility codes **`suggestion-reviewed-commit-not-head`**, **`suggestion-not-inline`**, **`suggestion-fence-unverified`**, **`suggestion-blank-only-unverified`**, **`suggestion-crlf-unverified`** and **`suggestion-final-newline-unverified`** are retired in favour of `delivery-unavailable` too: each condition is an obstacle of `native` (§8.9), so an edit that no listed mechanism can deliver is one `delivery-unavailable` whose bullet for `native` carries the condition's sentence. Reporting the condition under its own code as well would report one unit twice.
+- The native-suggestion eligibility codes **`suggestion-reviewed-commit-not-head`**, **`suggestion-not-inline`**, **`suggestion-fence-unverified`**, **`suggestion-blank-only-unverified`**, **`suggestion-crlf-unverified`** and **`suggestion-final-newline-unverified`** are retired in favour of `delivery-unavailable` too: each condition is an obstacle of `native` (§8.9), so an edit that no listed mechanism can deliver is one `delivery-unavailable` whose bullet for `native` carries the condition's sentence, and whose remedies carry the retired code's specific remedy (§8.9's table). Reporting the condition under its own code as well would report one unit twice.
 
 Publication reports only the codes of this section; [Diagnostics](diagnostics.md#retired-codes) lists the retired ones. None of them was released.
 
@@ -467,13 +479,13 @@ Each example gives its inputs and the hand-derived expectation. "Eligible" means
 
 **D-A7 (D51: a helper file and two edits).** An explicit group of a new helper file and two eligible edits that call it; `fileOperations` `[companion]` (for example from `--file-operations companion`). The group is one unit delivered by `companion`: one companion pull request holds all three changes. An unrelated ungrouped eligible edit in the same review is still delivered as `native`.
 
-**D-A8 (D51: the no-companion workflow).** The same group with the default `fileOperations` `[manual]`: delivered as the mixed manual group on the original pull request. No companion pull request is created.
+**D-A8 (D51: the no-companion workflow).** The same group with the default `fileOperations` `[manual]`: delivered as the mixed manual group on the original pull request. No companion pull request is created. *Specified; this version reports the mechanism unavailable until its presentation exists: the group is blocked with `delivery-unavailable` (§8.8).*
 
 **D-A9 (D55: strict, unavailable).** C: `--file-operations companion`. A standalone deletion on a pull request from a fork, whose companion obstacle is "The pull request's head branch is in a fork." Blocked: one `delivery-unavailable` naming the deletion, `` `[companion]` ``, ``set by the caller (`--file-operations`, `delivery.fileOperations`)``, and that obstacle. Nothing is written; the command line exits 2.
 
 **D-A10 (announced fallback).** F: `{"delivery":{"fileOperations":["companion","manual"]}}`. A standalone creation whose companion pull request cannot be made. Delivered as `manual`, with one `delivery-fallback` warning naming the creation, `` `[companion, manual]` ``, ``set by `.github/sarif-to-comment.json` on the default branch (`delivery.fileOperations`)`` and the companion obstacle.
 
-**D-A11 (D49: the manual group only when listed).** Defaults; an edit group with one ineligible member. Blocked: `manual-group` is not used, because no layer listed it. With `--delivery original-pr`: delivered as `manual-group`, with a `delivery-fallback` warning whose source is ``set by the caller's preset `original-pr` (`--delivery`, `delivery.preset`)``.
+**D-A11 (D49: the manual group only when listed).** Defaults; an edit group with one ineligible member. Blocked: `manual-group` is not used, because no layer listed it. With `--delivery original-pr`: delivered as `manual-group`, with a `delivery-fallback` warning whose source is ``set by the caller's preset `original-pr` (`--delivery`, `delivery.preset`)``. *Specified; this version reports the mechanism unavailable until its presentation exists: with `--delivery original-pr` the group is blocked with `delivery-unavailable`, naming both `native-batch` and `manual-group` (§8.8).*
 
 **D-A12 (D52: bundling).** `--delivery companion --companion-bundle single`; two edit groups and one standalone creation, all with companions possible. One companion pull request with three sections, in document order. With `per-unit`: three companion pull requests.
 
@@ -500,6 +512,8 @@ Each example gives its inputs and the hand-derived expectation. "Eligible" means
 **Owner confirmation at release review.**
 
 1. **`groupedEdits` default `[native-batch]`.** Today an edit group without suggestion pull requests is refused; under this default it is delivered as a native batch when every member is eligible. The alternative is a default that blocks every edit group unless the caller chooses. For the same review, note that the defaults also deliver a group containing a whole-file operation, which is refused today (`suggestion-group-requires-suggestion-prs`), as the mixed manual group (§5, §8.5). That route is already owner-authorized by D49's manual route, subsequently confirmed, and D51's no-companion workflow; it is recorded here so the release review sees every refusal the defaults turn into delivery, not as a new question.
+
+**What this version delivers.** Every mechanism, preset, layer and setting of this contract is accepted and resolved. These mechanisms deliver: `native` and `companion` for an edit; `native-batch` (for an explicit group whose members each make one change) and `companion` for an edit group; `manual` for a standalone file operation and `companion` for a file operation or a file-operation group; both bundle settings. These are specified but reported unavailable until their presentation exists (§8.8): `review-body`; `manual-group`; `manual` for a file-operation group (the mixed manual group); `native-batch` for a fix with several changes. Examples D-A8 and D-A11 are therefore blocked in this version.
 
 **Resolved since the first draft.**
 
