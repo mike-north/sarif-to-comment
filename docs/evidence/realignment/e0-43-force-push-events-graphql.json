@@ -1,0 +1,60 @@
+{
+  "data": {
+    "repository": {
+      "pullRequest": {
+        "number": 43,
+        "headRefName": "exp-forcepush-20260929-orphan",
+        "headRefOid": "d28aa24815178ce56025303fe98da1d1a0915a9f",
+        "baseRefName": "exp-forcepush-20260929-orphan-base",
+        "baseRefOid": "4f1974668dd1800b7926fa0aaf475330b68252a1",
+        "timelineItems": {
+          "totalCount": 4,
+          "nodes": [
+            {
+              "__typename": "HeadRefForcePushedEvent",
+              "id": "HRFPE_lADOUuyy7s8AAAABT9RSps8AAAAHeXhlgQ",
+              "createdAt": "2026-09-29T18:04:37Z",
+              "actor": {
+                "login": "mike-north"
+              },
+              "ref": {
+                "name": "exp-forcepush-20260929-orphan"
+              },
+              "beforeCommit": {
+                "oid": "eb6c2f6bbceb78a957684917cdb1a50cf9850cd4",
+                "committedDate": "2026-09-29T17:13:48Z",
+                "messageHeadline": "Experiment (orphan): C1 reviewed change"
+              },
+              "afterCommit": {
+                "oid": "3f77a6e1fe0359c81626b0437e61713d6c775526",
+                "committedDate": "2026-09-29T18:04:25Z",
+                "messageHeadline": "Experiment (orphan): C1 reviewed change"
+              }
+            },
+            {
+              "__typename": "HeadRefForcePushedEvent",
+              "id": "HRFPE_lADOUuyy7s8AAAABT9RSps8AAAAHeYZ_sQ",
+              "createdAt": "2026-09-29T18:18:56Z",
+              "actor": {
+                "login": "mike-north"
+              },
+              "ref": {
+                "name": "exp-forcepush-20260929-orphan"
+              },
+              "beforeCommit": {
+                "oid": "3f77a6e1fe0359c81626b0437e61713d6c775526",
+                "committedDate": "2026-09-29T18:04:25Z",
+                "messageHeadline": "Experiment (orphan): C1 reviewed change"
+              },
+              "afterCommit": {
+                "oid": "d28aa24815178ce56025303fe98da1d1a0915a9f",
+                "committedDate": "2026-09-29T18:18:48Z",
+                "messageHeadline": "Experiment (orphan): C1 reviewed change"
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

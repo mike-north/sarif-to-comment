@@ -1,0 +1,493 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "repos/mike-north/doc-linter/pulls/41/comments?per_page=100"
+  },
+  "status": 200,
+  "statusLine": "HTTP/2.0 200 OK",
+  "response": [
+    {
+      "url": "https://api.github.com/repos/mike-north/doc-linter/pulls/comments/4136702045",
+      "pull_request_review_id": 5356480526,
+      "id": 4136702045,
+      "node_id": "PRRC_kwDOUuyy7s72kRBd",
+      "diff_hunk": "@@ -2,8 +2,8 @@\n \n Line 03: stable filler text for the experiment.\n Line 04: stable filler text for the experiment.\n-Line 05: original text.\n-Line 06: original text.\n+Line 05: reviewed change one (added by C1).",
+      "path": "docs/experiments/forcepush/sample-amend.md",
+      "commit_id": "30073435e95ecbe4849f2423371d3d5010251cfe",
+      "original_commit_id": "e69981ed42926b07d0ff3f25d98558229afd348e",
+      "user": {
+        "login": "mike-north",
+        "id": 558005,
+        "node_id": "MDQ6VXNlcjU1ODAwNQ==",
+        "avatar_url": "https://avatars.githubusercontent.com/u/558005?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/mike-north",
+        "html_url": "https://github.com/mike-north",
+        "followers_url": "https://api.github.com/users/mike-north/followers",
+        "following_url": "https://api.github.com/users/mike-north/following{/other_user}",
+        "gists_url": "https://api.github.com/users/mike-north/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/mike-north/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/mike-north/subscriptions",
+        "organizations_url": "https://api.github.com/users/mike-north/orgs",
+        "repos_url": "https://api.github.com/users/mike-north/repos",
+        "events_url": "https://api.github.com/users/mike-north/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/mike-north/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "body": "Experiment comment on line 5 (reviewed at C1).\n\n<sub>— Force-push experiment</sub>",
+      "created_at": "2026-09-29T18:02:52Z",
+      "updated_at": "2026-10-01T01:35:19Z",
+      "html_url": "https://github.com/mike-north/doc-linter/pull/41#discussion_r4136702045",
+      "pull_request_url": "https://api.github.com/repos/mike-north/doc-linter/pulls/41",
+      "_links": {
+        "self": {
+          "href": "https://api.github.com/repos/mike-north/doc-linter/pulls/comments/4136702045"
+        },
+        "html": {
+          "href": "https://github.com/mike-north/doc-linter/pull/41#discussion_r4136702045"
+        },
+        "pull_request": {
+          "href": "https://api.github.com/repos/mike-north/doc-linter/pulls/41"
+        }
+      },
+      "reactions": {
+        "url": "https://api.github.com/repos/mike-north/doc-linter/pulls/comments/4136702045/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "start_line": null,
+      "original_start_line": null,
+      "start_side": null,
+      "line": null,
+      "original_line": 5,
+      "side": "RIGHT",
+      "author_association": "OWNER",
+      "original_position": 6,
+      "position": 1,
+      "subject_type": "line"
+    },
+    {
+      "url": "https://api.github.com/repos/mike-north/doc-linter/pulls/comments/4136702047",
+      "pull_request_review_id": 5356480526,
+      "id": 4136702047,
+      "node_id": "PRRC_kwDOUuyy7s72kRBf",
+      "diff_hunk": "@@ -2,8 +2,8 @@\n \n Line 03: stable filler text for the experiment.\n Line 04: stable filler text for the experiment.\n-Line 05: original text.\n-Line 06: original text.\n+Line 05: reviewed change one (added by C1).\n+Line 06: reviewed change two (added by C1).",
+      "path": "docs/experiments/forcepush/sample-amend.md",
+      "commit_id": "b3e3ed734b03fc8e4dae2b7cb85f6d8bb1b98801",
+      "original_commit_id": "e69981ed42926b07d0ff3f25d98558229afd348e",
+      "user": {
+        "login": "mike-north",
+        "id": 558005,
+        "node_id": "MDQ6VXNlcjU1ODAwNQ==",
+        "avatar_url": "https://avatars.githubusercontent.com/u/558005?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/mike-north",
+        "html_url": "https://github.com/mike-north",
+        "followers_url": "https://api.github.com/users/mike-north/followers",
+        "following_url": "https://api.github.com/users/mike-north/following{/other_user}",
+        "gists_url": "https://api.github.com/users/mike-north/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/mike-north/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/mike-north/subscriptions",
+        "organizations_url": "https://api.github.com/users/mike-north/orgs",
+        "repos_url": "https://api.github.com/users/mike-north/repos",
+        "events_url": "https://api.github.com/users/mike-north/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/mike-north/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "body": "Experiment suggestion on line 6 (reviewed at C1).\n\n<sub>— Force-push experiment</sub>\n\n```suggestion\nLine 06: native suggestion text for line six.\n```",
+      "created_at": "2026-09-29T18:02:52Z",
+      "updated_at": "2026-10-01T01:35:19Z",
+      "html_url": "https://github.com/mike-north/doc-linter/pull/41#discussion_r4136702047",
+      "pull_request_url": "https://api.github.com/repos/mike-north/doc-linter/pulls/41",
+      "_links": {
+        "self": {
+          "href": "https://api.github.com/repos/mike-north/doc-linter/pulls/comments/4136702047"
+        },
+        "html": {
+          "href": "https://github.com/mike-north/doc-linter/pull/41#discussion_r4136702047"
+        },
+        "pull_request": {
+          "href": "https://api.github.com/repos/mike-north/doc-linter/pulls/41"
+        }
+      },
+      "reactions": {
+        "url": "https://api.github.com/repos/mike-north/doc-linter/pulls/comments/4136702047/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "start_line": null,
+      "original_start_line": null,
+      "start_side": null,
+      "line": 6,
+      "original_line": 6,
+      "side": "RIGHT",
+      "author_association": "OWNER",
+      "original_position": 7,
+      "position": 5,
+      "subject_type": "line"
+    },
+    {
+      "url": "https://api.github.com/repos/mike-north/doc-linter/pulls/comments/4150989017",
+      "pull_request_review_id": 5373957613,
+      "id": 4150989017,
+      "node_id": "PRRC_kwDOUuyy7s73axDZ",
+      "diff_hunk": "@@ -2,8 +2,8 @@\n \n Line 03: stable filler text for the experiment.\n Line 04: stable filler text for the experiment.\n-Line 05: original text.\n-Line 06: original text.\n+Line 05: reviewed change one (added by C1).\n+Line 06: reviewed change two (added by C1).",
+      "path": "docs/experiments/forcepush/sample-amend.md",
+      "commit_id": "e69981ed42926b07d0ff3f25d98558229afd348e",
+      "original_commit_id": "e69981ed42926b07d0ff3f25d98558229afd348e",
+      "user": {
+        "login": "mike-north",
+        "id": 558005,
+        "node_id": "MDQ6VXNlcjU1ODAwNQ==",
+        "avatar_url": "https://avatars.githubusercontent.com/u/558005?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/mike-north",
+        "html_url": "https://github.com/mike-north",
+        "followers_url": "https://api.github.com/users/mike-north/followers",
+        "following_url": "https://api.github.com/users/mike-north/following{/other_user}",
+        "gists_url": "https://api.github.com/users/mike-north/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/mike-north/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/mike-north/subscriptions",
+        "organizations_url": "https://api.github.com/users/mike-north/orgs",
+        "repos_url": "https://api.github.com/users/mike-north/repos",
+        "events_url": "https://api.github.com/users/mike-north/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/mike-north/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "body": "E1 #41 `a-right6`: RIGHT line 6 at `e69981e`.",
+      "created_at": "2026-10-01T01:39:17Z",
+      "updated_at": "2026-10-01T01:39:17Z",
+      "html_url": "https://github.com/mike-north/doc-linter/pull/41#discussion_r4150989017",
+      "pull_request_url": "https://api.github.com/repos/mike-north/doc-linter/pulls/41",
+      "_links": {
+        "self": {
+          "href": "https://api.github.com/repos/mike-north/doc-linter/pulls/comments/4150989017"
+        },
+        "html": {
+          "href": "https://github.com/mike-north/doc-linter/pull/41#discussion_r4150989017"
+        },
+        "pull_request": {
+          "href": "https://api.github.com/repos/mike-north/doc-linter/pulls/41"
+        }
+      },
+      "reactions": {
+        "url": "https://api.github.com/repos/mike-north/doc-linter/pulls/comments/4150989017/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "start_line": null,
+      "original_start_line": null,
+      "start_side": null,
+      "line": 6,
+      "original_line": 6,
+      "side": "RIGHT",
+      "author_association": "OWNER",
+      "original_position": 7,
+      "position": 7,
+      "subject_type": "line"
+    },
+    {
+      "url": "https://api.github.com/repos/mike-north/doc-linter/pulls/comments/4150989117",
+      "pull_request_review_id": 5373957705,
+      "id": 4150989117,
+      "node_id": "PRRC_kwDOUuyy7s73axE9",
+      "diff_hunk": "@@ -2,8 +2,8 @@\n \n Line 03: stable filler text for the experiment.\n Line 04: stable filler text for the experiment.\n-Line 05: original text.\n-Line 06: original text.\n+Line 05: reviewed change one (added by C1).",
+      "path": "docs/experiments/forcepush/sample-amend.md",
+      "commit_id": "e69981ed42926b07d0ff3f25d98558229afd348e",
+      "original_commit_id": "e69981ed42926b07d0ff3f25d98558229afd348e",
+      "user": {
+        "login": "mike-north",
+        "id": 558005,
+        "node_id": "MDQ6VXNlcjU1ODAwNQ==",
+        "avatar_url": "https://avatars.githubusercontent.com/u/558005?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/mike-north",
+        "html_url": "https://github.com/mike-north",
+        "followers_url": "https://api.github.com/users/mike-north/followers",
+        "following_url": "https://api.github.com/users/mike-north/following{/other_user}",
+        "gists_url": "https://api.github.com/users/mike-north/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/mike-north/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/mike-north/subscriptions",
+        "organizations_url": "https://api.github.com/users/mike-north/orgs",
+        "repos_url": "https://api.github.com/users/mike-north/repos",
+        "events_url": "https://api.github.com/users/mike-north/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/mike-north/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "body": "E1 #41 `b-right5`: RIGHT line 5 at `e69981e`.",
+      "created_at": "2026-10-01T01:39:19Z",
+      "updated_at": "2026-10-01T01:39:19Z",
+      "html_url": "https://github.com/mike-north/doc-linter/pull/41#discussion_r4150989117",
+      "pull_request_url": "https://api.github.com/repos/mike-north/doc-linter/pulls/41",
+      "_links": {
+        "self": {
+          "href": "https://api.github.com/repos/mike-north/doc-linter/pulls/comments/4150989117"
+        },
+        "html": {
+          "href": "https://github.com/mike-north/doc-linter/pull/41#discussion_r4150989117"
+        },
+        "pull_request": {
+          "href": "https://api.github.com/repos/mike-north/doc-linter/pulls/41"
+        }
+      },
+      "reactions": {
+        "url": "https://api.github.com/repos/mike-north/doc-linter/pulls/comments/4150989117/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "start_line": null,
+      "original_start_line": null,
+      "start_side": null,
+      "line": 5,
+      "original_line": 5,
+      "side": "RIGHT",
+      "author_association": "OWNER",
+      "original_position": 6,
+      "position": 6,
+      "subject_type": "line"
+    },
+    {
+      "url": "https://api.github.com/repos/mike-north/doc-linter/pulls/comments/4150989226",
+      "pull_request_review_id": 5373957807,
+      "id": 4150989226,
+      "node_id": "PRRC_kwDOUuyy7s73axGq",
+      "diff_hunk": "@@ -2,8 +2,8 @@\n \n Line 03: stable filler text for the experiment.\n Line 04: stable filler text for the experiment.\n-Line 05: original text.\n-Line 06: original text.",
+      "path": "docs/experiments/forcepush/sample-amend.md",
+      "commit_id": "e69981ed42926b07d0ff3f25d98558229afd348e",
+      "original_commit_id": "e69981ed42926b07d0ff3f25d98558229afd348e",
+      "user": {
+        "login": "mike-north",
+        "id": 558005,
+        "node_id": "MDQ6VXNlcjU1ODAwNQ==",
+        "avatar_url": "https://avatars.githubusercontent.com/u/558005?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/mike-north",
+        "html_url": "https://github.com/mike-north",
+        "followers_url": "https://api.github.com/users/mike-north/followers",
+        "following_url": "https://api.github.com/users/mike-north/following{/other_user}",
+        "gists_url": "https://api.github.com/users/mike-north/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/mike-north/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/mike-north/subscriptions",
+        "organizations_url": "https://api.github.com/users/mike-north/orgs",
+        "repos_url": "https://api.github.com/users/mike-north/repos",
+        "events_url": "https://api.github.com/users/mike-north/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/mike-north/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "body": "E1 #41 `c-left6`: LEFT line 6 at `e69981e`.",
+      "created_at": "2026-10-01T01:39:20Z",
+      "updated_at": "2026-10-01T01:39:20Z",
+      "html_url": "https://github.com/mike-north/doc-linter/pull/41#discussion_r4150989226",
+      "pull_request_url": "https://api.github.com/repos/mike-north/doc-linter/pulls/41",
+      "_links": {
+        "self": {
+          "href": "https://api.github.com/repos/mike-north/doc-linter/pulls/comments/4150989226"
+        },
+        "html": {
+          "href": "https://github.com/mike-north/doc-linter/pull/41#discussion_r4150989226"
+        },
+        "pull_request": {
+          "href": "https://api.github.com/repos/mike-north/doc-linter/pulls/41"
+        }
+      },
+      "reactions": {
+        "url": "https://api.github.com/repos/mike-north/doc-linter/pulls/comments/4150989226/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "start_line": null,
+      "original_start_line": null,
+      "start_side": null,
+      "line": 6,
+      "original_line": 6,
+      "side": "LEFT",
+      "author_association": "OWNER",
+      "original_position": 5,
+      "position": 5,
+      "subject_type": "line"
+    },
+    {
+      "url": "https://api.github.com/repos/mike-north/doc-linter/pulls/comments/4150989346",
+      "pull_request_review_id": 5373957926,
+      "id": 4150989346,
+      "node_id": "PRRC_kwDOUuyy7s73axIi",
+      "diff_hunk": "@@ -2,8 +2,8 @@\n \n Line 03: stable filler text for the experiment.\n Line 04: stable filler text for the experiment.\n-Line 05: original text.",
+      "path": "docs/experiments/forcepush/sample-amend.md",
+      "commit_id": "e69981ed42926b07d0ff3f25d98558229afd348e",
+      "original_commit_id": "e69981ed42926b07d0ff3f25d98558229afd348e",
+      "user": {
+        "login": "mike-north",
+        "id": 558005,
+        "node_id": "MDQ6VXNlcjU1ODAwNQ==",
+        "avatar_url": "https://avatars.githubusercontent.com/u/558005?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/mike-north",
+        "html_url": "https://github.com/mike-north",
+        "followers_url": "https://api.github.com/users/mike-north/followers",
+        "following_url": "https://api.github.com/users/mike-north/following{/other_user}",
+        "gists_url": "https://api.github.com/users/mike-north/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/mike-north/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/mike-north/subscriptions",
+        "organizations_url": "https://api.github.com/users/mike-north/orgs",
+        "repos_url": "https://api.github.com/users/mike-north/repos",
+        "events_url": "https://api.github.com/users/mike-north/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/mike-north/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "body": "E1 #41 `c-left5`: LEFT line 5 at `e69981e`.",
+      "created_at": "2026-10-01T01:39:21Z",
+      "updated_at": "2026-10-01T01:39:21Z",
+      "html_url": "https://github.com/mike-north/doc-linter/pull/41#discussion_r4150989346",
+      "pull_request_url": "https://api.github.com/repos/mike-north/doc-linter/pulls/41",
+      "_links": {
+        "self": {
+          "href": "https://api.github.com/repos/mike-north/doc-linter/pulls/comments/4150989346"
+        },
+        "html": {
+          "href": "https://github.com/mike-north/doc-linter/pull/41#discussion_r4150989346"
+        },
+        "pull_request": {
+          "href": "https://api.github.com/repos/mike-north/doc-linter/pulls/41"
+        }
+      },
+      "reactions": {
+        "url": "https://api.github.com/repos/mike-north/doc-linter/pulls/comments/4150989346/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "start_line": null,
+      "original_start_line": null,
+      "start_side": null,
+      "line": 5,
+      "original_line": 5,
+      "side": "LEFT",
+      "author_association": "OWNER",
+      "original_position": 4,
+      "position": 4,
+      "subject_type": "line"
+    },
+    {
+      "url": "https://api.github.com/repos/mike-north/doc-linter/pulls/comments/4150989431",
+      "pull_request_review_id": 5373958025,
+      "id": 4150989431,
+      "node_id": "PRRC_kwDOUuyy7s73axJ3",
+      "diff_hunk": "@@ -2,8 +2,8 @@\n ",
+      "path": "docs/experiments/forcepush/sample-amend.md",
+      "commit_id": "e69981ed42926b07d0ff3f25d98558229afd348e",
+      "original_commit_id": "e69981ed42926b07d0ff3f25d98558229afd348e",
+      "user": {
+        "login": "mike-north",
+        "id": 558005,
+        "node_id": "MDQ6VXNlcjU1ODAwNQ==",
+        "avatar_url": "https://avatars.githubusercontent.com/u/558005?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/mike-north",
+        "html_url": "https://github.com/mike-north",
+        "followers_url": "https://api.github.com/users/mike-north/followers",
+        "following_url": "https://api.github.com/users/mike-north/following{/other_user}",
+        "gists_url": "https://api.github.com/users/mike-north/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/mike-north/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/mike-north/subscriptions",
+        "organizations_url": "https://api.github.com/users/mike-north/orgs",
+        "repos_url": "https://api.github.com/users/mike-north/repos",
+        "events_url": "https://api.github.com/users/mike-north/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/mike-north/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "body": "E1 #41 `d-reviewed-only-right2`: RIGHT line 2 at `e69981e`.",
+      "created_at": "2026-10-01T01:39:22Z",
+      "updated_at": "2026-10-01T01:39:22Z",
+      "html_url": "https://github.com/mike-north/doc-linter/pull/41#discussion_r4150989431",
+      "pull_request_url": "https://api.github.com/repos/mike-north/doc-linter/pulls/41",
+      "_links": {
+        "self": {
+          "href": "https://api.github.com/repos/mike-north/doc-linter/pulls/comments/4150989431"
+        },
+        "html": {
+          "href": "https://github.com/mike-north/doc-linter/pull/41#discussion_r4150989431"
+        },
+        "pull_request": {
+          "href": "https://api.github.com/repos/mike-north/doc-linter/pulls/41"
+        }
+      },
+      "reactions": {
+        "url": "https://api.github.com/repos/mike-north/doc-linter/pulls/comments/4150989431/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "start_line": null,
+      "original_start_line": null,
+      "start_side": null,
+      "line": 2,
+      "original_line": 2,
+      "side": "RIGHT",
+      "author_association": "OWNER",
+      "original_position": 1,
+      "position": 1,
+      "subject_type": "line"
+    }
+  ]
+}

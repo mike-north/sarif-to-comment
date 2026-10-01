@@ -1,0 +1,64 @@
+{
+  "additions": 1,
+  "baseRefName": "exp-forcepush-20260929-rebase-base",
+  "baseRefOid": "13fddb7722ab14a387af7e3f31f29f2b2cd3aa93",
+  "body": "Fixture PR (rebase variant) for an experiment on how GitHub treats reviews and suggestion pull requests after a force-push. Do not merge.",
+  "changedFiles": 1,
+  "closed": false,
+  "commits": [
+    {
+      "authoredDate": "2026-09-29T17:13:48Z",
+      "authors": [
+        {
+          "email": "<redacted-email>",
+          "id": "MDQ6VXNlcjU1ODAwNQ==",
+          "login": "mike-north",
+          "name": "Mike North"
+        }
+      ],
+      "committedDate": "2026-09-29T18:17:56Z",
+      "messageBody": "",
+      "messageHeadline": "Experiment (rebase): C1 reviewed change",
+      "oid": "f4ba85967197ae0ec1a2ebd18bebe2a2fb98c5c6"
+    }
+  ],
+  "createdAt": "2026-09-29T17:14:16Z",
+  "deletions": 1,
+  "files": [
+    {
+      "path": "docs/experiments/forcepush/sample-rebase.md",
+      "additions": 1,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    }
+  ],
+  "headRefName": "exp-forcepush-20260929-rebase",
+  "headRefOid": "f4ba85967197ae0ec1a2ebd18bebe2a2fb98c5c6",
+  "isDraft": true,
+  "latestReviews": [],
+  "mergeStateStatus": "CLEAN",
+  "mergeable": "MERGEABLE",
+  "mergedAt": null,
+  "number": 42,
+  "reviews": [
+    {
+      "id": "PRR_kwDOUuyy7s8AAAABP0VsEg",
+      "author": {
+        "login": "mike-north"
+      },
+      "authorAssociation": "OWNER",
+      "body": "\n\n<!-- sarif-to-comment:review:ad11405f-c515-4b27-b887-0332204bc016 -->",
+      "submittedAt": "2026-09-29T18:02:58Z",
+      "includesCreatedEdit": false,
+      "reactionGroups": [],
+      "state": "COMMENTED",
+      "commit": {
+        "oid": "7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc"
+      }
+    }
+  ],
+  "state": "OPEN",
+  "title": "Experiment: force-push behaviour (do not merge)",
+  "updatedAt": "2026-09-29T18:17:59Z",
+  "url": "https://github.com/mike-north/doc-linter/pull/42"
+}

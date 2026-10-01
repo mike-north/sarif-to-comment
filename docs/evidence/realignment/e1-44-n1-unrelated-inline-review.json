@@ -1,0 +1,48 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "repos/mike-north/doc-linter/pulls/44/reviews/5373959027"
+  },
+  "status": 200,
+  "statusLine": "HTTP/2.0 200 OK",
+  "response": {
+    "id": 5373959027,
+    "node_id": "PRR_kwDOUuyy7s8AAAABQFAbcw",
+    "user": {
+      "login": "mike-north",
+      "id": 558005,
+      "node_id": "MDQ6VXNlcjU1ODAwNQ==",
+      "avatar_url": "https://avatars.githubusercontent.com/u/558005?u=a27f905c8f24e1ad227d32905fa5512fd615153d&v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/mike-north",
+      "html_url": "https://github.com/mike-north",
+      "followers_url": "https://api.github.com/users/mike-north/followers",
+      "following_url": "https://api.github.com/users/mike-north/following{/other_user}",
+      "gists_url": "https://api.github.com/users/mike-north/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/mike-north/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/mike-north/subscriptions",
+      "organizations_url": "https://api.github.com/users/mike-north/orgs",
+      "repos_url": "https://api.github.com/users/mike-north/repos",
+      "events_url": "https://api.github.com/users/mike-north/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/mike-north/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "body": "E1 historical-review experiment, case `n1-unrelated-inline` on #44: commit_id is the tip of the unrelated branch demo/content-review, not in the PR's history; inline comment on a line that commit adds. Reviewed commit `bbd615c`. Fixture only; do not act on this review.\n\n<!-- e1:44:n1-unrelated-inline -->",
+    "state": "COMMENTED",
+    "html_url": "https://github.com/mike-north/doc-linter/pull/44#pullrequestreview-5373959027",
+    "pull_request_url": "https://api.github.com/repos/mike-north/doc-linter/pulls/44",
+    "author_association": "OWNER",
+    "_links": {
+      "html": {
+        "href": "https://github.com/mike-north/doc-linter/pull/44#pullrequestreview-5373959027"
+      },
+      "pull_request": {
+        "href": "https://api.github.com/repos/mike-north/doc-linter/pulls/44"
+      }
+    },
+    "submitted_at": "2026-10-01T01:39:33Z",
+    "commit_id": "bbd615c9c5c472a408d7fe6df019a07991536d59"
+  }
+}

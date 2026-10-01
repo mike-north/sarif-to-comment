@@ -1,0 +1,110 @@
+{
+  "data": {
+    "repository": {
+      "pullRequest": {
+        "number": 41,
+        "headRefOid": "b3e3ed734b03fc8e4dae2b7cb85f6d8bb1b98801",
+        "reviews": {
+          "nodes": [
+            {
+              "databaseId": 5356480526,
+              "state": "PENDING",
+              "submittedAt": null,
+              "createdAt": "2026-09-29T18:02:52Z",
+              "commit": {
+                "oid": "e69981ed42926b07d0ff3f25d98558229afd348e"
+              },
+              "comments": {
+                "totalCount": 2
+              }
+            }
+          ]
+        },
+        "reviewThreads": {
+          "nodes": [
+            {
+              "id": "PRRT_kwDOUuyy7s6nOyKP",
+              "isOutdated": true,
+              "isResolved": false,
+              "path": "docs/experiments/forcepush/sample-amend.md",
+              "line": null,
+              "originalLine": 5,
+              "startLine": null,
+              "originalStartLine": null,
+              "diffSide": "RIGHT",
+              "subjectType": "LINE",
+              "comments": {
+                "nodes": [
+                  {
+                    "databaseId": 4136702045,
+                    "state": "PENDING",
+                    "outdated": true,
+                    "path": "docs/experiments/forcepush/sample-amend.md",
+                    "line": null,
+                    "originalLine": 5,
+                    "startLine": null,
+                    "originalStartLine": null,
+                    "position": 1,
+                    "originalPosition": 6,
+                    "commit": {
+                      "oid": "30073435e95ecbe4849f2423371d3d5010251cfe"
+                    },
+                    "originalCommit": {
+                      "oid": "e69981ed42926b07d0ff3f25d98558229afd348e"
+                    },
+                    "pullRequestReview": {
+                      "databaseId": 5356480526,
+                      "state": "PENDING"
+                    },
+                    "createdAt": "2026-09-29T18:02:52Z",
+                    "body": "Experiment comment on line 5 (reviewed at C1).\n\n<sub>— Force-push experiment</sub>"
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDOUuyy7s6nOyKQ",
+              "isOutdated": false,
+              "isResolved": false,
+              "path": "docs/experiments/forcepush/sample-amend.md",
+              "line": 6,
+              "originalLine": 6,
+              "startLine": 6,
+              "originalStartLine": null,
+              "diffSide": "RIGHT",
+              "subjectType": "LINE",
+              "comments": {
+                "nodes": [
+                  {
+                    "databaseId": 4136702047,
+                    "state": "PENDING",
+                    "outdated": false,
+                    "path": "docs/experiments/forcepush/sample-amend.md",
+                    "line": 6,
+                    "originalLine": 6,
+                    "startLine": null,
+                    "originalStartLine": null,
+                    "position": 5,
+                    "originalPosition": 7,
+                    "commit": {
+                      "oid": "b3e3ed734b03fc8e4dae2b7cb85f6d8bb1b98801"
+                    },
+                    "originalCommit": {
+                      "oid": "e69981ed42926b07d0ff3f25d98558229afd348e"
+                    },
+                    "pullRequestReview": {
+                      "databaseId": 5356480526,
+                      "state": "PENDING"
+                    },
+                    "createdAt": "2026-09-29T18:02:52Z",
+                    "body": "Experiment suggestion on line 6 (reviewed at C1).\n\n<sub>— Force-push experiment</sub>\n\n```suggestion\nLine 06: native suggestion text for line six.\n```"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

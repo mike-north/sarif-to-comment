@@ -1,0 +1,573 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "graphql (scratch query: reviews, reviewThreads, timelineItems[PULL_REQUEST_REVIEW]; number=42)"
+  },
+  "status": 200,
+  "statusLine": "HTTP/2.0 200 OK",
+  "response": {
+    "data": {
+      "repository": {
+        "pullRequest": {
+          "number": 42,
+          "headRefOid": "f4ba85967197ae0ec1a2ebd18bebe2a2fb98c5c6",
+          "baseRefOid": "13fddb7722ab14a387af7e3f31f29f2b2cd3aa93",
+          "reviews": {
+            "totalCount": 7,
+            "nodes": [
+              {
+                "databaseId": 5356481554,
+                "state": "COMMENTED",
+                "createdAt": "2026-09-29T18:02:58Z",
+                "submittedAt": "2026-09-29T18:02:58Z",
+                "commit": {
+                  "oid": "7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc"
+                },
+                "body": "\n\n<!-- sarif-to-comment:review:ad11405f-c515-4b27-b887-0332204bc016 -->",
+                "comments": {
+                  "totalCount": 2,
+                  "nodes": [
+                    {
+                      "databaseId": 4136702857
+                    },
+                    {
+                      "databaseId": 4136702859
+                    }
+                  ]
+                }
+              },
+              {
+                "databaseId": 5373958189,
+                "state": "COMMENTED",
+                "createdAt": "2026-10-01T01:39:24Z",
+                "submittedAt": "2026-10-01T01:39:24Z",
+                "commit": {
+                  "oid": "7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc"
+                },
+                "body": "E1 historical-review experiment, case `a-right6` on #42: RIGHT line 6, unchanged between the reviewed commit and the head. Reviewed commit `7eb3dc6`. Fixture only; do not act on this review.\n\n<!-- e1:42:a-right6 -->",
+                "comments": {
+                  "totalCount": 1,
+                  "nodes": [
+                    {
+                      "databaseId": 4150989584
+                    }
+                  ]
+                }
+              },
+              {
+                "databaseId": 5373958297,
+                "state": "COMMENTED",
+                "createdAt": "2026-10-01T01:39:25Z",
+                "submittedAt": "2026-10-01T01:39:25Z",
+                "commit": {
+                  "oid": "7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc"
+                },
+                "body": "E1 historical-review experiment, case `b-right5` on #42: RIGHT line 5, changed at the reviewed commit, change dropped at the head. Reviewed commit `7eb3dc6`. Fixture only; do not act on this review.\n\n<!-- e1:42:b-right5 -->",
+                "comments": {
+                  "totalCount": 1,
+                  "nodes": [
+                    {
+                      "databaseId": 4150989677
+                    }
+                  ]
+                }
+              },
+              {
+                "databaseId": 5373958412,
+                "state": "COMMENTED",
+                "createdAt": "2026-10-01T01:39:27Z",
+                "submittedAt": "2026-10-01T01:39:27Z",
+                "commit": {
+                  "oid": "7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc"
+                },
+                "body": "E1 historical-review experiment, case `c-left6` on #42: LEFT line 6, a deleted base line in both diffs. Reviewed commit `7eb3dc6`. Fixture only; do not act on this review.\n\n<!-- e1:42:c-left6 -->",
+                "comments": {
+                  "totalCount": 1,
+                  "nodes": [
+                    {
+                      "databaseId": 4150989809
+                    }
+                  ]
+                }
+              },
+              {
+                "databaseId": 5373958488,
+                "state": "COMMENTED",
+                "createdAt": "2026-10-01T01:39:28Z",
+                "submittedAt": "2026-10-01T01:39:28Z",
+                "commit": {
+                  "oid": "7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc"
+                },
+                "body": "E1 historical-review experiment, case `c-left5` on #42: LEFT line 5, deleted in the reviewed diff, context in the head diff. Reviewed commit `7eb3dc6`. Fixture only; do not act on this review.\n\n<!-- e1:42:c-left5 -->",
+                "comments": {
+                  "totalCount": 1,
+                  "nodes": [
+                    {
+                      "databaseId": 4150989879
+                    }
+                  ]
+                }
+              },
+              {
+                "databaseId": 5373958588,
+                "state": "COMMENTED",
+                "createdAt": "2026-10-01T01:39:29Z",
+                "submittedAt": "2026-10-01T01:39:29Z",
+                "commit": {
+                  "oid": "7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc"
+                },
+                "body": "E1 historical-review experiment, case `d-reviewed-only-right2` on #42: RIGHT line 2, inside the merge-base...reviewed hunk but outside the base...head hunk. Reviewed commit `7eb3dc6`. Fixture only; do not act on this review.\n\n<!-- e1:42:d-reviewed-only-right2 -->",
+                "comments": {
+                  "totalCount": 1,
+                  "nodes": [
+                    {
+                      "databaseId": 4150989964
+                    }
+                  ]
+                }
+              },
+              {
+                "databaseId": 5373958814,
+                "state": "COMMENTED",
+                "createdAt": "2026-10-01T01:39:31Z",
+                "submittedAt": "2026-10-01T01:39:31Z",
+                "commit": {
+                  "oid": "7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc"
+                },
+                "body": "E1 historical-review experiment, case `f-twodot-only-right18` on #42: RIGHT line 18, inside the two-dot current-base..reviewed hunk only, outside the merge-base...reviewed and base...head hunks. Reviewed commit `7eb3dc6`. Fixture only; do not act on this review.\n\n<!-- e1:42:f-twodot-only-right18 -->",
+                "comments": {
+                  "totalCount": 1,
+                  "nodes": [
+                    {
+                      "databaseId": 4150990085
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "reviewThreads": {
+            "totalCount": 8,
+            "nodes": [
+              {
+                "id": "PRRT_kwDOUuyy7s6nOyRj",
+                "isOutdated": true,
+                "isResolved": false,
+                "path": "docs/experiments/forcepush/sample-rebase.md",
+                "line": null,
+                "originalLine": 5,
+                "startLine": null,
+                "originalStartLine": null,
+                "diffSide": "RIGHT",
+                "subjectType": "LINE",
+                "comments": {
+                  "nodes": [
+                    {
+                      "databaseId": 4136702857,
+                      "state": "SUBMITTED",
+                      "outdated": true,
+                      "path": "docs/experiments/forcepush/sample-rebase.md",
+                      "line": null,
+                      "originalLine": 5,
+                      "startLine": null,
+                      "originalStartLine": null,
+                      "position": 1,
+                      "originalPosition": 6,
+                      "diffHunk": "@@ -2,8 +2,8 @@\n \n Line 03: stable filler text for the experiment.\n Line 04: stable filler text for the experiment.\n-Line 05: original text.\n-Line 06: original text.\n+Line 05: reviewed change one (added by C1).",
+                      "commit": {
+                        "oid": "62ed990cc54a2f8185410d3d6a6e84a82da1f0c3"
+                      },
+                      "originalCommit": {
+                        "oid": "7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc"
+                      },
+                      "pullRequestReview": {
+                        "databaseId": 5356481554,
+                        "state": "COMMENTED"
+                      },
+                      "createdAt": "2026-09-29T18:02:58Z",
+                      "body": "Experiment comment on line 5 (reviewed at C1).\n\n<sub>— Force-push experiment</sub>"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "PRRT_kwDOUuyy7s6nOyRm",
+                "isOutdated": false,
+                "isResolved": false,
+                "path": "docs/experiments/forcepush/sample-rebase.md",
+                "line": 6,
+                "originalLine": 6,
+                "startLine": 6,
+                "originalStartLine": null,
+                "diffSide": "RIGHT",
+                "subjectType": "LINE",
+                "comments": {
+                  "nodes": [
+                    {
+                      "databaseId": 4136702859,
+                      "state": "SUBMITTED",
+                      "outdated": false,
+                      "path": "docs/experiments/forcepush/sample-rebase.md",
+                      "line": 6,
+                      "originalLine": 6,
+                      "startLine": null,
+                      "originalStartLine": null,
+                      "position": 5,
+                      "originalPosition": 7,
+                      "diffHunk": "@@ -2,8 +2,8 @@\n \n Line 03: stable filler text for the experiment.\n Line 04: stable filler text for the experiment.\n-Line 05: original text.\n-Line 06: original text.\n+Line 05: reviewed change one (added by C1).\n+Line 06: reviewed change two (added by C1).",
+                      "commit": {
+                        "oid": "f4ba85967197ae0ec1a2ebd18bebe2a2fb98c5c6"
+                      },
+                      "originalCommit": {
+                        "oid": "7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc"
+                      },
+                      "pullRequestReview": {
+                        "databaseId": 5356481554,
+                        "state": "COMMENTED"
+                      },
+                      "createdAt": "2026-09-29T18:02:58Z",
+                      "body": "Experiment suggestion on line 6 (reviewed at C1).\n\n<sub>— Force-push experiment</sub>\n\n```suggestion\nLine 06: native suggestion text for line six.\n```"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "PRRT_kwDOUuyy7s6nxbXH",
+                "isOutdated": false,
+                "isResolved": false,
+                "path": "docs/experiments/forcepush/sample-rebase.md",
+                "line": 6,
+                "originalLine": 6,
+                "startLine": 6,
+                "originalStartLine": null,
+                "diffSide": "RIGHT",
+                "subjectType": "LINE",
+                "comments": {
+                  "nodes": [
+                    {
+                      "databaseId": 4150989584,
+                      "state": "SUBMITTED",
+                      "outdated": false,
+                      "path": "docs/experiments/forcepush/sample-rebase.md",
+                      "line": 6,
+                      "originalLine": 6,
+                      "startLine": null,
+                      "originalStartLine": null,
+                      "position": 7,
+                      "originalPosition": 7,
+                      "diffHunk": "@@ -2,8 +2,8 @@\n \n Line 03: stable filler text for the experiment.\n Line 04: stable filler text for the experiment.\n-Line 05: original text.\n-Line 06: original text.\n+Line 05: reviewed change one (added by C1).\n+Line 06: reviewed change two (added by C1).",
+                      "commit": {
+                        "oid": "7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc"
+                      },
+                      "originalCommit": {
+                        "oid": "7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc"
+                      },
+                      "pullRequestReview": {
+                        "databaseId": 5373958189,
+                        "state": "COMMENTED"
+                      },
+                      "createdAt": "2026-10-01T01:39:24Z",
+                      "body": "E1 #42 `a-right6`: RIGHT line 6 at `7eb3dc6`."
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "PRRT_kwDOUuyy7s6nxbYE",
+                "isOutdated": false,
+                "isResolved": false,
+                "path": "docs/experiments/forcepush/sample-rebase.md",
+                "line": 5,
+                "originalLine": 5,
+                "startLine": null,
+                "originalStartLine": null,
+                "diffSide": "RIGHT",
+                "subjectType": "LINE",
+                "comments": {
+                  "nodes": [
+                    {
+                      "databaseId": 4150989677,
+                      "state": "SUBMITTED",
+                      "outdated": false,
+                      "path": "docs/experiments/forcepush/sample-rebase.md",
+                      "line": 5,
+                      "originalLine": 5,
+                      "startLine": null,
+                      "originalStartLine": null,
+                      "position": 6,
+                      "originalPosition": 6,
+                      "diffHunk": "@@ -2,8 +2,8 @@\n \n Line 03: stable filler text for the experiment.\n Line 04: stable filler text for the experiment.\n-Line 05: original text.\n-Line 06: original text.\n+Line 05: reviewed change one (added by C1).",
+                      "commit": {
+                        "oid": "7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc"
+                      },
+                      "originalCommit": {
+                        "oid": "7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc"
+                      },
+                      "pullRequestReview": {
+                        "databaseId": 5373958297,
+                        "state": "COMMENTED"
+                      },
+                      "createdAt": "2026-10-01T01:39:26Z",
+                      "body": "E1 #42 `b-right5`: RIGHT line 5 at `7eb3dc6`."
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "PRRT_kwDOUuyy7s6nxbZh",
+                "isOutdated": false,
+                "isResolved": false,
+                "path": "docs/experiments/forcepush/sample-rebase.md",
+                "line": 6,
+                "originalLine": 6,
+                "startLine": 6,
+                "originalStartLine": null,
+                "diffSide": "LEFT",
+                "subjectType": "LINE",
+                "comments": {
+                  "nodes": [
+                    {
+                      "databaseId": 4150989809,
+                      "state": "SUBMITTED",
+                      "outdated": false,
+                      "path": "docs/experiments/forcepush/sample-rebase.md",
+                      "line": 6,
+                      "originalLine": 6,
+                      "startLine": null,
+                      "originalStartLine": null,
+                      "position": 5,
+                      "originalPosition": 5,
+                      "diffHunk": "@@ -2,8 +2,8 @@\n \n Line 03: stable filler text for the experiment.\n Line 04: stable filler text for the experiment.\n-Line 05: original text.\n-Line 06: original text.",
+                      "commit": {
+                        "oid": "7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc"
+                      },
+                      "originalCommit": {
+                        "oid": "7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc"
+                      },
+                      "pullRequestReview": {
+                        "databaseId": 5373958412,
+                        "state": "COMMENTED"
+                      },
+                      "createdAt": "2026-10-01T01:39:27Z",
+                      "body": "E1 #42 `c-left6`: LEFT line 6 at `7eb3dc6`."
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "PRRT_kwDOUuyy7s6nxbaO",
+                "isOutdated": false,
+                "isResolved": false,
+                "path": "docs/experiments/forcepush/sample-rebase.md",
+                "line": 5,
+                "originalLine": 5,
+                "startLine": 5,
+                "originalStartLine": null,
+                "diffSide": "LEFT",
+                "subjectType": "LINE",
+                "comments": {
+                  "nodes": [
+                    {
+                      "databaseId": 4150989879,
+                      "state": "SUBMITTED",
+                      "outdated": false,
+                      "path": "docs/experiments/forcepush/sample-rebase.md",
+                      "line": 5,
+                      "originalLine": 5,
+                      "startLine": null,
+                      "originalStartLine": null,
+                      "position": 4,
+                      "originalPosition": 4,
+                      "diffHunk": "@@ -2,8 +2,8 @@\n \n Line 03: stable filler text for the experiment.\n Line 04: stable filler text for the experiment.\n-Line 05: original text.",
+                      "commit": {
+                        "oid": "7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc"
+                      },
+                      "originalCommit": {
+                        "oid": "7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc"
+                      },
+                      "pullRequestReview": {
+                        "databaseId": 5373958488,
+                        "state": "COMMENTED"
+                      },
+                      "createdAt": "2026-10-01T01:39:28Z",
+                      "body": "E1 #42 `c-left5`: LEFT line 5 at `7eb3dc6`."
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "PRRT_kwDOUuyy7s6nxbbG",
+                "isOutdated": false,
+                "isResolved": false,
+                "path": "docs/experiments/forcepush/sample-rebase.md",
+                "line": 2,
+                "originalLine": 2,
+                "startLine": 2,
+                "originalStartLine": null,
+                "diffSide": "RIGHT",
+                "subjectType": "LINE",
+                "comments": {
+                  "nodes": [
+                    {
+                      "databaseId": 4150989964,
+                      "state": "SUBMITTED",
+                      "outdated": false,
+                      "path": "docs/experiments/forcepush/sample-rebase.md",
+                      "line": 2,
+                      "originalLine": 2,
+                      "startLine": null,
+                      "originalStartLine": null,
+                      "position": 1,
+                      "originalPosition": 1,
+                      "diffHunk": "@@ -2,8 +2,8 @@\n ",
+                      "commit": {
+                        "oid": "7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc"
+                      },
+                      "originalCommit": {
+                        "oid": "7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc"
+                      },
+                      "pullRequestReview": {
+                        "databaseId": 5373958588,
+                        "state": "COMMENTED"
+                      },
+                      "createdAt": "2026-10-01T01:39:29Z",
+                      "body": "E1 #42 `d-reviewed-only-right2`: RIGHT line 2 at `7eb3dc6`."
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "PRRT_kwDOUuyy7s6nxbcR",
+                "isOutdated": true,
+                "isResolved": false,
+                "path": "docs/experiments/forcepush/sample-rebase.md",
+                "line": 18,
+                "originalLine": 18,
+                "startLine": null,
+                "originalStartLine": null,
+                "diffSide": "RIGHT",
+                "subjectType": "LINE",
+                "comments": {
+                  "nodes": [
+                    {
+                      "databaseId": 4150990085,
+                      "state": "SUBMITTED",
+                      "outdated": true,
+                      "path": "docs/experiments/forcepush/sample-rebase.md",
+                      "line": 18,
+                      "originalLine": 18,
+                      "startLine": null,
+                      "originalStartLine": null,
+                      "position": 1,
+                      "originalPosition": 16,
+                      "diffHunk": "@@ -15,6 +15,6 @@ Line 14: stable filler text for the experiment.\n Line 15: original text.\n Line 16: stable filler text for the experiment.\n Line 17: stable filler text for the experiment.\n-Line 18: base advanced (N).\n+Line 18: original text.",
+                      "commit": {
+                        "oid": "7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc"
+                      },
+                      "originalCommit": {
+                        "oid": "7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc"
+                      },
+                      "pullRequestReview": {
+                        "databaseId": 5373958814,
+                        "state": "COMMENTED"
+                      },
+                      "createdAt": "2026-10-01T01:39:31Z",
+                      "body": "E1 #42 `f-twodot-only-right18`: RIGHT line 18 at `7eb3dc6`."
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "timelineItems": {
+            "totalCount": 10,
+            "filteredCount": 7,
+            "pageInfo": {
+              "hasNextPage": false,
+              "endCursor": "Y3Vyc29yOnYyOpPPAAABoPUd4DgFqjUzNzM5NTg4MTQ="
+            },
+            "nodes": [
+              {
+                "__typename": "PullRequestReview",
+                "databaseId": 5356481554,
+                "state": "COMMENTED",
+                "createdAt": "2026-09-29T18:02:58Z",
+                "submittedAt": "2026-09-29T18:02:58Z",
+                "commit": {
+                  "oid": "7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc"
+                },
+                "url": "https://github.com/mike-north/doc-linter/pull/42#pullrequestreview-5356481554"
+              },
+              {
+                "__typename": "PullRequestReview",
+                "databaseId": 5373958189,
+                "state": "COMMENTED",
+                "createdAt": "2026-10-01T01:39:24Z",
+                "submittedAt": "2026-10-01T01:39:24Z",
+                "commit": {
+                  "oid": "7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc"
+                },
+                "url": "https://github.com/mike-north/doc-linter/pull/42#pullrequestreview-5373958189"
+              },
+              {
+                "__typename": "PullRequestReview",
+                "databaseId": 5373958297,
+                "state": "COMMENTED",
+                "createdAt": "2026-10-01T01:39:25Z",
+                "submittedAt": "2026-10-01T01:39:25Z",
+                "commit": {
+                  "oid": "7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc"
+                },
+                "url": "https://github.com/mike-north/doc-linter/pull/42#pullrequestreview-5373958297"
+              },
+              {
+                "__typename": "PullRequestReview",
+                "databaseId": 5373958412,
+                "state": "COMMENTED",
+                "createdAt": "2026-10-01T01:39:27Z",
+                "submittedAt": "2026-10-01T01:39:27Z",
+                "commit": {
+                  "oid": "7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc"
+                },
+                "url": "https://github.com/mike-north/doc-linter/pull/42#pullrequestreview-5373958412"
+              },
+              {
+                "__typename": "PullRequestReview",
+                "databaseId": 5373958488,
+                "state": "COMMENTED",
+                "createdAt": "2026-10-01T01:39:28Z",
+                "submittedAt": "2026-10-01T01:39:28Z",
+                "commit": {
+                  "oid": "7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc"
+                },
+                "url": "https://github.com/mike-north/doc-linter/pull/42#pullrequestreview-5373958488"
+              },
+              {
+                "__typename": "PullRequestReview",
+                "databaseId": 5373958588,
+                "state": "COMMENTED",
+                "createdAt": "2026-10-01T01:39:29Z",
+                "submittedAt": "2026-10-01T01:39:29Z",
+                "commit": {
+                  "oid": "7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc"
+                },
+                "url": "https://github.com/mike-north/doc-linter/pull/42#pullrequestreview-5373958588"
+              },
+              {
+                "__typename": "PullRequestReview",
+                "databaseId": 5373958814,
+                "state": "COMMENTED",
+                "createdAt": "2026-10-01T01:39:31Z",
+                "submittedAt": "2026-10-01T01:39:31Z",
+                "commit": {
+                  "oid": "7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc"
+                },
+                "url": "https://github.com/mike-north/doc-linter/pull/42#pullrequestreview-5373958814"
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

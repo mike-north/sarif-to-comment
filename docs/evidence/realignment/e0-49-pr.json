@@ -1,0 +1,48 @@
+{
+  "additions": 1,
+  "baseRefName": "exp-forcepush-20260929-control",
+  "baseRefOid": "4b82f10cb97c1ffef397981f2aa91651d0bf1853",
+  "body": "Suggestion-PR fixture (control variant, line6) for an experiment on force-push behaviour. Do not merge.",
+  "changedFiles": 1,
+  "closed": false,
+  "commits": [
+    {
+      "authoredDate": "2026-09-29T18:06:30Z",
+      "authors": [
+        {
+          "email": "<redacted-email>",
+          "id": "MDQ6VXNlcjU1ODAwNQ==",
+          "login": "mike-north",
+          "name": "Mike North"
+        }
+      ],
+      "committedDate": "2026-09-29T18:06:30Z",
+      "messageBody": "",
+      "messageHeadline": "Experiment (control): suggestion line6 on top of 91f433c",
+      "oid": "f013010c796e094fadd8e41dcca6a71f01fd9bef"
+    }
+  ],
+  "createdAt": "2026-09-29T18:06:55Z",
+  "deletions": 1,
+  "files": [
+    {
+      "path": "docs/experiments/forcepush/sample-control.md",
+      "additions": 1,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    }
+  ],
+  "headRefName": "exp-forcepush-20260929-control-sugg-line6",
+  "headRefOid": "f013010c796e094fadd8e41dcca6a71f01fd9bef",
+  "isDraft": true,
+  "latestReviews": [],
+  "mergeStateStatus": "CLEAN",
+  "mergeable": "MERGEABLE",
+  "mergedAt": null,
+  "number": 49,
+  "reviews": [],
+  "state": "OPEN",
+  "title": "Experiment: force-push behaviour (do not merge)",
+  "updatedAt": "2026-09-29T18:06:55Z",
+  "url": "https://github.com/mike-north/doc-linter/pull/49"
+}

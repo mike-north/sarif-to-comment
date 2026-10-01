@@ -1,0 +1,39 @@
+{
+  "data": {
+    "repository": {
+      "pullRequest": {
+        "number": 51,
+        "headRefName": "exp-forcepush-20260929-amend-sugg-reapply",
+        "headRefOid": "c156ae2b55e831b39b4c569acdb30ce0b25b15cd",
+        "baseRefName": "exp-forcepush-20260929-amend",
+        "baseRefOid": "b3e3ed734b03fc8e4dae2b7cb85f6d8bb1b98801",
+        "timelineItems": {
+          "totalCount": 3,
+          "nodes": [
+            {
+              "__typename": "BaseRefForcePushedEvent",
+              "id": "BRFPE_lADOUuyy7s8AAAABT92eeM8AAAAHeYUu6A",
+              "createdAt": "2026-09-29T18:17:32Z",
+              "actor": {
+                "login": "mike-north"
+              },
+              "ref": {
+                "name": "exp-forcepush-20260929-amend"
+              },
+              "beforeCommit": {
+                "oid": "30073435e95ecbe4849f2423371d3d5010251cfe",
+                "committedDate": "2026-09-29T18:04:25Z",
+                "messageHeadline": "Experiment (amend): C1 reviewed change"
+              },
+              "afterCommit": {
+                "oid": "b3e3ed734b03fc8e4dae2b7cb85f6d8bb1b98801",
+                "committedDate": "2026-09-29T18:17:25Z",
+                "messageHeadline": "Experiment (amend): C1 reviewed change"
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "data": {
+    "repository": {
+      "pullRequest": {
+        "number": 44,
+        "headRefName": "exp-forcepush-20260929-control",
+        "headRefOid": "4b82f10cb97c1ffef397981f2aa91651d0bf1853",
+        "baseRefName": "exp-forcepush-20260929-control-base",
+        "baseRefOid": "d138c0edc8b21b42acd023f17e947f5c4c742572",
+        "timelineItems": {
+          "totalCount": 3,
+          "nodes": []
+        }
+      }
+    }
+  }
+}

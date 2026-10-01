@@ -1,0 +1,37 @@
+{
+  "data": {
+    "repository": {
+      "pullRequest": {
+        "number": 44,
+        "timelineItems": {
+          "totalCount": 3,
+          "filteredCount": 3,
+          "pageCount": 3,
+          "nodes": [
+            {
+              "__typename": "PullRequestCommit",
+              "commit": {
+                "oid": "91f433c55edcf930e7d89899109ad9881222f362"
+              }
+            },
+            {
+              "__typename": "PullRequestReview",
+              "databaseId": 5356482670,
+              "state": "PENDING",
+              "createdAt": "2026-09-29T18:03:05Z",
+              "commit": {
+                "oid": "91f433c55edcf930e7d89899109ad9881222f362"
+              }
+            },
+            {
+              "__typename": "PullRequestCommit",
+              "commit": {
+                "oid": "4b82f10cb97c1ffef397981f2aa91651d0bf1853"
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

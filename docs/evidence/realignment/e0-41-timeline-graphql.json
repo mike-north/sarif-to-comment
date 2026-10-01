@@ -1,0 +1,51 @@
+{
+  "data": {
+    "repository": {
+      "pullRequest": {
+        "number": 41,
+        "timelineItems": {
+          "totalCount": 4,
+          "filteredCount": 4,
+          "pageCount": 4,
+          "nodes": [
+            {
+              "__typename": "PullRequestReview",
+              "databaseId": 5356480526,
+              "state": "PENDING",
+              "createdAt": "2026-09-29T18:02:52Z",
+              "commit": {
+                "oid": "e69981ed42926b07d0ff3f25d98558229afd348e"
+              }
+            },
+            {
+              "__typename": "HeadRefForcePushedEvent",
+              "createdAt": "2026-09-29T18:04:37Z",
+              "beforeCommit": {
+                "oid": "e69981ed42926b07d0ff3f25d98558229afd348e"
+              },
+              "afterCommit": {
+                "oid": "30073435e95ecbe4849f2423371d3d5010251cfe"
+              }
+            },
+            {
+              "__typename": "PullRequestCommit",
+              "commit": {
+                "oid": "b3e3ed734b03fc8e4dae2b7cb85f6d8bb1b98801"
+              }
+            },
+            {
+              "__typename": "HeadRefForcePushedEvent",
+              "createdAt": "2026-09-29T18:17:32Z",
+              "beforeCommit": {
+                "oid": "30073435e95ecbe4849f2423371d3d5010251cfe"
+              },
+              "afterCommit": {
+                "oid": "b3e3ed734b03fc8e4dae2b7cb85f6d8bb1b98801"
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

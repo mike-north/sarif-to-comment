@@ -1,0 +1,64 @@
+{
+  "additions": 1,
+  "baseRefName": "exp-forcepush-20260929-orphan-base",
+  "baseRefOid": "4f1974668dd1800b7926fa0aaf475330b68252a1",
+  "body": "Fixture PR (orphan variant) for an experiment on how GitHub treats reviews and suggestion pull requests after a force-push. Do not merge.",
+  "changedFiles": 1,
+  "closed": false,
+  "commits": [
+    {
+      "authoredDate": "2026-09-29T17:13:48Z",
+      "authors": [
+        {
+          "email": "<redacted-email>",
+          "id": "MDQ6VXNlcjU1ODAwNQ==",
+          "login": "mike-north",
+          "name": "Mike North"
+        }
+      ],
+      "committedDate": "2026-09-29T18:18:48Z",
+      "messageBody": "",
+      "messageHeadline": "Experiment (orphan): C1 reviewed change",
+      "oid": "d28aa24815178ce56025303fe98da1d1a0915a9f"
+    }
+  ],
+  "createdAt": "2026-09-29T17:14:18Z",
+  "deletions": 1,
+  "files": [
+    {
+      "path": "docs/experiments/forcepush/sample-orphan.md",
+      "additions": 1,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    }
+  ],
+  "headRefName": "exp-forcepush-20260929-orphan",
+  "headRefOid": "d28aa24815178ce56025303fe98da1d1a0915a9f",
+  "isDraft": true,
+  "latestReviews": [],
+  "mergeStateStatus": "CLEAN",
+  "mergeable": "MERGEABLE",
+  "mergedAt": null,
+  "number": 43,
+  "reviews": [
+    {
+      "id": "PRR_kwDOUuyy7s8AAAABP0XgJQ",
+      "author": {
+        "login": "mike-north"
+      },
+      "authorAssociation": "OWNER",
+      "body": "**Source:** [docs/experiments/forcepush/sample-orphan.md line 5 at eb6c2f6](https://github.com/mike-north/doc-linter/blob/eb6c2f6bbceb78a957684917cdb1a50cf9850cd4/docs/experiments/forcepush/sample-orphan.md#L5)\n\n```\nLine 05: reviewed change one (added by C1).\n```\n\nExperiment comment on line 5 (reviewed at C1).\n\n<sub>— Force-push experiment</sub>\n\n---\n\n**Source:** [docs/experiments/forcepush/sample-orphan.md line 6 at eb6c2f6](https://github.com/mike-north/doc-linter/blob/eb6c2f6bbceb78a957684917cdb1a50cf9850cd4/docs/experiments/forcepush/sample-orphan.md#L6)\n\n```\nLine 06: reviewed change two (added by C1).\n```\n\nExperiment suggestion on line 6 (reviewed at C1).\n\n<sub>— Force-push experiment</sub>\n\n<!-- sarif-to-comment:review:5908637f-8f19-4aec-a68d-972b3da9ab2b -->",
+      "submittedAt": null,
+      "includesCreatedEdit": false,
+      "reactionGroups": [],
+      "state": "PENDING",
+      "commit": {
+        "oid": "eb6c2f6bbceb78a957684917cdb1a50cf9850cd4"
+      }
+    }
+  ],
+  "state": "OPEN",
+  "title": "Experiment: force-push behaviour (do not merge)",
+  "updatedAt": "2026-09-29T18:18:56Z",
+  "url": "https://github.com/mike-north/doc-linter/pull/43"
+}

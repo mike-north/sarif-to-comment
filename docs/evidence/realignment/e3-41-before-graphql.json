@@ -1,0 +1,153 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "graphql (scratch query: reviews, reviewThreads, timelineItems[PULL_REQUEST_REVIEW]; number=41)"
+  },
+  "status": 200,
+  "statusLine": "HTTP/2.0 200 OK",
+  "response": {
+    "data": {
+      "repository": {
+        "pullRequest": {
+          "number": 41,
+          "headRefOid": "b3e3ed734b03fc8e4dae2b7cb85f6d8bb1b98801",
+          "baseRefOid": "c29a1b22f7d7b91f12f41893ad25f555b3f9101f",
+          "reviews": {
+            "totalCount": 1,
+            "nodes": [
+              {
+                "databaseId": 5356480526,
+                "state": "PENDING",
+                "createdAt": "2026-09-29T18:02:52Z",
+                "submittedAt": null,
+                "commit": {
+                  "oid": "e69981ed42926b07d0ff3f25d98558229afd348e"
+                },
+                "body": "\n\n<!-- sarif-to-comment:review:e8983298-6033-4ecc-bc52-cd1230957fb4 -->",
+                "comments": {
+                  "totalCount": 2,
+                  "nodes": [
+                    {
+                      "databaseId": 4136702045
+                    },
+                    {
+                      "databaseId": 4136702047
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "reviewThreads": {
+            "totalCount": 2,
+            "nodes": [
+              {
+                "id": "PRRT_kwDOUuyy7s6nOyKP",
+                "isOutdated": true,
+                "isResolved": false,
+                "path": "docs/experiments/forcepush/sample-amend.md",
+                "line": null,
+                "originalLine": 5,
+                "startLine": null,
+                "originalStartLine": null,
+                "diffSide": "RIGHT",
+                "subjectType": "LINE",
+                "comments": {
+                  "nodes": [
+                    {
+                      "databaseId": 4136702045,
+                      "state": "PENDING",
+                      "outdated": true,
+                      "path": "docs/experiments/forcepush/sample-amend.md",
+                      "line": null,
+                      "originalLine": 5,
+                      "startLine": null,
+                      "originalStartLine": null,
+                      "position": 1,
+                      "originalPosition": 6,
+                      "diffHunk": "@@ -2,8 +2,8 @@\n \n Line 03: stable filler text for the experiment.\n Line 04: stable filler text for the experiment.\n-Line 05: original text.\n-Line 06: original text.\n+Line 05: reviewed change one (added by C1).",
+                      "commit": {
+                        "oid": "30073435e95ecbe4849f2423371d3d5010251cfe"
+                      },
+                      "originalCommit": {
+                        "oid": "e69981ed42926b07d0ff3f25d98558229afd348e"
+                      },
+                      "pullRequestReview": {
+                        "databaseId": 5356480526,
+                        "state": "PENDING"
+                      },
+                      "createdAt": "2026-09-29T18:02:52Z",
+                      "body": "Experiment comment on line 5 (reviewed at C1).\n\n<sub>— Force-push experiment</sub>"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "PRRT_kwDOUuyy7s6nOyKQ",
+                "isOutdated": false,
+                "isResolved": false,
+                "path": "docs/experiments/forcepush/sample-amend.md",
+                "line": 6,
+                "originalLine": 6,
+                "startLine": 6,
+                "originalStartLine": null,
+                "diffSide": "RIGHT",
+                "subjectType": "LINE",
+                "comments": {
+                  "nodes": [
+                    {
+                      "databaseId": 4136702047,
+                      "state": "PENDING",
+                      "outdated": false,
+                      "path": "docs/experiments/forcepush/sample-amend.md",
+                      "line": 6,
+                      "originalLine": 6,
+                      "startLine": null,
+                      "originalStartLine": null,
+                      "position": 5,
+                      "originalPosition": 7,
+                      "diffHunk": "@@ -2,8 +2,8 @@\n \n Line 03: stable filler text for the experiment.\n Line 04: stable filler text for the experiment.\n-Line 05: original text.\n-Line 06: original text.\n+Line 05: reviewed change one (added by C1).\n+Line 06: reviewed change two (added by C1).",
+                      "commit": {
+                        "oid": "b3e3ed734b03fc8e4dae2b7cb85f6d8bb1b98801"
+                      },
+                      "originalCommit": {
+                        "oid": "e69981ed42926b07d0ff3f25d98558229afd348e"
+                      },
+                      "pullRequestReview": {
+                        "databaseId": 5356480526,
+                        "state": "PENDING"
+                      },
+                      "createdAt": "2026-09-29T18:02:52Z",
+                      "body": "Experiment suggestion on line 6 (reviewed at C1).\n\n<sub>— Force-push experiment</sub>\n\n```suggestion\nLine 06: native suggestion text for line six.\n```"
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "timelineItems": {
+            "totalCount": 4,
+            "filteredCount": 1,
+            "pageInfo": {
+              "hasNextPage": false,
+              "endCursor": "Y3Vyc29yOnYyOpPPAAABoO5VcOAFqjUzNTY0ODA1MjY="
+            },
+            "nodes": [
+              {
+                "__typename": "PullRequestReview",
+                "databaseId": 5356480526,
+                "state": "PENDING",
+                "createdAt": "2026-09-29T18:02:52Z",
+                "submittedAt": null,
+                "commit": {
+                  "oid": "e69981ed42926b07d0ff3f25d98558229afd348e"
+                },
+                "url": "https://github.com/mike-north/doc-linter/pull/41#pullrequestreview-5356480526"
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}
