@@ -1258,12 +1258,16 @@ const BOM = '\uFEFF';
 
 /**
  * Characters a rendered code block cannot show exactly: C0 controls other
- * than tab, LF and CR; DEL and C1 controls; a byte-order mark; the Arabic
- * letter mark and the bidirectional marks, embeddings, overrides and
- * isolates, which reorder text invisibly; and the line and paragraph
- * separators.
+ * than tab, LF and CR; DEL and C1 controls; every format character (Unicode
+ * category Cf: a byte-order mark, the bidirectional marks, embeddings,
+ * overrides and isolates, which reorder text invisibly, zero-width spaces and
+ * joiners, the word joiner, the soft hyphen, tag characters, …); U+00A0,
+ * which renders as an ordinary space; and the line and paragraph separators.
+ * Callers remove a file's own leading byte-order mark first. One rule for
+ * every content block: a proposed file, an alternative and an edit made by
+ * hand.
  */
-const INVISIBLE_IN_CONTENT = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\uFEFF\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069\u2028\u2029]/;
+const INVISIBLE_IN_CONTENT = /[\p{Cf}\u00A0\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u2028\u2029]/u;
 
 /** The same, plus tab, LF and CR: a path is shown on one line, in a code span or link text. */
 const INVISIBLE_IN_PATH = /[\u0000-\u001F\u007F-\u009F\uFEFF\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069\u2028\u2029]/;
@@ -4472,7 +4476,7 @@ class ReviewRenderer {
       const deletion = { path: operation.path, commit: operation.commit, url };
       return present('fileDeletion', this.#presentation.fileDeletion, {
         ...deletion, findings, markdown: renderFileDeletion(deletion, findings), required: [url, findings],
-      });
+      }, [{ text: `${operation.path} at ${operation.commit.slice(0, 7)}`, url }]);
     }
     const findings = items.map((item) => renderProposedFileFinding(item.proposedLines, this.finding(item))).join(SEPARATOR);
     const details = fileDetails(operation.text, operation.fileMode);
@@ -4517,8 +4521,8 @@ class ReviewRenderer {
       ...(details === undefined ? {} : { details }),
       findings,
       markdown: renderManualEdit(manual, findings),
-      required: [location, ...(block === undefined ? [] : [block]), ...(details === undefined ? [] : [details]), findings],
-    });
+      required: [location, url, ...(block === undefined ? [] : [block]), ...(details === undefined ? [] : [details]), findings],
+    }, [{ text: `${filePath} ${lineSpan(startLine, endLine)} at ${commit.slice(0, 7)}`, url }]);
   }
 
   /** One line of a suggestion pull request's change list (contract §2.11). */

@@ -15,7 +15,8 @@
  * Rendering:
  *
  *   guidance = "**" label ":** apply these " K " suggestions together, in one commit: "
- *              "add each of them to one batch of suggestions on the pull request, then commit the batch.\n\n"
+ *              "add each of them to one batch of suggestions on the pull request, then commit the batch. "
+ *              "Nothing checks that they are applied together.\n\n"
  *              member lines joined by "\n"
  *   member   = "- " code span of path " " lines              (in the order the changes first appear)
  *   note     = "**" label ":** apply this suggestion together with the " owner "'s other "
@@ -41,7 +42,7 @@ export interface INativeBatchMember {
 export function renderNativeBatchGuidance(label: GroupLabel, members: readonly INativeBatchMember[]): string {
   const lines = members.map((m) => `- ${codeSpan(m.path)} ${lineSpan(m.startLine, m.endLine)}`);
   return `**${renderGroupLabel(label)}:** apply these ${String(members.length)} suggestions together, in one commit: `
-    + `add each of them to one batch of suggestions on the pull request, then commit the batch.\n\n${lines.join('\n')}`;
+    + `add each of them to one batch of suggestions on the pull request, then commit the batch. Nothing checks that they are applied together.\n\n${lines.join('\n')}`;
 }
 
 /** The note in each change's inline comment, before its suggestion block. */

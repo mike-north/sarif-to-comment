@@ -26,13 +26,18 @@
  *     attribution, a finding's attribution), the source association of a
  *     deletion (its permalink) and of an edit made by hand (its location
  *     link), and the findings a proposal carries — each listed in the
- *     context's `required` fragments,
+ *     context's `required` fragments, each shown at its own occurrence (a
+ *     fragment that appears only inside another required one does not
+ *     count),
  *     which the result must show as itself: verbatim, and not concealed or
  *     turned into other code (src/presentation/markdown-tree.cts,
  *     showsAsItself);
  *   - a group's identity and membership when it is made by hand: its
  *     guidance, member lines and change labels, around each change's
  *     component (docs/delivery-policy-contract.md §8.10);
+ *   - the destination of an identity link — a manual edit's location, a
+ *     deletion's link — which no link of the result may carry to anywhere
+ *     else, unless the built-in Markdown has that exact link;
  *   - every size limit, which counts the customized Markdown.
  * A result is refused, before anything is written, when it is not a string,
  * is blank, omits a required fragment, could open a native suggestion block,
@@ -60,7 +65,8 @@
  * @see https://github.github.com/gfm/#raw-html
  */
 
-import { addedConstruct, fenceProblem, showsAsItself, unbalancedHtml } from './markdown-tree.cjs';
+import { addedConstruct, fenceProblem, linksIn, shownOccurrences, unbalancedHtml } from './markdown-tree.cjs';
+import type { IOccurrence } from './markdown-tree.cjs';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -439,21 +445,32 @@ export function capturePresentation(value: unknown, refuse: (message: string) =>
 }
 
 /**
+ * A link that identifies what an element proposes: its text (as a reader
+ * reads it) may lead only to its destination.
+ */
+export interface IIdentityLink {
+  readonly text: string;
+  readonly url: string;
+}
+
+/**
  * The Markdown of one element: the callback's result when the caller
  * supplied one and it keeps every core guarantee (see the module
- * documentation), otherwise the built-in `context.markdown`.
+ * documentation), otherwise the built-in `context.markdown`. `identity`
+ * names the element's identity links.
  */
 export function present<Context extends IPresentationContext>(
   name: PresentationComponent,
   callback: PresentationCallback<Context> | undefined,
   context: Context,
+  identity: readonly IIdentityLink[] = [],
 ): string {
   if (callback === undefined) return context.markdown;
   const result = callback(deepFrozenCopy(context));
   const refuse = (problem: string): TypeError => new TypeError(`Invalid presentation: options.presentation.${name} returned Markdown that ${problem}. `
     + 'A presentation callback may change how an element reads, never what is published or how it is identified.');
   if (typeof result !== 'string') throw refuse(`is not a string (it returned ${result === null ? 'null' : typeof result})`);
-  const problem = markdownProblem(name, result, context);
+  const problem = markdownProblem(name, result, context, identity);
   if (problem !== null) throw refuse(problem);
   return result;
 }
@@ -472,7 +489,7 @@ function deepFreeze<T>(value: T): T {
 }
 
 /** Why a callback's Markdown breaks a core guarantee, worded to follow "returned Markdown that", or null. */
-function markdownProblem(name: PresentationComponent, result: string, context: IPresentationContext): string | null {
+function markdownProblem(name: PresentationComponent, result: string, context: IPresentationContext, identity: readonly IIdentityLink[]): string | null {
   const { required } = context;
   if (result.trim() === '') return 'is blank, which would drop the element';
   const missing = required.find((fragment) => !result.includes(fragment));
@@ -493,12 +510,70 @@ function markdownProblem(name: PresentationComponent, result: string, context: I
     return `adds ${added.kind === 'html' ? 'raw HTML' : 'a link reference definition'} of its own (${JSON.stringify(added.text)}), which could hide text; `
       + 'only raw HTML and definitions that the presented content carries may pass through';
   }
-  const concealed = required.find((fragment) => !showsAsItself(result, fragment));
+  const occurrences = required.map((fragment) => shownOccurrences(result, fragment));
+  const concealed = required.find((_, i) => occurrences[i]?.length === 0);
   if (concealed !== undefined) {
     return `hides a required fragment, which must be shown as itself: ${JSON.stringify(concealed)} `
       + '(not inside raw HTML, a code span or block it does not open itself, an image, a definition or an element GitHub does not display, '
       + 'and, for a permalink, not as an image source or the text of a link to somewhere else)';
   }
+  const shared = sharedFragment(required, occurrences);
+  if (shared !== undefined) {
+    return `shows a required fragment only inside another required fragment, but each must be shown on its own: ${JSON.stringify(shared)}`;
+  }
+  const spoofed = spoofedLink(result, context.markdown, identity);
+  if (spoofed !== undefined) return `links the text ${JSON.stringify(spoofed.text)} to ${JSON.stringify(spoofed.url)} rather than its permalink`;
   if (INLINE_COMPONENTS.has(name) && /[\r\n]/.test(result)) return 'spans more than one line, but this component is inline';
   return null;
+}
+
+/**
+ * Whether occurrence `a` of fragment `fa` and occurrence `b` of fragment `fb`
+ * may both count: they are disjoint, or one is a URL inside the other, a link
+ * to that very URL (a location link holds its own permalink).
+ */
+function compatible(fa: string, a: IOccurrence, fb: string, b: IOccurrence): boolean {
+  if (a.end <= b.start || b.end <= a.start) return true;
+  const within = (inner: IOccurrence, outer: IOccurrence): boolean => outer.start <= inner.start && inner.end <= outer.end;
+  const linksTo = (link: string, url: string): boolean => /^https?:\/\/\S+$/.test(url) && link.includes(`](${url})`);
+  return (within(b, a) && linksTo(fa, fb)) || (within(a, b) && linksTo(fb, fa));
+}
+
+/**
+ * The required fragment that cannot be shown on its own, or undefined: the
+ * fragments must be shown at occurrences that are pairwise compatible (see
+ * compatible), so that a fragment appearing only inside another one — a
+ * location link inside a finding's identical source link — never stands in
+ * for itself. Every assignment is searched; when none exists, the fragment
+ * named is one whose every occurrence lies inside another fragment's.
+ */
+function sharedFragment(required: readonly string[], occurrences: readonly (readonly IOccurrence[])[]): string | undefined {
+  const chosen: IOccurrence[] = [];
+  const assign = (i: number): boolean => {
+    if (i === required.length) return true;
+    const fragment = required[i] ?? '';
+    for (const occurrence of occurrences[i] ?? []) {
+      if (!chosen.every((other, j) => compatible(fragment, occurrence, required[j] ?? '', other))) continue;
+      chosen.push(occurrence);
+      if (assign(i + 1)) return true;
+      chosen.pop();
+    }
+    return false;
+  };
+  if (assign(0)) return undefined;
+  const inside = required.find((fragment, i) => (occurrences[i] ?? []).every((occurrence) => required.some((other, j) => j !== i && other !== fragment
+    && (occurrences[j] ?? []).some((outer) => outer.start <= occurrence.start && occurrence.end <= outer.end && !compatible(fragment, occurrence, other, outer)))));
+  return inside ?? required[required.length - 1];
+}
+
+/**
+ * A link of `result` that carries an identity link's text to another
+ * destination, or undefined. A link the built-in Markdown has exactly (text
+ * and destination) passes through: it is the presented content's own.
+ */
+function spoofedLink(result: string, builtIn: string, identity: readonly IIdentityLink[]): { readonly text: string; readonly url: string } | undefined {
+  if (identity.length === 0) return undefined;
+  const own = linksIn(builtIn);
+  return linksIn(result).find((link) => identity.some((id) => id.text === link.text && id.url !== link.url)
+    && !own.some((o) => o.text === link.text && o.url === link.url));
 }
