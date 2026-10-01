@@ -159,7 +159,7 @@ At 02:02:48 UTC, about 23 minutes after the writes, `GET …/pulls/<pr>/comments
 ## Inferences, not observations
 
 - **Why #42's line 18 is outdated.** `original_position` 16 counts the diff from `13fddb7`, and `position` 1 with `outdated: true` suggests GitHub then re-resolved the comment against a diff without that line, perhaps the one from the merge base `7b5863e`. The other cases are not outdated because their lines sit in the first hunk, which is the same in both diffs. This is an explanation of the fields; it was not tested separately.
-- **No association check.** Since GitHub accepted foreign commits, any check that a reviewed commit belongs to the pull request (EC9) must be the tool's own. The host does not provide one.
+- **No association check.** Since GitHub accepted foreign commits, any check that a reviewed commit belongs to the pull request (specification R17) must be the tool's own. The host does not provide one.
 - **Rendering of new historical comments.** The API fields place them at the reviewed commit, neither at the head nor outdated. It is plausible that the web interface shows them in the conversation with the reviewed diff hunk, and not in the current "Files changed" diff, but this was not observed.
 
 ## Denied or skipped requests

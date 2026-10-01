@@ -2,7 +2,7 @@
 
 Errors, warnings and notes are modelled once, as structured diagnostics, and rendered for each audience: JSON and TOON for agents, a colored terminal view for people, and Markdown for GitHub and the library's `markdown` fields.
 
-**Status:** owner decision of September 30, 2026 ([issue #38](https://github.com/mike-north/sarif-to-comment/issues/38)), recorded as [D45](design-decisions.md#d45-model-diagnostics-once-and-render-them-per-audience--owner-decision). It supersedes [D13](design-decisions.md#d13-diagnostics-are-markdown-repair-interfaces-remain-the-ordinary-inputs--settled), which deliberately avoided a public machine-readable diagnostic schema. The codes below are public API once released.
+**Status:** owner decision of September 30, 2026 ([issue #38](https://github.com/mike-north/sarif-to-comment/issues/38)), recorded as [D45](design-decisions.md#d45-model-diagnostics-once-and-render-them-per-audience--owner-decision). It supersedes [D13](design-decisions.md#d13-diagnostics-are-markdown-repair-interfaces-remain-the-ordinary-inputs--settled), which deliberately avoided a public machine-readable diagnostic schema. The codes below are public API from 0.3.0.
 
 ## The model
 
@@ -38,9 +38,9 @@ Every library outcome and every CLI JSON (or TOON) document carries `diagnostics
 
 - **`problems`.** Every `problems` array keeps its entries' `message`, `pointer` and `path` exactly as before, and each entry gains the diagnostic fields: `severity`, `code`, `title`, and `location`, `subject` and `remedies` where they apply. An entry is therefore a diagnostic plus the two flat fields it always had (`IProblem extends IDiagnostic`). `problems` lists the blocking problems (`error`); `diagnostics` lists them too, with every warning and note.
 - **Receipt warnings.** `add-staged-changes` receipt `warnings` keep their shape the same way and are `warning` diagnostics. Inspection's `view.diagnostics` entries gain the same fields; the view's `format` and `version` are unchanged, because entries only gain fields.
-- **`markdown`.** Every `markdown` field remains and is rendered from the same diagnostics, with the same wording. Where a Markdown list names a code (`` - `code` at `pointer`: message ``), it names the catalog code, so the six renamed codes below appear under their new names. A message's later lines are indented two spaces, so its own lists stay nested under its item ([review presentation contract §6](review-presentation-contract.md#6-warnings-list)).
+- **`markdown`.** Every `markdown` field remains and is rendered from the same diagnostics, with the same wording. Where a Markdown list names a code (`` - `code` at `pointer`: message ``), it names the catalog code, so the five codes renamed since 0.2.1 (below) appear under their new names. A message's later lines are indented two spaces, so its own lists stay nested under its item ([review presentation contract §6](review-presentation-contract.md#6-warnings-list)).
 - **Key order.** Existing keys of outcomes and CLI documents keep their order. `diagnostics` is appended last.
-- **Behavior.** Exit statuses, refusals, fallbacks and everything written are unchanged. Only the human presentation and the new fields differ.
+- **Behavior.** The diagnostics model itself changes no exit status, refusal or write: it changes the human presentation and adds fields. What this version refuses, delivers or retires is described with the features concerned, and the codes it renamed or retired are listed below.
 
 ## JSON schema, version 1
 
@@ -182,36 +182,35 @@ The library's `markdown` fields and the JSON `message` are Markdown rendered fro
 
 ## Renamed codes
 
-These internal codes were unclear. They were renamed before their first release as public codes; every other code keeps the name it had in Markdown. `suggestion-pr-not-reapplied` became `suggestion-pr-fallback` when a suggestion pull request that cannot be re-applied stopped being skipped and started falling back as if suggestion pull requests were not allowed ([issue #37](https://github.com/mike-north/sarif-to-comment/issues/37)). Since the same decision, a fork, a base other than the default branch, a created file over the size limit and a description over the body limit are fallbacks too, so `suggestion-pr-fork-unsupported`, `suggestion-pr-base-unsupported`, `suggestion-file-too-large` and `suggestion-body-too-large`, never released, are no longer reported. Two of the new names, `suggestion-reviewed-commit-not-head` and `suggestion-pr-fallback`, were later retired too (see [Retired codes](#retired-codes)).
+0.2.1 named a problem's code only in the Markdown lists of its reports (`` - `code` at `pointer`: message ``). When codes became public API, these five were renamed to say what they mean; every other code 0.2.1 named keeps its name:
 
-| Before | After |
+| 0.2.1 | Now |
 |---|---|
 | `inline-unavailable` | `inline-placement-unavailable` |
 | `invocation-failed` | `tool-invocation-failed` |
 | `tool-notification-error` | `tool-reported-errors` |
 | `repository-mismatch` | `provenance-repository-mismatch` |
 | `provenance-conflict` | `provenance-revision-conflict` |
-| `suggestion-historical-unsupported` | `suggestion-reviewed-commit-not-head` |
-| `suggestion-pr-not-reapplied` | `suggestion-pr-fallback` |
 
 ## Retired codes
 
-These codes were never released, and are no longer reported. The [delivery policy](delivery-policy-contract.md#103-diagnostic-codes) replaced all but one of them; the reviewed diff made `suggestion-reviewed-commit-not-head` unnecessary:
+0.2.1 reported these codes, and this version no longer does: what they refused is now delivered, or is reported another way. The [delivery policy](delivery-policy-contract.md#103-diagnostic-codes) replaced most of them; the reviewed diff made `suggestion-historical-unsupported` unnecessary:
 
 | Retired | Reported instead |
 |---|---|
-| `suggestion-pr-fallback` | `delivery-fallback`: every fallback a delivery list authorizes, whatever its mechanisms. |
-| `suggestion-group-pr-unavailable` | `delivery-unavailable`: a group or fix with several changes that no listed mechanism can deliver. |
-| `suggestion-group-requires-suggestion-prs` | `delivery-unavailable` |
-| `fix-changes-require-suggestion-prs` | `delivery-unavailable` |
-| `suggestion-reviewed-commit-not-head` | Nothing: a native suggestion no longer needs the reviewed commit to be the pull request's head. It is eligible when its lines have an anchor on the reviewed diff ([specification R13.1](specification.md#r131-the-reviewed-diff-historical-placement-and-native-suggestions)); otherwise `native` is unavailable with the obstacle that replaced `suggestion-not-inline`. |
 | `suggestion-not-inline` | `delivery-unavailable`, whose `native` obstacle states the condition; its remedies start with `Remove the fix.` |
 | `suggestion-fence-unverified` | `delivery-unavailable`, whose `native` obstacle states the condition; its remedies start with `Change the replacement.` |
 | `suggestion-blank-only-unverified` | `delivery-unavailable`, whose `native` obstacle states the condition; its remedies start with `Change the replacement.` |
 | `suggestion-crlf-unverified` | `delivery-unavailable`, whose `native` obstacle states the condition; its remedies start with `Change the replacement.` |
 | `suggestion-final-newline-unverified` | `delivery-unavailable`, whose `native` obstacle states the condition; its remedies start with `Change the replacement.` |
+| `suggestion-historical-unsupported` | Nothing: a native suggestion no longer needs the reviewed commit to be the pull request's head. It is eligible when its lines have an anchor on the reviewed diff ([specification R13.1](specification.md#r131-the-reviewed-diff-historical-placement-and-native-suggestions)); otherwise `native` is unavailable with the obstacle that replaced `suggestion-not-inline`. |
+| `fix-multiple-files-unsupported` | Nothing: a fix with several changes is delivered whole by its `groupedEdits` list; when no listed mechanism can deliver it, `delivery-unavailable`. |
+| `fix-multiple-replacements-unsupported` | Nothing, as for `fix-multiple-files-unsupported`. |
+| `fix-alternatives-unsupported` | Nothing: a result's further fixes are listed as alternatives; one that cannot be listed exactly is refused with an `alternative-*` code. |
 
-Each code that `delivery-unavailable` or `delivery-fallback` replaced now gives its specific remedy among the remedies of that diagnostic, for the obstacle it relates to, before the code's catalogued remedies, each once ([delivery policy §8.9, §10.1](delivery-policy-contract.md#89-native-eligibility-of-an-edit)); the part that said to enable suggestion pull requests is the catalogued remedy of listing another mechanism. The remedies of `suggestion-group-pr-unavailable` for a rewritten history, a file over the limit and a long description appear the same way, with the `companion` obstacles.
+`file-operation-unsupported` is still reported, but only for a proposed `edit` operation: proposed file creations and deletions are published.
+
+Each code that `delivery-unavailable` replaced now gives its specific remedy among the remedies of that diagnostic, for the obstacle it relates to, before the code's catalogued remedies, each once ([delivery policy §8.9, §10.1](delivery-policy-contract.md#89-native-eligibility-of-an-edit)).
 
 ## Code catalog
 

@@ -12,8 +12,10 @@
  *   so a finding can be corrected by removing it and adding it again.
  *
  * - {@link groupSarifFixes} declares that fixes of several findings must be
- *   accepted together, published as one suggestion pull request, and
- *   {@link ungroupSarifFixes} undoes it.
+ *   accepted together, so publication delivers them whole by the delivery
+ *   policy (a native batch by default, a suggestion pull request, or one
+ *   section of the review to make by hand), and {@link ungroupSarifFixes}
+ *   undoes it.
  *
  * - {@link inspectSarif} shows every finding, location and fix in any SARIF.
  *
@@ -23,11 +25,13 @@
  * - {@link validateSarifReview} optionally checks, without publishing, that a
  *   complete document can be published faithfully to its pull request.
  *
- * - {@link publishSarifReview} publishes a ready document as one draft review.
+ * - {@link publishSarifReview} publishes a ready document as one review, a
+ *   draft unless a submitted comment review is requested, delivering each
+ *   proposed change as its delivery policy lists.
  *
  * - {@link closeSuggestionPullRequests} closes the companion suggestion pull
- *   requests publication created once their original pull request has merged
- *   or closed.
+ *   requests that follow the suggestion pull request convention, whichever
+ *   tool created them, once their original pull request has merged or closed.
  *
  * Every outcome carries `diagnostics`: its errors, warnings and notes as
  * {@link IDiagnostic} values with stable codes, listed in the package's

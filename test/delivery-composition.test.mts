@@ -846,7 +846,7 @@ describe('the configuration file (§11) and caller settings (§12)', () => {
     }
   });
 
-  test('L15: a failed configuration read is operational: validate is incomplete and publish rejects, never a silent default', async () => {
+  test('§11.1: a failed configuration read is operational: validate is incomplete and publish rejects, never a silent default', async () => {
     const world = makeWorld(repository(), { companion: { defaultBranchRead: 'server-error' } });
     const assessed = await validate(world, document([TYPO()]));
     assert.equal(status(assessed), 'incomplete', markdown(assessed));

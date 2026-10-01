@@ -49,7 +49,7 @@ The examples below read these values from the environment:
 | `REVIEW_COMMIT` | The **reviewed commit**: the full 40-character SHA your analyzer looked at. | `c0dec0de…` |
 | `REVIEW_STATE` | Absolute path of the **state file** for this publication. | `/var/lib/my-linter/acme-widgets-42-run-1817.json` |
 
-- **Reviewed commit.** This is usually the pull request's head commit when your analysis ran. The review stays pinned to it even if the author pushes more commits later. Findings that can no longer be anchored inline become exact links to the reviewed commit in the review body. Nothing is ever moved to a different line or commit.
+- **Reviewed commit.** This is usually the pull request's head commit when your analysis ran. The review stays pinned to it even if the author pushes more commits later, or force-pushes: findings on lines of the reviewed diff are still inline comments at that commit, and the others become exact links to it in the review body. Nothing is ever moved to a different line or commit. The reviewed commit must belong to the pull request (its head, an ancestor of the head, or part of a head a force-push replaced); otherwise the review is blocked.
 - **State path.** Choose one state file per publication and keep it:
   - Retry with the same path.
   - **Do not delete it** after an `uncertain` result; it is the only record that the review may already exist.
@@ -183,7 +183,7 @@ esac
 exit $status
 ```
 
-The CLI prints the same Markdown the library returns. Add `--source-root file:///…/` for absolute artifact URIs, and `--ignore-approval-hold` to publish despite an approval hold. `npx sarif-to-comment --help` lists every option and needs no token.
+The CLI prints the outcome on standard output and each problem or warning once, as a [diagnostic](./diagnostics.md), on standard error; `--format json` prints one document whose `message` is the Markdown the library returns. Add `--source-root file:///…/` for absolute artifact URIs, and `--ignore-approval-hold` to publish despite an approval hold. `npx sarif-to-comment --help` lists every option and needs no token.
 
 ## Check readiness without publishing
 
@@ -221,8 +221,11 @@ You don't need an analyzer. Create a SARIF document, add findings on lines or li
 | --- | --- | --- |
 | Create a document for your findings | `init` | `createSarifDocument` |
 | Add a finding on a line or range | `add-comment` | `addSarifComment` |
+| Remove a finding, to correct it | `remove-comment` | `removeSarifComment` |
 | Add your staged changes as fixes | `add-staged-changes` | `addStagedChangesToSarif` |
+| Group fixes to be accepted together | `group-fixes`, `ungroup-fixes` | `groupSarifFixes`, `ungroupSarifFixes` |
 | Proofread findings and fixes | `inspect` | `inspectSarif` |
+| Check that it can be published | `validate` | `validateSarifReview` |
 | Publish the draft review | `publish` | `publishSarifReview` |
 
 Each step reads and writes ordinary SARIF. Every step is optional, and none of them needs the one before it: SARIF from an analyzer can be inspected, given staged changes, extended with your own findings, or published directly.
@@ -268,7 +271,7 @@ npx --no-install sarif-to-comment publish --sarif review.staged.sarif \
 
 - `init` refuses to overwrite an existing file. `add-comment` updates its file in place.
 - `add-staged-changes` never changes its input, so you can correct `review.sarif` and run it again. If the output file already exists, it's first renamed to `<UTC time>.old.review.staged.sarif`. When it fails, it writes no output and exits with status 2.
-- `inspect` shows every finding in full, with its locations and fixes. Only long fix previews are shortened, always with a `(truncated: …)` note. Log-level properties and inline external properties are shown verbatim too; results embedded in inline external properties are counted separately and are not presented as findings, and external property files are never fetched. Inspecting doesn't check whether the file can be published; `publish` does that.
+- `inspect` shows every finding in full, with its selector, locations, fixes and suggestion group. Only long fix previews are shortened, always with a `(truncated: …)` note. Log-level properties and inline external properties are shown verbatim too; results embedded in inline external properties are counted separately and are not presented as findings, and external property files are never fetched. Inspecting doesn't check whether the file can be published; `publish` does that.
 - Add `--format json` (or `--format toon`, the same document in a more compact notation) to any command for one document on standard output, including for errors. It carries the same information as the human output, and the exit status is the same. Agents should prefer it. Every document ends with `diagnostics`: its errors, warnings and notes, each with a stable `code` listed in [Diagnostics](./diagnostics.md). In human output, the diagnostics appear on standard error, once: standard output keeps the outcome (for `validate`, `publish` and `close-suggestion-prs`, the report without its problem and warning lists).
 
 ### Library
@@ -372,7 +375,7 @@ A finding that already has its own fix is never changed. If your staged change i
 | Library `status` | CLI exit | Meaning | What to do |
 | --- | --- | --- | --- |
 | `published` | 0 | The publication is complete: the draft review was created and confirmed now, confirmed after an earlier uncertain attempt, or already recorded as complete in the state file (which needs no GitHub request). A person may since have submitted, edited or deleted the review; the tool does not check. | Nothing more to publish. Reviewing and submitting the draft is up to people on GitHub. |
-| `blocked` | 2 | The document can't be published faithfully. Nothing was written and no state file exists. | Fix the SARIF (the Markdown lists every problem with a pointer), then run again. |
+| `blocked` | 2 | The document can't be published faithfully. Nothing was written and no state file exists. | Resolve each problem its diagnostics name, then run again. Most are in the SARIF and carry a pointer; some name a delivery list to change or the reviewed commit. |
 | `uncertain` | 3 | Delivery could not be confirmed, for example because the response was lost or the review isn't visible yet. | Retry later with the **same** state path; it only checks GitHub. Don't delete the file. |
 | `rejected` | 1 | GitHub definitively refused the request, and it is never resent. | Resolve the cause (often an existing pending draft), then use a **new** state path. |
 | *(rejects / throws)* | 1 | Invalid input, a state problem, or an operational failure. | Read the message; nothing was published unless a state file says otherwise. |

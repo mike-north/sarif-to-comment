@@ -12,7 +12,7 @@ Nine operations work on ordinary in-memory SARIF values, and one cleans up after
 
 - [createSarifDocument()](./sarif-to-comment.createsarifdocument.md) and [addSarifComment()](./sarif-to-comment.addsarifcomment.md) optionally author  SARIF for your own findings, on lines or line ranges, and  [removeSarifComment()](./sarif-to-comment.removesarifcomment.md) removes a finding selected through inspection,  so a finding can be corrected by removing it and adding it again.
 
-- [groupSarifFixes()](./sarif-to-comment.groupsariffixes.md) declares that fixes of several findings must be  accepted together, published as one suggestion pull request, and  [ungroupSarifFixes()](./sarif-to-comment.ungroupsariffixes.md) undoes it.
+- [groupSarifFixes()](./sarif-to-comment.groupsariffixes.md) declares that fixes of several findings must be  accepted together, so publication delivers them whole by the delivery  policy (a native batch by default, a suggestion pull request, or one  section of the review to make by hand), and [ungroupSarifFixes()](./sarif-to-comment.ungroupsariffixes.md)  undoes it.
 
 - [inspectSarif()](./sarif-to-comment.inspectsarif.md) shows every finding, location and fix in any SARIF.
 
@@ -20,9 +20,9 @@ Nine operations work on ordinary in-memory SARIF values, and one cleans up after
 
 - [validateSarifReview()](./sarif-to-comment.validatesarifreview.md) optionally checks, without publishing, that a  complete document can be published faithfully to its pull request.
 
-- [publishSarifReview()](./sarif-to-comment.publishsarifreview.md) publishes a ready document as one draft review.
+- [publishSarifReview()](./sarif-to-comment.publishsarifreview.md) publishes a ready document as one review, a  draft unless a submitted comment review is requested, delivering each  proposed change as its delivery policy lists.
 
-- [closeSuggestionPullRequests()](./sarif-to-comment.closesuggestionpullrequests.md) closes the companion suggestion pull  requests publication created once their original pull request has merged  or closed.
+- [closeSuggestionPullRequests()](./sarif-to-comment.closesuggestionpullrequests.md) closes the companion suggestion pull  requests that follow the suggestion pull request convention, whichever  tool created them, once their original pull request has merged or closed.
 
 Every outcome carries `diagnostics`<!-- -->: its errors, warnings and notes as[IDiagnostic](./sarif-to-comment.idiagnostic.md) values with stable codes, listed in the package's`docs/diagnostics.md`<!-- -->.
 

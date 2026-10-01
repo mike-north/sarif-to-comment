@@ -42,37 +42,41 @@ describe('the code catalog (docs/diagnostics.md "Code catalog")', () => {
     for (const code of ['pending-review-exists']) {
       assert.ok(CATALOG.has(code), code);
     }
-    // The delivery policy retired the allow/disallow setting's codes and the native-suggestion
-    // eligibility codes in favour of its own (docs/delivery-policy-contract.md §10.3); the
-    // reviewed diff retired `suggestion-reviewed-commit-not-head` (specification R13.1).
-    // docs/diagnostics.md "Retired codes": never released, and no longer reported.
+    // The delivery policy replaced the native-suggestion eligibility codes 0.2.1 reported with its own
+    // (docs/delivery-policy-contract.md §10.3); the reviewed diff retired `suggestion-historical-unsupported`
+    // (specification R13.1); fixes with several changes and alternative fixes are now delivered.
+    // docs/diagnostics.md "Retired codes": reported by 0.2.1, and no longer reported.
     for (const code of ['delivery-unavailable', 'delivery-fallback', 'delivery-configuration-invalid', 'companion-options-unused']) assert.ok(CATALOG.has(code), code);
-    const retired = [
-      'suggestion-pr-fallback', 'suggestion-group-pr-unavailable', 'suggestion-group-requires-suggestion-prs', 'fix-changes-require-suggestion-prs',
-      'suggestion-reviewed-commit-not-head', 'suggestion-not-inline', 'suggestion-fence-unverified', 'suggestion-blank-only-unverified',
-      'suggestion-crlf-unverified', 'suggestion-final-newline-unverified',
+    const retiredSince021 = [
+      'suggestion-not-inline', 'suggestion-fence-unverified', 'suggestion-blank-only-unverified', 'suggestion-crlf-unverified',
+      'suggestion-final-newline-unverified', 'suggestion-historical-unsupported', 'fix-multiple-files-unsupported',
+      'fix-multiple-replacements-unsupported', 'fix-alternatives-unsupported',
     ];
-    for (const code of retired) {
+    for (const code of retiredSince021) {
       assert.equal(CATALOG.has(code), false, `${code} is retired`);
       assert.ok(DIAGNOSTICS_DOC.includes(`| \`${code}\` | `), `the retired ${code} is listed under "Retired codes"`);
+    }
+    // Codes that only unreleased builds reported are gone too; the shipped catalog does not list them.
+    for (const code of [
+      'suggestion-pr-fallback', 'suggestion-group-pr-unavailable', 'suggestion-group-requires-suggestion-prs', 'fix-changes-require-suggestion-prs',
+      'suggestion-reviewed-commit-not-head', 'suggestion-pr-not-reapplied',
+    ]) {
+      assert.equal(CATALOG.has(code), false, `${code} is not reported`);
     }
     // Specification R17: the reviewed commit's association with the pull request.
     assert.equal(CATALOG.get('reviewed-commit-not-in-pull-request')?.severity, 'error');
     assert.equal(CATALOG.get('reviewed-commit-association-unknown')?.severity, 'note');
-    // docs/diagnostics.md "Renamed codes".
+    // docs/diagnostics.md "Renamed codes": the codes 0.2.1 named in its Markdown that were renamed.
     const renames: readonly (readonly [string, string])[] = [
       ['inline-unavailable', 'inline-placement-unavailable'],
       ['invocation-failed', 'tool-invocation-failed'],
       ['tool-notification-error', 'tool-reported-errors'],
       ['repository-mismatch', 'provenance-repository-mismatch'],
       ['provenance-conflict', 'provenance-revision-conflict'],
-      ['suggestion-historical-unsupported', 'suggestion-reviewed-commit-not-head'],
-      // Issue #37: the skip became a fallback, announced for every change handled as if suggestion pull requests were not allowed.
-      ['suggestion-pr-not-reapplied', 'suggestion-pr-fallback'],
     ];
     for (const [before, after] of renames) {
       assert.equal(CATALOG.has(before), false, `${before} was renamed`);
-      assert.ok(CATALOG.has(after) || retired.includes(after), after);
+      assert.ok(CATALOG.has(after), after);
       assert.ok(DIAGNOSTICS_DOC.includes(`| \`${before}\` | \`${after}\` |`), `the rename ${before} -> ${after} is listed`);
     }
   });

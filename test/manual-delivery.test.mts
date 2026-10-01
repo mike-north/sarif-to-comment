@@ -218,7 +218,7 @@ describe('an edit made by hand in the review body (`edits: review-body`, §8.10)
     assert.equal(outcome.review.body, manualEdit('src/app.ts', 2, 'B', sectionAt('src/app.ts', 2, 'b', 'Use B.')));
   });
 
-  test('L12: never a default; under the defaults an edit outside the diff is blocked naming only `native`', async () => {
+  test('`review-body` is never a default; under the defaults an edit outside the diff is blocked naming only `native`', async () => {
     const { message } = unavailable(await blocked(document([USE_B])));
     assert.equal(message, `The edit of \`src/app.ts\` line 2 cannot be delivered. \`edits\` is \`[native]\`, the default, and no mechanism it lists is available:\n\n- \`native\`: ${NOT_INLINE('src/app.ts', 2)}`);
   });

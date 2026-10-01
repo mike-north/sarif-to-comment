@@ -2567,7 +2567,7 @@ describe('preparation warnings are recorded with the publication and reported by
  * The resolved delivery policy is recorded with the publication before its
  * first write (docs/delivery-policy-contract.md §13): a record that holds it
  * is version 3, with `warnings` only when there are any; records of versions
- * 1 (0.2.x) and 2 are still read and continued (L8).
+ * 1 (0.2.x) and 2 are still read and continued.
  *
  * @see docs/delivery-policy-contract.md §13
  * @see docs/companion-suggestion-pr-contract.md §2.9
@@ -2608,7 +2608,7 @@ describe('the resolved delivery policy is recorded with the publication (version
     assert.deepEqual(published(await recover(world)).warnings, [NOTE]);
   });
 
-  test('a version-1 record written by 0.2.x is still continued (L8)', async () => {
+  test('a version-1 record written by 0.2.x is still continued', async () => {
     const world = makeWorld();
     fs.writeFileSync(world.statePath, JSON.stringify(handBuiltIntent()), { mode: 0o600 });
     const outcome = await publishDelivered(world, DELIVERY);
