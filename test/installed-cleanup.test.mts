@@ -9,8 +9,9 @@
  * The repository holds the worked example of
  * docs/suggestion-cleanup-contract.md §3: an open original with two
  * suggestions and a closed original with one. Expected results are written by
- * hand from that contract, including the owner scope and the early exit of a
- * label sweep (§2.2, §2.4.2).
+ * hand from that contract, including the owner scope, the early exit of a label
+ * sweep before the candidate limit, and options that would change nothing
+ * refused as usage errors (§2.2, §2.4.1, §2.4.2).
  *
  * @see https://docs.github.com/en/graphql/reference/objects#ref
  * @see https://docs.github.com/en/rest/pulls/pulls#update-a-pull-request
@@ -156,9 +157,18 @@ describe('the installed package closes suggestion pull requests whose original e
     assert.equal(wrong['status'], 'label-not-suggestion-prs');
     assert.deepEqual(asArray(wrong['diagnostics']).map((d) => asRecord(d)['code']), ['label-not-suggestion-prs']);
     assert.equal(w.host.log().length - before, 1, 'one request before the refusal');
-    const capped = cli(['--label', 'bug', '--max-candidates', '10'], 1);
-    assert.equal(capped['status'], 'too-many-candidates');
+    const lowered = w.host.log().length;
+    const stillWrong = cli(['--label', 'bug', '--max-candidates', '10'], 2);
+    assert.equal(stillWrong['status'], 'label-not-suggestion-prs', 'the early exit is decided before the limit');
+    assert.equal(w.host.log().length - lowered, 1, 'one request before the refusal');
+    const capped = cli(['--label', 'bug', '--force', '--max-candidates', '10'], 1);
+    assert.equal(capped['status'], 'too-many-candidates', '--force bypasses only the early exit');
     assert.deepEqual(capped['counts'], { candidates: 25, checked: 0, labeled: 0, conforming: 0 });
+    const misuse = w.host.log().length;
+    const ignored = cli(['--force'], 1);
+    assert.equal(ignored['status'], 'usage-error');
+    assert.equal(ignored['message'], '--force requires --label (only a --label sweep stops early)');
+    assert.equal(w.host.log().length, misuse, 'a usage error makes no request');
     assert.deepEqual(states(w), { ...OPEN_ALL, '41': 'open', ...Object.fromEntries(ordinaries.map((p) => [String(p.number), 'open'])) }, 'nothing was closed');
   });
 
@@ -181,6 +191,8 @@ describe('the installed package closes suggestion pull requests whose original e
       assert.equal(outcome.owner, 'me');
       assert.deepEqual(outcome.counts, { candidates: 3, checked: 3, labeled: 3, conforming: 3 });
       await assert.rejects(closeSuggestionPullRequests({ ...input, label: 'a,b' }), TypeError);
+      await assert.rejects(closeSuggestionPullRequests({ ...input, force: true }), /force applies only to a label sweep, so it requires label/);
+      await assert.rejects(closeSuggestionPullRequests({ ...input, originalPullNumber: 37, maxCandidates: 10 }), TypeError);
       process.stdout.write(JSON.stringify({ status: outcome.status }));
     `;
     const file = path.join(consumer, 'cleanup-library.mjs');

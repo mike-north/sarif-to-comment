@@ -19,7 +19,10 @@
  *   is evaluated;
  * - the early exit (§2.4.2): a label sweep whose first 20 pull requests show
  *   no suggestion marker and no `suggestion-pr/` branch stops, unless
- *   `force` / `--force`;
+ *   `force` / `--force`; it is decided before the limit, from the same first
+ *   page, and `force` bypasses only it;
+ * - options that would change nothing are refused (§2.2): `force` outside a
+ *   label sweep, `maxCandidates` in targeted mode;
  * - the counts reported (§2.10), and the CLI's statuses and exit codes.
  *
  * Request counts come from the host's request log, which records every
@@ -273,6 +276,7 @@ describe('the candidate limit (§2.4.1)', () => {
     const remedies = asArray(diagnostic['remedies']).map((r) => asString(r)).join('\n');
     assert.match(remedies, /--original/, 'how to narrow');
     assert.match(remedies, /--max-candidates/, 'how to raise the limit');
+    assert.match(remedies, /include those of suggestions already closed, because cleanup never deletes a branch/, 'why an active repository reaches the limit (§2.4.1, known limitation)');
     assert.equal(
       markdown(outcome),
       ['## Suggestion pull request cleanup stopped: too many candidates', '', message].join('\n'),
@@ -298,8 +302,9 @@ describe('the candidate limit (§2.4.1)', () => {
     assert.deepEqual(writes(lowered), []);
   });
 
-  test('a label sweep over the limit is refused after one request, before the second page, the account or any pull request', async () => {
-    const world = makeWorld(ordinaries(1000, 501));
+  test('a label sweep over the limit, whose first page shows a suggestion, is refused after one request, before the second page, the account or any pull request', async () => {
+    // The first page passes the early exit (§2.4.2: #40 carries a marker), so the limit decides (§2.4.1).
+    const world = makeWorld([original(37, 'closed'), suggestion(40, 37, { labels: ['bug'] }), ...ordinaries(1000, 500)]);
     const outcome = await cleanup(world, { label: 'bug' });
     assert.equal(outcome['status'], 'too-many-candidates');
     assert.deepEqual(outcome['counts'], { candidates: 501, ...COUNTS_NONE });
@@ -417,16 +422,6 @@ describe('the early exit of a label sweep (§2.4.2)', () => {
     assert.deepEqual(requests(world), ['POST /graphql']);
   });
 
-  test('a broad label costs at most two requests before it is refused', async () => {
-    for (const [pulls, status] of [[ordinaries(1000, 600), 'too-many-candidates'], [ordinaries(1000, 30), 'label-not-suggestion-prs']] as const) {
-      const world = makeWorld(pulls);
-      const outcome = await cleanup(world, { label: 'bug' });
-      assert.equal(outcome['status'], status);
-      assert.ok(world.host.log().length <= 2, `at most two requests: ${requests(world).join(', ')}`);
-      assert.deepEqual(writes(world), []);
-    }
-  });
-
   test('force that is not a boolean is a TypeError before any request', async () => {
     const world = makeWorld([]);
     await assert.rejects(cleanup(world, { label: 'bug', force: 'yes' }), (err: unknown) => err instanceof TypeError && /force must be a boolean/.test(err.message));
@@ -447,6 +442,120 @@ describe('the early exit of a label sweep (§2.4.2)', () => {
     assert.equal(asRecord(parseJson(forced.stdout))['status'], 'complete');
     assert.deepEqual(writes(world), closes(120));
   });
+});
+
+// ---------------------------------------------------------------------------
+
+describe('the early exit comes before the limit (§2.4.1, §2.4.2)', () => {
+  // Both checks read the same first page, so a wrong broad label is refused
+  // as a wrong label (exit 2), however many pull requests carry it, and
+  // still after exactly one request.
+  for (const count of [30, 600]) {
+    test(`a wrong label on ${String(count)} pull requests is label-not-suggestion-prs after exactly one request, not too-many-candidates`, async () => {
+      const world = makeWorld(ordinaries(1000, count));
+      const outcome = await cleanup(world, { label: 'bug' });
+      assert.equal(outcome['status'], 'label-not-suggestion-prs');
+      assert.deepEqual(outcome['counts'], { candidates: count, ...COUNTS_NONE });
+      assert.deepEqual(asArray(outcome['diagnostics']).map((d) => asRecord(d)['code']), ['label-not-suggestion-prs']);
+      assert.match(asString(asRecord(asArray(outcome['diagnostics'])[0])['message']), new RegExp(`first 20 of the ${String(count)} open pull requests labeled \`bug\``));
+      assert.deepEqual(requests(world), ['POST /graphql'], 'exactly one request before the refusal');
+    });
+  }
+
+  test('force bypasses only the early exit: the limit still applies after it, still after exactly one request', async () => {
+    const world = makeWorld(ordinaries(1000, 600));
+    const outcome = await cleanup(world, { label: 'bug', force: true });
+    assert.equal(outcome['status'], 'too-many-candidates');
+    assert.deepEqual(outcome['counts'], { candidates: 600, ...COUNTS_NONE });
+    const [diagnostic, ...others] = asArray(outcome['diagnostics']).map((d) => asRecord(d));
+    assert.deepEqual(others, []);
+    assert.ok(diagnostic);
+    assert.equal(diagnostic['code'], 'suggestion-pr-candidates-over-limit');
+    assert.match(asString(diagnostic['message']), /600 open pull requests labeled `bug` .*limit of 500/);
+    assert.deepEqual(requests(world), ['POST /graphql']);
+  });
+
+  test('force within the limit evaluates every pull request', async () => {
+    const world = makeWorld(ordinaries(1000, 30));
+    const outcome = await cleanup(world, { label: 'bug', force: true, dryRun: true });
+    assert.equal(outcome['status'], 'complete');
+    assert.equal(results(outcome).length, 30);
+    assert.ok(results(outcome).every(([, , result]) => result === 'not-conforming'));
+  });
+
+  test('CLI: a wrong broad label exits 2, and with --force exits 1 over the limit; one request each', () => {
+    const world = makeWorld(ordinaries(1000, 600));
+    const wrong = cli(world, ['close-suggestion-prs', '--repo', `${OWNER}/${REPO}`, '--label', 'bug', '--format', 'json']);
+    assert.equal(wrong.status, 2, wrong.stdout + wrong.stderr);
+    assert.equal(asRecord(parseJson(wrong.stdout))['status'], 'label-not-suggestion-prs');
+    assert.deepEqual(requests(world), ['POST /graphql']);
+    const forced = cli(world, ['close-suggestion-prs', '--repo', `${OWNER}/${REPO}`, '--label', 'bug', '--force', '--format', 'json']);
+    assert.equal(forced.status, 1, forced.stdout + forced.stderr);
+    const doc = asRecord(parseJson(forced.stdout));
+    assert.equal(doc['status'], 'too-many-candidates');
+    assert.deepEqual(asArray(doc['diagnostics']).map((d) => asRecord(d)['code']), ['suggestion-pr-candidates-over-limit']);
+    assert.deepEqual(requests(world), ['POST /graphql', 'POST /graphql']);
+    assert.deepEqual(writes(world), []);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe('an option that would change nothing is refused, never ignored (§2.2)', () => {
+  // Only a label sweep stops early, so force means something only there; and
+  // targeted discovery has no candidate limit (§2.4.1, §2.4.2).
+  const refusals: readonly (readonly [string, Json, RegExp])[] = [
+    ['force without label', { force: true }, /force applies only to a label sweep, so it requires label/],
+    ['force in targeted mode', { label: 'bug', originalPullNumber: 37, force: true }, /force applies only to a label sweep, so it cannot be combined with originalPullNumber/],
+    ['maxCandidates in targeted mode', { originalPullNumber: 37, maxCandidates: 10 }, /maxCandidates limits a sweep, so it cannot be combined with originalPullNumber/],
+    ['maxCandidates in targeted mode with a label', { label: 'bug', originalPullNumber: 37, maxCandidates: 10 }, /maxCandidates limits a sweep, so it cannot be combined with originalPullNumber/],
+  ];
+  for (const [what, extra, pattern] of refusals) {
+    test(`library: ${what} is a TypeError before any request`, async () => {
+      const world = makeWorld([original(37, 'closed'), suggestion(40, 37)]);
+      await assert.rejects(
+        cleanup(world, extra),
+        (err: unknown) => err instanceof TypeError && err.message.startsWith('Invalid closeSuggestionPullRequests input: ') && pattern.test(err.message),
+      );
+      assert.deepEqual(world.host.log(), []);
+    });
+  }
+
+  test('library: force: false asks for nothing, so it is accepted without a label', async () => {
+    const world = makeWorld([original(37, 'closed'), suggestion(40, 37)]);
+    const outcome = await cleanup(world, { force: false });
+    assert.equal(outcome['status'], 'complete');
+    assert.deepEqual(writes(world), closes(40));
+  });
+
+  const usage: readonly (readonly [string, readonly string[], string])[] = [
+    ['--force without --label', ['--force'], '--force requires --label (only a --label sweep stops early)'],
+    ['--force with --original', ['--label', 'bug', '--original', '37', '--force'], '--force cannot be combined with --original (only a --label sweep stops early)'],
+    ['--max-candidates with --original', ['--original', '37', '--max-candidates', '10'], '--max-candidates cannot be combined with --original (only a sweep has a candidate limit)'],
+  ];
+  for (const [what, args, message] of usage) {
+    test(`CLI: ${what} is a usage error (exit 1) before any request, even without a token`, () => {
+      const world = makeWorld([original(37, 'closed'), suggestion(40, 37)]);
+      const human = cli(world, ['close-suggestion-prs', '--repo', `${OWNER}/${REPO}`, ...args], {});
+      assert.equal(human.status, 1, human.stdout + human.stderr);
+      assert.equal(human.stdout, '');
+      assert.ok(human.stderr.includes(message), human.stderr);
+      assert.ok(human.stderr.includes('Run `sarif-to-comment close-suggestion-prs --help` for usage.'), human.stderr);
+      const json = cli(world, ['close-suggestion-prs', '--repo', `${OWNER}/${REPO}`, ...args, '--format', 'json']);
+      assert.equal(json.status, 1, json.stdout + json.stderr);
+      const doc = asRecord(parseJson(json.stdout));
+      assert.equal(doc['command'], 'close-suggestion-prs');
+      assert.equal(doc['status'], 'usage-error');
+      assert.equal(doc['message'], message);
+      const [diagnostic, ...others] = asArray(doc['diagnostics']).map((d) => asRecord(d));
+      assert.deepEqual(others, []);
+      assert.ok(diagnostic);
+      assert.equal(diagnostic['code'], 'usage-error');
+      assert.equal(diagnostic['subject'], 'close-suggestion-prs');
+      assert.deepEqual(diagnostic['remedies'], ['Run `sarif-to-comment close-suggestion-prs --help` for usage.']);
+      assert.deepEqual(world.host.log(), []);
+    });
+  }
 });
 
 // ---------------------------------------------------------------------------
