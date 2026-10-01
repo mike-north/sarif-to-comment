@@ -312,7 +312,7 @@ The user chose a setting controlling whether suggestion PRs are allowed, rather 
 
 **Consequences:** Preserving explicitly supplied groups is in scope and does not contradict D7's prohibition on inferring dependencies. If publication requires grouped application while suggestion PRs are disabled, explain the required setting instead of silently splitting or omitting the group; D12's whole-review gate applies. Enabling the setting permits proposal-branch/PR publication, not automatic acceptance into the author's branch. Use D21's backlink-plus-label relationship for suggestion PR discovery. Exact grouping representation, permission-failure handling, and multi-object publication recovery remain open implementation contracts.
 
-**Owner decision (September 29, 2026): explicit opt-in, default off.** Suggestion PRs are created only when the caller explicitly enables them; when the setting is omitted, they are disabled. The owner recorded this on [issue #5](https://github.com/mike-north/sarif-to-comment/issues/5), after the evaluation against PR clutter and triggered automation in the [companion suggestion PR contract §2.1](companion-suggestion-pr-contract.md#21-the-setting-and-why-it-is-off-by-default). The explicit enable setting and the explicit disable choice both remain. This supersedes the earlier provisional default below, which is kept as recorded.
+**Owner decision (September 29, 2026): explicit opt-in, default off.** Suggestion PRs are created only when the caller explicitly enables them; when the setting is omitted, they are disabled. The owner recorded this on [issue #5](https://github.com/mike-north/sarif-to-comment/issues/5), after the evaluation against PR clutter and triggered automation in the [companion suggestion PR contract §2.1](companion-suggestion-pr-contract.md#21-off-by-default-and-why). The explicit enable setting and the explicit disable choice both remain. This supersedes the earlier provisional default below, which is kept as recorded.
 
 **Earlier provisional default (superseded September 29, 2026), low conviction:** The user chose suggestion PRs enabled when the setting is omitted, explicitly as a choice to validate with real user feedback. Additional PR clutter and organization-specific review infrastructure triggered by PR creation may make opt-in preferable in some environments. Keep the explicit disable setting. Assess this default through actual user experience and downstream automation costs; do not describe it as a high-confidence or permanently settled preference. Small edits still prefer native suggestions.
 
@@ -677,6 +677,23 @@ D48–D60 record the owner's later decisions of September 30, 2026 on caller-con
 **Accepted tradeoff:** Reopening much later may require manually reopening companions already closed by cleanup. This is a grace period and fresh-state check, not a guarantee that reopening can never race with cleanup. The delay does not authorize deleting branches or recreating/reopening proposals automatically.
 
 **Evidence and open implementation:** GH-02 in the [behavior register](github-behavior.md#gh-02--closing-the-original-without-merging-left-its-companion-open) establishes that the tested abandoned original left its companion open. GitHub advertises `closed` PR events and an event payload merge flag; this documents a feasible trigger, not a tested workflow. Source: [Actions event documentation](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#pull_request). Workflow event choice, trusted-code execution, token permissions, fork scope, repeat-run behavior and a bounded positive/negative experiment remain design work. No workflow has been installed, run or authorized for execution during this discussion.
+
+**October 1, 2026 update: implemented.** The guard is `requireAbandonedOriginal` / `--if-abandoned` on targeted cleanup ([cleanup contract §2.12](suggestion-cleanup-contract.md#212-requiring-an-abandoned-original-requireabandonedoriginal---if-abandoned)), unreleased. The tool reads the exact original after resolving the label and before listing anything. That read is targeted discovery's own, not a second one.
+
+- **Closed and not merged:** the established targeted cleanup runs unchanged, keeping every positive identification.
+- **Open (including reopened), merged or not found:** a skip, not a failure. The status is `original-not-abandoned` (exit 0), with the note `original-pull-request-not-abandoned` naming the state.
+- **Unreadable:** an operational error, and nothing is closed.
+
+The two-minute grace period belongs to the workflow. The tool never waits, deletes a branch, or reopens or recreates a proposal. The workflow is shipped as an example only ([`docs/examples/abandonment-cleanup.workflow.yml`](examples/abandonment-cleanup.md)). Its page records:
+
+- the choice of `pull_request` over `pull_request_target`;
+- forks;
+- repeat runs;
+- its credential, a personal access token from a repository secret, with the workflow's own token (`github.token`) as an alternative whose support is not yet established;
+- `--owner all`, for either credential;
+- reopening companions by hand.
+
+Live dry runs in doc-linter skipped open, merged and missing originals, and proceeded for a closed, unmerged one ([evidence](evidence/abandonment-cleanup/README.md)). The workflow experiment (E7: trigger, delay, a quick close and reopen) remains pending. It needs the owner's authority to install a workflow in a fixture repository's branch. No workflow has been installed or run. The text above is kept as decided.
 
 ### D55. Report unavailable explicit delivery requests without silently substituting — owner-selected direction
 

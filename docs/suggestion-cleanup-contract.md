@@ -1,8 +1,8 @@
 # Suggestion pull request cleanup: contract
 
-Owner-accepted · September 30, 2026. On-demand cleanup closes open suggestion pull requests that follow the tool-neutral [suggestion pull request convention](suggestion-pr-convention.md), whichever tool created them, once their original pull request has merged or closed. It is implemented under the options below and verified against live GitHub in the [live evidence](suggestion-cleanup-e2e-evidence.md) and the [convention evidence](suggestion-pr-convention-e2e-evidence.md). The owner's decisions on [issue #27](https://github.com/mike-north/sarif-to-comment/issues/27) (label resolution, the `--label` migration override, conforming pull requests), recorded in the decision log as [D41](design-decisions.md#d41-the-suggestion-pull-request-convention-and-options--owner-decisions), and on [issue #44](https://github.com/mike-north/sarif-to-comment/issues/44) (closing by default, the exit codes, a 404 on close, the override skipping the configuration, the owner scope and bounded discovery), recorded as [D47](design-decisions.md#d47-scope-cleanup-by-who-opened-the-suggestion-and-bound-its-discovery--owner-decisions), are listed in [Decisions](#4-decisions). Only the [open questions](#4-decisions) listed there remain for the owner.
+Owner-accepted · September 30, 2026. On-demand cleanup closes open suggestion pull requests that follow the tool-neutral [suggestion pull request convention](suggestion-pr-convention.md), whichever tool created them, once their original pull request has merged or closed. It is implemented under the options below and verified against live GitHub in the [live evidence](suggestion-cleanup-e2e-evidence.md) and the [convention evidence](suggestion-pr-convention-e2e-evidence.md). The owner's decisions on [issue #27](https://github.com/mike-north/sarif-to-comment/issues/27) (label resolution, the `--label` migration override, conforming pull requests), recorded in the decision log as [D41](design-decisions.md#d41-the-suggestion-pull-request-convention-and-options--owner-decisions), and on [issue #44](https://github.com/mike-north/sarif-to-comment/issues/44) (closing by default, the exit codes, a 404 on close, the override skipping the configuration, the owner scope and bounded discovery), recorded as [D47](design-decisions.md#d47-scope-cleanup-by-who-opened-the-suggestion-and-bound-its-discovery--owner-decisions), are listed in [Decisions](#4-decisions). The owner's optional abandonment cleanup ([D54](design-decisions.md#d54-delay-optional-abandonment-cleanup-and-recheck-the-original--owner-selected-candidate-policy-workflow-experiment-pending)) is a guard on targeted cleanup, implemented October 1, 2026 (§2.12), with an example workflow that is documentation only. Only the [open questions](#4-decisions) listed there remain for the owner.
 
-**Sources.** [Issue #6](https://github.com/mike-north/sarif-to-comment/issues/6); [issue #44](https://github.com/mike-north/sarif-to-comment/issues/44); [issue #27](https://github.com/mike-north/sarif-to-comment/issues/27) and the [suggestion pull request convention](suggestion-pr-convention.md); [specification](specification.md) R16 (cleanup paragraph), A31 and A36, with R14 and the deferred fork case (A34); [decisions](design-decisions.md) D21, D25, D27, D28 and D29; the [companion suggestion PR contract](companion-suggestion-pr-contract.md), especially §2.6–§2.7 and §5 (what cleanup can rely on); the [lifecycle experiment](companion-pr-lifecycle-experiment.md); [status](status.md).
+**Sources.** [Issue #6](https://github.com/mike-north/sarif-to-comment/issues/6); [issue #44](https://github.com/mike-north/sarif-to-comment/issues/44); [issue #27](https://github.com/mike-north/sarif-to-comment/issues/27) and the [suggestion pull request convention](suggestion-pr-convention.md); [specification](specification.md) R16 (cleanup paragraph), A31 and A36, with R14 and the deferred fork case (A34); [decisions](design-decisions.md) D21, D25, D27, D28, D29 and D54; the [companion suggestion PR contract](companion-suggestion-pr-contract.md), especially §2.6–§2.7 and §5 (what cleanup can rely on); the [lifecycle experiment](companion-pr-lifecycle-experiment.md); [status](status.md).
 
 ## 1. What is fixed by the sources
 
@@ -38,10 +38,11 @@ The names use the vocabulary users already have: a [delivery list](delivery-poli
 | `owner?` | `--owner me\|all` | Whose suggestion pull requests may be closed, by who opened the **suggestion** pull request (not the original): `me` (the default), the authenticated account; `all`, anyone (§2.6). |
 | `maxCandidates?` | `--max-candidates N` | A sweep's candidate limit, a positive integer; default 500 (§2.4.1). Targeted discovery has no limit, so it cannot be combined with `originalPullNumber` (`--original`). |
 | `force?` | `--force` | A label sweep continues past the early exit (§2.4.2); its limit still applies (§2.4.1). Nothing else stops early, so `force: true` requires `label` and cannot be combined with `originalPullNumber` (`--force` requires `--label` and cannot be combined with `--original`). |
+| `requireAbandonedOriginal?` | `--if-abandoned` | Targeted mode only: proceed only if a fresh read shows the original closed without merging; otherwise skip, closing nothing (§2.12). `true` requires `originalPullNumber` (`--if-abandoned` requires `--original`). |
 | `dryRun?` | `--dry-run` | Discover and verify everything, close nothing (§2.3). |
 | | `--format human\|json` | As for every command. |
 
-Unknown fields are refused. Invalid input is a `TypeError` (CLI: a usage error, exit 1, whose remedy names `sarif-to-comment close-suggestion-prs --help`) before any request. An option that could change nothing is invalid input too, never silently ignored: `force: true` without `label` or with `originalPullNumber`, and `maxCandidates` with `originalPullNumber`. `force: false` asks for nothing and is accepted.
+Unknown fields are refused. Invalid input is a `TypeError` (CLI: a usage error, exit 1, whose remedy names `sarif-to-comment close-suggestion-prs --help`) before any request. An option that could change nothing is invalid input too, never silently ignored: `force: true` without `label` or with `originalPullNumber`, `maxCandidates` with `originalPullNumber`, and `requireAbandonedOriginal: true` without `originalPullNumber`. `force: false` and `requireAbandonedOriginal: false` ask for nothing and are accepted.
 
 **Labels.** `label` must be a label name under the [convention](suggestion-pr-convention.md#3-the-canonical-label): 1–50 characters, no control or invisible formatting characters, no surrounding whitespace, and **no comma**. GitHub's label filter takes a comma-separated list, so a label with a comma cannot be selected on its own; the convention refuses commas in every suggestion label for the same reason.
 
@@ -172,7 +173,7 @@ After every read, each eligible suggestion is closed in ascending number order w
 
 ### 2.10 Outcome
 
-The library resolves (it does not reject) once discovery has completed, or once a sweep has stopped (§2.4.1, §2.4.2):
+The library resolves (it does not reject) once discovery has completed, once a sweep has stopped (§2.4.1, §2.4.2), or once a guarded run has skipped because its original is not closed without merging (§2.12):
 
 ```text
 { status, dryRun, owner, originals: [{ number, state, reason? }], suggestions: [{ number, url, original, result, reason? }],
@@ -185,25 +186,92 @@ The library resolves (it does not reject) once discovery has completed, or once 
 - `counts`: `candidates` is what discovery counted, the number `maxCandidates` limits (GitHub's total of branches under `suggestion-pr/` for the default sweep, of open pull requests with the label for a label sweep; for targeted discovery, the pull requests of this repository that reference the original); `checked` is the number of `suggestions`; `labeled` and `conforming` are how many of those carried the label and passed rows 2–6 of §2.6 as discovery listed them.
 - `status`:
   - `too-many-candidates` or `label-not-suggestion-prs` when a sweep stopped (§2.4.1, §2.4.2): nothing was evaluated;
+  - `original-not-abandoned` when `requireAbandonedOriginal` found the original open, merged or not found (§2.12): nothing was listed, evaluated or closed;
   - otherwise `incomplete` when any suggestion is `failed` or `unverified`, or a targeted original is `unverified`: something could not be established; running again is safe;
   - otherwise `permission-limited` when any suggestion is `permission-limited`: someone with the right to close them can finish;
   - otherwise `complete`, including a dry run and a run with nothing to do.
-- `markdown` says what was checked, how much, each original's state, each suggestion's result, that no branch is deleted, and, when relevant, that a rerun is safe or who can close the rest. Its form is shown in §3: a title naming the status (`complete`, `: dry run`, `limited by permissions`, `incomplete`), the scope (``Checked the open pull requests on `suggestion-pr/` branches in OWNER/REPO; the suggestion label is `LABEL` (SOURCE).`` for the default sweep, ``Checked the open pull requests labeled `LABEL` in OWNER/REPO (SOURCE).`` for a label sweep, ``Checked the pull requests that reference #N in OWNER/REPO; the suggestion label is `LABEL` (SOURCE).`` when targeted, where SOURCE is `the default suggestion label`, ``the suggestion label set in `.github/suggestion-prs.json` on `BRANCH` `` or `a label given in place of the repository's suggestion label`; followed by `Only suggestion pull requests opened by this account are closed.` or `Suggestion pull requests are closed whoever opened them.`), `Pull requests checked: N (L labeled, C conforming).` when any was, `Original pull requests:` with one line per original (`open`, `merged`, `closed without merging`, `not found (OWNER/REPO has no pull request #N that this account can read)`, `could not be verified (<reason>)`), `Suggestion pull requests:` with one line per result (`closed`; `would be closed`; `already closed`; `left open, because the original is still open`; `left open, because the original could not be verified`; `left open, not permitted to close it: <reason>`; `not closed, the close failed: <reason>` or `not closed, it could not be read again before closing: <reason>`; `skipped, not a conforming suggestion pull request: <reason>`; `left open, because someone else opened it`; ``skipped, it does not carry the label `<label>` ``), then the dry-run, rerun and permission notes that apply, and last `Closing never deletes a branch: each proposal branch is left in place.` A stopped sweep's Markdown is its title (`## Suggestion pull request cleanup stopped: too many candidates`, or `… stopped: the label does not mark suggestion pull requests`) and its diagnostic's message.
+- `markdown` says what was checked, how much, each original's state, each suggestion's result, that no branch is deleted, and, when relevant, that a rerun is safe or who can close the rest. Its form is shown in §3: a title naming the status (`complete`, `: dry run`, `limited by permissions`, `incomplete`), the scope (``Checked the open pull requests on `suggestion-pr/` branches in OWNER/REPO; the suggestion label is `LABEL` (SOURCE).`` for the default sweep, ``Checked the open pull requests labeled `LABEL` in OWNER/REPO (SOURCE).`` for a label sweep, ``Checked the pull requests that reference #N in OWNER/REPO; the suggestion label is `LABEL` (SOURCE).`` when targeted, where SOURCE is `the default suggestion label`, ``the suggestion label set in `.github/suggestion-prs.json` on `BRANCH` `` or `a label given in place of the repository's suggestion label`; followed by `Only suggestion pull requests opened by this account are closed.` or `Suggestion pull requests are closed whoever opened them.`), `Pull requests checked: N (L labeled, C conforming).` when any was, `Original pull requests:` with one line per original (`open`, `merged`, `closed without merging`, `not found (OWNER/REPO has no pull request #N that this account can read)`, `could not be verified (<reason>)`), `Suggestion pull requests:` with one line per result (`closed`; `would be closed`; `already closed`; `left open, because the original is still open`; `left open, because the original could not be verified`; `left open, not permitted to close it: <reason>`; `not closed, the close failed: <reason>` or `not closed, it could not be read again before closing: <reason>`; `skipped, not a conforming suggestion pull request: <reason>`; `left open, because someone else opened it`; ``skipped, it does not carry the label `<label>` ``), then the dry-run, rerun and permission notes that apply, and last `Closing never deletes a branch: each proposal branch is left in place.` A stopped sweep's Markdown is its title (`## Suggestion pull request cleanup stopped: too many candidates`, or `… stopped: the label does not mark suggestion pull requests`) and its diagnostic's message. A skipped guarded run's Markdown is its title, `## Suggestion pull request cleanup skipped: the original is not closed without merging`, and its note's message (§2.12).
 
-It rejects with a `TypeError` for invalid input, and with an `Error` for an operational failure during discovery or the account read (before any write). Neither contains the token.
+It rejects with a `TypeError` for invalid input, and with an `Error` for an operational failure during discovery or the account read, or when the original of a guarded run cannot be read (§2.12); always before any write. Neither contains the token.
 
-**CLI.** Human output is the Markdown on stdout, without what the diagnostics on stderr already say; a stopped sweep prints its title and `Nothing was checked or closed.` JSON is one document: `{ command: 'close-suggestion-prs', status, dryRun, owner, originals, suggestions, counts, message, diagnostics }`.
+**CLI.** Human output is the Markdown on stdout, without what the diagnostics on stderr already say; a stopped sweep or a skipped guarded run prints its title and `Nothing was checked or closed.` JSON is one document: `{ command: 'close-suggestion-prs', status, dryRun, owner, originals, suggestions, counts, message, diagnostics }`.
 
 | Exit status | Meaning |
 | --- | --- |
-| 0 | `complete` (also a dry run with nothing unverified, and a targeted original that does not exist) |
+| 0 | `complete` (also a dry run with nothing unverified, and a targeted original that does not exist); or `original-not-abandoned`: a guarded run skipped, nothing was checked (§2.12) |
 | 2 | `permission-limited`: every other eligible suggestion was closed; or `label-not-suggestion-prs`: the label sweep stopped, nothing was checked (`--force` continues) |
 | 3 | `incomplete`: a failed close or an unverified original; rerun later |
-| 1 | `too-many-candidates`: the sweep stopped, nothing was checked; or a usage error, missing token, or an operational failure before any write |
+| 1 | `too-many-candidates`: the sweep stopped, nothing was checked; or a usage error, missing token, or an operational failure before any write (including a guarded run whose original could not be read, §2.12) |
 
 ### 2.11 What cleanup never does
 
-Delete or update a branch; reopen, edit, label or comment on anything; write to the original; close a pull request whose marker is missing, duplicated, non-canonical or for another repository or original; close a fork's pull request; close someone else's suggestion under `owner: 'me'`; infer a terminal state from a failed lookup; treat an unreadable repository configuration as absent; write the repository configuration; keep any local record; evaluate the candidates of a sweep over its limit, or of a label sweep stopped early.
+Delete or update a branch; reopen, recreate, edit, label or comment on anything; wait, schedule or watch for anything (a guarded run's grace period belongs to its caller, §2.12); write to the original; close a pull request whose marker is missing, duplicated, non-canonical or for another repository or original; close a fork's pull request; close someone else's suggestion under `owner: 'me'`; infer a terminal state from a failed lookup; treat an unreadable repository configuration as absent; write the repository configuration; keep any local record; evaluate the candidates of a sweep over its limit, or of a label sweep stopped early.
+
+### 2.12 Requiring an abandoned original (`requireAbandonedOriginal`, `--if-abandoned`)
+
+The owner's [D54](design-decisions.md#d54-delay-optional-abandonment-cleanup-and-recheck-the-original--owner-selected-candidate-policy-workflow-experiment-pending) asks for optional cleanup when an original pull request is **abandoned**: closed without merging. [GH-02](github-behavior.md#gh-02--closing-the-original-without-merging-left-its-companion-open) shows why: closing an original without merging left its companion open. An automated trigger (the [example workflow](examples/abandonment-cleanup.md)) waits two minutes after the close, then runs targeted cleanup with this guard. The guard makes the decision on the tool's own fresh read of the original, never on the event that started the run. A brief close and reopen therefore skips: for example, one used to retrigger checks.
+
+**Input.** `requireAbandonedOriginal: true` (`--if-abandoned`) applies only to targeted mode. Without `originalPullNumber` (`--original N`) it could change nothing, so it is invalid input: a `TypeError` (CLI: a usage error, exit 1) before any request (§2.2). `requireAbandonedOriginal: false` asks for nothing and is accepted. The guard combines with `label`, `owner` and `dryRun` as targeted cleanup does.
+
+**Read first, then act.** A guarded run resolves the label exactly as targeted cleanup does (§2.2.1). That read also establishes that the repository exists, so an original's 404 stays definitive. It then reads the original, `GET /repos/{owner}/{repo}/pulls/{n}` (§2.7). This is the read targeted discovery makes before anything else (§2.4), made when the tool runs. Nothing is listed, classified or closed before it, and the account is not read. The answer decides the run:
+
+| The original's fresh read (§2.7) | A guarded run |
+| --- | --- |
+| `closed` (`state: closed`, `merged: false`) | **Proceeds**: targeted cleanup, unchanged (§2.4–§2.10), with this read as the original's state; it is not read a second time. |
+| `open`, including an original reopened after it was closed | **Skipped** |
+| `merged` | **Skipped**: a merged original is closed but not abandoned |
+| `not-found` (404) | **Skipped** |
+| `unverified` (403, 401, 5xx, a network failure, a malformed answer) | **Operational failure**: the call rejects with an `Error` naming the original and the reason (CLI: exit 1, `operation-failed`, "Nothing was closed."). An unread original is never treated as abandoned, and never as not abandoned. |
+
+**A skip is not a failure.** "The original is not abandoned" is a definitive answer for this run. A skipped run resolves with:
+
+- status `original-not-abandoned` (CLI: exit 0);
+- `originals` holding the one original and its state (`open`, `merged` or `not-found`);
+- empty `suggestions`, and zero `counts`;
+- one note, `original-pull-request-not-abandoned`, about `OWNER/REPO#N`, whose message names the state:
+  - `#N is open, not closed without merging, so nothing was checked or closed.`
+  - `#N was merged, not closed without merging, so nothing was checked or closed.`
+  - `OWNER/REPO has no pull request #N that this account can read, so nothing was checked or closed.`
+
+  Without the guard, the `not-found` case is a warning, `original-pull-request-not-found` (§2.4). Under the guard it is only the note.
+
+The Markdown is the title `## Suggestion pull request cleanup skipped: the original is not closed without merging` and the note's message. The CLI's human report is the title and `Nothing was checked or closed.`, with the note on stderr. A dry run skips identically.
+
+**What the guard keeps.** A run that proceeds is targeted cleanup, so every positive identification of §2.5–§2.8 still applies to each suggestion: the marker, the repository, the head branch, the label and the owner scope. Each suggestion is still read again before it is closed. The guard adds no write and no new kind of write. Cleanup still never deletes a branch, and never reopens, recreates or edits anything (§2.9, §2.11). In particular, the guard never reopens suggestions when an original is reopened, and never recreates proposals.
+
+**The grace period belongs to the caller.** The library and the CLI never wait, schedule or watch. They read the original once, when they run. The two-minute delay is the workflow's (`sleep 120` in the example). A caller can choose another delay, or none.
+
+**The window, and the accepted trade-off.** The guard narrows the race between a reopen and cleanup; it does not remove it. An original reopened after the guard's read can still have its suggestions closed in that run, as in §2.3. An original reopened much later does not reopen the suggestions cleanup already closed. Someone reopens them by hand. Closing is reversible: each suggestion's branch, commits, body and label are left untouched. The owner accepted this trade-off in D54.
+
+**Repeat runs.** Running the guarded command again is safe. If the original is still closed without merging, the run proceeds: suggestions already closed are `already-closed`, and nothing more is written (§2.6 row 7). If the original was reopened or merged in the meantime, the run skips.
+
+**Request cost.** The guard adds no request to targeted cleanup. Its read of the original is the one targeted discovery makes first (§2.4). A run that proceeds therefore costs exactly what targeted cleanup costs. A skipped run costs the label resolution and that one read: no listing, no account read, no write. Compared with trusting the event that triggered a workflow, the guard costs one extra read of the original, made when the tool runs.
+
+#### 2.12.1 Acceptance examples
+
+Each example uses `octo/widgets` with no repository configuration (label `suggestion-pr`), and #40, a conforming, labeled suggestion of #37 opened by this account.
+
+1. **Closed and unmerged: cleanup proceeds.** #37 is closed without merging. Running `close-suggestion-prs --repo octo/widgets --original 37 --if-abandoned`:
+   - reads #37 before the backlink listing;
+   - lists #37's backlinks, reads #40 again, and closes it with one `PATCH`;
+   - reports status `complete` and `- #37: closed without merging`, and exits 0.
+
+   The outcome is identical to the same command without `--if-abandoned`.
+2. **Reopened: skipped.** #37 was closed and then reopened, so it is open when the guard reads it. The run:
+   - reports status `original-not-abandoned` and `originals` `[{ number: 37, state: 'open' }]`;
+   - adds the note `#37 is open, not closed without merging, so nothing was checked or closed.`;
+   - exits 0.
+
+   No backlink listing, account read or write is made, and #40 stays open.
+3. **Merged: skipped.** #37 was merged. The run is the same as example 2, with state `merged` and the note `#37 was merged, not closed without merging, so nothing was checked or closed.` Unguarded targeted cleanup would close #40 here.
+4. **Not found: skipped.** `--original 99`, and GitHub answers 404 for #99. The run:
+   - reports status `original-not-abandoned` and `originals` `[{ number: 99, state: 'not-found' }]`;
+   - adds the note `octo/widgets has no pull request #99 that this account can read, so nothing was checked or closed.`, and no `original-pull-request-not-found` warning;
+   - exits 0, with nothing listed or written.
+5. **Read failure: nothing is closed.** The read of #37 answers HTTP 502 (or 403, or a malformed answer). The library rejects with an `Error` that begins `Pull request octo/widgets#37 could not be read (` and names the reason. The CLI exits 1, with `operation-failed` on stderr and `Nothing was closed.` on stdout. Nothing is listed or written.
+6. **Without `--original`: usage error.** `--if-abandoned` without `--original` is a usage error (exit 1) naming `--original`, and no request is made. The library raises the corresponding `TypeError`.
+7. **Dry run.** With `--dry-run`, a closed, unmerged #37 makes the same reads as example 1 and reports #40 `would-close`; nothing is written. An open #37 skips exactly as in example 2.
+8. **Repeat run.** After example 1, running the same command again reads #37 (still closed without merging), proceeds, and reports #40 `already-closed`. Nothing more is written.
 
 ## 3. Worked example
 
@@ -265,6 +333,20 @@ Settled in engineering after the implementation review of #44, within D47:
 - **The early exit comes before the limit** (§2.4.1, §2.4.2): a wrong broad label is `label-not-suggestion-prs`, not `too-many-candidates`; `force` lifts only the early exit; either refusal still costs one request.
 - **The count is unchanged** (§2.4.1): it is GitHub's total of `suggestion-pr/` branches in the first request, including those of closed suggestions, documented as a known limitation with `--max-candidates` as the remedy; the early exit's evidence is unchanged as well.
 
+Decided by the owner on September 30, 2026 ([D54](design-decisions.md#d54-delay-optional-abandonment-cleanup-and-recheck-the-original--owner-selected-candidate-policy-workflow-experiment-pending)), implemented October 1, 2026 (§2.12):
+
+- **Optional abandonment cleanup**: wait two minutes, then freshly confirm that the exact original is still closed and unmerged, then use the established discovery and cleanup. A brief close and reopen skips. Reopening companions by hand after a much later reopen is an accepted trade-off. Nothing infers branch deletion, or the automatic recreation or reopening of proposals.
+
+Settled in engineering when implementing D54 (the realignment plan's EC8):
+
+- **The names** `requireAbandonedOriginal` / `--if-abandoned`, a boolean that requires `originalPullNumber` / `--original`.
+- **A skip has its own status**, `original-not-abandoned` (exit 0), and one note, `original-pull-request-not-abandoned`, so that a caller can tell a skip from a cleanup that ran.
+- **An unreadable original makes a guarded run fail operationally** (exit 1), rather than end `incomplete` (exit 3) as unguarded targeted cleanup does. The guard exists to decide whether to act, and an unknown answer cannot decide it.
+- **The guard's read is targeted discovery's own read** of the original. It is not a second read, so it adds no request.
+- **The delay lives in the workflow**, which is shipped as an example under `docs/examples/`, never installed. Running it live on GitHub (the realignment plan's E7) needs the owner's authority to install a workflow in a fixture repository's branch ([evidence](evidence/abandonment-cleanup/README.md#the-remaining-obstacle-a-live-workflow-run)).
+- **The example's credential is the supported one**: a personal access token from a repository secret, `SARIF_TO_COMMENT_TOKEN`. The workflow's own token (`github.token`) is documented as an alternative whose support is not yet established; Phase 2 of the live experiment would establish it. The `permissions:` block stays, because it scopes `github.token` when a caller switches to it.
+- **The example passes `--owner all`.** With the personal token, `me` would close only the suggestion pull requests opened by the token's own account. With `github.token`, `me` would match nothing, and it needs `GET /user`, which that token cannot read.
+
 Open questions for the owner, raised by implementing #44:
 
 1. **The early exit's evidence** (§2.4.2): a malformed marker line or a `suggestion-pr/` branch on the first page counts as looking like a suggestion, so a label on a single abandoned, hand-opened suggestion branch lets a broad sweep continue up to its limit. The alternative is to require a recognized marker.
@@ -286,3 +368,5 @@ Open questions for the owner, raised by implementing #44:
 | Public types | `test/close-suggestion-pull-requests.types.mts` | |
 | CLI and library through the installed package | `test/installed-cleanup.test.mts`, `test/cli-commands.test.mts` | |
 | Diagnostics of cleanup | `test/diagnostics-outcomes.test.mts`, `test/cli-human-reports.test.mts` | |
+| Requiring an abandoned original (§2.12, D54): every original state, the usage error, an unreadable original, and the original read before any listing | `test/cleanup-abandonment.test.mts`, `test/installed-cleanup.test.mts`, `test/close-suggestion-pull-requests.types.mts` | [dry runs of October 1, 2026](evidence/abandonment-cleanup/README.md): an open original skipped; a closed, unmerged original proceeded; a merged and a missing original skipped. No workflow was run. |
+| The example workflow parses, has the documented trigger, condition, delay, permissions and token, and runs a command the CLI's help documents | `test/abandonment-workflow-example.test.mts` | not run on GitHub (E7; [evidence](evidence/abandonment-cleanup/README.md#the-remaining-obstacle-a-live-workflow-run)) |

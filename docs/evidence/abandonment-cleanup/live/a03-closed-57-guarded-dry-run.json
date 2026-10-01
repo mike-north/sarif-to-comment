@@ -1,0 +1,28 @@
+{
+  "command": "close-suggestion-prs",
+  "status": "complete",
+  "dryRun": true,
+  "owner": "me",
+  "originals": [
+    {
+      "number": 57,
+      "state": "closed"
+    }
+  ],
+  "suggestions": [
+    {
+      "number": 59,
+      "url": "https://github.com/mike-north/doc-linter/pull/59",
+      "original": 57,
+      "result": "already-closed"
+    }
+  ],
+  "counts": {
+    "candidates": 1,
+    "checked": 1,
+    "labeled": 1,
+    "conforming": 1
+  },
+  "message": "## Suggestion pull request cleanup: dry run\n\nChecked the pull requests that reference #57 in mike-north/doc-linter; the suggestion label is `suggestion-pr` (the default suggestion label). Only suggestion pull requests opened by this account are closed.\n\nPull requests checked: 1 (1 labeled, 1 conforming).\n\nOriginal pull requests:\n\n- #57: closed without merging\n\nSuggestion pull requests:\n\n- #59 (for #57): already closed\n\nThis was a dry run: nothing was closed.\n\nClosing never deletes a branch: each proposal branch is left in place.",
+  "diagnostics": []
+}

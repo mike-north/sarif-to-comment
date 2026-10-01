@@ -28,6 +28,11 @@
  *                        with originalPullNumber, which has no limit
  *   force?:              a label sweep continues past the early exit;
  *                        refused (when true) outside a label sweep
+ *   requireAbandonedOriginal?:
+ *                        targeted mode only (refused, when true, without
+ *                        originalPullNumber): proceed only if a fresh read
+ *                        shows the original closed without merging (D54,
+ *                        contract §2.12)
  *   dryRun?:             discover and verify, write nothing
  *
  * Sequence (every read completes before the first write):
@@ -41,6 +46,10 @@
  *      is resolved first; if it cannot be verified, or does not exist (404),
  *      nothing else is read; otherwise its cross-referencing pull requests
  *      in this repository (D21). A pull request listed twice counts once.
+ *      With requireAbandonedOriginal, that first read of the original is the
+ *      guard: unless it shows the original closed without merging, the run
+ *      stops there, skipped (open, merged, not found) or rejected as
+ *      operational (unverified), before anything is listed.
  *   2. The label (after the first sweep page, before targeted discovery):
  *      the override, or else the repository's canonical label resolved
  *      exactly as publication resolves it (contract §2.2.1). An invalid
@@ -62,9 +71,10 @@
  *
  * Outcome: { status, dryRun, owner, originals, suggestions, counts, markdown,
  * diagnostics } (see the public types below). A stopped sweep resolves too,
- * with nothing evaluated. Rejects for invalid input, for an invalid or
- * unreadable repository configuration, for an operational failure during
- * discovery or while reading the account, and for a defect in this package
+ * with nothing evaluated, and so does a skipped guarded run. Rejects for
+ * invalid input, for an invalid or unreadable repository configuration, for
+ * an operational failure during discovery or while reading the account, for
+ * a guarded run's original that cannot be read, and for a defect in this package
  * during steps 1-4: always before anything has been written. From step 5
  * on, every failure is reported in the outcome, so the closes already made
  * are never lost. Neither an outcome nor a rejection contains the token.
@@ -163,6 +173,18 @@ export interface ICloseSuggestionPullRequestsInput {
    * not lift `maxCandidates`.
    */
   readonly force?: boolean | undefined;
+  /**
+   * Proceed only if the original is abandoned: closed without merging. The
+   * original (`originalPullNumber`, which `true` requires; a `TypeError`
+   * otherwise) is read first, before anything is listed. When that fresh
+   * read shows it closed and not merged, targeted cleanup runs unchanged.
+   * When it is open (for example, reopened after it was closed), merged or
+   * not found, nothing is listed, checked or closed: the status is
+   * `original-not-abandoned`, with one note naming its state. When it
+   * cannot be read, the call rejects. Nothing waits: a grace period before
+   * the run is the caller's, for example a workflow's delay.
+   */
+  readonly requireAbandonedOriginal?: boolean | undefined;
   /** Read and verify everything, but close nothing; eligible suggestions are reported as `would-close`. */
   readonly dryRun?: boolean | undefined;
 }
@@ -255,10 +277,19 @@ export interface ICheckedSuggestionPullRequest {
  *   (`maxCandidates`), so nothing was evaluated.
  * - `label-not-suggestion-prs`: a label sweep's first page shows no
  *   suggestion pull request, so nothing was evaluated; `force` continues.
+ * - `original-not-abandoned`: with `requireAbandonedOriginal`, the original
+ *   was open, merged or not found, so nothing was listed, checked or closed.
+ *   A skip, not a failure.
  *
  * @public
  */
-export type CloseSuggestionPullRequestsStatus = 'complete' | 'permission-limited' | 'incomplete' | 'too-many-candidates' | 'label-not-suggestion-prs';
+export type CloseSuggestionPullRequestsStatus =
+  | 'complete'
+  | 'permission-limited'
+  | 'incomplete'
+  | 'too-many-candidates'
+  | 'label-not-suggestion-prs'
+  | 'original-not-abandoned';
 
 /**
  * How much a cleanup found and checked.
@@ -307,8 +338,9 @@ export interface ICloseSuggestionPullRequestsOutcome {
    * stopped by the candidate limit (error); an original that could not be
    * verified, a targeted original that does not exist, a close this account
    * may not make, or a label sweep stopped
-   * because its label does not look like a suggestion label (warning); and a
-   * pull request that does not follow the convention (note).
+   * because its label does not look like a suggestion label (warning); a
+   * pull request that does not follow the convention, and a guarded run
+   * skipped because its original is not closed without merging (note).
    */
   readonly diagnostics: readonly IDiagnostic[];
 }
@@ -364,7 +396,17 @@ function isCleanupClient(client: object): client is CleanupClient {
 // Input
 
 /** Every accepted input field. */
-const INPUT_KEYS: ReadonlySet<string> = new Set(['repository', 'token', 'label', 'originalPullNumber', 'owner', 'maxCandidates', 'force', 'dryRun']);
+const INPUT_KEYS: ReadonlySet<string> = new Set([
+  'repository',
+  'token',
+  'label',
+  'originalPullNumber',
+  'owner',
+  'maxCandidates',
+  'force',
+  'requireAbandonedOriginal',
+  'dryRun',
+]);
 
 /** The candidate limit of a sweep when the caller sets none (contract §2.4.1). */
 const DEFAULT_MAX_CANDIDATES = 500;
@@ -390,6 +432,8 @@ interface ICaptured {
   readonly scope: SuggestionOwnerScope;
   readonly maxCandidates: number;
   readonly force: boolean;
+  /** Whether a targeted run proceeds only for an original closed without merging (contract §2.12). */
+  readonly requireAbandonedOriginal: boolean;
   readonly dryRun: boolean;
 }
 
@@ -471,6 +515,10 @@ function capture(input: unknown): ICaptured {
   if (maxCandidates !== undefined && originalPullNumber !== undefined) {
     throw invalid('maxCandidates limits a sweep, so it cannot be combined with originalPullNumber (targeted discovery has no limit)');
   }
+  const requireAbandonedOriginal = booleanField(input, 'requireAbandonedOriginal');
+  if (requireAbandonedOriginal && originalPullNumber === undefined) {
+    throw invalid('requireAbandonedOriginal applies only to targeted cleanup, so it requires originalPullNumber');
+  }
   return {
     owner,
     repo,
@@ -480,6 +528,7 @@ function capture(input: unknown): ICaptured {
     scope: scope ?? 'me',
     maxCandidates: maxCandidates ?? DEFAULT_MAX_CANDIDATES,
     force,
+    requireAbandonedOriginal,
     dryRun: booleanField(input, 'dryRun'),
   };
 }
@@ -655,7 +704,16 @@ class Cleanup {
     let candidates: readonly ICandidate[];
     if (mode === 'targeted') {
       this.label = await resolveLabel(this.captured, this.client);
-      candidates = await this.referencingCandidates();
+      const original = await this.resolveTargetedOriginal();
+      // The guard of contract §2.12 decides on this read, the first of the
+      // original and the one targeted discovery makes anyway, before
+      // anything is listed. A run that proceeds keeps it as the original's
+      // state, so the original is never read twice.
+      if (this.captured.requireAbandonedOriginal) {
+        const skipped = abandonmentGuard(this.captured, original);
+        if (skipped !== undefined) return skipped;
+      }
+      candidates = await this.referencingCandidates(original);
       this.candidates = candidates.length;
     } else {
       const found = await sweep(this.captured, this.client, this.captured.label);
@@ -678,19 +736,24 @@ class Cleanup {
     return this.label;
   }
 
+  /** The targeted original, resolved first of all pull requests (contract §2.4). */
+  private async resolveTargetedOriginal(): Promise<IOriginalPullRequest> {
+    const { originalPullNumber } = this.captured;
+    if (originalPullNumber === undefined) throw new Error('Internal error: targeted discovery without an original pull request.');
+    return this.resolveOriginal(originalPullNumber);
+  }
+
   /**
-   * Targeted discovery: the original is resolved first, and only when it is
+   * Targeted discovery, once the original is resolved: only when it is
    * verified are the pull requests of this repository that reference it
    * listed, each once. Nothing can be closed for an original that cannot be
    * verified, and nothing can reference one that does not exist (the run is
    * then complete, with a warning about the original).
    */
-  private async referencingCandidates(): Promise<ICandidate[]> {
-    const { owner, repo, originalPullNumber } = this.captured;
-    if (originalPullNumber === undefined) return [];
-    const original = await this.resolveOriginal(originalPullNumber);
+  private async referencingCandidates(original: IOriginalPullRequest): Promise<ICandidate[]> {
+    const { owner, repo } = this.captured;
     if (original.state === 'unverified' || original.state === 'not-found') return [];
-    const listed = await this.client.listCrossReferencingPullRequests({ owner, repo, pullNumber: originalPullNumber });
+    const listed = await this.client.listCrossReferencingPullRequests({ owner, repo, pullNumber: original.number });
     return unique(listed.filter((pr) => this.isThisRepository(pr.repository)));
   }
 
@@ -1036,6 +1099,74 @@ function stoppedOutcome(captured: ICaptured, stopped: IStopped): IReported<IClos
 }
 
 // ---------------------------------------------------------------------------
+// A guarded run (contract §2.12)
+
+/** The original states a guarded run skips on: anything but closed without merging, or unread. */
+type NotAbandonedState = Exclude<OriginalPullRequestState, 'closed' | 'unverified'>;
+
+const NOT_ABANDONED_TITLE = '## Suggestion pull request cleanup skipped: the original is not closed without merging';
+
+/** The skip note's message: the original's state, in the words of contract §2.12. */
+function notAbandonedText(captured: ICaptured, n: number, state: NotAbandonedState): string {
+  switch (state) {
+    case 'open':
+      return `#${String(n)} is open, not closed without merging, so nothing was checked or closed.`;
+    case 'merged':
+      return `#${String(n)} was merged, not closed without merging, so nothing was checked or closed.`;
+    case 'not-found':
+      return `${notFoundText(captured, n)}, so nothing was checked or closed.`;
+  }
+}
+
+/**
+ * The guard of `requireAbandonedOriginal` (contract §2.12) on the fresh read
+ * of the targeted original: undefined when the original is closed without
+ * merging, so that targeted cleanup proceeds unchanged; otherwise the
+ * skipped outcome, with one note naming the state. An original that could
+ * not be read decides nothing either way, so the run rejects as
+ * operational before anything is listed or written.
+ */
+function abandonmentGuard(captured: ICaptured, original: IOriginalPullRequest): IReported<ICloseSuggestionPullRequestsOutcome> | undefined {
+  const { owner, repo } = captured;
+  switch (original.state) {
+    case 'closed':
+      return undefined;
+    case 'unverified':
+      throw new Error(
+        `Pull request ${owner}/${repo}#${String(original.number)} could not be read (${original.reason ?? 'no reason given'}), so whether it was closed without merging is not known; nothing was checked or closed.`,
+      );
+    case 'open':
+    case 'merged':
+    case 'not-found':
+      return notAbandonedOutcome(captured, original.number, original.state);
+  }
+}
+
+/**
+ * A guarded run skipped because its original is not closed without merging:
+ * nothing listed, checked or closed, the original's state, and one note. The
+ * Markdown is its title and the note's message; the CLI's human report
+ * leaves the message to stderr.
+ */
+function notAbandonedOutcome(captured: ICaptured, n: number, state: NotAbandonedState): IReported<ICloseSuggestionPullRequestsOutcome> {
+  const message = notAbandonedText(captured, n, state);
+  const diagnostic = createDiagnostic('original-pull-request-not-abandoned', message, { subject: `${captured.owner}/${captured.repo}#${String(n)}` });
+  return {
+    outcome: {
+      status: 'original-not-abandoned',
+      dryRun: captured.dryRun,
+      owner: captured.scope,
+      originals: [{ number: n, state }],
+      suggestions: [],
+      counts: { candidates: 0, checked: 0, labeled: 0, conforming: 0 },
+      markdown: [NOT_ABANDONED_TITLE, '', message].join('\n'),
+      diagnostics: [diagnostic],
+    },
+    report: [NOT_ABANDONED_TITLE, '', 'Nothing was checked or closed.'].join('\n'),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Presentation
 
 const ORIGINAL_TEXT: Readonly<Record<Exclude<OriginalPullRequestState, 'unverified' | 'not-found'>, string>> = {
@@ -1087,8 +1218,11 @@ function resultText(entry: IChecked, label: string): string {
   }
 }
 
+/** The statuses of a cleanup that evaluated its candidates: not stopped by a sweep's first page, nor skipped by its guard. */
+type EvaluatedStatus = Exclude<CloseSuggestionPullRequestsStatus, StopReason | 'original-not-abandoned'>;
+
 /** The titles of a cleanup that evaluated its candidates. */
-const TITLES: Readonly<Record<Exclude<CloseSuggestionPullRequestsStatus, StopReason>, string>> = {
+const TITLES: Readonly<Record<EvaluatedStatus, string>> = {
   complete: '## Suggestion pull request cleanup complete',
   'permission-limited': '## Suggestion pull request cleanup limited by permissions',
   incomplete: '## Suggestion pull request cleanup incomplete',
@@ -1124,7 +1258,7 @@ const DIAGNOSED_RESULTS: ReadonlySet<SuggestionCleanupResult> = new Set(['unveri
 interface IReport {
   readonly captured: ICaptured;
   readonly label: ICleanupLabel;
-  readonly status: Exclude<CloseSuggestionPullRequestsStatus, StopReason>;
+  readonly status: EvaluatedStatus;
   readonly counts: ISuggestionCleanupCounts;
   readonly originals: readonly IOriginalPullRequest[];
   readonly checked: readonly IChecked[];
@@ -1201,6 +1335,14 @@ function renderMarkdown({ captured, label, status, counts, originals: allOrigina
  * reports does not exist is `not-found`; neither is ever treated as ended.
  * Everything is read before anything is closed.
  *
+ * With `requireAbandonedOriginal` (targeted mode only), cleanup proceeds only
+ * if its own fresh read of the original, made before anything is listed,
+ * shows it closed without merging. An original that is open (for example,
+ * reopened), merged or not found is skipped with the status
+ * `original-not-abandoned` and a note, and nothing is listed or closed. This
+ * is the check of an automated abandonment cleanup; any grace period before
+ * it runs is the caller's.
+ *
  * Closing is the only change made. Branches are never deleted, and nothing
  * is edited, labeled, commented on or reopened; the original is never
  * touched. Running cleanup again is safe: suggestions already closed are not
@@ -1211,14 +1353,17 @@ function renderMarkdown({ captured, label, status, counts, originals: allOrigina
  * @returns What was checked and done. The status is `complete`, or
  * else `permission-limited` (some eligible suggestions could not be closed
  * with this account), `incomplete` (an original could not be verified or an
- * action failed), or `too-many-candidates` or `label-not-suggestion-prs` (a
- * sweep stopped before evaluating anything).
+ * action failed), `too-many-candidates` or `label-not-suggestion-prs` (a
+ * sweep stopped before evaluating anything), or `original-not-abandoned` (a
+ * guarded run skipped).
  * @throws A `TypeError` for invalid input, before any request, including
- * `force: true` outside a label sweep and `maxCandidates` with
+ * `force: true` outside a label sweep, `maxCandidates` with
+ * `originalPullNumber`, and `requireAbandonedOriginal: true` without
  * `originalPullNumber`. An `Error`
  * when the repository configuration is invalid (naming the file and field)
- * or cannot be read, or when discovery or reading the account fails (GitHub,
- * network, authentication), before anything was closed. Neither a result
+ * or cannot be read, when discovery or reading the account fails (GitHub,
+ * network, authentication), or when a guarded run's original cannot be
+ * read, before anything was closed. Neither a result
  * nor a rejection contains the token.
  *
  * @example

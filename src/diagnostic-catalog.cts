@@ -784,6 +784,11 @@ export const DIAGNOSTIC_CATALOG = {
     title: 'The original pull request was not found',
     remedies: ['Check the pull request number.'],
   },
+  'original-pull-request-not-abandoned': {
+    severity: 'note',
+    title: 'The original pull request is not closed without merging',
+    remedies: [],
+  },
   'suggestion-pr-close-not-permitted': {
     severity: 'warning',
     title: 'GitHub did not allow this account to close a suggestion pull request',

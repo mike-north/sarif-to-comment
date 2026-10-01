@@ -4,7 +4,7 @@
 
 ## ICloseSuggestionPullRequestsOutcome.diagnostics property
 
-What was left undone or untouched: a failed read or close, or a sweep stopped by the candidate limit (error); an original that could not be verified, a targeted original that does not exist, a close this account may not make, or a label sweep stopped because its label does not look like a suggestion label (warning); and a pull request that does not follow the convention (note).
+What was left undone or untouched: a failed read or close, or a sweep stopped by the candidate limit (error); an original that could not be verified, a targeted original that does not exist, a close this account may not make, or a label sweep stopped because its label does not look like a suggestion label (warning); a pull request that does not follow the convention, and a guarded run skipped because its original is not closed without merging (note).
 
 **Signature:**
 

@@ -1050,7 +1050,7 @@ Every outcome of [addStagedChangesToSarif()](./sarif-to-comment.addstagedchanges
 
 Whether cleanup established everything it set out to:
 
-- `complete`<!-- -->: every pull request checked has its final result (a dry run  too). - `permission-limited`<!-- -->: everything else is done, but some eligible  suggestion pull requests could not be closed with this account. - `incomplete`<!-- -->: an original could not be verified or an action failed;  running cleanup again is safe. - `too-many-candidates`<!-- -->: a sweep found more candidates than its limit  (`maxCandidates`<!-- -->), so nothing was evaluated. - `label-not-suggestion-prs`<!-- -->: a label sweep's first page shows no  suggestion pull request, so nothing was evaluated; `force` continues.
+- `complete`<!-- -->: every pull request checked has its final result (a dry run  too). - `permission-limited`<!-- -->: everything else is done, but some eligible  suggestion pull requests could not be closed with this account. - `incomplete`<!-- -->: an original could not be verified or an action failed;  running cleanup again is safe. - `too-many-candidates`<!-- -->: a sweep found more candidates than its limit  (`maxCandidates`<!-- -->), so nothing was evaluated. - `label-not-suggestion-prs`<!-- -->: a label sweep's first page shows no  suggestion pull request, so nothing was evaluated; `force` continues. - `original-not-abandoned`<!-- -->: with `requireAbandonedOriginal`<!-- -->, the original  was open, merged or not found, so nothing was listed, checked or closed.  A skip, not a failure.
 
 
 </td></tr>

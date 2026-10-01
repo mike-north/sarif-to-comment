@@ -1,0 +1,5 @@
+ℹ note  The original pull request is not closed without merging  [original-pull-request-not-abandoned]
+  mike-north/doc-linter#103
+  #103 is open, not closed without merging, so nothing was checked or closed.
+
+1 note
