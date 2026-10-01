@@ -588,6 +588,8 @@ D48–D60 record the owner's later decisions of September 30, 2026 on caller-con
 
 **Supersession:** D22's native-first restriction is superseded as target product direction. The earlier native-first versus companion-first proposal is not reinstated wholesale. Existing implementation and published releases are not evidence that this new direction has already been delivered. Unrelated contracts and the release hold remain in place.
 
+**Implemented September 30, 2026 (unreleased):** the [delivery policy contract](delivery-policy-contract.md) implements caller control and precedence: the `--delivery`, `--edits`, `--grouped-edits`, `--file-operations` and `--companion-bundle` options and the library's `delivery` option override `.github/sarif-to-comment.json` on the default branch, which overrides the documented defaults (§5–§7, §11, §12), and either all-native or all-companion delivery can be requested.
+
 ### D49. Keep each supplied group available for collective application in one PR — owner-selected direction; host verification open
 
 **Acceptance basis:** Later in the same September 30 voice discussion, the user specified that a group means do not apply its members except as a collective unit: all members must be available for application in a single commit. The user explicitly allowed either a batch of suggestions on the original PR or one companion PR, and prohibited splitting a group between those destinations or across multiple companion PRs. If splitting is desired, the user must deliberately break the group and thereby change the supplied intent; the tool must not infer that splitting is safe.
@@ -606,6 +608,8 @@ D48–D60 record the owner's later decisions of September 30, 2026 on caller-con
 
 **Supersession and delivery:** This settles the reopened group-containment direction after D48, without reinstating the earlier rule that groups require companion PRs or a promise of enforced all-or-none acceptance. It is accepted intent for design discussion, not evidence of implementation, authorization to begin execution, or a release decision.
 
+**Partly implemented September 30, 2026 (unreleased):** a group is delivered whole by one mechanism and never split, as a native batch for an explicit group whose members each make one change or as one companion pull request; the manual group is specified but reported unavailable in this version ([delivery policy contract](delivery-policy-contract.md) §8.3, §8.4, §8.8, §15).
+
 ### D50. Use one delivery setting for whole-file additions and deletions — owner-selected direction
 
 **Acceptance basis:** Continuing the September 30 voice discussion, the user selected one setting for file additions and deletions rather than separate delivery settings. Both ask the author to perform a file operation outside native suggestion application, or offer the operation through a companion PR whose merge incorporates it. Different instructions for creating and deleting files do not justify separate policy choices.
@@ -615,6 +619,8 @@ D48–D60 record the owner's later decisions of September 30, 2026 on caller-con
 **Reason:** The meaningful consumer choice is the acceptance workflow: a mergeable proposal versus personally performing the file operation. Independently configuring additions and deletions would add flexibility the user does not find useful for this model.
 
 **Scope and validation:** This selects a common policy dimension, not a default, option name, configuration schema, PR cardinality, or host-action link guarantee. A shared companion-PR choice applies to both additions and deletions; a shared manual choice applies to both. D49's collective-application requirement still applies when a file operation belongs to a group. D51 subsequently selects destination precedence for that mixed group; the user confirmed that manual/local collective assembly qualifies. Host-specific presentation, action links and batch mechanics still require validation where used.
+
+**Implemented September 30, 2026 (unreleased):** `fileOperations` is the one setting for whole-file creations and deletions, delivered as `manual` or `companion` ([delivery policy contract](delivery-policy-contract.md) §2, §3, §8.5).
 
 ### D51. Propagate whole-file delivery over its explicit group — owner-selected precedence
 
@@ -630,6 +636,8 @@ D48–D60 record the owner's later decisions of September 30, 2026 on caller-con
 
 **Resolved definition:** The user accepted manual/local assembly of the complete mixed group into one commit. A host-native collective application action is therefore not required for every permitted representation. This acceptance does not verify pending-comment mechanics or authorize a host experiment, implementation, default or release change.
 
+**Partly implemented September 30, 2026 (unreleased):** a group containing a whole-file operation follows `fileOperations` as a whole, so `companion` carries every member into one companion pull request; keeping such a group on the original pull request (`manual`) is specified but reported unavailable in this version ([delivery policy contract](delivery-policy-contract.md) §8.5, §8.8, §15).
+
 ### D52. Organize companion PRs around caller-selected acceptance choices — owner scenarios; representation design open
 
 **Source:** After confirming the mixed manual route, the user described companion-PR organizations serving different acceptance experiences: one PR per fix group for separate merge choices; a convenient PR containing several complete, high-confidence/noncontroversial groups; and separate optional or subjective ideas, including alternative proposals for one gap where at most one or none is expected to be accepted.
@@ -641,6 +649,8 @@ D48–D60 record the owner's later decisions of September 30, 2026 on caller-con
 **Open design:** The representation of bundle membership and alternative relationships, automatic organization policies, defaults, PR counts/limits and any CLI or library surface remain unspecified. These examples are product inputs for subsequent design, not authorization to publish every SARIF alternative or begin implementation. Tests and validation must distinguish complete-group preservation from faithful preservation of the caller's separate acceptance choices.
 
 **Independent conceptual review:** The separate bundle concept is justified by the caller's acceptance choices. Bundling couples several complete groups into one convenient merge decision; it does not prove they depend on one another. Explicit choose-one alternatives must remain separately selectable, and cannot be combined into a bundle offered for wholesale acceptance unless a particular alternative has first been selected. Whether separate PRs are compatible or safely mergeable in any order remains upstream information or unknown.
+
+**Partly implemented September 30, 2026 (unreleased):** `companionBundle` packages companion-delivered units `per-unit` or as one `single` bundle, each unit its own section and no group split; alternative families and other organizations remain open ([delivery policy contract](delivery-policy-contract.md) §9).
 
 ### D53. Offer alternative remedies as a related family of companion PRs — owner scenario; cleanup mechanism unverified
 
@@ -671,6 +681,8 @@ D48–D60 record the owner's later decisions of September 30, 2026 on caller-con
 **Direction:** An explicitly requested delivery mechanism is a constraint, not merely a preference the tool may override. When it cannot deliver the intended proposal through that mechanism, explain the obstacle and exit cleanly with a non-zero CLI status, as the user explicitly clarified. The library must likewise expose failure rather than success; its exact outcome shape remains interface design. Do not create companion PRs, substitute manual instructions, or change to native suggestions contrary to that explicit request. Any fallback requires explicit caller authorization and must preserve complete groups and the caller's acceptance choices.
 
 **Scope and remaining work:** This settles the failure-policy boundary for the preceding delivery discussion. It does not choose defaults, option syntax, diagnostic codes, or a fallback configuration interface. Whole-review validation and publication recovery still govern their respective stages; this decision does not promise rollback of already-created remote artifacts. Host verification and implementation remain pending. The product discussion can now proceed to moving-head and force-push behavior without treating those engineering tasks as new owner-policy questions.
+
+**Implemented September 30, 2026 (unreleased):** a unit is delivered only by a mechanism its list names; when none is available the publication is blocked before any write with `delivery-unavailable` (exit 2), and a fallback happens only in the order a list authorizes, announced with `delivery-fallback` ([delivery policy contract](delivery-policy-contract.md) §8.1, §10).
 
 ### D56. Make each review an explicit index of its companion proposals — owner-selected scope extension
 
