@@ -270,16 +270,22 @@
  *
  *   listOpenPullRequestsByBranchPrefix({ owner, repo, branchPrefix, first, after })
  *       -> { totalCount, itemCount, pullRequests, nextCursor }
- *     One page of a GraphQL query of the repository's branches under
- *     `refs/heads/<branchPrefix>` (`refs(refPrefix:)`, in name order), each
- *     with its open associated pull requests (`associatedPullRequests(states:
- *     OPEN, first: 10)`: those whose head is that branch). totalCount and
- *     itemCount count branches (the host's total, and this page's), so the
- *     cost of a sweep scales with branches, not with the repository's pull
- *     requests. A pull request of another repository (one from this
- *     repository's branch into its upstream) is left out before anything
- *     else about it is read or checked. A branch with more open pull
- *     requests than one page holds is 'pagination', never truncated.
+ *     One page of a GraphQL query of the repository's branches whose names
+ *     contain branchPrefix (`refs(refPrefix: "refs/heads/", query:)`, in
+ *     name order), each with its open associated pull requests
+ *     (`associatedPullRequests(states: OPEN, first: 10)`: those whose head
+ *     is that branch), and, in the same request, the count of branches under
+ *     `refs/heads/<branchPrefix>` (`refs(refPrefix:, first: 0)`). The
+ *     listing is not under the deeper prefix because GitHub associates no
+ *     pull request with a ref listed there; its name filter matches anywhere
+ *     in a name, ignoring case, so a listed branch outside the prefix is
+ *     left out before anything about it is read. totalCount and itemCount
+ *     count branches under the prefix (the host's total, and this page's),
+ *     so the cost of a sweep scales with branches, not with the
+ *     repository's pull requests. A pull request of another repository (one
+ *     from this repository's branch into its upstream) is left out before
+ *     anything else about it is read or checked. A branch with more open
+ *     pull requests than one page holds is 'pagination', never truncated.
  *     branchPrefix: '/'-separated segments ending in '/', no '.' or '..'.
  *   listOpenPullRequestsByLabel({ owner, repo, label, first, after })
  *       -> { totalCount, itemCount, pullRequests, nextCursor }
@@ -728,9 +734,9 @@ export interface IRepositorySnapshot {
 
 /** One page of a sweep listing, and how many items the whole listing holds. */
 export interface IOpenPullRequestPage {
-  /** How many items the whole listing holds, as GitHub counts them: branches for a branch-prefix listing, pull requests for a label listing. */
+  /** How many items the whole listing holds, as GitHub counts them: branches under the prefix for a branch-prefix listing, pull requests for a label listing. */
   readonly totalCount: number;
-  /** How many of those items this page holds (a branch without an open pull request counts). */
+  /** How many of those items this page holds (a branch under the prefix without an open pull request counts; a listed branch outside it does not). */
   readonly itemCount: number;
   /** This page's open pull requests of the requested repository. */
   readonly pullRequests: readonly IListedPullRequest[];
@@ -1076,13 +1082,21 @@ const CROSS_REFERENCES_QUERY = gql`query ($owner: String!, $repo: String!, $numb
 }`;
 
 /**
- * One page of the branches under a prefix, each with its open pull requests
- * (those whose head is that branch), and how many branches there are.
+ * How many branches there are under a prefix, and one page of the branches
+ * whose names contain it, each with its open pull requests (those whose head
+ * is that branch).
+ *
+ * The branches are listed under `refs/heads/` itself, narrowed by GitHub's
+ * name filter (`query`), because GitHub answers no associated pull request
+ * for a ref listed under a deeper prefix (docs/evidence/suggestion-cleanup/
+ * 25-27). The filter matches anywhere in a name, ignoring case (30, 31), so
+ * the page can hold branches outside the prefix, which the client leaves
+ * out; the count is of the branches under the prefix alone.
  */
-const BRANCH_PREFIX_PULLS_QUERY = gql`query ($owner: String!, $repo: String!, $prefix: String!, $first: Int!, $after: String) {
+const BRANCH_PREFIX_PULLS_QUERY = gql`query ($owner: String!, $repo: String!, $prefix: String!, $contains: String!, $first: Int!, $after: String) {
   repository(owner: $owner, name: $repo) {
-    refs(refPrefix: $prefix, first: $first, after: $after, orderBy: {field: ALPHABETICAL, direction: ASC}) {
-      totalCount
+    branchCount: refs(refPrefix: $prefix, first: 0) { totalCount }
+    branches: refs(refPrefix: "refs/heads/", query: $contains, first: $first, after: $after, orderBy: {field: ALPHABETICAL, direction: ASC}) {
       pageInfo { hasNextPage endCursor }
       nodes {
         name
@@ -2534,14 +2548,19 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
   }
 
   /**
-   * A sweep connection's count and next cursor: `totalCount` a non-negative
+   * A sweep connection's nodes, count and next cursor: `totalCount` (the
+   * connection's own, or the one the query counts separately) a non-negative
    * integer, and a next page only with a cursor that differs from `after`.
    */
-  function sweepConnection(connection: unknown, after: string | null, what: string): { readonly nodes: readonly unknown[]; readonly totalCount: number; readonly nextCursor: string | null } {
+  function sweepConnection(
+    connection: unknown,
+    totalCount: unknown,
+    after: string | null,
+    what: string,
+  ): { readonly nodes: readonly unknown[]; readonly totalCount: number; readonly nextCursor: string | null } {
     if (!isPlainObject(connection) || !isList(connection['nodes']) || !isPlainObject(connection['pageInfo'])) {
       throw new GitHubError('malformed-response', `The ${what} returned no connection.`);
     }
-    const totalCount = connection['totalCount'];
     if (!isSafeInteger(totalCount) || totalCount < 0) throw new GitHubError('malformed-response', `The ${what} returned no total count.`);
     const { hasNextPage, endCursor } = connection['pageInfo'];
     if (hasNextPage === false) return { nodes: connection['nodes'], totalCount, nextCursor: null };
@@ -2565,10 +2584,23 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
     );
     const { first, after } = sweepPage(firstInput, afterInput);
     const what = 'suggestion branch query';
-    const body = await graphqlData(BRANCH_PREFIX_PULLS_QUERY, { owner, repo, prefix: `refs/heads/${branchPrefix}`, first, after }, what);
-    const { nodes, totalCount, nextCursor } = sweepConnection(optionalMember(body, 'data', 'repository', 'refs'), after, what);
+    const body = await graphqlData(BRANCH_PREFIX_PULLS_QUERY, { owner, repo, prefix: `refs/heads/${branchPrefix}`, contains: branchPrefix, first, after }, what);
+    const repository = optionalMember(body, 'data', 'repository');
+    const { nodes, totalCount, nextCursor } = sweepConnection(
+      optionalMember(repository, 'branches'),
+      optionalMember(repository, 'branchCount', 'totalCount'),
+      after,
+      what,
+    );
     const pullRequests: IListedPullRequest[] = [];
+    let itemCount = 0;
     for (const ref of nodes) {
+      // Listed under refs/heads/, so the name is the whole branch name. The
+      // name filter also matches it elsewhere in a name and ignoring case:
+      // such a branch is outside the prefix, and none of it is read.
+      const name = hostString(optionalMember(ref, 'name'), `${what}'s branch name`);
+      if (!name.startsWith(branchPrefix)) continue;
+      itemCount += 1;
       const pulls = optionalMember(ref, 'associatedPullRequests');
       const more = optionalMember(pulls, 'pageInfo', 'hasNextPage');
       if (!isPlainObject(pulls) || !isList(pulls['nodes']) || typeof more !== 'boolean') {
@@ -2580,7 +2612,7 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
         if (listed !== null) pullRequests.push(listed.pull);
       }
     }
-    return { totalCount, itemCount: nodes.length, pullRequests, nextCursor };
+    return { totalCount, itemCount, pullRequests, nextCursor };
   }
 
   async function listOpenPullRequestsByLabel({
@@ -2595,7 +2627,8 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
     const { first, after } = sweepPage(firstInput, afterInput);
     const what = 'labeled pull request query';
     const body = await graphqlData(LABELED_PULLS_QUERY, { owner, repo, label, first, after }, what);
-    const { nodes, totalCount, nextCursor } = sweepConnection(optionalMember(body, 'data', 'repository', 'pullRequests'), after, what);
+    const connection = optionalMember(body, 'data', 'repository', 'pullRequests');
+    const { nodes, totalCount, nextCursor } = sweepConnection(connection, optionalMember(connection, 'totalCount'), after, what);
     const pullRequests: IListedPullRequest[] = [];
     for (const node of nodes) {
       // The connection is this repository's own, so every entry is of this repository.
