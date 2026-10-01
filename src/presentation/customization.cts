@@ -26,24 +26,25 @@
  *     source association of a deletion (its permalink), and the findings a
  *     proposal carries — each listed in the context's `required` fragments,
  *     which the result must show as itself: verbatim, and not concealed or
- *     turned into other code (src/presentation/markdown.cts, showsAsItself);
+ *     turned into other code (src/presentation/markdown-tree.cts,
+ *     showsAsItself);
  *   - every size limit, which counts the customized Markdown.
  * A result is refused, before anything is written, when it is not a string,
  * is blank, omits a required fragment, could open a native suggestion block,
  * leaves a code fence or raw HTML open (either would swallow or hide what
  * follows, including a suggestion block or marker), contains text that reads
- * as a publication or suggestion marker, adds an HTML comment, CDATA
- * section, processing instruction, declaration or link reference definition
- * of its own (one the presented content carries, and so the built-in
- * Markdown contains, may pass through), hides a required fragment, or — for
- * an inline component — spans more than one line. The refusal is a
+ * as a publication or suggestion marker, adds raw HTML or a link reference
+ * definition of its own (a node whose exact source is also a node of the
+ * built-in Markdown, and so is carried by the presented content, may pass
+ * through), hides a required fragment, or — for an inline component — spans
+ * more than one line. The refusal is a
  * TypeError naming the component and the rule. A callback's own exception
  * propagates unchanged. The context a callback receives is a deeply frozen
  * copy, so a callback cannot change what preparation holds.
  *
- * The checks are a conservative reading of CommonMark and GitHub's HTML
- * handling, not a renderer: an element that only collapses its content
- * (`<details>`) is allowed, since a reader can expand it.
+ * The checks read the Markdown with a conformant CommonMark + GFM parser
+ * (src/presentation/markdown-tree.cts; docs/review-presentation-contract.md
+ * §7 records where GitHub's renderer may differ).
  *
  * Callbacks are explicitly supplied application code, not repository
  * configuration: nothing here evaluates template text or loads code (D60,
@@ -54,8 +55,7 @@
  * @see https://github.github.com/gfm/#raw-html
  */
 
-import { concealingConstructs, fenceProblem, showsAsItself, unbalancedHtml } from './markdown.cjs';
-import type { MarkdownRegionKind } from './markdown.cjs';
+import { addedConstruct, fenceProblem, showsAsItself, unbalancedHtml } from './markdown-tree.cjs';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -400,15 +400,6 @@ function deepFreeze<T>(value: T): T {
   return value;
 }
 
-/** How a refusal names a concealing construct a callback added. */
-const CONSTRUCT_NAMES: Partial<Record<MarkdownRegionKind, string>> = {
-  'html-comment': 'an HTML comment',
-  'html-cdata': 'a CDATA section',
-  'html-instruction': 'a processing instruction',
-  'html-declaration': 'a declaration',
-  'link-reference-definition': 'a link reference definition',
-};
-
 /** Why a callback's Markdown breaks a core guarantee, worded to follow "returned Markdown that", or null. */
 function markdownProblem(name: PresentationComponent, result: string, context: IPresentationContext): string | null {
   const { required } = context;
@@ -426,16 +417,16 @@ function markdownProblem(name: PresentationComponent, result: string, context: I
   const html = unbalancedHtml(result);
   if (html !== null) return `leaves ${html} open, which could hide what follows, including a suggestion block or marker`;
   if (MARKER_TEXT.test(result)) return 'contains text that reads as a publication or suggestion marker, which only the core writes';
-  const added = concealingConstructs(result).find((construct) => !context.markdown.includes(construct.text));
+  const added = addedConstruct(result, context.markdown);
   if (added !== undefined) {
-    return `adds ${CONSTRUCT_NAMES[added.kind] ?? 'a concealing construct'} of its own (${JSON.stringify(added.text)}), which is not rendered and could hide text; `
-      + 'only one that the presented content carries may pass through';
+    return `adds ${added.kind === 'html' ? 'raw HTML' : 'a link reference definition'} of its own (${JSON.stringify(added.text)}), which could hide text; `
+      + 'only raw HTML and definitions that the presented content carries may pass through';
   }
   const concealed = required.find((fragment) => !showsAsItself(result, fragment));
   if (concealed !== undefined) {
     return `hides a required fragment, which must be shown as itself: ${JSON.stringify(concealed)} `
-      + '(not inside a comment, a code span or block it does not open itself, a tag, a link destination or title, an image description '
-      + 'or an element GitHub does not display)';
+      + '(not inside raw HTML, a code span or block it does not open itself, an image, a definition or an element GitHub does not display, '
+      + 'and, for a permalink, not as an image source or the text of a link to somewhere else)';
   }
   if (INLINE_COMPONENTS.has(name) && /[\r\n]/.test(result)) return 'spans more than one line, but this component is inline';
   return null;

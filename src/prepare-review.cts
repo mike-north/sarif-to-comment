@@ -256,9 +256,14 @@
  * (finding and finding section, attribution, alternatives, file addition,
  * file deletion, companion reference, companion description, lifecycle
  * note), with links from src/github-urls.cts; this module decides what is
- * published and where, and composes them as follows. (The reports about a
- * review — its outcome Markdown — list diagnostics through
- * src/presentation/warnings-list.cts.)
+ * published and where, and composes them. The contract for the built-in
+ * presentation is docs/review-presentation-contract.md (with
+ * docs/file-operation-publication-contract.md §2 and
+ * docs/companion-suggestion-pr-contract.md §2.11); the summary below is a
+ * reading aid, and the contract governs where they differ. (The reports about
+ * a review — its outcome Markdown — list diagnostics through
+ * src/presentation/warnings-list.cts.) Producer Markdown is checked with the
+ * parser-based reader of src/presentation/markdown-tree.cts.
  *   item      = message [ "\n\n**Fix:** " fix description ]
  *               [ "\n\n**Alternatives to consider:**" { "\n\n" alternative } ]
  *               "\n\n<sub>— " attribution "</sub>"
@@ -317,7 +322,8 @@ import { renderFileDeletion } from './presentation/file-deletion.cjs';
 import { renderFinding, renderFindingSection } from './presentation/finding.cjs';
 import type { QuotedSource } from './presentation/finding.cjs';
 import { renderLifecycleNote } from './presentation/lifecycle-note.cjs';
-import { SEPARATOR, codeSpan, escapePlain, escapePlainInline, fenceProblem, lineSpan, unbalancedHtml } from './presentation/markdown.cjs';
+import { SEPARATOR, codeSpan, escapePlain, escapePlainInline, lineSpan } from './presentation/markdown.cjs';
+import { fenceProblem, loadMarkdownParser, unbalancedHtml } from './presentation/markdown-tree.cjs';
 import { renderDiagnosticLine, renderWarningsList } from './presentation/warnings-list.cjs';
 import { createDiagnostic } from './diagnostics.cjs';
 import type { DiagnosticCode, IDiagnostic } from './diagnostics.cjs';
@@ -1248,6 +1254,9 @@ function sarifValidator(): ValidateFunction<ISarifLogView> {
  */
 async function prepareReview(input: unknown, internals: IPrepareReviewInternals | null = {}): Promise<PrepareReviewOutcome> {
   validateCallerInput(input);
+  // Producer Markdown and presentation callbacks are checked with the
+  // CommonMark + GFM parser, an ES module loaded once here.
+  await loadMarkdownParser();
   const { sarif, context, readSource } = input;
   const options: IEffectiveOptions = { ...PRODUCT_LIMITS, ignoreApprovalHold: false, ...(input.options || {}) };
   const report = new Report();

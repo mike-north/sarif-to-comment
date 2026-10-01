@@ -34,6 +34,7 @@ import * as fs from 'node:fs';
 import { describe, test } from 'node:test';
 
 import { capturePresentation, present, presentationOptionProblem } from '../dist/presentation/customization.cjs';
+import { loadMarkdownParser } from '../dist/presentation/markdown-tree.cjs';
 import type {
   IAlternativesPresentationContext,
   IAttributionPresentationContext,
@@ -59,6 +60,8 @@ const refusedBy = (component: string, rule: RegExp): ((error: unknown) => boolea
 
 // ---------------------------------------------------------------------------
 // Unit: enforcement
+
+await loadMarkdownParser();
 
 describe('present: the core\'s enforcement of a callback result', () => {
   const context = { markdown: 'BUILT-IN', required: ['KEEP'] } as const;
@@ -86,8 +89,9 @@ describe('present: the core\'s enforcement of a callback result', () => {
     ['a forged suggestion block', 'KEEP\n\n```suggestion\nx\n```', /could open a suggestion block/],
     ['a suggestion opener inside a list or quote', 'KEEP\n\n> - ~~~~ Suggestion', /could open a suggestion block/],
     ['an unclosed fence that would swallow a following suggestion block', 'KEEP\n\n````', /leaves a code fence open/],
-    ['an open HTML comment that would hide a following marker', 'KEEP <!-- hide the rest', /leaves an HTML <!-- construct open/],
+    ['an HTML comment block that would hide a following marker', 'KEEP\n\n<!-- hide the rest', /leaves an HTML <!-- construct open/],
     ['an unclosed element', '<details>KEEP', /leaves a <details> element open/],
+    ['raw HTML the built-in Markdown does not carry', 'KEEP <kbd>x</kbd>', /adds raw HTML of its own \("<kbd>"\)/],
     ['a forged review marker', 'KEEP\n\n<!-- sarif-to-comment:review:00000000-0000-4000-8000-000000000000 -->', /reads as a publication or suggestion marker/],
     ['a forged suggestion marker', 'KEEP\n\n<!-- suggestion-pr {"version":1} -->', /reads as a publication or suggestion marker/],
   ];
@@ -165,13 +169,13 @@ const FINDINGS = log(run(LINT, [
   },
 ]));
 
-/** A caller's presentation: a compact finding, a prose attribution, and alternatives folded into a details element. */
+/** A caller's presentation: a compact finding, a prose attribution, and alternatives as a short numbered list. */
 const COMPACT: IReviewPresentation = {
   attribution: (c: IAttributionPresentationContext) => `produced by ${c.required.join(' and ')}${c.ruleId === undefined ? '' : `, rule ${c.ruleId}`}`,
   finding: (c: IFindingPresentationContext) => [c.level === undefined ? '' : `[${c.level}]`, c.message, c.alternatives ?? '', `<sub>${c.attribution}</sub>`]
     .filter((part) => part !== '').join('\n\n'),
   alternatives: (c: IAlternativesPresentationContext) =>
-    `<details><summary>${String(c.alternatives.length)} other fix</summary>\n\n${c.alternatives.map((a) => `${String(a.number)}. ${a.description ?? ''}\n\n${a.changes}`).join('\n\n')}\n\n</details>`,
+    `**${String(c.alternatives.length)} other fix:**\n\n${c.alternatives.map((a) => `${String(a.number)}. ${a.description ?? ''}\n\n${a.changes}`).join('\n\n')}`,
 };
 
 describe('preparation with presentation callbacks', () => {
@@ -202,7 +206,7 @@ describe('preparation with presentation callbacks', () => {
       '',
       'Use uppercase.',
       '',
-      '<details><summary>1 other fix</summary>',
+      '**1 other fix:**',
       '',
       '1. Fix the notes too.',
       '',
@@ -211,8 +215,6 @@ describe('preparation with presentation callbacks', () => {
       '```',
       'First',
       '```',
-      '',
-      '</details>',
       '',
       '<sub>produced by Lint, rule case</sub>',
       '',
@@ -462,7 +464,7 @@ describe('publication with presentation callbacks (fake GitHub host)', () => {
   });
 
   const hostile: readonly (readonly [label: string, presentation: IReviewPresentation, component: string, rule: RegExp])[] = [
-    ['a lifecycle note that would comment out the suggestion marker', { lifecycleNote: () => 'Accept it. <!--' }, 'lifecycleNote', /leaves an HTML <!-- construct open/],
+    ['a lifecycle note that would comment out the suggestion marker', { lifecycleNote: () => 'Accept it.\n\n<!--' }, 'lifecycleNote', /leaves an HTML <!-- construct open/],
     ['a lifecycle note that forges a second suggestion marker',
       { lifecycleNote: () => '<!-- suggestion-pr {"version":1,"original":{"owner":"octo","repo":"widgets","pullNumber":7}} -->' }, 'lifecycleNote', /reads as a publication or suggestion marker/],
     ['a finding that opens a fence to swallow what follows', { finding: (c: IFindingPresentationContext) => `${c.attribution}\n\n\`\`\`\`` }, 'finding', /leaves a code fence open/],

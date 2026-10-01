@@ -61,7 +61,7 @@ describe('the installed package accepts presentation callbacks', () => {
       const assessed = await validateSarifReview({ ...input, options });
       assert.equal(assessed.status, 'ready', assessed.markdown);
       await assert.rejects(
-        publishSarifReview({ ...input, statePath: process.env.REFUSED_STATE, options: { ...options, presentation: { lifecycleNote: () => 'Accept it. <!--' } } }),
+        publishSarifReview({ ...input, statePath: process.env.REFUSED_STATE, options: { ...options, presentation: { lifecycleNote: () => 'Accept it.\n\n<!--' } } }),
         (error) => error instanceof TypeError && /options\.presentation\.lifecycleNote returned Markdown that leaves an HTML <!-- construct open/.test(error.message),
       );
       assert.equal(existsSync(process.env.REFUSED_STATE), false);

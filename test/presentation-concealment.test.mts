@@ -1,13 +1,13 @@
 /**
  * Presentation callbacks cannot conceal a required fragment that the result
- * still "contains" (src/presentation/customization.cts): every required
- * fragment must be shown as itself — not inside an HTML comment, CDATA
- * section, processing instruction or declaration, a link reference
- * definition, a code span or fence it does not open itself, a tag, a link
- * destination or title, an image description, or an element GitHub does not
- * display — and a callback may not add comments, CDATA sections, processing
- * instructions, declarations or link reference definitions of its own (one
- * the presented content carries may pass through).
+ * still "contains" (src/presentation/customization.cts), as a conformant
+ * CommonMark + GFM parse reads the result (src/presentation/markdown-tree.cts).
+ * Every required fragment must be shown as itself: not inside raw HTML, a
+ * code span or block it does not open itself, an image, a definition, or an
+ * element GitHub does not display, and a permalink not as an image source or
+ * the text of a link to somewhere else. A callback may add no raw HTML and no
+ * link reference definition of its own; a node whose exact source the
+ * built-in Markdown also has as a node may pass through.
  *
  * Each negative case keeps the fragment verbatim and states why GitHub would
  * not show it as itself, following the CommonMark and GFM rules cited below.
@@ -26,6 +26,7 @@ import * as assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
 import { present } from '../dist/presentation/customization.cjs';
+import { loadMarkdownParser } from '../dist/presentation/markdown-tree.cjs';
 import type {
   IAttributionPresentationContext,
   IFileAdditionPresentationContext,
@@ -42,6 +43,8 @@ const refusedBy = (component: string, rule: RegExp): ((error: unknown) => boolea
   return true;
 };
 
+await loadMarkdownParser();
+
 const ESLINT = { driver: { name: 'eslint', version: '9.0.0' } };
 /** One general finding by eslint and one creation with a finding on its line 1. */
 const DOCUMENT = log(run(ESLINT, [
@@ -52,10 +55,10 @@ const DOCUMENT = log(run(ESLINT, [
 describe('callbacks cannot hide a required fragment that is still "contained"', () => {
   test('the review\'s three examples are refused', async () => {
     await assert.rejects(prepareOutcome(DOCUMENT, { presentation: { attribution: () => '<!-- eslint 9.0.0 --> nobody' } }),
-      refusedBy('attribution', /adds an HTML comment/));
+      refusedBy('attribution', /adds raw HTML of its own \("<!-- eslint 9\.0\.0 --> nobody"\)/));
     await assert.rejects(prepareOutcome(DOCUMENT, {
       presentation: { fileAddition: (c: IFileAdditionPresentationContext) => `<![CDATA[ ${c.markdown} ]]> see attached` },
-    }), refusedBy('fileAddition', /adds a CDATA section/));
+    }), refusedBy('fileAddition', /adds raw HTML of its own \("<!\[CDATA\[/));
     await assert.rejects(prepareOutcome(DOCUMENT, {
       presentation: { finding: (c: IFindingPresentationContext) => `Looks fine.\n\n[//]: # (${c.attribution})` },
     }), refusedBy('finding', /adds a link reference definition/));
@@ -69,10 +72,6 @@ describe('callbacks cannot hide a required fragment that is still "contained"', 
     ['in a link destination', '[a linter](https://example.com/eslint)'],
     ['in a link title', '[a linter](https://example.com "eslint")'],
     ['in an image description', '![eslint](https://example.com/logo.png)'],
-    ['in a tag\'s attribute', '<abbr title="eslint">a linter</abbr>'],
-    ['in an element with the hidden attribute', '<span hidden>eslint</span> a linter'],
-    ['in an element with a style attribute', '<span style="display:none">eslint</span> a linter'],
-    ['in an element GitHub does not display', '<template>eslint</template> a linter'],
   ];
   for (const [label, attribution] of hidden) {
     test(`the producer's name ${label} is hidden`, async () => {
@@ -80,6 +79,52 @@ describe('callbacks cannot hide a required fragment that is still "contained"', 
         refusedBy('attribution', /hides a required fragment, which must be shown as itself: "eslint"/));
     });
   }
+
+  // A callback may add no raw HTML of its own, so no tag, attribute or element can hide a fragment.
+  const raw: readonly (readonly [label: string, attribution: string])[] = [
+    ['in a tag\'s attribute', '<abbr title="eslint">a linter</abbr>'],
+    ['in an element with the hidden attribute', '<span hidden>eslint</span> a linter'],
+    ['in an element with a style attribute', '<span style="display:none">eslint</span> a linter'],
+    ['in an element GitHub does not display', '<template>eslint</template> a linter'],
+    ['in a <textarea>', '<textarea>eslint</textarea>'],
+    ['in a <details> summary', '<details><summary>eslint</summary>x</details>'],
+  ];
+  for (const [label, attribution] of raw) {
+    test(`the producer's name ${label} is refused as raw HTML the callback adds`, async () => {
+      await assert.rejects(prepareOutcome(DOCUMENT, { presentation: { attribution: () => attribution } }),
+        refusedBy('attribution', /adds raw HTML of its own/));
+    });
+  }
+
+  test('a link reference definition over several lines is refused, wherever its label and title are', () => {
+    const context = { markdown: 'eslint', required: ['eslint'] };
+    assert.throws(() => present('finding', () => '[\neslint\n]: https://x\n\nhello', context), refusedBy('finding', /adds a link reference definition of its own/));
+  });
+
+  test('pass-through is decided per whole node: a carried definition or comment cannot be extended to hide a fragment', () => {
+    const carried = { markdown: 'See [g][g].\n\n[g]: https://example.com/guide', required: ['eslint'] };
+    assert.throws(() => present('finding', () => 'See [g][g].\n\n[g]: https://example.com/guide\n   "eslint"', carried),
+      refusedBy('finding', /adds a link reference definition of its own/));
+    assert.throws(() => present('finding', () => 'See [g][g].\n\n[g]:\nhttps://x/eslint', { ...carried, markdown: 'See [g][g].\n\n[g]:\nhttps://example.com/guide' }),
+      refusedBy('finding', /adds a link reference definition of its own/));
+    assert.throws(() => present('finding', () => '<!-- lint:disable -->eslint', { markdown: 'x <!-- lint:disable -->', required: ['eslint'] }),
+      refusedBy('finding', /adds raw HTML of its own/));
+  });
+
+  test('a backtick in a tag attribute cannot make an open element look closed', () => {
+    const context = { markdown: 'eslint', required: ['eslint'] };
+    assert.throws(() => present('finding', () => 'eslint <details title="`">x`</details>`y`</details>`', context), refusedBy('finding', /leaves a <details> element open/));
+  });
+
+  test('a permalink as an image source, or as the text of a link to somewhere else, is not its source association', async () => {
+    const deletion = log(run(ESLINT, [carrying('Remove it.', [{ operation: 'delete', artifactIndex: 0 }])], [{ location: { uri: 'obsolete.txt' } }]));
+    await assert.rejects(prepareOutcome(deletion, { presentation: { fileDeletion: (c: IFileDeletionPresentationContext) => `![file](${c.url})\n\n${c.findings}` } }),
+      refusedBy('fileDeletion', /hides a required fragment/));
+    await assert.rejects(prepareOutcome(deletion, { presentation: { fileDeletion: (c: IFileDeletionPresentationContext) => `[${c.url}](https://example.com/elsewhere)\n\n${c.findings}` } }),
+      refusedBy('fileDeletion', /hides a required fragment/));
+    const bare = await prepare(deletion, { presentation: { fileDeletion: (c: IFileDeletionPresentationContext) => `Remove ${c.url}\n\n${c.findings}` } });
+    assert.match(bare.review.body, /^Remove https:\/\/github\.com\//, 'a bare permalink, which GitHub links to itself, is fine');
+  });
 
   test('proposed content wrapped in a longer fence, or in a block quote, is no longer shown as its own code block', async () => {
     await assert.rejects(prepareOutcome(DOCUMENT, {

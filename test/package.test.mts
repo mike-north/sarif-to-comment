@@ -260,7 +260,7 @@ describe('manifest', () => {
     // Both directions: an undeclared require breaks consumers, and a declared
     // dependency nothing needs is installed by every consumer for no reason.
     assert.deepEqual(runtimeDependencyClosure(required), declared);
-    assert.deepEqual(declared, ['@toon-format/toon', 'ajv', 'ajv-draft-04', 'ajv-formats', 'chalk']);
+    assert.deepEqual(declared, ['@toon-format/toon', 'ajv', 'ajv-draft-04', 'ajv-formats', 'chalk', 'mdast-util-from-markdown', 'mdast-util-gfm', 'micromark-extension-gfm']);
     for (const tool of ['@changesets/cli', '@microsoft/api-extractor', '@microsoft/api-documenter', 'typescript']) {
       assert.ok(Object.hasOwn(asRecord(PKG['devDependencies'], 'package.json devDependencies'), tool), `${tool} is a dev dependency`);
     }

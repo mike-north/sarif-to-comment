@@ -35,9 +35,12 @@ import { renderFileDeletion } from '../dist/presentation/file-deletion.cjs';
 import { renderFinding, renderFindingSection } from '../dist/presentation/finding.cjs';
 import { renderLifecycleNote } from '../dist/presentation/lifecycle-note.cjs';
 import { renderDiagnosticLine, renderWarningsList } from '../dist/presentation/warnings-list.cjs';
-import { codeSpan, escapePlain, escapePlainInline, fenceProblem, fenced, lineSpan, unbalancedHtml } from '../dist/presentation/markdown.cjs';
+import { codeSpan, escapePlain, escapePlainInline, fenced, lineSpan } from '../dist/presentation/markdown.cjs';
+import { fenceProblem, loadMarkdownParser, unbalancedHtml } from '../dist/presentation/markdown-tree.cjs';
 
 const C = '2222222222222222222222222222222222222222';
+
+await loadMarkdownParser();
 
 describe('Markdown primitives', () => {
   test('a code span is delimited by one more backtick than its longest run, padded when it starts or ends with one', () => {
