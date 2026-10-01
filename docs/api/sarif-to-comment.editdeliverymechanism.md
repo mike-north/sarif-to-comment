@@ -4,7 +4,7 @@
 
 ## EditDeliveryMechanism type
 
-A mechanism that can deliver an ungrouped edit: a `'native'` suggestion, its replacement in the `'review-body'` (not yet supported by this version), or a `'companion'` pull request holding it.
+A mechanism that can deliver an ungrouped edit: a `'native'` suggestion, its exact replacement in the `'review-body'` for the author to make by hand (never a suggestion), or a `'companion'` pull request holding it.
 
 **Signature:**
 

@@ -21,13 +21,18 @@
  *     companion's structured marker, which the core appends after all
  *     presentation;
  *   - the exact bytes of proposed content (a new file's block and details,
- *     an alternative's replacement blocks), required provenance (the
- *     producer's names in an attribution, a finding's attribution), the
- *     source association of a deletion (its permalink), and the findings a
- *     proposal carries — each listed in the context's `required` fragments,
+ *     an alternative's replacement blocks, an edit made by hand's block and
+ *     details), required provenance (the producer's names in an
+ *     attribution, a finding's attribution), the source association of a
+ *     deletion (its permalink) and of an edit made by hand (its location
+ *     link), and the findings a proposal carries — each listed in the
+ *     context's `required` fragments,
  *     which the result must show as itself: verbatim, and not concealed or
  *     turned into other code (src/presentation/markdown-tree.cts,
  *     showsAsItself);
+ *   - a group's identity and membership when it is made by hand: its
+ *     guidance, member lines and change labels, around each change's
+ *     component (docs/delivery-policy-contract.md §8.10);
  *   - every size limit, which counts the customized Markdown.
  * A result is refused, before anything is written, when it is not a string,
  * is blank, omits a required fragment, could open a native suggestion block,
@@ -227,6 +232,46 @@ export interface IFileDeletionPresentationContext extends IPresentationContext {
 }
 
 /**
+ * One edit of a reviewed file for the author to make by hand, shown in the
+ * review body: its exact whole-line replacement and the findings that carry
+ * it. It is never a suggestion. It is presented alone (an edit delivered in
+ * the review body) or as one change of a group made by hand, whose guidance
+ * and labels the core keeps around it.
+ *
+ * @remarks
+ * `required` holds the location link, the replacement block (when the lines
+ * are replaced rather than removed), the details (when there are any) and
+ * the findings: together they state the file, the lines, the reviewed
+ * commit and the replacement's exact bytes.
+ *
+ * @public
+ */
+export interface IManualEditPresentationContext extends IPresentationContext {
+  /** The edited file's repository path. */
+  readonly path: string;
+  /** The first replaced line of the reviewed file. */
+  readonly startLine: number;
+  /** The last replaced line of the reviewed file. */
+  readonly endLine: number;
+  /** The reviewed commit the lines are read at. */
+  readonly commit: string;
+  /** The permalink to the replaced lines at that commit. */
+  readonly url: string;
+  /** The Markdown link naming the file, the lines and the commit, to {@link IManualEditPresentationContext.url}. */
+  readonly location: string;
+  /**
+   * The fenced code block of the new lines: LF line breaks, without the last
+   * line's terminator or the file's own byte-order mark. Absent when the
+   * lines are removed.
+   */
+  readonly replacement?: string;
+  /** What the block cannot show (`CRLF line endings`, `no newline at end of file`), when anything. */
+  readonly details?: string;
+  /** The findings that carry the edit, as presented and joined. */
+  readonly findings: string;
+}
+
+/**
  * The note in every suggestion pull request's description that explains how
  * it is accepted and when it can be closed.
  *
@@ -299,6 +344,8 @@ export interface IReviewPresentation {
   readonly fileAddition?: ((context: IFileAdditionPresentationContext) => string) | undefined;
   /** A proposed file deletion (see {@link IFileDeletionPresentationContext}). */
   readonly fileDeletion?: ((context: IFileDeletionPresentationContext) => string) | undefined;
+  /** An edit made by hand in the review body (see {@link IManualEditPresentationContext}). */
+  readonly manualEdit?: ((context: IManualEditPresentationContext) => string) | undefined;
   /** A suggestion pull request's lifecycle note (see {@link ILifecycleNotePresentationContext}). */
   readonly lifecycleNote?: ((context: ILifecycleNotePresentationContext) => string) | undefined;
 }
@@ -311,7 +358,7 @@ export type PresentationComponent = keyof IReviewPresentation;
 
 /** Every customizable component, in documentation order. */
 export const PRESENTATION_COMPONENTS: readonly PresentationComponent[] = [
-  'finding', 'attribution', 'alternatives', 'fileAddition', 'fileDeletion', 'lifecycleNote',
+  'finding', 'attribution', 'alternatives', 'fileAddition', 'fileDeletion', 'manualEdit', 'lifecycleNote',
 ];
 
 /** Components whose Markdown is embedded within a line, so a result must be one line. */
@@ -386,6 +433,7 @@ export function capturePresentation(value: unknown, refuse: (message: string) =>
     alternatives: callbackAt(value, 'alternatives'),
     fileAddition: callbackAt(value, 'fileAddition'),
     fileDeletion: callbackAt(value, 'fileDeletion'),
+    manualEdit: callbackAt(value, 'manualEdit'),
     lifecycleNote: callbackAt(value, 'lifecycleNote'),
   });
 }

@@ -4,7 +4,7 @@
 
 ## GroupedEditDeliveryMechanism type
 
-A mechanism that can deliver a group of edits (an explicit`suggestionGroup`<!-- -->, or a SARIF fix with several changes), always whole: every member as a native suggestion to add to one batch (`'native-batch'`<!-- -->), one`'companion'` pull request, or one review-body section to apply by hand (`'manual-group'`<!-- -->, not yet supported by this version).
+A mechanism that can deliver a group of edits (an explicit`suggestionGroup`<!-- -->, or a SARIF fix with several changes), always whole: every change as a native suggestion to add to one batch (`'native-batch'`<!-- -->), one`'companion'` pull request, or one review-body section holding every change's exact replacement, to make by hand and commit once (`'manual-group'`<!-- -->, used only when listed).
 
 **Signature:**
 

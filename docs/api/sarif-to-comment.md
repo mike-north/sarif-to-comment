@@ -621,6 +621,17 @@ The note in every suggestion pull request's description that explains how it is 
 </td></tr>
 <tr><td>
 
+[IManualEditPresentationContext](./sarif-to-comment.imanualeditpresentationcontext.md)
+
+
+</td><td>
+
+One edit of a reviewed file for the author to make by hand, shown in the review body: its exact whole-line replacement and the findings that carry it. It is never a suggestion. It is presented alone (an edit delivered in the review body) or as one change of a group made by hand, whose guidance and labels the core keeps around it.
+
+
+</td></tr>
+<tr><td>
+
 [INewSarifRun](./sarif-to-comment.inewsarifrun.md)
 
 
@@ -1050,7 +1061,7 @@ How serious a diagnostic is: `error` (the operation did not do what was asked), 
 
 </td><td>
 
-A mechanism that can deliver an ungrouped edit: a `'native'` suggestion, its replacement in the `'review-body'` (not yet supported by this version), or a `'companion'` pull request holding it.
+A mechanism that can deliver an ungrouped edit: a `'native'` suggestion, its exact replacement in the `'review-body'` for the author to make by hand (never a suggestion), or a `'companion'` pull request holding it.
 
 
 </td></tr>
@@ -1061,7 +1072,7 @@ A mechanism that can deliver an ungrouped edit: a `'native'` suggestion, its rep
 
 </td><td>
 
-A mechanism that can deliver a whole-file creation or deletion, and any group containing one, whole: its section of the review body, applied by hand (`'manual'`<!-- -->; for a group, not yet supported by this version), or a`'companion'` pull request.
+A mechanism that can deliver a whole-file creation or deletion, and any group containing one, whole: its section of the review body, applied by hand (`'manual'`<!-- -->; for a group, one section holding every member, to assemble by hand and commit once), or a `'companion'` pull request.
 
 
 </td></tr>
@@ -1072,7 +1083,7 @@ A mechanism that can deliver a whole-file creation or deletion, and any group co
 
 </td><td>
 
-A mechanism that can deliver a group of edits (an explicit`suggestionGroup`<!-- -->, or a SARIF fix with several changes), always whole: every member as a native suggestion to add to one batch (`'native-batch'`<!-- -->), one`'companion'` pull request, or one review-body section to apply by hand (`'manual-group'`<!-- -->, not yet supported by this version).
+A mechanism that can deliver a group of edits (an explicit`suggestionGroup`<!-- -->, or a SARIF fix with several changes), always whole: every change as a native suggestion to add to one batch (`'native-batch'`<!-- -->), one`'companion'` pull request, or one review-body section holding every change's exact replacement, to make by hand and commit once (`'manual-group'`<!-- -->, used only when listed).
 
 
 </td></tr>

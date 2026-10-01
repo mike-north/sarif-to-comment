@@ -236,8 +236,8 @@ export interface IPublishSarifReviewOptions {
   readonly markSuggestionPullRequestsReady?: boolean | undefined;
   /**
    * Your own Markdown for named review elements: a finding, its attribution
-   * and alternatives, a proposed new file or file deletion, and a suggestion
-   * pull request's lifecycle note. Each callback receives the element's data,
+   * and alternatives, a proposed new file or file deletion, an edit made by
+   * hand in the review body, and a suggestion pull request's lifecycle note. Each callback receives the element's data,
    * its built-in Markdown and the fragments your result must keep; omitted
    * elements keep the built-in presentation. See {@link IReviewPresentation}
    * for what the tool keeps regardless (markers, suggestion blocks, exact
@@ -250,8 +250,8 @@ export interface IPublishSarifReviewOptions {
 
 /**
  * A mechanism that can deliver an ungrouped edit: a `'native'` suggestion, its
- * replacement in the `'review-body'` (not yet supported by this version), or
- * a `'companion'` pull request holding it.
+ * exact replacement in the `'review-body'` for the author to make by hand
+ * (never a suggestion), or a `'companion'` pull request holding it.
  *
  * @public
  */
@@ -260,9 +260,10 @@ export type EditDeliveryMechanism = 'native' | 'review-body' | 'companion';
 /**
  * A mechanism that can deliver a group of edits (an explicit
  * `suggestionGroup`, or a SARIF fix with several changes), always whole: every
- * member as a native suggestion to add to one batch (`'native-batch'`), one
- * `'companion'` pull request, or one review-body section to apply by hand
- * (`'manual-group'`, not yet supported by this version).
+ * change as a native suggestion to add to one batch (`'native-batch'`), one
+ * `'companion'` pull request, or one review-body section holding every
+ * change's exact replacement, to make by hand and commit once
+ * (`'manual-group'`, used only when listed).
  *
  * @public
  */
@@ -271,8 +272,8 @@ export type GroupedEditDeliveryMechanism = 'native-batch' | 'companion' | 'manua
 /**
  * A mechanism that can deliver a whole-file creation or deletion, and any
  * group containing one, whole: its section of the review body, applied by
- * hand (`'manual'`; for a group, not yet supported by this version), or a
- * `'companion'` pull request.
+ * hand (`'manual'`; for a group, one section holding every member, to
+ * assemble by hand and commit once), or a `'companion'` pull request.
  *
  * @public
  */

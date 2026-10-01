@@ -185,5 +185,26 @@ _(Optional)_ A suggestion pull request's lifecycle note (see [ILifecycleNotePres
 
 
 </td></tr>
+<tr><td>
+
+[manualEdit?](./sarif-to-comment.ireviewpresentation.manualedit.md)
+
+
+</td><td>
+
+`readonly`
+
+
+</td><td>
+
+((context: [IManualEditPresentationContext](./sarif-to-comment.imanualeditpresentationcontext.md)<!-- -->) =&gt; string) \| undefined
+
+
+</td><td>
+
+_(Optional)_ An edit made by hand in the review body (see [IManualEditPresentationContext](./sarif-to-comment.imanualeditpresentationcontext.md)<!-- -->).
+
+
+</td></tr>
 </tbody></table>
 
