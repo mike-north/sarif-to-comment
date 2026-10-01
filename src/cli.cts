@@ -248,7 +248,7 @@ const FORMAT_OPTION = md`  --format human|json|toon       Output format (default
  * lowercase phrase saying what it does (test/cli-commands.test.mts).
  */
 const USAGE: Readonly<Record<'top' | CliCommand, string>> = {
-  top: md`sarif-to-comment — author, inspect and publish SARIF as one GitHub draft review
+  top: md`sarif-to-comment — author, inspect, publish SARIF as a draft or submitted review
 
 Usage:
   sarif-to-comment init --output FILE [options]
