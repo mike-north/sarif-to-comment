@@ -554,6 +554,8 @@ No companion pull request is planned, so these options have no effect: OPTIONS.
 
 where `OPTIONS` names each given option as its flag and its library name, in this order, joined by `, `: `` `--pr-labels` (`pullRequestLabels`) ``, `` `--mark-suggestion-prs-ready` (`markSuggestionPullRequestsReady`) ``. For example: ``No companion pull request is planned, so these options have no effect: `--pr-labels` (`pullRequestLabels`), `--mark-suggestion-prs-ready` (`markSuggestionPullRequestsReady`).`` A blocked publication does not carry the note. The note changes nothing else: the exit status stays 0. Like preparation's warnings, it is recorded with the publication and reported by every later call for its state path.
 
+**Existing companions.** `existingCompanions` / `--existing-companion N` ([companion contract §2.13](companion-suggestion-pr-contract.md#213-the-companion-index-and-existing-companions)) lists existing suggestion pull requests in the review's companion index. It is not a delivery setting: it routes no proposal, creates nothing, and is valid with every policy, including the defaults, which create no companion pull request. It never produces the `companion-options-unused` note.
+
 ## 13. Recording the resolved policy
 
 The resolved policy is part of the publication's identity, in two places:
