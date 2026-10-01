@@ -1,0 +1,9 @@
+{
+  "format": "sarif-to-comment.companion-step",
+  "version": 1,
+  "publication": "e149273c-139d-45a2-bbd5-3bb6e97c1ce0",
+  "suggestion": "07ce6f99-7c28-4b22-8583-c5161c7b1568",
+  "step": "branch",
+  "commit": "b03e88a99ba1cd7f2e6e1afe4617d41578e5f53d",
+  "phase": "completed"
+}

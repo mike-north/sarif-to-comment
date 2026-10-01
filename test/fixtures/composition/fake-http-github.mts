@@ -553,8 +553,10 @@ export class FakeHttpGitHub {
       return json({
         number: pullNumber,
         html_url: `https://github.com/${fullName}/pull/${String(pullNumber)}`,
+        title: 'Retry requests once',
         state: 'open',
         merged: false,
+        draft: false,
         body: null,
         labels: [],
         head: { sha: head, ref: branches.headRef ?? 'feature', repo: headRepo === null ? null : { full_name: headRepo } },

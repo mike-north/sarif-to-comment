@@ -36,10 +36,14 @@
  * Recognition is strict: exactly one line of the body may begin with the
  * marker prefix, and that line must be the canonical line of well-formed
  * fields, byte for byte (the round trip through formatSuggestionMarker is
- * the check). A person may edit the rest of the body, add text after the
+ * the check). Lines are read as plain text, not as Markdown: a line that
+ * begins with the prefix counts wherever it is, inside a fenced code block
+ * included, so a second such line makes the marker unrecognized rather than
+ * being skipped. A person may edit the rest of the body, add text after the
  * marker, or let GitHub store it with CRLF line endings (one trailing
- * carriage return per line is ignored); a changed, duplicated or quoted
- * marker is never guessed at.
+ * carriage return per line is ignored); a changed or duplicated marker is
+ * never guessed at. A marker quoted in a block quote (`> <!-- …`) does not
+ * begin its line with the prefix, so it is not counted.
  */
 
 /** The fields one suggestion's marker records. */

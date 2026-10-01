@@ -111,6 +111,9 @@ export type {
   IFileDeletionPresentationContext,
   IManualEditPresentationContext,
   ILifecycleNotePresentationContext,
+  ICompanionPresentation,
+  ICompanionIndexPresentationContext,
+  ICompanionReferencePresentationContext,
 } from './presentation/customization.cjs';
 
 export type {

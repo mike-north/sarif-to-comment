@@ -1,0 +1,19 @@
+{
+  "command": "publish",
+  "status": "published",
+  "review": {
+    "id": 5376687723,
+    "url": "https://github.com/mike-north/doc-linter/pull/100#pullrequestreview-5376687723"
+  },
+  "statePath": "<evidence>/state/second.json",
+  "message": "## Draft review published\n\nThe draft [review 5376687723](https://github.com/mike-north/doc-linter/pull/100#pullrequestreview-5376687723) on mike-north/doc-linter#100 at commit `a7662e3085c192c87860b78f24863977901f0d43` was already published; its completion is recorded at `<evidence>/state/second.json`. Nothing was sent.\n\n**Warnings:**\n\n- `companion-reused`: #101 is listed in the review's companion index as an existing companion; it was a draft when the review was prepared.",
+  "diagnostics": [
+    {
+      "severity": "note",
+      "code": "companion-reused",
+      "title": "An existing companion pull request is listed in the review",
+      "message": "#101 is listed in the review's companion index as an existing companion; it was a draft when the review was prepared.",
+      "subject": "mike-north/doc-linter#101"
+    }
+  ]
+}

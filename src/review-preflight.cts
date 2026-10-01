@@ -23,13 +23,15 @@
  *     sarif, destination { owner, repo, pullNumber }, reviewedCommit, token,
  *     sourceRootUri?, oldSourceCommit?, options? { ignoreApprovalHold?, submit?,
  *     delivery?, pullRequestLabels?, markSuggestionPullRequestsReady?,
- *     presentation? } — `delivery` is the caller's delivery settings
+ *     existingCompanions?, presentation? } — `delivery` is the caller's delivery settings
  *     (docs/delivery-policy-contract.md §12), validated by §11.4's rules and
  *     captured as the caller layer; the companion options
  *     (docs/companion-suggestion-pr-contract.md §2.2) are valid with any
  *     policy, captured as given (for the companion-options-unused note) and
  *     as the extra labels (deduplicated case-insensitively, first spelling
- *     kept) and whether companions are created ready
+ *     kept) and whether companions are created ready; `existingCompanions`
+ *     (docs/companion-suggestion-pr-contract.md §2.13.1) is a list of
+ *     distinct positive pull request numbers, captured in the order given
  *   The SARIF, destination and options are deep JSON copies of own data
  *   properties only: caller getters never run, and cycles and non-JSON values
  *   are refused rather than dropped or coerced. The one exception is
@@ -51,7 +53,13 @@
  *   it), with
  *   `reviewed-commit-not-in-pull-request`, and an undecided lookup adds the
  *   note `reviewed-commit-association-unknown` to the outcome's warnings;
- *   then, unless the caller's settings decide every one
+ *   then each existing companion the caller names, read once through the
+ *   client's getPullRequest (src/existing-companions.cts; companion
+ *   contract §2.13.2): one that cannot be listed is a
+ *   `companion-not-reusable` error, reported after preparation's own
+ *   problems, which blocks the review, and each listed one is a
+ *   `companion-reused` note after preparation's warnings, and is passed to
+ *   preparation for the review's companion index; then, unless the caller's settings decide every one
  *   (docs/delivery-policy-contract.md §11.1), the
  *   repository's delivery configuration `.github/sarif-to-comment.json`,
  *   read once from the default branch through readDefaultBranchFile (an
@@ -109,6 +117,8 @@ import {
   validateDeliveryPolicyLayer,
 } from './delivery-policy.cjs';
 import type { ICompanionOptions, IDeliveryPolicyLayer, IDeliveryPolicyProblem, IResolvedDeliveryPolicy } from './delivery-policy.cjs';
+import { readExistingCompanions } from './existing-companions.cjs';
+import type { IExistingCompanion, IExistingCompanionsReading, ReadPullRequest } from './existing-companions.cjs';
 import { blockedBy, codeSpan, prepareReview, withoutWarnings } from './prepare-review.cjs';
 import { renderWarningsList } from './presentation/warnings-list.cjs';
 import { associateReviewedCommit, associationDiagnostic } from './reviewed-commit-association.cjs';
@@ -160,6 +170,12 @@ export interface ICapturedReview {
   readonly delivery: IDeliveryPolicyLayer | undefined;
   /** The caller's companion pull request options (docs/companion-suggestion-pr-contract.md §2.2). */
   readonly companionOptions: ICapturedCompanionOptions;
+  /**
+   * The existing suggestion pull requests the caller selects for the
+   * review's companion index, in the order given; empty when none
+   * (docs/companion-suggestion-pr-contract.md §2.13.1).
+   */
+  readonly existingCompanions: readonly number[];
   /**
    * The caller's presentation callbacks, when supplied: they change how
    * review elements read, never readiness or publication identity, so they
@@ -233,6 +249,12 @@ export interface IContextClient {
     | undefined;
   readonly readTreeRecursive?: ((request: { readonly owner: string; readonly repo: string; readonly commit: string }) => Promise<IRecursiveTree>) | undefined;
   readonly readBlobBytes?: ((request: { readonly owner: string; readonly repo: string; readonly blob: string }) => Promise<Uint8Array>) | undefined;
+  /**
+   * Read only for the existing companions the caller names, once each
+   * (docs/companion-suggestion-pr-contract.md §2.13.2); a client without it
+   * cannot list them.
+   */
+  readonly getPullRequest?: ReadPullRequest | undefined;
   /** Read only when a ready review needs suggestion pull requests. */
   readonly findLabel?: ((request: { readonly owner: string; readonly repo: string; readonly name: string }) => Promise<string | null>) | undefined;
   /**
@@ -291,6 +313,7 @@ const OPTION_KEYS: ReadonlySet<string> = new Set([
   'delivery',
   'pullRequestLabels',
   'markSuggestionPullRequestsReady',
+  'existingCompanions',
   'presentation',
 ]);
 
@@ -509,6 +532,7 @@ export function captureReviewInput<Own extends object>(input: unknown, spec: IRe
   let submit: boolean | undefined;
   let delivery: IDeliveryPolicyLayer | undefined;
   let companionOptions: ICapturedCompanionOptions = { pullRequestLabels: [], markReady: false, given: {} };
+  let existingCompanions: readonly number[] = [];
   let presentation: CapturedPresentation | undefined;
   if (optionsValue !== undefined) {
     if (!isPlainObject(optionsValue)) throw invalid('options must be a plain object');
@@ -524,12 +548,14 @@ export function captureReviewInput<Own extends object>(input: unknown, spec: IRe
     submit = submitValue;
     delivery = captureDelivery(options, invalid);
     companionOptions = captureCompanionOptions(options, invalid);
+    existingCompanions = captureExistingCompanions(options, invalid);
     const presentationValue = refusals.dataValue(optionsValue, PRESENTATION_OPTION, `options.${PRESENTATION_OPTION}`);
     if (presentationValue !== undefined) presentation = capturePresentation(presentationValue, invalid);
   }
 
   const shared: ICapturedReview = {
-    sarif, destination, reviewedCommit, oldSourceCommit, token, sourceRootUri, ignoreApprovalHold, submit, delivery, companionOptions, presentation,
+    sarif, destination, reviewedCommit, oldSourceCommit, token, sourceRootUri, ignoreApprovalHold, submit, delivery, companionOptions,
+    existingCompanions, presentation,
   };
   return { ...own, ...shared };
 }
@@ -602,6 +628,27 @@ function captureCompanionOptions(options: IJsonObject, invalid: (message: string
     markReady: ready ?? false,
     given: { ...(extras === undefined ? {} : { pullRequestLabels: labels }), ...(ready === undefined ? {} : { markSuggestionPullRequestsReady: ready }) },
   };
+}
+
+/**
+ * The existing companions the caller selects
+ * (docs/companion-suggestion-pr-contract.md §2.13.1): distinct positive
+ * pull request numbers, in the order given; none when omitted. Anything
+ * else is a TypeError naming the entry.
+ */
+function captureExistingCompanions(options: IJsonObject, invalid: (message: string) => TypeError): readonly number[] {
+  const value = options['existingCompanions'];
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) throw invalid('options.existingCompanions must be an array of pull request numbers');
+  const numbers: number[] = [];
+  for (const [i, entry] of value.entries()) {
+    if (typeof entry !== 'number' || !Number.isSafeInteger(entry) || entry < 1) {
+      throw invalid(`options.existingCompanions[${String(i)}] must be a positive pull request number`);
+    }
+    if (numbers.includes(entry)) throw invalid(`options.existingCompanions[${String(i)}] repeats #${String(entry)}`);
+    numbers.push(entry);
+  }
+  return numbers;
 }
 
 // ---------------------------------------------------------------------------
@@ -686,8 +733,40 @@ export async function prepareForDestination(captured: ICapturedReview, client: I
   const association = { destination: captured.destination, reviewedCommit: captured.reviewedCommit, head: pullHeadOf(context, captured) };
   const diagnostic = associationDiagnostic(await associateReviewedCommit(association, client), association);
   if (diagnostic?.severity === 'error') return blockedBy([diagnostic], []);
-  const outcome = await prepareVerified(captured, client, { context, readSource, fileExists });
+  const existing = await existingCompanionsOf(captured, client);
+  const prepared = await prepareVerified(captured, client, { context, readSource, fileExists }, existing?.listed ?? []);
+  const outcome = existing === undefined ? prepared : withExistingCompanions(prepared, existing);
   return diagnostic === undefined ? outcome : withPreparationNote(outcome, diagnostic);
+}
+
+/**
+ * The existing companions the caller names, read once each
+ * (src/existing-companions.cts); undefined when the caller names none, so
+ * nothing is read.
+ */
+async function existingCompanionsOf(captured: ICapturedReview, client: IContextClient): Promise<IExistingCompanionsReading | undefined> {
+  if (captured.existingCompanions.length === 0) return undefined;
+  if (client.getPullRequest === undefined) throw new Error('This GitHub client cannot read existing companion pull requests.');
+  return readExistingCompanions(captured.existingCompanions, captured.destination, client.getPullRequest);
+}
+
+/**
+ * An outcome with what reading the existing companions established
+ * (docs/companion-suggestion-pr-contract.md §2.13.2): any that cannot be
+ * listed block, after preparation's own problems, and — like the repository
+ * checks — without the delivery warnings and notes of a review that is not
+ * delivered; otherwise a ready review ends its warnings with a
+ * `companion-reused` note for each one listed. A review preparation blocked
+ * on its own states no reuse.
+ */
+function withExistingCompanions(outcome: DestinationOutcome, existing: IExistingCompanionsReading): DestinationOutcome {
+  if (existing.problems.length > 0) {
+    const problems = outcome.status === 'blocked' ? [...outcome.diagnostics, ...existing.problems] : existing.problems;
+    return blockedBy(problems, outcome.warnings.filter((w) => w.code !== 'delivery-fallback' && w.code !== 'companion-options-unused'));
+  }
+  if (outcome.status === 'blocked' || existing.notes.length === 0) return outcome;
+  const warnings = [...outcome.warnings, ...existing.notes];
+  return { ...outcome, warnings, markdown: `${withoutWarnings(outcome)}\n\n${renderWarningsList(warnings)}` };
 }
 
 /**
@@ -706,6 +785,7 @@ async function prepareVerified(
   captured: ICapturedReview,
   client: IContextClient,
   { context, readSource, fileExists }: { readonly context: IPlainObject; readonly readSource: unknown; readonly fileExists?: unknown },
+  existingCompanions: readonly IExistingCompanion[],
 ): Promise<DestinationOutcome> {
 
   const configuration = await readConfigurationLayer(captured, client);
@@ -729,6 +809,7 @@ async function prepareVerified(
   const options = {
     ...(captured.ignoreApprovalHold === undefined ? {} : { ignoreApprovalHold: captured.ignoreApprovalHold }),
     ...(captured.presentation === undefined ? {} : { presentation: captured.presentation }),
+    ...(existingCompanions.length === 0 ? {} : { existingCompanions }),
     delivery: { policy, companionOptions: captured.companionOptions.given, companionTarget },
   };
   const prepareInput = {

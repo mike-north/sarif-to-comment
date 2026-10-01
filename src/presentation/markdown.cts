@@ -99,3 +99,26 @@ function longestRun(text: string, character: string): number {
   }
   return longest;
 }
+
+/** "U+XXXX" for a character, as diagnostics and visible escapes name it. */
+export function codePointName(character: string): string {
+  return `U+${(character.codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(4, '0')}`;
+}
+
+/**
+ * A character a reader cannot see as itself: a format character (Unicode
+ * category Cf, which includes the bidirectional controls that reorder text,
+ * inside code spans too) or U+00A0 — except a zero-width joiner between two
+ * pictographs (after an optional variation selector), which joins an emoji
+ * sequence.
+ */
+const UNSEEN = /(?<!\p{Extended_Pictographic}️?)‍|‍(?!\p{Extended_Pictographic})|(?!‍)[\p{Cf} ]/gu;
+
+/**
+ * Host text shown with every character a reader could not see replaced by a
+ * visible escape, `{U+XXXX}`: nothing is dropped, and nothing can reorder or
+ * hide what follows it. A zero-width joiner inside an emoji sequence is kept.
+ */
+export function visibleText(text: string): string {
+  return text.replace(UNSEEN, (character) => `{${codePointName(character)}}`);
+}

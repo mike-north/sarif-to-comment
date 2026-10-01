@@ -58,6 +58,27 @@ _(Optional)_ Which mechanism delivers each proposed change: a native suggestion,
 </td></tr>
 <tr><td>
 
+[existingCompanions?](./sarif-to-comment.ipublishsarifreviewoptions.existingcompanions.md)
+
+
+</td><td>
+
+`readonly`
+
+
+</td><td>
+
+readonly number\[\] \| undefined
+
+
+</td><td>
+
+_(Optional)_ Existing suggestion pull requests of this pull request that the review lists in its companion index, by number, in the order to list them: for example proposals an earlier review created that this review continues. Each must already exist and follow the suggestion pull request convention with a marker naming this pull request as its original; otherwise nothing is published (`blocked`<!-- -->, with a`companion-not-reusable` error naming it). It is listed whether it is open, a draft, closed or merged, and a `companion-reused` note states which. Nothing is created, changed or inferred: only the pull requests named here are listed, besides the ones the review creates. Each number at most once; `[]` is the same as omitting it. Part of the publication identity.
+
+
+</td></tr>
+<tr><td>
+
 [ignoreApprovalHold?](./sarif-to-comment.ipublishsarifreviewoptions.ignoreapprovalhold.md)
 
 

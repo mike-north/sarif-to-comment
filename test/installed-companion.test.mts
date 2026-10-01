@@ -145,7 +145,9 @@ function assertPublished(w: IWorld, expected: { readonly draft: boolean; readonl
   assert.equal(reviews.length, 1);
   const [review] = reviews;
   assert.ok(review);
-  assert.ok(review.request.body.startsWith(`**Suggestion pull request:** [#${String(pull.number)}](https://github.com/octo/companion-uat/pull/${String(pull.number)})`), review.request.body);
+  const link = `[#${String(pull.number)}](https://github.com/octo/companion-uat/pull/${String(pull.number)})`;
+  // Companion contract §2.13.3: the companion index, then the suggestion pull request's own section.
+  assert.ok(review.request.body.startsWith(`**Companion pull requests of this review:**\n\n- ${link}: \`Suggestion for #45: retry-with-test (2 changes)\` — created with this review\n\n---\n\n**Suggestion pull request:** ${link}`), review.request.body);
   assert.deepEqual(review.request.comments, [], 'both changes travel in the suggestion pull request');
   assert.ok(w.host.log().every((r) => r.authorized));
 }

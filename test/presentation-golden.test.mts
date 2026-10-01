@@ -336,9 +336,15 @@ describe('golden presentation: the published review and its companions', () => {
         '',
         marker[1],
       ].join('\n'));
-      // Companion contract §2.11, review body: the companion reference section.
+      // Companion contract §2.13.3 and §2.11, review body: the companion index, then the companion reference section.
       const number = String(pull.number);
       assert.equal(reviewBodyWithoutMarker(world), [
+        '**Companion pull requests of this review:**',
+        '',
+        `- [#${number}](https://github.com/octo/widgets/pull/${number}): \`Suggestion for #7: create docs/guide.md\` — created with this review`,
+        '',
+        '---',
+        '',
         `**Suggestion pull request:** [#${number}](https://github.com/octo/widgets/pull/${number})`,
         '',
         'Merging it into `feature/retry` applies this change:',

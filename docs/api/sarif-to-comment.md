@@ -313,6 +313,39 @@ The outcome of [closeSuggestionPullRequests()](./sarif-to-comment.closesuggestio
 </td></tr>
 <tr><td>
 
+[ICompanionIndexPresentationContext](./sarif-to-comment.icompanionindexpresentationcontext.md)
+
+
+</td><td>
+
+The review body's companion index: every companion pull request the review creates, then every existing one the caller named, in that order.
+
+
+</td></tr>
+<tr><td>
+
+[ICompanionPresentation](./sarif-to-comment.icompanionpresentation.md)
+
+
+</td><td>
+
+One companion suggestion pull request of the review, as the companion index and a companion's section name it.
+
+
+</td></tr>
+<tr><td>
+
+[ICompanionReferencePresentationContext](./sarif-to-comment.icompanionreferencepresentationcontext.md)
+
+
+</td><td>
+
+The review body's section for one proposal a companion suggestion pull request carries: its link, what merging it applies and the findings that carry the proposal.
+
+
+</td></tr>
+<tr><td>
+
 [ICreateSarifDocumentOptions](./sarif-to-comment.icreatesarifdocumentoptions.md)
 
 

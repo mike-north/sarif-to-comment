@@ -481,18 +481,41 @@ export interface IMarkdownLink {
 
 /**
  * Every inline link of `markdown` (GFM autolinks included), with its text as
- * literal characters — the values of the text and code it holds, without
- * escapes or emphasis — so that two links reading the same compare equal
- * whatever Markdown spells them with.
+ * literal characters — the values of the text and code it holds, and the alt
+ * text of an image inside it, without escapes or emphasis — so that two
+ * links reading the same compare equal whatever Markdown spells them with.
  */
 export function linksIn(markdown: string): IMarkdownLink[] {
   const textOf = (node: Nodes): string => {
     if (node.type === 'text' || node.type === 'inlineCode') return node.value;
+    if (node.type === 'image') return node.alt ?? '';
     return 'children' in node ? node.children.map(textOf).join('') : '';
   };
   return placedNodes(parse(markdown)).flatMap((placed) => (placed.node.type === 'link'
     ? [{ text: textOf(placed.node), url: placed.node.url, source: markdown.slice(placed.start, placed.end) }]
     : []));
+}
+
+/** Every image of `markdown` (inline or by reference to a definition), by its source text. */
+export function imagesIn(markdown: string): string[] {
+  return placedNodes(parse(markdown)).flatMap((placed) => (placed.node.type === 'image' || placed.node.type === 'imageReference'
+    ? [markdown.slice(placed.start, placed.end)]
+    : []));
+}
+
+/**
+ * `markdown` with the source of every code span and code block replaced by
+ * spaces: the text a reader could take for something other than code. Code
+ * shows its characters literally, so text-level checks (an identity marker)
+ * that must not fire on presented code read this instead.
+ */
+export function outsideCode(markdown: string): string {
+  let text = markdown;
+  for (const placed of placedNodes(parse(markdown))) {
+    if (placed.node.type !== 'inlineCode' && placed.node.type !== 'code') continue;
+    text = `${text.slice(0, placed.start)}${' '.repeat(placed.end - placed.start)}${text.slice(placed.end)}`;
+  }
+  return text;
 }
 
 /** Blocks whose inline content GitHub may read as `$…$` math. */

@@ -1,0 +1,29 @@
+{
+  "command": "validate",
+  "status": "blocked",
+  "problems": [
+    {
+      "message": "#97 cannot be listed as an existing companion of #100: its suggestion marker names #96, not #100.",
+      "severity": "error",
+      "code": "companion-not-reusable",
+      "title": "An existing companion pull request cannot be listed in the review",
+      "subject": "mike-north/doc-linter#97",
+      "remedies": [
+        "Name a suggestion pull request whose marker names this pull request, or leave this one out (`--existing-companion`, `existingCompanions`)."
+      ]
+    }
+  ],
+  "message": "## Review blocked\n\nNothing was published and no publication state was written.\n\n**Review blocked:** 1 problem must be resolved before publication; nothing was published.\n\n- `companion-not-reusable`: #97 cannot be listed as an existing companion of #100: its suggestion marker names #96, not #100.",
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "companion-not-reusable",
+      "title": "An existing companion pull request cannot be listed in the review",
+      "message": "#97 cannot be listed as an existing companion of #100: its suggestion marker names #96, not #100.",
+      "subject": "mike-north/doc-linter#97",
+      "remedies": [
+        "Name a suggestion pull request whose marker names this pull request, or leave this one out (`--existing-companion`, `existingCompanions`)."
+      ]
+    }
+  ]
+}

@@ -744,6 +744,8 @@ describe('companion bundles (D52; §9)', () => {
     assert.deepEqual(review.comments, [], 'no native suggestion');
     const link = `**Suggestion pull request:** [#${String(pull.number)}](${pullUrl(pull.number)})`;
     assert.equal(review.body, [
+      // Companion contract §2.13.3: the index lists the one bundle once.
+      `**Companion pull requests of this review:**\n\n- [#${String(pull.number)}](${pullUrl(pull.number)}): \`Suggestion for #7: 3 proposals (4 changes)\` — created with this review`,
       `${link}, proposal 1 of 3\n\nMerging it into \`feature/retry\` applies this change, with the 2 other proposals it bundles:\n\n${sections[0][0]}\n\n${sections[0][1]}`,
       `${link}, proposal 2 of 3\n\nMerging it into \`feature/retry\` applies these 2 changes together, with the 2 other proposals it bundles:\n\n${sections[1][0]}\n\n${sections[1][1]}`,
       `${link}, proposal 3 of 3\n\nMerging it into \`feature/retry\` applies this change, with the 2 other proposals it bundles:\n\n${sections[2][0]}\n\n${sections[2][1]}`,

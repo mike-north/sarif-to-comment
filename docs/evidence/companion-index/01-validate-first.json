@@ -1,0 +1,6 @@
+{
+  "command": "validate",
+  "status": "ready",
+  "message": "## Ready to publish\n\nThe complete document can be published faithfully to mike-north/doc-linter#100 at commit `a7662e3085c192c87860b78f24863977901f0d43` as a submitted comment review.\n\nPublication would also create 1 draft suggestion pull request into `exp-companion-index-20261001`, labeled `suggestion-pr`.\n\n**Review prepared:** 0 inline comment(s) and 1 general section(s) for commit `a7662e3085c192c87860b78f24863977901f0d43`.\n\nNothing was published and no publication state was written.\n\nNo pending review of this account was found on the pull request. This is not an approval: publication repeats every check against the pull request as it is then. GitHub can still refuse the review, for example if this account starts a pending review on the pull request before publication.",
+  "diagnostics": []
+}

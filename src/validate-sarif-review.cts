@@ -395,6 +395,7 @@ class OperationalFailures {
       ...(client.readTreeRecursive === undefined ? {} : { readTreeRecursive: this.observeCall(client.readTreeRecursive) }),
       ...(client.readBlobBytes === undefined ? {} : { readBlobBytes: this.observeCall(client.readBlobBytes) }),
       ...(client.listHeadRefForcePushes === undefined ? {} : { listHeadRefForcePushes: this.observeCall(client.listHeadRefForcePushes) }),
+      ...(client.getPullRequest === undefined ? {} : { getPullRequest: this.observeCall(client.getPullRequest) }),
       ...(client.findLabel === undefined ? {} : { findLabel: this.observeCall(client.findLabel) }),
       ...(client.readDefaultBranchFile === undefined ? {} : { readDefaultBranchFile: this.observeCall(client.readDefaultBranchFile) }),
     };

@@ -673,6 +673,16 @@ export const DIAGNOSTIC_CATALOG = {
     title: 'A suggestion label does not exist',
     remedies: ['Create the label in the repository, or choose an existing one.'],
   },
+  'companion-not-reusable': {
+    severity: 'error',
+    title: 'An existing companion pull request cannot be listed in the review',
+    remedies: ['Name a suggestion pull request whose marker names this pull request, or leave this one out (`--existing-companion`, `existingCompanions`).'],
+  },
+  'companion-reused': {
+    severity: 'note',
+    title: 'An existing companion pull request is listed in the review',
+    remedies: [],
+  },
   'delivery-unavailable': {
     severity: 'error',
     title: 'No delivery mechanism the policy lists is available for a proposal',

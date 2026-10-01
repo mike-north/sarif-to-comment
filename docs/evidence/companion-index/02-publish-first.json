@@ -1,0 +1,18 @@
+{
+  "command": "publish",
+  "status": "published",
+  "review": {
+    "id": 5376657276,
+    "url": "https://github.com/mike-north/doc-linter/pull/100#pullrequestreview-5376657276"
+  },
+  "suggestions": [
+    {
+      "number": 101,
+      "url": "https://github.com/mike-north/doc-linter/pull/101",
+      "branch": "suggestion-pr/100/07ce6f99-7c28-4b22-8583-c5161c7b1568"
+    }
+  ],
+  "statePath": "<evidence>/state/first.json",
+  "message": "## Review submitted\n\nCreated and submitted the comment [review 5376657276](https://github.com/mike-north/doc-linter/pull/100#pullrequestreview-5376657276) on mike-north/doc-linter#100 at commit `a7662e3085c192c87860b78f24863977901f0d43`. It is visible on the pull request now.\n\nSuggestion pull requests (drafts into `exp-companion-index-20261001`, labeled `suggestion-pr`):\n\n- [#101](https://github.com/mike-north/doc-linter/pull/101) from `suggestion-pr/100/07ce6f99-7c28-4b22-8583-c5161c7b1568`",
+  "diagnostics": []
+}

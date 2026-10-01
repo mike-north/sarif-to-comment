@@ -34,7 +34,7 @@ A callback controls how an element reads, never what is published or how it is i
 
 An exception a callback throws propagates unchanged.
 
-Callbacks run while the review is prepared, once per element, and must be deterministic. They are not part of the publication identity: a retry with the same state path never re-renders what an earlier call already planned or sent.
+Callbacks run while the review is prepared, once per element, and must be deterministic. The companion index and a companion's section also run once more, with the real pull request numbers, when the review is composed after its companion pull requests exist; a result refused then stops the publication before the review is sent, and a retry composes it with that call's callbacks. Callbacks are not part of the publication identity: a retry with the same state path never re-renders what an earlier call already planned, or a review body it already recorded.
 
 ## Properties
 
@@ -98,6 +98,48 @@ _(Optional)_ A finding's alternative fixes (see [IAlternativesPresentationContex
 </td><td>
 
 _(Optional)_ A finding's producer attribution (see [IAttributionPresentationContext](./sarif-to-comment.iattributionpresentationcontext.md)<!-- -->).
+
+
+</td></tr>
+<tr><td>
+
+[companionIndex?](./sarif-to-comment.ireviewpresentation.companionindex.md)
+
+
+</td><td>
+
+`readonly`
+
+
+</td><td>
+
+((context: [ICompanionIndexPresentationContext](./sarif-to-comment.icompanionindexpresentationcontext.md)<!-- -->) =&gt; string) \| undefined
+
+
+</td><td>
+
+_(Optional)_ The review's companion index (see [ICompanionIndexPresentationContext](./sarif-to-comment.icompanionindexpresentationcontext.md)<!-- -->).
+
+
+</td></tr>
+<tr><td>
+
+[companionReference?](./sarif-to-comment.ireviewpresentation.companionreference.md)
+
+
+</td><td>
+
+`readonly`
+
+
+</td><td>
+
+((context: [ICompanionReferencePresentationContext](./sarif-to-comment.icompanionreferencepresentationcontext.md)<!-- -->) =&gt; string) \| undefined
+
+
+</td><td>
+
+_(Optional)_ A companion's section in the review body (see [ICompanionReferencePresentationContext](./sarif-to-comment.icompanionreferencepresentationcontext.md)<!-- -->).
 
 
 </td></tr>
