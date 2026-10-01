@@ -90,6 +90,8 @@ A library caller may replace the Markdown of the finding, attribution, alternati
 
 Each callback's context lists `required` fragments that its result must show as itself. These are the exact proposed content and file details, a deletion's permalink, a finding's attribution and alternatives, the producers' names, and the findings a proposal carries. The checks below refuse a result before anything is written. The companion reference is not customizable yet.
 
+**Templates.** Repository templates are not implemented. Callbacks are application code, and nothing here evaluates template text. The [template engine evaluation](template-engine-evaluation.md) records the delimiter, value, safety and composition checks D60 requires before an engine is chosen, including template output run through the checks below. It selects no engine.
+
 **Parser basis.** Producer Markdown and callback results are read with a conformant CommonMark 0.31 + GFM parser: micromark with its GFM extension, through `mdast-util-from-markdown` and `mdast-util-gfm`. The parser decides what is code, text, raw HTML, a link, an image or a definition. Two checks remain hand-written, because a Markdown parser does not answer them:
 
 - the balance of the elements that raw HTML opens and closes;
