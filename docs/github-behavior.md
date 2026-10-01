@@ -166,7 +166,16 @@ Do not promote them to observed merge outcomes.
 - A retry after a second rewrite.
 - An actual merge of any companion.
 
-**Evidence:** The [force-push experiment report](force-push-experiment.md), with its inline readback excerpts, and the live PRs, reviews and branches it lists, which were left in place. No raw readback files from this run are retained in the repository.
+**Evidence:** The [force-push experiment report](force-push-experiment.md), with its inline readback excerpts, and the live PRs, reviews and branches it lists, which were left in place. No raw readback files from the run itself are retained in the repository.
+
+**Later read-only snapshot (October 1, 2026):** A [readback of #41–#52](evidence/realignment/e0-readme.md) recorded the fixtures' state a day after the run, with no writes. It is observed state at that time, not the experiment's own evidence.
+
+- It agrees with every recorded observation above. #45–#48 and #51 were CONFLICTING, and #52 MERGEABLE. The reviews on #41, #43 and #44 were still pending.
+- **Force-push events named the discarded heads.** Each `HeadRefForcePushedEvent` on #41, #42 and #43 carried a non-null `beforeCommit`, and each discarded reviewed commit was the `beforeCommit` of its PR's first event. The PR's commit list held only the current head.
+- The outdated comments on #41 and #42 kept a `commit_id` that is the intermediate, also discarded, head.
+- Pending review comments were absent from `GET …/pulls/<pr>/comments`. The per-review endpoint returned them without `line` or `original_line`, and GraphQL review threads returned them with both.
+
+Whether `beforeCommit` can ever be null, and timelines longer than one page, are not covered.
 
 Later implementation runs separately observed companions proposed on the reviewed commit of an advanced branch, or re-applied onto a rewritten head. Each listed exactly one commit carrying only its own change, and GitHub reported each MERGEABLE. Nothing was merged in those runs either. See the [force-push re-application evidence](force-push-reapply-e2e-evidence.md) and its raw outputs in [`evidence/force-push-reapply/`](evidence/force-push-reapply/).
 
@@ -176,7 +185,7 @@ Later implementation runs separately observed companions proposed on the reviewe
 
 **Product boundary:** The [settled force-push decisions](design-decisions.md#settled-force-push-boundary--september-30-2026) distinguish host review lifecycle, upstream follow-up and this project's faithful-publication responsibilities. Capability gaps below are experiment questions, not authority to invent a review-maintenance service.
 
-The force-push experiment now has a repository home. Its report is [force-push-experiment.md](force-push-experiment.md), and GH-14 records it with its exact conditions and limits. Its primary evidence is the report's inline readback excerpts and the live fixtures it lists in `mike-north/doc-linter`, which were left in place. No raw readback files from that run are in the repository. Capturing read-only readbacks of those fixtures would complete the record; it is not a reason to rerun the experiment.
+The force-push experiment now has a repository home. Its report is [force-push-experiment.md](force-push-experiment.md), and GH-14 records it with its exact conditions and limits. Its primary evidence is the report's inline readback excerpts and the live fixtures it lists in `mike-north/doc-linter`, which were left in place. No raw readback files from the run itself are in the repository. A later read-only [snapshot of those fixtures](evidence/realignment/e0-readme.md), taken October 1, 2026, records their raw state, reviews, comments, force-push events and compare readbacks. It completes the record without rerunning the experiment.
 
 Two working summaries of the experiment, a briefing and a responsibility review, exist only in the maintainer's uncommitted working logs. GH-14 keeps their distinctions between observed, inferred and untested results, and nothing in this register depends on them.
 
