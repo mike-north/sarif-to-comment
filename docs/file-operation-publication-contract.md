@@ -40,12 +40,12 @@ The whole file is removed; this is not a proposal to empty it.
 ITEMS
 ```
 
-These are the built-in presentations of the file-addition and file-deletion components (`src/presentation/file-addition.cts`, `src/presentation/file-deletion.cts`; [D60](design-decisions.md#d60-use-reusable-markdown-components-for-a-rich-github-review-experience--owner-selected-presentation-direction)). A library caller may replace either through `options.presentation` (README, "Customizing how the review reads"). A replacement must keep, verbatim, a creation's path as a code span, its `FACTS`, its content block and its `ITEMS`, or a deletion's `PERMALINK` and its `ITEMS`; otherwise it is refused before anything is written. The CLI always uses the built-in sections.
+These are the built-in presentations of the file-addition and file-deletion components (`src/presentation/file-addition.cts`, `src/presentation/file-deletion.cts`; [D60](design-decisions.md#d60-use-reusable-markdown-components-for-a-rich-github-review-experience--owner-selected-presentation-direction)). A library caller may replace either through `options.presentation` (README, "Customizing how the review reads"). A replacement must keep, verbatim and each at its own occurrence, a creation's path as a code span, its `FACTS`, its content block and its `ITEMS`, or a deletion's `PERMALINK` and its `ITEMS`, and a deletion's link text may not point elsewhere ([review presentation contract](review-presentation-contract.md) §7); otherwise it is refused before anything is written. The CLI always uses the built-in sections.
 
 - `PERMALINK` is `https://github.com/OWNER/REPO/blob/REVIEWED_COMMIT/PATH`, the exact file at the reviewed commit. Each path segment is percent-encoded, including `(`, `)`, `!`, `'` and `*`, so the link destination can never end early; `/` separators are kept. `SHORT` is the commit's first seven characters. No permalink is ever produced for a created path.
 - `ITEMS` are the findings joined by `\n\n---\n\n`, as in a shared suggestion comment. Each item is the ordinary rendered finding (message, location message, status and attribution). It is preceded by its location when the finding has a region:
   - on a created file: `**Location:** line N of the proposed file` (or `lines N-M`), then a blank line. The content is already shown, so it is not quoted again.
-  - on a deleted file: the existing general-feedback source quote, `**Source:** [PATH line N at SHORT](PERMALINK#LN)` followed by a fenced quote of those lines at the reviewed commit.
+  - on a deleted file: the existing general-feedback source quote, `**Source:** [PATH line N at SHORT](PERMALINK?plain=1#LN)` followed by a fenced quote of those lines at the reviewed commit.
 - A finding without a region has no location line; the section header already names the file.
 
 ### Content and facts (decision 3)
@@ -81,7 +81,7 @@ Any of the following blocks the whole review before any write:
 | A path with a control or invisible formatting character, or leading or trailing whitespace, which cannot be shown exactly | `file-operation-path-unrepresentable` |
 | Binary contents (`contents.binary`) or no `contents.text` | `file-operation-binary-unsupported`, `file-operation-invalid` |
 | An encoding other than UTF-8 (`encoding`, else the run's `defaultEncoding`) | `file-operation-encoding-unsupported` |
-| Content that cannot be shown exactly: C0 controls other than tab, LF and CR in CRLF; DEL and C1 controls; a bare CR; mixed LF and CRLF line endings; a byte-order mark after the start; bidirectional formatting controls; U+2028/U+2029; a lone surrogate | `file-operation-content-unrepresentable` |
+| Content that cannot be shown exactly: C0 controls other than tab, LF and CR in CRLF; DEL and C1 controls; a bare CR; mixed LF and CRLF line endings; any format character (Unicode category `Cf`: a byte-order mark after the start, a bidirectional control, a zero-width space or joiner, a word joiner, a soft hyphen, a tag character, …); U+00A0, which renders as a space; U+2028/U+2029; a lone surrogate | `file-operation-content-unrepresentable` |
 | The run's source revision is not the reviewed commit | `file-operation-source-not-reviewed` (or the run's provenance code) |
 | A created path already exists at the reviewed commit; a deleted path does not | `file-operation-target-exists`, `file-operation-target-missing` |
 | The finding's location names another file | `file-operation-association-unsupported` |

@@ -195,7 +195,7 @@ So the defaults deliver an edit group whose every change can be a native suggest
 The review body holds, at the position of the group's first finding in SARIF order, the guidance section:
 
 ```text
-**LABEL:** apply these K suggestions together, in one commit: add each of them to one batch of suggestions on the pull request, then commit the batch.
+**LABEL:** apply these K suggestions together, in one commit: add each of them to one batch of suggestions on the pull request, then commit the batch. Nothing checks that they are applied together.
 
 - `PATH` line N
 - `PATH` lines A-B
@@ -240,7 +240,7 @@ BLOCK
 or, when the replacement is empty (the lines are removed), ``delete [PATH LINES at SHORT](PERMALINK).``, where:
 
 - `PATH` is the file's path as literal text, `LINES` is `line N` or `lines A-B` of the reviewed file, and `SHORT` is the reviewed commit's first seven characters.
-- `PERMALINK` is `https://github.com/OWNER/REPO/blob/COMMIT/PATH#LA`, or `#LA-LB` for several lines, built by the shared URL builder with each path segment percent-encoded ([review presentation contract](review-presentation-contract.md) §5).
+- `PERMALINK` is `https://github.com/OWNER/REPO/blob/COMMIT/PATH?plain=1#LA`, or `?plain=1#LA-LB` for several lines (the source view, whose line anchors work for rendered file types too), built by the shared URL builder with each path segment percent-encoded ([review presentation contract](review-presentation-contract.md) §5).
 - `BLOCK` is a fenced code block of the replacement lines: LF line breaks, without the last line's terminator, and without the file's own byte-order mark, which a replacement of line 1 keeps. Its backtick fence is one longer than the longest backtick run inside, and at least three, so no line of it can close the block.
 - `DETAILS` states what the block cannot show, joined by `, `: `CRLF line endings` when the replacement's lines end with CRLF, and `no newline at end of file` when its last line has no line terminator (which only a replacement that ends the file can have). It is absent when neither holds.
 
@@ -257,7 +257,7 @@ with the remedy `Change the replacement.`, where `REASON` is the first of these 
 | `the file path contains U+XXXX, which cannot be shown exactly` | the path holds a control or invisible formatting character |
 | `the file path begins or ends with whitespace, which Markdown does not show` | |
 | `replacement line N contains an unpaired surrogate, which is not UTF-8 text` | |
-| `replacement line N contains U+XXXX, which a code block does not show` | a C0 control other than tab, LF and the CR of CRLF; DEL or a C1 control; a byte-order mark other than the file's own; a bidirectional formatting control; U+2028 or U+2029 |
+| `replacement line N contains U+XXXX, which a code block does not show` | a C0 control other than tab, LF and the CR of CRLF; DEL or a C1 control; any format character (Unicode category `Cf`: a zero-width space or joiner, a word joiner, a soft hyphen, a bidirectional control, a tag character, a byte-order mark other than the file's own, …); U+00A0, which renders as a space; U+2028 or U+2029 |
 | `replacement line N contains a carriage return that does not end a line` | |
 | `it mixes CRLF and LF line endings, and only one style can be stated` | |
 | `a line of it could open a suggestion block, which a proposal made by hand never shows` | a line that could open a `suggestion` fence ([review presentation contract](review-presentation-contract.md) §7) |
@@ -272,7 +272,7 @@ with the remedy `Change the replacement.`, where `REASON` is the first of these 
 FINDINGS
 ```
 
-where `REPLACEMENT` is the edit's replacement shown exactly, as above, and `FINDINGS` are the findings that carry the edit, each a finding section with its source link and quote ([review presentation contract](review-presentation-contract.md) §5), joined by `\n\n---\n\n`. This is the built-in presentation of the manual edit component (`src/presentation/manual-edit.cts`). A library caller may replace it with the `manualEdit` callback; the result must show as itself the location link ``[PATH LINES at SHORT](PERMALINK)``, `BLOCK` when there is one, `DETAILS` when there are any, and `FINDINGS` ([review presentation contract](review-presentation-contract.md) §7).
+where `REPLACEMENT` is the edit's replacement shown exactly, as above, and `FINDINGS` are the findings that carry the edit, each a finding section with its source link and quote ([review presentation contract](review-presentation-contract.md) §5), joined by `\n\n---\n\n`. This is the built-in presentation of the manual edit component (`src/presentation/manual-edit.cts`). A library caller may replace it with the `manualEdit` callback; the result must show as itself, each at its own occurrence, the location link ``[PATH LINES at SHORT](PERMALINK)``, `PERMALINK`, `BLOCK` when there is one, `DETAILS` when there are any, and `FINDINGS`, and no link of its own may carry the location's text to another destination ([review presentation contract](review-presentation-contract.md) §7).
 
 **The manual group section** (`manual-group` for an edit group; `manual` for a file-operation group, the mixed manual group):
 

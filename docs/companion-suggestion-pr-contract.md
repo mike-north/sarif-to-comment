@@ -329,7 +329,7 @@ ITEMS
 
 - creation: ``New file `PATH`: FACTS``, where FACTS are the file-operation contract's details (for example `18 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644`);
 - deletion: `Deleted file [PATH at SHORT](PERMALINK): the whole file is removed`;
-- edit: `Edited [PATH line L at SHORT](PERMALINK#LL)` or `Edited [PATH lines A-B at SHORT](PERMALINK#LA-LB)`, the replaced lines of the reviewed file.
+- edit: `Edited [PATH line L at SHORT](PERMALINK?plain=1#LL)` or `Edited [PATH lines A-B at SHORT](PERMALINK?plain=1#LA-LB)`, the replaced lines of the reviewed file.
 
 `ITEMS` are the findings carrying those changes, joined by `\n\n---\n\n`, each rendered as today: after `**Location:** line(s) … of the proposed file` for a located finding on a created file, and after its quoted source for a located finding on an edited or deleted file. Proposed content is not repeated in the review (R10): the pull request carries the exact bytes.
 
