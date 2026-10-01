@@ -116,6 +116,15 @@ describe('the GitHub web URL builder', () => {
       });
     }
 
+    test('an owner or repository name that is empty, "." or ".."', () => {
+      for (const name of ['', '.', '..']) {
+        assert.throws(() => repositoryUrl({ owner: name, repo: 'widgets' }), /is not a GitHub owner/);
+        assert.throws(() => repositoryUrl({ owner: 'acme', repo: name }), /is not a GitHub repository name/);
+        assert.throws(() => pullRequestUrl({ owner: 'acme', repo: name }, 7), /is not a GitHub repository name/);
+      }
+      assert.equal(repositoryUrl({ owner: 'acme', repo: '.github' }), 'https://github.com/acme/.github', 'a name that merely starts with a dot is fine');
+    });
+
     test('a ref name containing ".." or an empty segment', () => {
       assert.throws(() => compareUrl(REPO, 'main', 'a..b'), /ref name contains "\.\."/);
       assert.throws(() => compareUrl(REPO, 'main...x', 'b'), /ref name contains "\.\."/);
