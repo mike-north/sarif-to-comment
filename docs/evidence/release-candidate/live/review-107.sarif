@@ -1,0 +1,69 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "rc030 acceptance",
+          "version": "1.0.0"
+        }
+      },
+      "columnKind": "utf16CodeUnits",
+      "versionControlProvenance": [
+        {
+          "repositoryUri": "https://github.com/mike-north/doc-linter",
+          "revisionId": "920fc63ae2fde7a398dd63c1d80dad425c7fc085"
+        }
+      ],
+      "artifacts": [],
+      "results": [
+        {
+          "message": {
+            "text": "A general remark on the rc030 fixture."
+          }
+        },
+        {
+          "message": {
+            "text": "End this line with LF, and join its words with a zero-width space."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "docs/experiments/rc030/crlf.txt"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "docs/experiments/rc030/crlf.txt"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 1,
+                        "startColumn": 1,
+                        "endLine": 2,
+                        "endColumn": 1
+                      },
+                      "insertedContent": {
+                        "text": "Only line,​with LF.\n"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

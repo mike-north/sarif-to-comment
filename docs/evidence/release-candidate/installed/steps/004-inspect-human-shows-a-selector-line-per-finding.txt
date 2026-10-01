@@ -1,0 +1,298 @@
+# 004 inspect (human) shows a "Selector:" line per finding
+feature: inspect
+
+$ sarif-to-comment inspect --sarif <tmp>/authoring-HObiYv/review.sarif --color never
+exit status: 0
+
+checks:
+  PASS  exit 0
+  PASS  5 "Selector:" lines
+
+--- stdout
+SARIF inspection: 1 run(s), 5 finding(s), 5 fix(es), 0 file proposal(s), 0 truncated preview(s).
+Run 0 (/runs/0): Review bot 1.0.0 (source: declared; columnKind: utf16CodeUnits)
+  declared source: https://github.com/octo/widgets at feedfeedfeedfeedfeedfeedfeedfeedfeedfeed
+  Other run content:
+    {
+      "tool": {
+        "driver": {
+          "name": "Review bot",
+          "version": "1.0.0"
+        }
+      },
+      "artifacts": []
+    }
+
+Finding /runs/0/results/0 — Review bot 1.0.0
+Selector: /runs/0/results/0@e6bf06fcf799f76c
+Message:
+Fix the typo.
+Locations:
+  README.md:2
+Fix 1 of 1 (/runs/0/results/0/fixes/0)
+  Change README.md
+    Replace region {"startLine":2} with:
+      | The widget client.
+
+Finding /runs/0/results/1 — Review bot 1.0.0
+Selector: /runs/0/results/1@e6bf06fcf799f76c
+Message:
+Fix the spelling.
+Locations:
+  README.md:3
+Fix 1 of 1 (/runs/0/results/1/fixes/0)
+  Change README.md
+    Replace region {"startLine":3} with:
+      | Receive updates.
+
+Finding /runs/0/results/2 — Review bot 1.0.0
+Selector: /runs/0/results/2@e6bf06fcf799f76c
+Message:
+Use the American spelling.
+Locations:
+  README.md:4
+Fix 1 of 1 (/runs/0/results/2/fixes/0)
+  Change README.md
+    Replace region {"startLine":4} with:
+      | License: MIT.
+
+Finding /runs/0/results/3 — Review bot 1.0.0
+Selector: /runs/0/results/3@e6bf06fcf799f76c
+Message:
+Retry once on timeout.
+Locations:
+  src/client.ts:2
+Fix 1 of 1 (/runs/0/results/3/fixes/0)
+  Change src/client.ts
+    Replace region {"startLine":2} with:
+      |   const response = await request(id).catch(() => request(id));
+
+Finding /runs/0/results/4 — Review bot 1.0.0
+Selector: /runs/0/results/4@e6bf06fcf799f76c
+Message:
+Revise note 3.
+Locations:
+  notes.txt:3
+Fix 1 of 1 (/runs/0/results/4/fixes/0)
+  Change notes.txt
+    Replace region {"startLine":3} with:
+      | Note 3, revised.
+
+This inspection only describes the SARIF; it does not check whether it can be published.
+
+--- stderr
+
+--- input SARIF (as given to --sarif, before the command)
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Review bot",
+          "version": "1.0.0"
+        }
+      },
+      "columnKind": "utf16CodeUnits",
+      "versionControlProvenance": [
+        {
+          "repositoryUri": "https://github.com/octo/widgets",
+          "revisionId": "feedfeedfeedfeedfeedfeedfeedfeedfeedfeed"
+        }
+      ],
+      "artifacts": [],
+      "results": [
+        {
+          "message": {
+            "text": "Fix the typo."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "README.md"
+                },
+                "region": {
+                  "startLine": 2
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "README.md"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 2
+                      },
+                      "insertedContent": {
+                        "text": "The widget client."
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "message": {
+            "text": "Fix the spelling."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "README.md"
+                },
+                "region": {
+                  "startLine": 3
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "README.md"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 3
+                      },
+                      "insertedContent": {
+                        "text": "Receive updates."
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "message": {
+            "text": "Use the American spelling."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "README.md"
+                },
+                "region": {
+                  "startLine": 4
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "README.md"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 4
+                      },
+                      "insertedContent": {
+                        "text": "License: MIT."
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "message": {
+            "text": "Retry once on timeout."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/client.ts"
+                },
+                "region": {
+                  "startLine": 2
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "src/client.ts"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 2
+                      },
+                      "insertedContent": {
+                        "text": "  const response = await request(id).catch(() => request(id));"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "message": {
+            "text": "Revise note 3."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "notes.txt"
+                },
+                "region": {
+                  "startLine": 3
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "notes.txt"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 3
+                      },
+                      "insertedContent": {
+                        "text": "Note 3, revised."
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

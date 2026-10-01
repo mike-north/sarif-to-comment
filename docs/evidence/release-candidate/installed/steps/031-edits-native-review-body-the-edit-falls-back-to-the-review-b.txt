@@ -1,0 +1,62 @@
+# 031 `--edits native,review-body`: the edit falls back to the review body, announced
+feature: delivery: announced fallback
+
+$ GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-waW17R/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/delivery-composition-waW17R/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --edits native,review-body --state <tmp>/delivery-composition-waW17R/state/review.json --format json
+exit status: 0
+
+checks:
+  PASS  the token never appears in stdout or stderr
+  PASS  exit 0, published, one delivery-fallback warning
+  PASS  the body holds the manual edit section "**Proposed edit, to make by hand:**"
+  PASS  no suggestion block anywhere
+
+--- stdout
+{
+  "command": "publish",
+  "status": "published",
+  "review": {
+    "id": 5000,
+    "url": "https://github.com/octo/widgets/pull/7#pullrequestreview-5000"
+  },
+  "statePath": "<tmp>/delivery-composition-waW17R/state/review.json",
+  "message": "## Draft review published\n\n**Published with 1 warning:** A proposal is delivered by a later mechanism of its delivery list.\n\nCreated the draft [review 5000](https://github.com/octo/widgets/pull/7#pullrequestreview-5000) on octo/widgets#7 at commit `feedfeedfeedfeedfeedfeedfeedfeedfeedfeed`. It stays a draft until someone submits it on GitHub.\n\n**Warnings:**\n\n- `delivery-fallback` at `/runs/0/results/0`: The edit of `src/client.ts` line 2 is delivered as `review-body`. `edits` is `[native, review-body]`, set by the caller (`--edits`, `delivery.edits`), and the mechanisms listed before it are unavailable:\n\n  - `native`: Lines 2-2 of src/client.ts cannot carry a native suggestion (file-not-in-diff).",
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "code": "delivery-fallback",
+      "title": "A proposal is delivered by a later mechanism of its delivery list",
+      "message": "The edit of `src/client.ts` line 2 is delivered as `review-body`. `edits` is `[native, review-body]`, set by the caller (`--edits`, `delivery.edits`), and the mechanisms listed before it are unavailable:\n\n- `native`: Lines 2-2 of src/client.ts cannot carry a native suggestion (file-not-in-diff).",
+      "location": {
+        "pointer": "/runs/0/results/0"
+      },
+      "remedies": [
+        "Remove the fix.",
+        "To use an earlier mechanism, remove the obstacle the message names, then publish again.",
+        "To refuse rather than fall back, list only the mechanism you require."
+      ]
+    }
+  ]
+}
+
+--- stderr
+
+--- input SARIF (as given to --sarif, before the command)
+{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"Review bot","version":"1.0.0"}},"columnKind":"utf16CodeUnits","versionControlProvenance":[{"repositoryUri":"https://github.com/octo/widgets","revisionId":"feedfeedfeedfeedfeedfeedfeedfeedfeedfeed"}],"artifacts":[],"results":[{"message":{"text":"Retry once on timeout."},"locations":[{"physicalLocation":{"artifactLocation":{"uri":"src/client.ts"},"region":{"startLine":2}}}],"fixes":[{"artifactChanges":[{"artifactLocation":{"uri":"src/client.ts"},"replacements":[{"deletedRegion":{"startLine":2},"insertedContent":{"text":"  const response = await request(id).catch(() => request(id));"}}]}]}]}]}]}
+--- fake host after the command (writes so far, review requests, pull requests)
+{
+  "writesSoFar": [
+    "POST /repos/octo/widgets/pulls/7/reviews"
+  ],
+  "reviews": [
+    {
+      "id": 5000,
+      "state": "PENDING",
+      "request": {
+        "commit_id": "feedfeedfeedfeedfeedfeedfeedfeedfeedfeed",
+        "body": "**Proposed edit, to make by hand:** replace [src/client.ts line 2 at feedfee](https://github.com/octo/widgets/blob/feedfeedfeedfeedfeedfeedfeedfeedfeedfeed/src/client.ts?plain=1#L2) with:\n\n```\n  const response = await request(id).catch(() => request(id));\n```\n\n**Source:** [src/client.ts line 2 at feedfee](https://github.com/octo/widgets/blob/feedfeedfeedfeedfeedfeedfeedfeedfeedfeed/src/client.ts?plain=1#L2)\n\n```\n  const response = await request(id);\n```\n\nRetry once on timeout.\n\n<sub>— Review bot 1.0.0</sub>\n\n<!-- sarif-to-comment:review:22ec8149-750a-4bb4-adcb-baf14f0ec1a1 -->",
+        "comments": []
+      }
+    }
+  ],
+  "pulls": []
+}

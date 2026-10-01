@@ -1,0 +1,143 @@
+# 059 head C1′ (amended): a creation projected faithful, created with no warning
+feature: companion fidelity: faithful
+
+$ GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/force-push-composition-XJAjAI/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/force-push-composition-XJAjAI/review.sarif --repo octo/widgets --pull 7 --commit c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1 --file-operations companion --state <tmp>/force-push-composition-XJAjAI/state/review.json --format json
+exit status: 0
+
+checks:
+  PASS  the token never appears in stdout or stderr
+  PASS  exit 0, published, no diagnostics, one companion
+  PASS  the proposal commit's parent is the reviewed commit (never re-applied)
+  PASS  the plan is version 3 and records a faithful projection onto the head
+
+--- stdout
+{
+  "command": "publish",
+  "status": "published",
+  "review": {
+    "id": 5000,
+    "url": "https://github.com/octo/widgets/pull/7#pullrequestreview-5000"
+  },
+  "suggestions": [
+    {
+      "number": 101,
+      "url": "https://github.com/octo/widgets/pull/101",
+      "branch": "suggestion-pr/7/3b186408-3776-4a50-a863-a695a77fde37"
+    }
+  ],
+  "statePath": "<tmp>/force-push-composition-XJAjAI/state/review.json",
+  "message": "## Draft review published\n\nCreated the draft [review 5000](https://github.com/octo/widgets/pull/7#pullrequestreview-5000) on octo/widgets#7 at commit `c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1`. It stays a draft until someone submits it on GitHub.\n\nSuggestion pull requests (drafts into `feature/retry`, labeled `suggestion-pr`, proposed on the reviewed commit and projected onto the head `a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1`):\n\n- [#101](https://github.com/octo/widgets/pull/101) from `suggestion-pr/7/3b186408-3776-4a50-a863-a695a77fde37`",
+  "diagnostics": []
+}
+
+--- stderr
+
+--- input SARIF (as given to --sarif, before the command)
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Review bot",
+          "version": "1.0.0"
+        }
+      },
+      "columnKind": "utf16CodeUnits",
+      "versionControlProvenance": [
+        {
+          "repositoryUri": "https://github.com/octo/widgets",
+          "revisionId": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1"
+        }
+      ],
+      "artifacts": [
+        {
+          "location": {
+            "uri": "docs/new.md"
+          },
+          "contents": {
+            "text": "# New\n"
+          },
+          "encoding": "utf-8"
+        },
+        {
+          "location": {
+            "uri": "obsolete.txt"
+          }
+        }
+      ],
+      "results": [
+        {
+          "message": {
+            "text": "Add a new page."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "docs/new.md"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "properties": {
+            "sarifToComment": {
+              "proposedFileChanges": [
+                {
+                  "operation": "create",
+                  "artifactIndex": 0
+                }
+              ]
+            }
+          }
+        },
+        {
+          "message": {
+            "text": "A general remark."
+          }
+        }
+      ]
+    }
+  ]
+}
+
+--- fake host after the command (writes so far, review requests, pull requests)
+{
+  "writesSoFar": [
+    "POST /repos/octo/widgets/git/blobs",
+    "POST /repos/octo/widgets/git/trees",
+    "POST /repos/octo/widgets/git/commits",
+    "POST /repos/octo/widgets/git/refs",
+    "POST /repos/octo/widgets/pulls",
+    "POST /repos/octo/widgets/issues/101/labels",
+    "POST /repos/octo/widgets/pulls/7/reviews"
+  ],
+  "reviews": [
+    {
+      "id": 5000,
+      "state": "PENDING",
+      "request": {
+        "commit_id": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+        "body": "**Companion pull requests of this review:**\n\n- [#101](https://github.com/octo/widgets/pull/101): `Suggestion for #7: create docs/new.md` — created with this review\n\n---\n\n**Suggestion pull request:** [#101](https://github.com/octo/widgets/pull/101)\n\nMerging it into `feature/retry` applies this change:\n\n- New file `docs/new.md`: 6 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644\n\n**Location:** line 1 of the proposed file\n\nAdd a new page.\n\n<sub>— Review bot 1.0.0</sub>\n\n---\n\nA general remark.\n\n<sub>— Review bot 1.0.0</sub>\n\n<!-- sarif-to-comment:review:1cb0f69d-385a-4bb1-b0f2-58bae45298cd -->",
+        "comments": []
+      }
+    }
+  ],
+  "pulls": [
+    {
+      "number": 101,
+      "title": "Suggestion for #7: create docs/new.md",
+      "head": "suggestion-pr/7/3b186408-3776-4a50-a863-a695a77fde37",
+      "base": "feature/retry",
+      "draft": true,
+      "state": "open",
+      "labels": [
+        "suggestion-pr"
+      ],
+      "body": "Suggested in a review of #7 at commit c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1.\n\n**The reviewed commit is not part of the branch of #7:** the branch was rewritten after commit c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1 (its head was a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1 when this was proposed). GitHub shows this pull request's changes from an older merge base, so they also list changes of the reviewed commit itself. Projected onto that head before this pull request was created, merging it applies only its own changes, which are listed below.\n\nMerging this pull request into `feature/retry` applies this change:\n\n- New file `docs/new.md`: 6 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644\n\n**How this suggestion is accepted:** it is a draft pull request into `feature/retry`, the branch of #7. A draft cannot be merged: someone with write access first marks it ready for review. The author of #7 then decides whether to merge it, and #7 carries the change to its base. Once #7 is merged or closed, this pull request can be closed.\n\n---\n\n**Location:** line 1 of the proposed file\n\nAdd a new page.\n\n<sub>— Review bot 1.0.0</sub>\n\n<!-- suggestion-pr {\"version\":1,\"original\":{\"owner\":\"octo\",\"repo\":\"widgets\",\"pullNumber\":7},\"reviewedCommit\":\"c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1\",\"id\":\"3b186408-3776-4a50-a863-a695a77fde37\",\"batch\":\"eb0ac817-1aa3-4f02-82a1-904638b3e96a\"} -->"
+    }
+  ]
+}

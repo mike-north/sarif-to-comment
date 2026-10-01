@@ -1,0 +1,46 @@
+# 052 a group with a creation, an edit and a deletion under the defaults: the mixed manual group
+feature: mixed groups
+
+$ GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-a9haOt/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/delivery-composition-a9haOt/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --state <tmp>/delivery-composition-a9haOt/state/review.json --format json
+exit status: 0
+
+checks:
+  PASS  the token never appears in stdout or stderr
+  PASS  exit 0, no diagnostics
+  PASS  guidance for 3 changes by hand, the new file content, the edit and the deletion
+
+--- stdout
+{
+  "command": "publish",
+  "status": "published",
+  "review": {
+    "id": 5000,
+    "url": "https://github.com/octo/widgets/pull/7#pullrequestreview-5000"
+  },
+  "statePath": "<tmp>/delivery-composition-a9haOt/state/review.json",
+  "message": "## Draft review published\n\nCreated the draft [review 5000](https://github.com/octo/widgets/pull/7#pullrequestreview-5000) on octo/widgets#7 at commit `feedfeedfeedfeedfeedfeedfeedfeedfeedfeed`. It stays a draft until someone submits it on GitHub.",
+  "diagnostics": []
+}
+
+--- stderr
+
+--- input SARIF (as given to --sarif, before the command)
+{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"Review bot","version":"1.0.0"}},"columnKind":"utf16CodeUnits","versionControlProvenance":[{"repositoryUri":"https://github.com/octo/widgets","revisionId":"feedfeedfeedfeedfeedfeedfeedfeedfeedfeed"}],"artifacts":[{"location":{"uri":"docs/guide.md"},"contents":{"text":"# Guide\n\nUse the client.\n"},"encoding":"utf-8"},{"location":{"uri":"obsolete.txt"}}],"results":[{"message":{"text":"Add a guide."},"locations":[{"physicalLocation":{"artifactLocation":{"uri":"docs/guide.md"},"region":{"startLine":1}}}],"properties":{"sarifToComment":{"suggestionGroup":"mix","proposedFileChanges":[{"operation":"create","artifactIndex":0}]}}},{"message":{"text":"Revise note 5."},"locations":[{"physicalLocation":{"artifactLocation":{"uri":"notes.txt"},"region":{"startLine":5}}}],"fixes":[{"artifactChanges":[{"artifactLocation":{"uri":"notes.txt"},"replacements":[{"deletedRegion":{"startLine":5},"insertedContent":{"text":"Note 5, revised."}}]}]}],"properties":{"sarifToComment":{"suggestionGroup":"mix"}}},{"message":{"text":"Remove the obsolete file."},"locations":[{"physicalLocation":{"artifactLocation":{"uri":"obsolete.txt"}}}],"properties":{"sarifToComment":{"suggestionGroup":"mix","proposedFileChanges":[{"operation":"delete","artifactIndex":1}]}}}]}]}
+--- fake host after the command (writes so far, review requests, pull requests)
+{
+  "writesSoFar": [
+    "POST /repos/octo/widgets/pulls/7/reviews"
+  ],
+  "reviews": [
+    {
+      "id": 5000,
+      "state": "PENDING",
+      "request": {
+        "commit_id": "feedfeedfeedfeedfeedfeedfeedfeedfeedfeed",
+        "body": "**Suggestion group `mix`:** apply these 3 changes together, by hand, in one commit: make every change below in a local copy of the pull request's branch, then commit them together. They are not offered as suggestions, and nothing checks that they are applied together.\n\n- `docs/guide.md`: new file\n- `notes.txt` line 5\n- `obsolete.txt`: file deletion\n\n---\n\n**Suggestion group `mix` — change 1 of 3**\n\n**Proposed new file:** `docs/guide.md`\n\n**File details:** 25 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644\n\n```\n# Guide\n\nUse the client.\n```\n\n**Location:** line 1 of the proposed file\n\nAdd a guide.\n\n<sub>— Review bot 1.0.0</sub>\n\n---\n\n**Suggestion group `mix` — change 2 of 3**\n\n**Proposed edit, to make by hand:** replace [notes.txt line 5 at feedfee](https://github.com/octo/widgets/blob/feedfeedfeedfeedfeedfeedfeedfeedfeedfeed/notes.txt?plain=1#L5) with:\n\n```\nNote 5, revised.\n```\n\n**Source:** [notes.txt line 5 at feedfee](https://github.com/octo/widgets/blob/feedfeedfeedfeedfeedfeedfeedfeedfeedfeed/notes.txt?plain=1#L5)\n\n```\nNote 5.\n```\n\nRevise note 5.\n\n<sub>— Review bot 1.0.0</sub>\n\n---\n\n**Suggestion group `mix` — change 3 of 3**\n\n**Proposed file deletion:** [obsolete.txt at feedfee](https://github.com/octo/widgets/blob/feedfeedfeedfeedfeedfeedfeedfeedfeedfeed/obsolete.txt)\n\nThe whole file is removed; this is not a proposal to empty it.\n\nRemove the obsolete file.\n\n<sub>— Review bot 1.0.0</sub>\n\n<!-- sarif-to-comment:review:747b295f-9d29-4902-8546-1350594ff306 -->",
+        "comments": []
+      }
+    }
+  ],
+  "pulls": []
+}

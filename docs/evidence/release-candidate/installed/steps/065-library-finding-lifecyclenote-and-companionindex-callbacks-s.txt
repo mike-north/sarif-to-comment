@@ -1,0 +1,71 @@
+# 065 library: finding, lifecycleNote and companionIndex callbacks shape the companion and the review
+feature: presentation callbacks
+
+$ GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-OR4UvA/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts SARIF='{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"Review…(628 chars)' REVIEW_COMMIT=feedfeedfeedfeedfeedfeedfeedfeedfeedfeed REVIEW_STATE=<tmp>/delivery-composition-OR4UvA/state/review.json node <consumer>/u8-presentation.mjs
+exit status: 0
+
+checks:
+  PASS  the token never appears in stdout or stderr
+  PASS  exit 0 (in-script assertions held)
+  PASS  the companion description carries the custom lifecycle note and finding, and still ends with its marker
+  PASS  the review body begins with the custom index
+
+--- script
+import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
+import { publishSarifReview, validateSarifReview } from 'sarif-to-comment';
+const tick = String.fromCharCode(96);
+const presentation = {
+  finding: (c) => c.message + ' (' + c.attribution + ')',
+  lifecycleNote: (c) => '**Accepting:** a ' + (c.ready ? 'ready' : 'draft') + ' proposal into ' + tick + c.headRef + tick + ' for #' + c.pullNumber + '.',
+  companionIndex: (c) => c.companions.map((x) => '* ' + x.link + ' (' + x.origin + ')').join('\n'),
+};
+const input = { sarif: JSON.parse(process.env.SARIF), destination: { owner: 'octo', repo: 'widgets', pullNumber: 7 }, reviewedCommit: process.env.REVIEW_COMMIT, token: process.env.GH_TOKEN };
+const options = { delivery: { fileOperations: ['companion'] }, presentation };
+const assessed = await validateSarifReview({ ...input, options });
+assert.equal(assessed.status, 'ready', assessed.markdown);
+const outcome = await publishSarifReview({ ...input, statePath: process.env.REVIEW_STATE, options });
+assert.equal(outcome.status, 'published', outcome.markdown);
+process.stdout.write(JSON.stringify({ assessed: assessed.status, published: outcome.status, suggestions: outcome.suggestions.length }));
+
+--- stdout
+{"assessed":"ready","published":"published","suggestions":1}
+--- stderr
+
+--- fake host after the command (writes so far, review requests, pull requests)
+{
+  "writesSoFar": [
+    "POST /repos/octo/widgets/git/blobs",
+    "POST /repos/octo/widgets/git/trees",
+    "POST /repos/octo/widgets/git/commits",
+    "POST /repos/octo/widgets/git/refs",
+    "POST /repos/octo/widgets/pulls",
+    "POST /repos/octo/widgets/issues/101/labels",
+    "POST /repos/octo/widgets/pulls/7/reviews"
+  ],
+  "reviews": [
+    {
+      "id": 5000,
+      "state": "PENDING",
+      "request": {
+        "commit_id": "feedfeedfeedfeedfeedfeedfeedfeedfeedfeed",
+        "body": "* [#101](https://github.com/octo/widgets/pull/101) (created)\n\n---\n\n**Suggestion pull request:** [#101](https://github.com/octo/widgets/pull/101)\n\nMerging it into `feature/retry` applies this change:\n\n- New file `docs/guide.md`: 25 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644\n\n**Location:** line 1 of the proposed file\n\nAdd a guide. (Review bot 1.0.0)\n\n<!-- sarif-to-comment:review:6d6530b9-47e6-4497-99f5-f7139b23d189 -->",
+        "comments": []
+      }
+    }
+  ],
+  "pulls": [
+    {
+      "number": 101,
+      "title": "Suggestion for #7: create docs/guide.md",
+      "head": "suggestion-pr/7/aa482755-8934-4ec7-a229-b36b5f662ffe",
+      "base": "feature/retry",
+      "draft": true,
+      "state": "open",
+      "labels": [
+        "suggestion-pr"
+      ],
+      "body": "Suggested in a review of #7 at commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed.\n\nMerging this pull request into `feature/retry` applies this change:\n\n- New file `docs/guide.md`: 25 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644\n\n**Accepting:** a draft proposal into `feature/retry` for #7.\n\n---\n\n**Location:** line 1 of the proposed file\n\nAdd a guide. (Review bot 1.0.0)\n\n<!-- suggestion-pr {\"version\":1,\"original\":{\"owner\":\"octo\",\"repo\":\"widgets\",\"pullNumber\":7},\"reviewedCommit\":\"feedfeedfeedfeedfeedfeedfeedfeedfeedfeed\",\"id\":\"aa482755-8934-4ec7-a229-b36b5f662ffe\",\"batch\":\"cd4d5d4d-3560-4a7d-a5ec-4a20beeac125\"} -->"
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+Verified sarif-to-comment-0.2.1.tgz: 537 files, all inside the distribution boundary.
+exit 0

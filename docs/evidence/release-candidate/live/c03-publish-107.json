@@ -1,0 +1,18 @@
+{
+  "command": "publish",
+  "status": "published",
+  "review": {
+    "id": 5378749555,
+    "url": "https://github.com/mike-north/doc-linter/pull/107#pullrequestreview-5378749555"
+  },
+  "suggestions": [
+    {
+      "number": 108,
+      "url": "https://github.com/mike-north/doc-linter/pull/108",
+      "branch": "suggestion-pr/107/7e5f9d0c-d206-4fa4-b752-7daa9659ede1"
+    }
+  ],
+  "statePath": "<evidence>/state/review-107.json",
+  "message": "## Draft review published\n\nCreated the draft [review 5378749555](https://github.com/mike-north/doc-linter/pull/107#pullrequestreview-5378749555) on mike-north/doc-linter#107 at commit `920fc63ae2fde7a398dd63c1d80dad425c7fc085`. It stays a draft until someone submits it on GitHub.\n\nSuggestion pull requests (drafts into `sarif-rc030-crlf-20261001`, labeled `suggestion-pr`, proposed on the reviewed commit and projected onto the head `37064469185a2a04ffef0063059c5c6fd8332c31`):\n\n- [#108](https://github.com/mike-north/doc-linter/pull/108) from `suggestion-pr/107/7e5f9d0c-d206-4fa4-b752-7daa9659ede1`",
+  "diagnostics": []
+}

@@ -1,0 +1,9 @@
+{
+  "format": "sarif-to-comment.companion-step",
+  "version": 1,
+  "publication": "b44104cc-7cf4-4bf0-8325-46e72d7ac150",
+  "suggestion": "7e5f9d0c-d206-4fa4-b752-7daa9659ede1",
+  "step": "labels",
+  "number": 108,
+  "phase": "completed"
+}

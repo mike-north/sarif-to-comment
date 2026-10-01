@@ -1,0 +1,64 @@
+# 124 parse the example workflow YAML (yaml 2.x) and check its shape
+feature: example workflow
+
+$ node: yaml.parse(<repo>/docs/examples/abandonment-cleanup.workflow.yml)
+exit status: 0
+
+checks:
+  PASS  parses as YAML
+  PASS  triggers only on pull_request closed, never pull_request_target
+  PASS  the job runs only when the event says not merged
+  PASS  it waits two minutes (sleep 120) before cleanup
+  PASS  permissions: pull-requests write, contents read, issues read
+  PASS  the credential is the repository secret SARIF_TO_COMMENT_TOKEN (a personal access token), not github.token
+  PASS  it runs close-suggestion-prs --repo --original --if-abandoned --owner all, pinned to sarif-to-comment@0.3.0
+  PASS  no checkout step
+  PASS  concurrency cancels an earlier waiting run for the same pull request
+
+--- stdout
+{
+  "name": "Close suggestion pull requests of an abandoned pull request",
+  "on": {
+    "pull_request": {
+      "types": [
+        "closed"
+      ]
+    }
+  },
+  "permissions": {
+    "pull-requests": "write",
+    "contents": "read",
+    "issues": "read"
+  },
+  "jobs": {
+    "close-abandoned-suggestions": {
+      "if": "github.event.pull_request.merged == false",
+      "runs-on": "ubuntu-latest",
+      "concurrency": {
+        "group": "abandonment-cleanup-${{ github.event.pull_request.number }}",
+        "cancel-in-progress": true
+      },
+      "steps": [
+        {
+          "name": "Wait two minutes, so that a quick close and reopen is not treated as abandonment",
+          "run": "sleep 120"
+        },
+        {
+          "uses": "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+          "with": {
+            "node-version": 24,
+            "package-manager-cache": false
+          }
+        },
+        {
+          "name": "Close its suggestion pull requests if it is still closed without merging",
+          "env": {
+            "GH_TOKEN": "${{ secrets.SARIF_TO_COMMENT_TOKEN }}"
+          },
+          "run": "npx --yes sarif-to-comment@0.3.0 close-suggestion-prs --repo ${{ github.repository }} --original ${{ github.event.pull_request.number }} --if-abandoned --owner all"
+        }
+      ]
+    }
+  }
+}
+--- stderr

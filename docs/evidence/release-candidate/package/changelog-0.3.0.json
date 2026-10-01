@@ -1,0 +1,42 @@
+{
+  "renderedIn": "a throwaway clone of the fresh clone, checked out at 99b461d599d58d4bcca7fc7cfdad5d4b0076343b, after pnpm install --frozen-lockfile; never in the worktree",
+  "command": "pnpm run release:version (node scripts/release-guard.mts version: the release plan, then changeset version, then a re-check)",
+  "exit": 0,
+  "lastOutputLine": "Versioned sarif-to-comment 0.3.0. Review, commit and merge to main to release it.",
+  "packageJsonVersionAfter": "0.3.0",
+  "changesTo": [
+    "D .changeset/01-suggestion-pull-requests.md",
+    " D .changeset/02-delivery-policy.md",
+    " D .changeset/03-file-operations-and-alternatives.md",
+    " D .changeset/04-suggestion-groups.md",
+    " D .changeset/05-reviews-of-an-earlier-commit.md",
+    " D .changeset/06-validate.md",
+    " D .changeset/07-remove-comment.md",
+    " D .changeset/08-submitted-review.md",
+    " D .changeset/09-close-suggestion-prs.md",
+    " D .changeset/09a-abandonment-cleanup.md",
+    " D .changeset/10-command-line.md",
+    " D .changeset/11-presentation-callbacks.md",
+    " D .changeset/12-structured-diagnostics.md",
+    " D .changeset/13-publication-state.md",
+    " D .changeset/14-producer-markdown.md",
+    " D .changeset/15-fixes.md",
+    " M CHANGELOG.md",
+    " M package.json"
+  ],
+  "changelog": {
+    "path": "CHANGELOG.md",
+    "bytes": 69745,
+    "characters": 69642,
+    "lines": 751,
+    "sha256": "8a8067258e331003dd48411af8dae6bf1ecd7abd83e67a355129881af7d26fa5"
+  },
+  "section030": {
+    "from": "## 0.3.0",
+    "to": "up to, not including, ## 0.2.1",
+    "bytes": 66548,
+    "lines": 708,
+    "sha256": "6470b65abbf6cf8c920b0200ad31f485dbd41da925ba93d5ed3578946faea0a1"
+  },
+  "copy": "CHANGELOG-0.3.0-rendered.txt (the rendered file, byte for byte)"
+}

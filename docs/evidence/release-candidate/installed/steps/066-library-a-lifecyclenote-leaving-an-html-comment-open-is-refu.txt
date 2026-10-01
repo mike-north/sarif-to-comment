@@ -1,0 +1,33 @@
+# 066 library: a lifecycleNote leaving an HTML comment open is refused with a TypeError before any write
+feature: presentation callbacks
+
+$ GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-G8fqy1/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts SARIF='{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"Review…(628 chars)' REVIEW_COMMIT=feedfeedfeedfeedfeedfeedfeedfeedfeedfeed REVIEW_STATE=<tmp>/delivery-composition-G8fqy1/state/review.json node <consumer>/u8-presentation-refused.mjs
+exit status: 0
+
+checks:
+  PASS  the token never appears in stdout or stderr
+  PASS  exit 0 (TypeError asserted, no state file)
+  PASS  nothing written to the host
+
+--- script
+import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
+import { publishSarifReview } from 'sarif-to-comment';
+const input = { sarif: JSON.parse(process.env.SARIF), destination: { owner: 'octo', repo: 'widgets', pullNumber: 7 }, reviewedCommit: process.env.REVIEW_COMMIT, token: process.env.GH_TOKEN, statePath: process.env.REVIEW_STATE };
+await assert.rejects(
+  publishSarifReview({ ...input, options: { delivery: { fileOperations: ['companion'] }, presentation: { lifecycleNote: () => 'Accept it.\n\n<!--' } } }),
+  (error) => error instanceof TypeError && /options\.presentation\.lifecycleNote returned Markdown that leaves an HTML <!-- construct open/.test(error.message),
+);
+assert.equal(existsSync(process.env.REVIEW_STATE), false);
+process.stdout.write('refused');
+
+--- stdout
+refused
+--- stderr
+
+--- fake host after the command (writes so far, review requests, pull requests)
+{
+  "writesSoFar": [],
+  "reviews": [],
+  "pulls": []
+}

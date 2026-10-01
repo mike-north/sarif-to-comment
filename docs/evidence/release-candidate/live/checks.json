@@ -1,0 +1,162 @@
+{
+  "checks": [
+    {
+      "step": "c00 fixture",
+      "name": "main is 0a7b03f after the run (never touched)",
+      "pass": true
+    },
+    {
+      "step": "c00 fixture",
+      "name": "#107 is open, draft, into main, head 3706446",
+      "pass": true
+    },
+    {
+      "step": "c00 fixture",
+      "name": "the timeline records one force-push, 920fc63 -> 3706446",
+      "pass": true
+    },
+    {
+      "step": "c01 validate",
+      "name": "exit 0, status ready, no diagnostics",
+      "pass": true
+    },
+    {
+      "step": "c01 validate",
+      "name": "plans one draft suggestion pull request, projected onto the head 37064469185a2a04ffef0063059c5c6fd8332c31",
+      "pass": true
+    },
+    {
+      "step": "c01 validate",
+      "name": "stderr empty",
+      "pass": true
+    },
+    {
+      "step": "c03 publish",
+      "name": "exit 0, status published, no diagnostics",
+      "pass": true
+    },
+    {
+      "step": "c03 publish",
+      "name": "one review and one suggestion pull request, #108",
+      "pass": true
+    },
+    {
+      "step": "c03 publish",
+      "name": "stderr empty",
+      "pass": true
+    },
+    {
+      "step": "c04 companion",
+      "name": "#108 is open, draft, into sarif-rc030-crlf-20261001, labeled suggestion-pr",
+      "pass": true
+    },
+    {
+      "step": "c04 companion",
+      "name": "GitHub reports it mergeable (MERGEABLE, CLEAN)",
+      "pass": true
+    },
+    {
+      "step": "c04 companion",
+      "name": "the description read by gh pr view equals the one read by GraphQL",
+      "pass": true
+    },
+    {
+      "step": "c04 companion",
+      "name": "the description holds the projection section exactly as §2.11 specifies: the hunk states \"CRLF line endings become LF line endings\", U+200B is written {U+200B}, and the escapes note follows",
+      "pass": true
+    },
+    {
+      "step": "c04 companion",
+      "name": "no raw U+200B, U+00A0 or carriage return reaches the description",
+      "pass": true
+    },
+    {
+      "step": "c04 companion",
+      "name": "the description ends with a version 1 marker naming mike-north/doc-linter#107 and the reviewed commit",
+      "pass": true
+    },
+    {
+      "step": "c04 companion",
+      "name": "its commits are R (parent C0) and the proposal commit 5747d6a (parent R)",
+      "pass": true
+    },
+    {
+      "step": "c05 bytes",
+      "name": "the branch tip is 5747d6a, whose only parent is R",
+      "pass": true
+    },
+    {
+      "step": "c05 bytes",
+      "name": "git: the committed crlf.txt is exactly 4f6e6c79206c696e652c e2808b 77697468204c462e 0a (\"Only line,\", U+200B, \"with LF.\", one LF, no CR)",
+      "pass": true
+    },
+    {
+      "step": "c05 bytes",
+      "name": "git: the proposal commit changes only crlf.txt; sample.md is the reviewed commit's blob",
+      "pass": true
+    },
+    {
+      "step": "c06 bytes",
+      "name": "GitHub: the blob on the suggestion branch is 22 bytes, not binary, and its text is exactly the replacement",
+      "pass": true
+    },
+    {
+      "step": "c06 bytes",
+      "name": "GitHub: the blob at the reviewed commit is the CRLF original (23 bytes)",
+      "pass": true
+    },
+    {
+      "step": "c06 review",
+      "name": "one review on #107: 5378749555, PENDING, at the reviewed commit, no inline comment",
+      "pass": true
+    },
+    {
+      "step": "c06 review",
+      "name": "its body equals the request recorded before sending, and the recorded commit is R",
+      "pass": true
+    },
+    {
+      "step": "c06 review",
+      "name": "the body begins with the companion index listing #108, created with this review",
+      "pass": true
+    },
+    {
+      "step": "c06 review",
+      "name": "the plan is version 3 and records a faithful projection onto A from merge base C0",
+      "pass": true
+    },
+    {
+      "step": "c08 guard: open #107",
+      "name": "exit 0, original-not-abandoned, dry run, originals [{107, open}], no suggestions, zero counts",
+      "pass": true
+    },
+    {
+      "step": "c08 guard: open #107",
+      "name": "exactly one note, original-pull-request-not-abandoned, about mike-north/doc-linter#107, with the §2.12 message",
+      "pass": true
+    },
+    {
+      "step": "c09 guard: open #107 (human)",
+      "name": "exit 0; stdout is the skip title and \"Nothing was checked or closed.\"; the note is on stderr",
+      "pass": true
+    },
+    {
+      "step": "c10 guard: closed #57",
+      "name": "exit 0, complete, dry run, #57 closed (without merging), #59 already-closed, counts 1/1/1/1, no diagnostics",
+      "pass": true
+    },
+    {
+      "step": "c11 guard: closed #57 (human)",
+      "name": "exit 0; \"- #57: closed without merging\", \"- #59 (for #57): already closed\", \"This was a dry run: nothing was closed.\"; stderr empty",
+      "pass": true
+    },
+    {
+      "step": "c07/c12 states",
+      "name": "#107, #108, #57 and #59 have identical states before and after the guarded runs",
+      "pass": true
+    }
+  ],
+  "total": 31,
+  "passed": 31,
+  "failed": 0
+}

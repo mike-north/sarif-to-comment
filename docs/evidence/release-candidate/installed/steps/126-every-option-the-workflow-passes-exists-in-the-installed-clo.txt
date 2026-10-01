@@ -1,0 +1,94 @@
+# 126 every option the workflow passes exists in the installed close-suggestion-prs --help
+feature: example workflow
+
+$ sarif-to-comment close-suggestion-prs --help
+exit status: 0
+
+checks:
+  PASS  --repo, --original, --if-abandoned and --owner me|all are in the installed help
+
+--- stdout
+sarif-to-comment close-suggestion-prs — close suggestions whose original ended
+
+Usage:
+  sarif-to-comment close-suggestion-prs --repo OWNER/REPO [--owner me|all]
+                                        [--label NAME [--force]]
+                                        [--max-candidates N] [--dry-run]
+                                        [--format human|json|toon]
+  sarif-to-comment close-suggestion-prs --repo OWNER/REPO --original N
+                                        [--if-abandoned] [--owner me|all]
+                                        [--label NAME] [--dry-run]
+                                        [--format human|json|toon]
+
+Closes open suggestion pull requests (made by publish with a delivery list that
+names companion, or by any tool following the suggestion pull request
+convention) whose original pull request has merged or closed. They are found by
+their suggestion-pr/ branches and recognized by the marker in their description,
+never by their title. They must carry the repository's suggestion label:
+suggestion-pr, or the label in .github/suggestion-prs.json on the default
+branch; an invalid file stops the command. By default only suggestion pull
+requests opened by the account of the token are closed. A suggestion is closed
+only after its original has been read and found merged or closed and the
+suggestion itself has been read again; an original that cannot be read is never
+treated as ended. Everything is read before anything is closed. Closing never
+deletes a branch, and nothing else is changed. Running it again is safe.
+
+A sweep first counts its candidates in one request. A --label sweep whose first
+20 pull requests show no suggestion marker and no suggestion-pr/ branch stops
+there. Then a sweep checks nothing when there are more candidates than the
+limit. The suggestion-pr/ branches counted include those of suggestions already
+closed, because closing never deletes a branch, so an active repository can
+reach the limit over time: raise it with --max-candidates.
+
+Options:
+  --repo OWNER/REPO              Repository whose suggestion pull requests are
+                                 checked.
+  --owner me|all                 Whose suggestion pull requests may be closed,
+                                 by who opened them (default me: the account of
+                                 the token). Others are reported and left open.
+  --label NAME                   Check the open pull requests with this label
+                                 instead, for suggestions left under a
+                                 previously configured label. The repository's
+                                 suggestion label is then not read.
+  --force                        Requires --label: check every pull request even
+                                 when the first 20 do not look like suggestion
+                                 pull requests. The limit still applies.
+  --original N                   Check only the pull requests that reference
+                                 original pull request N, instead of sweeping.
+                                 If N does not exist, nothing can reference it:
+                                 the cleanup is complete, with a warning.
+  --if-abandoned                 Requires --original: first read N, and go on
+                                 only if it is closed without merging. If N is
+                                 open (for example reopened), merged or not
+                                 found, nothing is checked or closed (exit 0,
+                                 with a note). If N cannot be read, it is an
+                                 error. It never waits: a delay before it runs
+                                 is the caller's, for example a workflow's.
+  --max-candidates N             The most candidates a sweep checks: suggestion
+                                 branches, or pull requests with the --label
+                                 (default 500). More stops it before any check.
+                                 Not with --original, which has no limit.
+  --dry-run                      Read and verify everything, close nothing.
+  --format human|json|toon       Output format (default human). JSON and TOON
+                                 print one document on stdout for every outcome.
+  --color auto|always|never      Color diagnostics (default auto: only on a
+                                 terminal; NO_COLOR and FORCE_COLOR apply).
+
+Credentials (validate, publish and close-suggestion-prs only):
+  GH_TOKEN, or else GITHUB_TOKEN: a GitHub personal access token or user token.
+  GitHub App installation tokens (including the automatic Actions token) are
+  not supported. There is no token flag.
+
+Exit status:
+  0  complete: nothing left to do (also a dry run, and an --original pull
+     request that does not exist); or skipped by --if-abandoned: the original
+     is not closed without merging, so nothing was checked
+  2  permission-limited: some suggestion pull requests could not be closed with
+     this token; someone allowed to close them can finish. Also: the --label
+     does not mark suggestion pull requests (nothing was checked; see --force)
+  3  incomplete: an original could not be verified or an action failed; run
+     it again later
+  1  usage error, missing token, more candidates than --max-candidates, or
+     operational failure (nothing was closed)
+
+--- stderr

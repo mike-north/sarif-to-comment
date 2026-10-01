@@ -1,0 +1,151 @@
+# 121 usage error in json: --if-abandoned without --original
+feature: --if-abandoned
+
+$ GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/abandon-YqbKgx/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment close-suggestion-prs --repo octo/cleanup-ab --if-abandoned --format json
+exit status: 1
+
+checks:
+  PASS  the token never appears in stdout or stderr
+  PASS  exit 1, one usage-error document with the message
+
+--- stdout
+{
+  "command": "close-suggestion-prs",
+  "status": "usage-error",
+  "message": "--if-abandoned requires --original (it checks that original pull request)",
+  "usage": "sarif-to-comment close-suggestion-prs — close suggestions whose original ended\n\nUsage:\n  sarif-to-comment close-suggestion-prs --repo OWNER/REPO [--owner me|all]\n                                        [--label NAME [--force]]\n                                        [--max-candidates N] [--dry-run]\n                                        [--format human|json|toon]\n  sarif-to-comment close-suggestion-prs --repo OWNER/REPO --original N\n                                        [--if-abandoned] [--owner me|all]\n                                        [--label NAME] [--dry-run]\n                                        [--format human|json|toon]\n\nCloses open suggestion pull requests (made by publish with a delivery list that\nnames companion, or by any tool following the suggestion pull request\nconvention) whose original pull request has merged or closed. They are found by\ntheir suggestion-pr/ branches and recognized by the marker in their description,\nnever by their title. They must carry the repository's suggestion label:\nsuggestion-pr, or the label in .github/suggestion-prs.json on the default\nbranch; an invalid file stops the command. By default only suggestion pull\nrequests opened by the account of the token are closed. A suggestion is closed\nonly after its original has been read and found merged or closed and the\nsuggestion itself has been read again; an original that cannot be read is never\ntreated as ended. Everything is read before anything is closed. Closing never\ndeletes a branch, and nothing else is changed. Running it again is safe.\n\nA sweep first counts its candidates in one request. A --label sweep whose first\n20 pull requests show no suggestion marker and no suggestion-pr/ branch stops\nthere. Then a sweep checks nothing when there are more candidates than the\nlimit. The suggestion-pr/ branches counted include those of suggestions already\nclosed, because closing never deletes a branch, so an active repository can\nreach the limit over time: raise it with --max-candidates.\n\nOptions:\n  --repo OWNER/REPO              Repository whose suggestion pull requests are\n                                 checked.\n  --owner me|all                 Whose suggestion pull requests may be closed,\n                                 by who opened them (default me: the account of\n                                 the token). Others are reported and left open.\n  --label NAME                   Check the open pull requests with this label\n                                 instead, for suggestions left under a\n                                 previously configured label. The repository's\n                                 suggestion label is then not read.\n  --force                        Requires --label: check every pull request even\n                                 when the first 20 do not look like suggestion\n                                 pull requests. The limit still applies.\n  --original N                   Check only the pull requests that reference\n                                 original pull request N, instead of sweeping.\n                                 If N does not exist, nothing can reference it:\n                                 the cleanup is complete, with a warning.\n  --if-abandoned                 Requires --original: first read N, and go on\n                                 only if it is closed without merging. If N is\n                                 open (for example reopened), merged or not\n                                 found, nothing is checked or closed (exit 0,\n                                 with a note). If N cannot be read, it is an\n                                 error. It never waits: a delay before it runs\n                                 is the caller's, for example a workflow's.\n  --max-candidates N             The most candidates a sweep checks: suggestion\n                                 branches, or pull requests with the --label\n                                 (default 500). More stops it before any check.\n                                 Not with --original, which has no limit.\n  --dry-run                      Read and verify everything, close nothing.\n  --format human|json|toon       Output format (default human). JSON and TOON\n                                 print one document on stdout for every outcome.\n  --color auto|always|never      Color diagnostics (default auto: only on a\n                                 terminal; NO_COLOR and FORCE_COLOR apply).\n\nCredentials (validate, publish and close-suggestion-prs only):\n  GH_TOKEN, or else GITHUB_TOKEN: a GitHub personal access token or user token.\n  GitHub App installation tokens (including the automatic Actions token) are\n  not supported. There is no token flag.\n\nExit status:\n  0  complete: nothing left to do (also a dry run, and an --original pull\n     request that does not exist); or skipped by --if-abandoned: the original\n     is not closed without merging, so nothing was checked\n  2  permission-limited: some suggestion pull requests could not be closed with\n     this token; someone allowed to close them can finish. Also: the --label\n     does not mark suggestion pull requests (nothing was checked; see --force)\n  3  incomplete: an original could not be verified or an action failed; run\n     it again later\n  1  usage error, missing token, more candidates than --max-candidates, or\n     operational failure (nothing was closed)\n",
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "usage-error",
+      "title": "The command line is not valid",
+      "message": "--if-abandoned requires --original (it checks that original pull request)",
+      "subject": "close-suggestion-prs",
+      "remedies": [
+        "Run `sarif-to-comment close-suggestion-prs --help` for usage."
+      ]
+    }
+  ]
+}
+
+--- stderr
+
+--- fake host after the command (writes so far, review requests, pull requests)
+{
+  "writesSoFar": [
+    "PATCH /repos/octo/cleanup-ab/pulls/62"
+  ],
+  "reviews": [],
+  "pulls": [
+    {
+      "number": 50,
+      "title": "Original 50",
+      "head": "feature-50",
+      "base": "main",
+      "draft": false,
+      "state": "open",
+      "labels": [],
+      "body": ""
+    },
+    {
+      "number": 51,
+      "title": "Original 51",
+      "head": "feature-51",
+      "base": "main",
+      "draft": false,
+      "state": "closed",
+      "labels": [],
+      "body": ""
+    },
+    {
+      "number": 52,
+      "title": "Original 52",
+      "head": "feature-52",
+      "base": "main",
+      "draft": false,
+      "state": "closed",
+      "labels": [],
+      "body": ""
+    },
+    {
+      "number": 53,
+      "title": "Original 53",
+      "head": "feature-53",
+      "base": "main",
+      "draft": false,
+      "state": "closed",
+      "labels": [],
+      "body": ""
+    },
+    {
+      "number": 54,
+      "title": "Original 54",
+      "head": "feature-54",
+      "base": "main",
+      "draft": false,
+      "state": "closed",
+      "labels": [],
+      "body": ""
+    },
+    {
+      "number": 60,
+      "title": "Suggestion for #50",
+      "head": "suggestion-pr/50/00000000-0000-4000-8000-000000000060",
+      "base": "feature-50",
+      "draft": true,
+      "state": "open",
+      "labels": [
+        "suggestion-pr"
+      ],
+      "body": "Suggested in a review of #50 at commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed.\n\n<!-- suggestion-pr {\"version\":1,\"original\":{\"owner\":\"octo\",\"repo\":\"cleanup-ab\",\"pullNumber\":50},\"reviewedCommit\":\"feedfeedfeedfeedfeedfeedfeedfeedfeedfeed\",\"id\":\"00000000-0000-4000-8000-000000000060\",\"batch\":\"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb\"} -->"
+    },
+    {
+      "number": 61,
+      "title": "Suggestion for #51",
+      "head": "suggestion-pr/51/00000000-0000-4000-8000-000000000061",
+      "base": "feature-51",
+      "draft": true,
+      "state": "open",
+      "labels": [
+        "suggestion-pr"
+      ],
+      "body": "Suggested in a review of #51 at commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed.\n\n<!-- suggestion-pr {\"version\":1,\"original\":{\"owner\":\"octo\",\"repo\":\"cleanup-ab\",\"pullNumber\":51},\"reviewedCommit\":\"feedfeedfeedfeedfeedfeedfeedfeedfeedfeed\",\"id\":\"00000000-0000-4000-8000-000000000061\",\"batch\":\"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb\"} -->"
+    },
+    {
+      "number": 62,
+      "title": "Suggestion for #52",
+      "head": "suggestion-pr/52/00000000-0000-4000-8000-000000000062",
+      "base": "feature-52",
+      "draft": true,
+      "state": "closed",
+      "labels": [
+        "suggestion-pr"
+      ],
+      "body": "Suggested in a review of #52 at commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed.\n\n<!-- suggestion-pr {\"version\":1,\"original\":{\"owner\":\"octo\",\"repo\":\"cleanup-ab\",\"pullNumber\":52},\"reviewedCommit\":\"feedfeedfeedfeedfeedfeedfeedfeedfeedfeed\",\"id\":\"00000000-0000-4000-8000-000000000062\",\"batch\":\"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb\"} -->"
+    },
+    {
+      "number": 63,
+      "title": "Suggestion for #53",
+      "head": "suggestion-pr/53/00000000-0000-4000-8000-000000000063",
+      "base": "feature-53",
+      "draft": true,
+      "state": "open",
+      "labels": [
+        "suggestion-pr"
+      ],
+      "body": "Suggested in a review of #53 at commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed.\n\n<!-- suggestion-pr {\"version\":1,\"original\":{\"owner\":\"octo\",\"repo\":\"cleanup-ab\",\"pullNumber\":53},\"reviewedCommit\":\"feedfeedfeedfeedfeedfeedfeedfeedfeedfeed\",\"id\":\"00000000-0000-4000-8000-000000000063\",\"batch\":\"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb\"} -->"
+    },
+    {
+      "number": 64,
+      "title": "Suggestion for #54",
+      "head": "suggestion-pr/54/00000000-0000-4000-8000-000000000064",
+      "base": "feature-54",
+      "draft": true,
+      "state": "open",
+      "labels": [
+        "suggestion-pr"
+      ],
+      "body": "Suggested in a review of #54 at commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed.\n\n<!-- suggestion-pr {\"version\":1,\"original\":{\"owner\":\"octo\",\"repo\":\"cleanup-ab\",\"pullNumber\":54},\"reviewedCommit\":\"feedfeedfeedfeedfeedfeedfeedfeedfeedfeed\",\"id\":\"00000000-0000-4000-8000-000000000064\",\"batch\":\"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb\"} -->"
+    }
+  ]
+}

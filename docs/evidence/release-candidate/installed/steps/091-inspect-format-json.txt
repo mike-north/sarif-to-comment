@@ -1,0 +1,289 @@
+# 091 inspect --format json
+feature: every --format
+
+$ sarif-to-comment inspect --sarif <tmp>/formats-9CPypa/r.sarif --format json --color never
+exit status: 0
+
+checks:
+  PASS  exit 0 and the group appears
+
+--- stdout
+{
+  "command": "inspect",
+  "status": "inspected",
+  "view": {
+    "format": "sarif-to-comment.inspection",
+    "version": 1,
+    "summary": {
+      "runs": 1,
+      "findings": 2,
+      "fixes": 2,
+      "fileProposals": 0,
+      "truncatedPreviews": 0
+    },
+    "runs": [
+      {
+        "index": 0,
+        "ref": "/runs/0",
+        "tool": {
+          "name": "Review bot",
+          "version": "1.0.0"
+        },
+        "source": {
+          "state": "declared",
+          "provenance": [
+            {
+              "repositoryUri": "https://github.com/octo/widgets",
+              "revisionId": "feedfeedfeedfeedfeedfeedfeedfeedfeedfeed"
+            }
+          ]
+        },
+        "columnKind": "utf16CodeUnits",
+        "otherContent": {
+          "tool": {
+            "driver": {
+              "name": "Review bot",
+              "version": "1.0.0"
+            }
+          },
+          "artifacts": []
+        }
+      }
+    ],
+    "findings": [
+      {
+        "ref": "/runs/0/results/0",
+        "selector": "/runs/0/results/0@796ca7f9f8e07a41",
+        "runIndex": 0,
+        "resultIndex": 0,
+        "suggestionGroup": "g",
+        "message": {
+          "text": "Fix the typo.",
+          "resolved": true
+        },
+        "locations": [
+          {
+            "path": "README.md",
+            "artifactLocation": {
+              "uri": "README.md"
+            },
+            "uri": "README.md",
+            "startLine": 2
+          }
+        ],
+        "relatedLocations": [],
+        "otherContent": {
+          "properties": {
+            "sarifToComment": {
+              "suggestionGroup": "g"
+            }
+          }
+        },
+        "fixes": [
+          {
+            "ref": "/runs/0/results/0/fixes/0",
+            "changes": [
+              {
+                "path": "README.md",
+                "uri": "README.md",
+                "artifactLocation": {
+                  "uri": "README.md"
+                },
+                "replacements": [
+                  {
+                    "deletedRegion": {
+                      "startLine": 2
+                    },
+                    "inserted": {
+                      "state": "complete",
+                      "text": "The widget client.",
+                      "totalLines": 1,
+                      "totalChars": 18,
+                      "shownLines": 1,
+                      "shownChars": 18
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "fileProposals": []
+      },
+      {
+        "ref": "/runs/0/results/1",
+        "selector": "/runs/0/results/1@796ca7f9f8e07a41",
+        "runIndex": 0,
+        "resultIndex": 1,
+        "suggestionGroup": "g",
+        "message": {
+          "text": "Fix the spelling.",
+          "resolved": true
+        },
+        "locations": [
+          {
+            "path": "README.md",
+            "artifactLocation": {
+              "uri": "README.md"
+            },
+            "uri": "README.md",
+            "startLine": 3
+          }
+        ],
+        "relatedLocations": [],
+        "otherContent": {
+          "properties": {
+            "sarifToComment": {
+              "suggestionGroup": "g"
+            }
+          }
+        },
+        "fixes": [
+          {
+            "ref": "/runs/0/results/1/fixes/0",
+            "changes": [
+              {
+                "path": "README.md",
+                "uri": "README.md",
+                "artifactLocation": {
+                  "uri": "README.md"
+                },
+                "replacements": [
+                  {
+                    "deletedRegion": {
+                      "startLine": 3
+                    },
+                    "inserted": {
+                      "state": "complete",
+                      "text": "Receive updates.",
+                      "totalLines": 1,
+                      "totalChars": 16,
+                      "shownLines": 1,
+                      "shownChars": 16
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "fileProposals": []
+      }
+    ],
+    "diagnostics": []
+  },
+  "diagnostics": []
+}
+
+--- stderr
+
+--- input SARIF (as given to --sarif, before the command)
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Review bot",
+          "version": "1.0.0"
+        }
+      },
+      "columnKind": "utf16CodeUnits",
+      "versionControlProvenance": [
+        {
+          "repositoryUri": "https://github.com/octo/widgets",
+          "revisionId": "feedfeedfeedfeedfeedfeedfeedfeedfeedfeed"
+        }
+      ],
+      "artifacts": [],
+      "results": [
+        {
+          "message": {
+            "text": "Fix the typo."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "README.md"
+                },
+                "region": {
+                  "startLine": 2
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "README.md"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 2
+                      },
+                      "insertedContent": {
+                        "text": "The widget client."
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "sarifToComment": {
+              "suggestionGroup": "g"
+            }
+          }
+        },
+        {
+          "message": {
+            "text": "Fix the spelling."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "README.md"
+                },
+                "region": {
+                  "startLine": 3
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "README.md"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 3
+                      },
+                      "insertedContent": {
+                        "text": "Receive updates."
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "sarifToComment": {
+              "suggestionGroup": "g"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

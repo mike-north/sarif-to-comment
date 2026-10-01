@@ -1,0 +1,572 @@
+# 010 inspect grouped.sarif for selectors (json)
+feature: inspect
+
+$ sarif-to-comment inspect --sarif <tmp>/authoring-HObiYv/grouped.sarif --format json
+exit status: 0
+
+checks:
+  PASS  exit 0
+  PASS  every finding has a document-bound selector /runs/0/results/N@<16 hex>
+
+--- stdout
+{
+  "command": "inspect",
+  "status": "inspected",
+  "view": {
+    "format": "sarif-to-comment.inspection",
+    "version": 1,
+    "summary": {
+      "runs": 1,
+      "findings": 5,
+      "fixes": 5,
+      "fileProposals": 0,
+      "truncatedPreviews": 0
+    },
+    "runs": [
+      {
+        "index": 0,
+        "ref": "/runs/0",
+        "tool": {
+          "name": "Review bot",
+          "version": "1.0.0"
+        },
+        "source": {
+          "state": "declared",
+          "provenance": [
+            {
+              "repositoryUri": "https://github.com/octo/widgets",
+              "revisionId": "feedfeedfeedfeedfeedfeedfeedfeedfeedfeed"
+            }
+          ]
+        },
+        "columnKind": "utf16CodeUnits",
+        "otherContent": {
+          "tool": {
+            "driver": {
+              "name": "Review bot",
+              "version": "1.0.0"
+            }
+          },
+          "artifacts": []
+        }
+      }
+    ],
+    "findings": [
+      {
+        "ref": "/runs/0/results/0",
+        "selector": "/runs/0/results/0@c3eb456d3f0ec34d",
+        "runIndex": 0,
+        "resultIndex": 0,
+        "suggestionGroup": "readme-typos",
+        "message": {
+          "text": "Fix the typo.",
+          "resolved": true
+        },
+        "locations": [
+          {
+            "path": "README.md",
+            "artifactLocation": {
+              "uri": "README.md"
+            },
+            "uri": "README.md",
+            "startLine": 2
+          }
+        ],
+        "relatedLocations": [],
+        "otherContent": {
+          "properties": {
+            "sarifToComment": {
+              "suggestionGroup": "readme-typos"
+            }
+          }
+        },
+        "fixes": [
+          {
+            "ref": "/runs/0/results/0/fixes/0",
+            "changes": [
+              {
+                "path": "README.md",
+                "uri": "README.md",
+                "artifactLocation": {
+                  "uri": "README.md"
+                },
+                "replacements": [
+                  {
+                    "deletedRegion": {
+                      "startLine": 2
+                    },
+                    "inserted": {
+                      "state": "complete",
+                      "text": "The widget client.",
+                      "totalLines": 1,
+                      "totalChars": 18,
+                      "shownLines": 1,
+                      "shownChars": 18
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "fileProposals": []
+      },
+      {
+        "ref": "/runs/0/results/1",
+        "selector": "/runs/0/results/1@c3eb456d3f0ec34d",
+        "runIndex": 0,
+        "resultIndex": 1,
+        "suggestionGroup": "readme-typos",
+        "message": {
+          "text": "Fix the spelling.",
+          "resolved": true
+        },
+        "locations": [
+          {
+            "path": "README.md",
+            "artifactLocation": {
+              "uri": "README.md"
+            },
+            "uri": "README.md",
+            "startLine": 3
+          }
+        ],
+        "relatedLocations": [],
+        "otherContent": {
+          "properties": {
+            "sarifToComment": {
+              "suggestionGroup": "readme-typos"
+            }
+          }
+        },
+        "fixes": [
+          {
+            "ref": "/runs/0/results/1/fixes/0",
+            "changes": [
+              {
+                "path": "README.md",
+                "uri": "README.md",
+                "artifactLocation": {
+                  "uri": "README.md"
+                },
+                "replacements": [
+                  {
+                    "deletedRegion": {
+                      "startLine": 3
+                    },
+                    "inserted": {
+                      "state": "complete",
+                      "text": "Receive updates.",
+                      "totalLines": 1,
+                      "totalChars": 16,
+                      "shownLines": 1,
+                      "shownChars": 16
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "fileProposals": []
+      },
+      {
+        "ref": "/runs/0/results/2",
+        "selector": "/runs/0/results/2@c3eb456d3f0ec34d",
+        "runIndex": 0,
+        "resultIndex": 2,
+        "suggestionGroup": "readme-typos",
+        "message": {
+          "text": "Use the American spelling.",
+          "resolved": true
+        },
+        "locations": [
+          {
+            "path": "README.md",
+            "artifactLocation": {
+              "uri": "README.md"
+            },
+            "uri": "README.md",
+            "startLine": 4
+          }
+        ],
+        "relatedLocations": [],
+        "otherContent": {
+          "properties": {
+            "sarifToComment": {
+              "suggestionGroup": "readme-typos"
+            }
+          }
+        },
+        "fixes": [
+          {
+            "ref": "/runs/0/results/2/fixes/0",
+            "changes": [
+              {
+                "path": "README.md",
+                "uri": "README.md",
+                "artifactLocation": {
+                  "uri": "README.md"
+                },
+                "replacements": [
+                  {
+                    "deletedRegion": {
+                      "startLine": 4
+                    },
+                    "inserted": {
+                      "state": "complete",
+                      "text": "License: MIT.",
+                      "totalLines": 1,
+                      "totalChars": 13,
+                      "shownLines": 1,
+                      "shownChars": 13
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "fileProposals": []
+      },
+      {
+        "ref": "/runs/0/results/3",
+        "selector": "/runs/0/results/3@c3eb456d3f0ec34d",
+        "runIndex": 0,
+        "resultIndex": 3,
+        "message": {
+          "text": "Retry once on timeout.",
+          "resolved": true
+        },
+        "locations": [
+          {
+            "path": "src/client.ts",
+            "artifactLocation": {
+              "uri": "src/client.ts"
+            },
+            "uri": "src/client.ts",
+            "startLine": 2
+          }
+        ],
+        "relatedLocations": [],
+        "otherContent": {},
+        "fixes": [
+          {
+            "ref": "/runs/0/results/3/fixes/0",
+            "changes": [
+              {
+                "path": "src/client.ts",
+                "uri": "src/client.ts",
+                "artifactLocation": {
+                  "uri": "src/client.ts"
+                },
+                "replacements": [
+                  {
+                    "deletedRegion": {
+                      "startLine": 2
+                    },
+                    "inserted": {
+                      "state": "complete",
+                      "text": "  const response = await request(id).catch(() => request(id));",
+                      "totalLines": 1,
+                      "totalChars": 62,
+                      "shownLines": 1,
+                      "shownChars": 62
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "fileProposals": []
+      },
+      {
+        "ref": "/runs/0/results/4",
+        "selector": "/runs/0/results/4@c3eb456d3f0ec34d",
+        "runIndex": 0,
+        "resultIndex": 4,
+        "message": {
+          "text": "Revise note 3.",
+          "resolved": true
+        },
+        "locations": [
+          {
+            "path": "notes.txt",
+            "artifactLocation": {
+              "uri": "notes.txt"
+            },
+            "uri": "notes.txt",
+            "startLine": 3
+          }
+        ],
+        "relatedLocations": [],
+        "otherContent": {},
+        "fixes": [
+          {
+            "ref": "/runs/0/results/4/fixes/0",
+            "changes": [
+              {
+                "path": "notes.txt",
+                "uri": "notes.txt",
+                "artifactLocation": {
+                  "uri": "notes.txt"
+                },
+                "replacements": [
+                  {
+                    "deletedRegion": {
+                      "startLine": 3
+                    },
+                    "inserted": {
+                      "state": "complete",
+                      "text": "Note 3, revised.",
+                      "totalLines": 1,
+                      "totalChars": 16,
+                      "shownLines": 1,
+                      "shownChars": 16
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "fileProposals": []
+      }
+    ],
+    "diagnostics": []
+  },
+  "diagnostics": []
+}
+
+--- stderr
+
+--- input SARIF (as given to --sarif, before the command)
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Review bot",
+          "version": "1.0.0"
+        }
+      },
+      "columnKind": "utf16CodeUnits",
+      "versionControlProvenance": [
+        {
+          "repositoryUri": "https://github.com/octo/widgets",
+          "revisionId": "feedfeedfeedfeedfeedfeedfeedfeedfeedfeed"
+        }
+      ],
+      "artifacts": [],
+      "results": [
+        {
+          "message": {
+            "text": "Fix the typo."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "README.md"
+                },
+                "region": {
+                  "startLine": 2
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "README.md"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 2
+                      },
+                      "insertedContent": {
+                        "text": "The widget client."
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "sarifToComment": {
+              "suggestionGroup": "readme-typos"
+            }
+          }
+        },
+        {
+          "message": {
+            "text": "Fix the spelling."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "README.md"
+                },
+                "region": {
+                  "startLine": 3
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "README.md"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 3
+                      },
+                      "insertedContent": {
+                        "text": "Receive updates."
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "sarifToComment": {
+              "suggestionGroup": "readme-typos"
+            }
+          }
+        },
+        {
+          "message": {
+            "text": "Use the American spelling."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "README.md"
+                },
+                "region": {
+                  "startLine": 4
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "README.md"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 4
+                      },
+                      "insertedContent": {
+                        "text": "License: MIT."
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "sarifToComment": {
+              "suggestionGroup": "readme-typos"
+            }
+          }
+        },
+        {
+          "message": {
+            "text": "Retry once on timeout."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/client.ts"
+                },
+                "region": {
+                  "startLine": 2
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "src/client.ts"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 2
+                      },
+                      "insertedContent": {
+                        "text": "  const response = await request(id).catch(() => request(id));"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "message": {
+            "text": "Revise note 3."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "notes.txt"
+                },
+                "region": {
+                  "startLine": 3
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "notes.txt"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 3
+                      },
+                      "insertedContent": {
+                        "text": "Note 3, revised."
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

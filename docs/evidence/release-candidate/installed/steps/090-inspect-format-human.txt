@@ -1,0 +1,176 @@
+# 090 inspect --format human
+feature: every --format
+
+$ sarif-to-comment inspect --sarif <tmp>/formats-9CPypa/r.sarif --format human --color never
+exit status: 0
+
+checks:
+  PASS  exit 0 and the group appears
+
+--- stdout
+SARIF inspection: 1 run(s), 2 finding(s), 2 fix(es), 0 file proposal(s), 0 truncated preview(s).
+Run 0 (/runs/0): Review bot 1.0.0 (source: declared; columnKind: utf16CodeUnits)
+  declared source: https://github.com/octo/widgets at feedfeedfeedfeedfeedfeedfeedfeedfeedfeed
+  Other run content:
+    {
+      "tool": {
+        "driver": {
+          "name": "Review bot",
+          "version": "1.0.0"
+        }
+      },
+      "artifacts": []
+    }
+
+Finding /runs/0/results/0 — Review bot 1.0.0 · suggestionGroup: g
+Selector: /runs/0/results/0@796ca7f9f8e07a41
+Message:
+Fix the typo.
+Locations:
+  README.md:2
+Fix 1 of 1 (/runs/0/results/0/fixes/0)
+  Change README.md
+    Replace region {"startLine":2} with:
+      | The widget client.
+Other finding evidence:
+  {
+    "properties": {
+      "sarifToComment": {
+        "suggestionGroup": "g"
+      }
+    }
+  }
+
+Finding /runs/0/results/1 — Review bot 1.0.0 · suggestionGroup: g
+Selector: /runs/0/results/1@796ca7f9f8e07a41
+Message:
+Fix the spelling.
+Locations:
+  README.md:3
+Fix 1 of 1 (/runs/0/results/1/fixes/0)
+  Change README.md
+    Replace region {"startLine":3} with:
+      | Receive updates.
+Other finding evidence:
+  {
+    "properties": {
+      "sarifToComment": {
+        "suggestionGroup": "g"
+      }
+    }
+  }
+
+This inspection only describes the SARIF; it does not check whether it can be published.
+
+--- stderr
+
+--- input SARIF (as given to --sarif, before the command)
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Review bot",
+          "version": "1.0.0"
+        }
+      },
+      "columnKind": "utf16CodeUnits",
+      "versionControlProvenance": [
+        {
+          "repositoryUri": "https://github.com/octo/widgets",
+          "revisionId": "feedfeedfeedfeedfeedfeedfeedfeedfeedfeed"
+        }
+      ],
+      "artifacts": [],
+      "results": [
+        {
+          "message": {
+            "text": "Fix the typo."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "README.md"
+                },
+                "region": {
+                  "startLine": 2
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "README.md"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 2
+                      },
+                      "insertedContent": {
+                        "text": "The widget client."
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "sarifToComment": {
+              "suggestionGroup": "g"
+            }
+          }
+        },
+        {
+          "message": {
+            "text": "Fix the spelling."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "README.md"
+                },
+                "region": {
+                  "startLine": 3
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "README.md"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 3
+                      },
+                      "insertedContent": {
+                        "text": "Receive updates."
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "sarifToComment": {
+              "suggestionGroup": "g"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

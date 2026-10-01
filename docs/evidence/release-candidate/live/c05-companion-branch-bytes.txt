@@ -1,0 +1,20 @@
+# companion branch suggestion-pr/107/7e5f9d0c-d206-4fa4-b752-7daa9659ede1, fetched with git
+tip: 5747d6ab1c7779e3601da56bdb5962fdd2bf83e5
+tip parents: 920fc63ae2fde7a398dd63c1d80dad425c7fc085 
+crlf.txt blob at tip: d87cade0fe7b21087ed2285dbc23f7f4708e6a84
+crlf.txt bytes at tip (xxd):
+00000000: 4f6e 6c79 206c 696e 652c e280 8b77 6974  Only line,...wit
+00000010: 6820 4c46 2e0a                           h LF..
+crlf.txt blob at R 920fc63: 5b39cb81f731d594fb1263dfc1f545d03c3d546c
+crlf.txt bytes at R (xxd):
+00000000: 4f6e 6c79 206c 696e 652c 2077 6974 6820  Only line, with 
+00000010: 4352 4c46 2e0d 0a                        CRLF...
+sample.md blob at tip: bf55e2b71e379a30c83bbdd1ea2e11a2ce619368  at R: bf55e2b71e379a30c83bbdd1ea2e11a2ce619368
+files changed by the proposal commit (R..tip):
+ docs/experiments/rc030/crlf.txt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+proposal commit:
+5747d6ab1c7779e3601da56bdb5962fdd2bf83e5
+  author Mike North <<redacted-email>>
+  committer Mike North <<redacted-email>>
+  Suggestion for #107: edit docs/experiments/rc030/crlf.txt

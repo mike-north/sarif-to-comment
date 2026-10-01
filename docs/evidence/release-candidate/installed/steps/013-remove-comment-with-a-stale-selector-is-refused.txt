@@ -1,0 +1,274 @@
+# 013 remove-comment with a stale selector is refused
+feature: remove-comment
+
+$ sarif-to-comment remove-comment --sarif <tmp>/authoring-HObiYv/grouped.sarif --finding /runs/0/results/4@c3eb456d3f0ec34d --format json
+exit status: 2
+
+checks:
+  PASS  exit 2, file unchanged
+
+--- stdout
+{
+  "command": "remove-comment",
+  "status": "stale",
+  "sarif": {
+    "path": "<tmp>/authoring-HObiYv/grouped.sarif",
+    "written": false
+  },
+  "problems": [
+    {
+      "message": "The document has changed since the selector `/runs/0/results/4@c3eb456d3f0ec34d` was taken from inspecting it, so it may no longer name the same finding. Nothing was removed. Inspect the document again and use its current selector.",
+      "pointer": "/runs/0/results/4",
+      "severity": "error",
+      "code": "finding-selector-stale",
+      "title": "The finding selector does not fit the document",
+      "location": {
+        "pointer": "/runs/0/results/4"
+      },
+      "remedies": [
+        "Inspect the document again and use the selector it shows now."
+      ]
+    }
+  ],
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "finding-selector-stale",
+      "title": "The finding selector does not fit the document",
+      "message": "The document has changed since the selector `/runs/0/results/4@c3eb456d3f0ec34d` was taken from inspecting it, so it may no longer name the same finding. Nothing was removed. Inspect the document again and use its current selector.",
+      "location": {
+        "pointer": "/runs/0/results/4"
+      },
+      "remedies": [
+        "Inspect the document again and use the selector it shows now."
+      ]
+    }
+  ]
+}
+
+--- stderr
+
+--- input SARIF (as given to --sarif, before the command)
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Review bot",
+          "version": "1.0.0"
+        }
+      },
+      "columnKind": "utf16CodeUnits",
+      "versionControlProvenance": [
+        {
+          "repositoryUri": "https://github.com/octo/widgets",
+          "revisionId": "feedfeedfeedfeedfeedfeedfeedfeedfeedfeed"
+        }
+      ],
+      "artifacts": [],
+      "results": [
+        {
+          "message": {
+            "text": "Fix the typo."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "README.md"
+                },
+                "region": {
+                  "startLine": 2
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "README.md"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 2
+                      },
+                      "insertedContent": {
+                        "text": "The widget client."
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "sarifToComment": {
+              "suggestionGroup": "readme-typos"
+            }
+          }
+        },
+        {
+          "message": {
+            "text": "Fix the spelling."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "README.md"
+                },
+                "region": {
+                  "startLine": 3
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "README.md"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 3
+                      },
+                      "insertedContent": {
+                        "text": "Receive updates."
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "sarifToComment": {
+              "suggestionGroup": "readme-typos"
+            }
+          }
+        },
+        {
+          "message": {
+            "text": "Use the American spelling."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "README.md"
+                },
+                "region": {
+                  "startLine": 4
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "README.md"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 4
+                      },
+                      "insertedContent": {
+                        "text": "License: MIT."
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "message": {
+            "text": "Retry once on timeout."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/client.ts"
+                },
+                "region": {
+                  "startLine": 2
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "src/client.ts"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 2
+                      },
+                      "insertedContent": {
+                        "text": "  const response = await request(id).catch(() => request(id));"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "message": {
+            "text": "Revise note 3."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "notes.txt"
+                },
+                "region": {
+                  "startLine": 3
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "notes.txt"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 3
+                      },
+                      "insertedContent": {
+                        "text": "Note 3, revised."
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

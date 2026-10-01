@@ -1,0 +1,74 @@
+# 021 validate after the draft: the pending review of this account is blocked
+feature: validate
+
+$ GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-CSpHzT/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment validate --sarif <tmp>/delivery-composition-CSpHzT/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --format json
+exit status: 2
+
+checks:
+  PASS  the token never appears in stdout or stderr
+  PASS  exit 2, blocked
+  PASS  the problem says the pull request already has a pending review
+  PASS  nothing more was written
+
+--- stdout
+{
+  "command": "validate",
+  "status": "blocked",
+  "problems": [
+    {
+      "message": "This account already has a pending review on octo/widgets#7: review 5000 (https://github.com/octo/widgets/pull/7#pullrequestreview-5000). GitHub allows one pending review per account on a pull request, so it would refuse this review, as a draft or as a submitted comment review. Submit or delete that pending review on GitHub, then validate again; this tool never submits, edits or deletes an existing review. If it is this tool's own earlier publication, retry publish with that publication's state path rather than a new one.",
+      "severity": "error",
+      "code": "pending-review-exists",
+      "title": "The account already has a pending review on the pull request",
+      "subject": "octo/widgets#7",
+      "remedies": [
+        "Submit or delete that pending review on GitHub.",
+        "If it is this tool's own earlier publication, retry publish with that publication's state path."
+      ]
+    }
+  ],
+  "message": "## Review blocked\n\nNothing was published and no publication state was written.\n\n**Review blocked:** 1 problem must be resolved before publication; nothing was published.\n\n- `pending-review-exists`: This account already has a pending review on octo/widgets#7: review 5000 (https://github.com/octo/widgets/pull/7#pullrequestreview-5000). GitHub allows one pending review per account on a pull request, so it would refuse this review, as a draft or as a submitted comment review. Submit or delete that pending review on GitHub, then validate again; this tool never submits, edits or deletes an existing review. If it is this tool's own earlier publication, retry publish with that publication's state path rather than a new one.",
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "pending-review-exists",
+      "title": "The account already has a pending review on the pull request",
+      "message": "This account already has a pending review on octo/widgets#7: review 5000 (https://github.com/octo/widgets/pull/7#pullrequestreview-5000). GitHub allows one pending review per account on a pull request, so it would refuse this review, as a draft or as a submitted comment review. Submit or delete that pending review on GitHub, then validate again; this tool never submits, edits or deletes an existing review. If it is this tool's own earlier publication, retry publish with that publication's state path rather than a new one.",
+      "subject": "octo/widgets#7",
+      "remedies": [
+        "Submit or delete that pending review on GitHub.",
+        "If it is this tool's own earlier publication, retry publish with that publication's state path."
+      ]
+    }
+  ]
+}
+
+--- stderr
+
+--- input SARIF (as given to --sarif, before the command)
+{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"Review bot","version":"1.0.0"}},"columnKind":"utf16CodeUnits","versionControlProvenance":[{"repositoryUri":"https://github.com/octo/widgets","revisionId":"feedfeedfeedfeedfeedfeedfeedfeedfeedfeed"}],"artifacts":[],"results":[{"message":{"text":"Fix the typo."},"locations":[{"physicalLocation":{"artifactLocation":{"uri":"README.md"},"region":{"startLine":2}}}],"fixes":[{"artifactChanges":[{"artifactLocation":{"uri":"README.md"},"replacements":[{"deletedRegion":{"startLine":2},"insertedContent":{"text":"The widget client."}}]}]}]}]}]}
+--- fake host after the command (writes so far, review requests, pull requests)
+{
+  "writesSoFar": [
+    "POST /repos/octo/widgets/pulls/7/reviews"
+  ],
+  "reviews": [
+    {
+      "id": 5000,
+      "state": "PENDING",
+      "request": {
+        "commit_id": "feedfeedfeedfeedfeedfeedfeedfeedfeedfeed",
+        "body": "\n\n<!-- sarif-to-comment:review:c877034a-ed00-4164-95af-e264015c9f87 -->",
+        "comments": [
+          {
+            "path": "README.md",
+            "body": "Fix the typo.\n\n<sub>— Review bot 1.0.0</sub>\n\n```suggestion\nThe widget client.\n```",
+            "line": 2,
+            "side": "RIGHT"
+          }
+        ]
+      }
+    }
+  ],
+  "pulls": []
+}

@@ -1,0 +1,92 @@
+{
+  "format": "sarif-to-comment.companion-publication-state",
+  "version": 3,
+  "publication": "b44104cc-7cf4-4bf0-8325-46e72d7ac150",
+  "destination": {
+    "owner": "mike-north",
+    "repo": "doc-linter",
+    "pullNumber": 107
+  },
+  "reviewedCommit": "920fc63ae2fde7a398dd63c1d80dad425c7fc085",
+  "inputFingerprint": "sha256:c4796940a182078f58f444ca67b0896af38226095bad3d5363cb5312cb4f5914",
+  "authorId": 558005,
+  "submit": false,
+  "headRef": "sarif-rc030-crlf-20261001",
+  "labels": [
+    "suggestion-pr"
+  ],
+  "ready": false,
+  "projection": {
+    "head": "37064469185a2a04ffef0063059c5c6fd8332c31",
+    "mergeBase": "3c2704853bb0cb524a8936892121ac5a697c46be",
+    "suggestions": [
+      {
+        "verdict": "faithful",
+        "conflicts": []
+      }
+    ]
+  },
+  "delivery": {
+    "edits": {
+      "value": [
+        "companion"
+      ],
+      "source": "caller"
+    },
+    "groupedEdits": {
+      "value": [
+        "native-batch"
+      ],
+      "source": "default"
+    },
+    "fileOperations": {
+      "value": [
+        "manual"
+      ],
+      "source": "default"
+    },
+    "companionBundle": {
+      "value": "per-unit",
+      "source": "default"
+    }
+  },
+  "suggestions": [
+    {
+      "title": "Suggestion for #107: edit docs/experiments/rc030/crlf.txt",
+      "commitMessage": "Suggestion for #107: edit docs/experiments/rc030/crlf.txt\n\nSuggested in a review of mike-north/doc-linter pull request 107 at commit 920fc63ae2fde7a398dd63c1d80dad425c7fc085.",
+      "changes": [
+        {
+          "operation": "edit",
+          "path": "docs/experiments/rc030/crlf.txt",
+          "text": "Only line,​with LF.\n"
+        }
+      ],
+      "sections": [
+        {
+          "changeCount": 1,
+          "changeLines": "- Edited [docs/experiments/rc030/crlf.txt line 1 at 920fc63](https://github.com/mike-north/doc-linter/blob/920fc63ae2fde7a398dd63c1d80dad425c7fc085/docs/experiments/rc030/crlf.txt?plain=1#L1)",
+          "items": "**Source:** [docs/experiments/rc030/crlf.txt line 1 at 920fc63](https://github.com/mike-north/doc-linter/blob/920fc63ae2fde7a398dd63c1d80dad425c7fc085/docs/experiments/rc030/crlf.txt?plain=1#L1)\n\n```\nOnly line, with CRLF.\n```\n\nEnd this line with LF, and join its words with a zero-width space.\n\n<sub>— rc030 acceptance 1.0.0</sub>"
+        }
+      ],
+      "id": "7e5f9d0c-d206-4fa4-b752-7daa9659ede1",
+      "branch": "suggestion-pr/107/7e5f9d0c-d206-4fa4-b752-7daa9659ede1",
+      "body": "Suggested in a review of #107 at commit 920fc63ae2fde7a398dd63c1d80dad425c7fc085.\n\n**The reviewed commit is not part of the branch of #107:** the branch was rewritten after commit 920fc63ae2fde7a398dd63c1d80dad425c7fc085 (its head was 37064469185a2a04ffef0063059c5c6fd8332c31 when this was proposed). GitHub shows this pull request's changes from an older merge base, so they also list changes of the reviewed commit itself. Projected onto that head before this pull request was created, merging it applies only its own changes, which are these:\n\n```diff\n--- a/docs/experiments/rc030/crlf.txt\n+++ b/docs/experiments/rc030/crlf.txt\n@@ -1 +1 @@ CRLF line endings become LF line endings\n-Only line, with CRLF.\n+Only line,{U+200B}with LF.\n```\n\nIn this diff, each `{U+XXXX}` stands for the character with that code point, written visibly; this pull request's commit has the exact bytes.\n\nMerging this pull request into `sarif-rc030-crlf-20261001` applies this change:\n\n- Edited [docs/experiments/rc030/crlf.txt line 1 at 920fc63](https://github.com/mike-north/doc-linter/blob/920fc63ae2fde7a398dd63c1d80dad425c7fc085/docs/experiments/rc030/crlf.txt?plain=1#L1)\n\n**How this suggestion is accepted:** it is a draft pull request into `sarif-rc030-crlf-20261001`, the branch of #107. A draft cannot be merged: someone with write access first marks it ready for review. The author of #107 then decides whether to merge it, and #107 carries the change to its base. Once #107 is merged or closed, this pull request can be closed.\n\n---\n\n**Source:** [docs/experiments/rc030/crlf.txt line 1 at 920fc63](https://github.com/mike-north/doc-linter/blob/920fc63ae2fde7a398dd63c1d80dad425c7fc085/docs/experiments/rc030/crlf.txt?plain=1#L1)\n\n```\nOnly line, with CRLF.\n```\n\nEnd this line with LF, and join its words with a zero-width space.\n\n<sub>— rc030 acceptance 1.0.0</sub>\n\n<!-- suggestion-pr {\"version\":1,\"original\":{\"owner\":\"mike-north\",\"repo\":\"doc-linter\",\"pullNumber\":107},\"reviewedCommit\":\"920fc63ae2fde7a398dd63c1d80dad425c7fc085\",\"id\":\"7e5f9d0c-d206-4fa4-b752-7daa9659ede1\",\"batch\":\"b44104cc-7cf4-4bf0-8325-46e72d7ac150\"} -->"
+    }
+  ],
+  "review": {
+    "sections": [
+      {
+        "companionIndex": {
+          "existing": []
+        }
+      },
+      "A general remark on the rc030 fixture.\n\n<sub>— rc030 acceptance 1.0.0</sub>",
+      {
+        "companion": 0,
+        "section": 0
+      }
+    ],
+    "comments": []
+  },
+  "planFingerprint": "sha256:c4c69862b0c5a4a81ab3dc6fc41e48ddcbf21ee1abd90368c2464a2b48d10510"
+}

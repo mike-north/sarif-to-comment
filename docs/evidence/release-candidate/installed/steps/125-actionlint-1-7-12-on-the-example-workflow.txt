@@ -1,0 +1,12 @@
+# 125 actionlint 1.7.12 on the example workflow
+feature: example workflow
+
+$ actionlint -no-color <repo>/docs/examples/abandonment-cleanup.workflow.yml
+exit status: 0
+
+checks:
+  PASS  actionlint is available and reports nothing (exit 0)
+
+--- stdout
+
+--- stderr

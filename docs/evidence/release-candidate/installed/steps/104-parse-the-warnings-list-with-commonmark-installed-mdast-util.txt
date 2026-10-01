@@ -1,0 +1,40 @@
+# 104 parse the warnings list with CommonMark (installed mdast-util-from-markdown + GFM)
+feature: outcome Markdown nesting
+
+$ MD='## Draft review published
+
+**Published with 1 warning:** A p…(705 chars)' EXPECT='{"items":1,"nested":[1],"heading":"Warnings:"}' node <consumer>/u8-nesting-warnings-list.mjs
+exit status: 0
+
+checks:
+  PASS  exit 0: the warning holds its one obstacle
+
+--- script
+import assert from 'node:assert/strict';
+import { fromMarkdown } from 'mdast-util-from-markdown';
+import { gfmFromMarkdown } from 'mdast-util-gfm';
+import { gfm } from 'micromark-extension-gfm';
+const expect = JSON.parse(process.env.EXPECT);
+const tree = fromMarkdown(process.env.MD, { extensions: [gfm()], mdastExtensions: [gfmFromMarkdown()] });
+const text = (node) => (node.value ?? '') + (node.children ?? []).map(text).join('');
+// The list that follows the heading paragraph (for example "**Warnings:**" or "**Review blocked:** …").
+const at = tree.children.findIndex((n) => n.type === 'paragraph' && text(n).startsWith(expect.heading));
+assert.ok(at >= 0, 'the heading paragraph is present');
+const lists = tree.children.slice(at + 1).filter((n) => n.type === 'list');
+assert.equal(lists.length, 1, 'one list of diagnostics after the heading, and no sibling list after it');
+const [list] = lists;
+assert.equal(list.children.length, expect.items, 'one item per diagnostic, nothing more at their level');
+const nested = list.children.map((item) => item.children.filter((n) => n.type === 'list').map((l) => l.children.length));
+assert.deepEqual(nested, expect.nested.map((n) => [n]), 'each diagnostic holds exactly its own obstacle list');
+for (const item of list.children) {
+  const firstCode = item.children[0]?.children?.[0];
+  assert.equal(firstCode?.type, 'inlineCode', 'each item begins with its code');
+  for (const sub of item.children.filter((n) => n.type === 'list').flatMap((l) => l.children)) {
+    assert.equal(sub.children[0]?.children?.[0]?.type, 'inlineCode', 'each obstacle begins with its mechanism');
+  }
+}
+process.stdout.write(JSON.stringify({ items: list.children.length, nested }));
+
+--- stdout
+{"items":1,"nested":[[1]]}
+--- stderr

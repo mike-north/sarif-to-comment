@@ -1,0 +1,44 @@
+# 087 --format json
+feature: every --format
+
+$ GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-qwajm6/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment validate --sarif <tmp>/delivery-composition-qwajm6/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --edits native,review-body --format json
+exit status: 0
+
+checks:
+  PASS  the token never appears in stdout or stderr
+  PASS  exit 0; one JSON document: command validate, status ready, delivery-fallback warning
+  PASS  stderr empty in json format
+
+--- stdout
+{
+  "command": "validate",
+  "status": "ready",
+  "message": "## Ready to publish\n\n**Ready to publish with 1 warning:** A proposal is delivered by a later mechanism of its delivery list.\n\nThe complete document can be published faithfully to octo/widgets#7 at commit `feedfeedfeedfeedfeedfeedfeedfeedfeedfeed`.\n\n**Review prepared:** 0 inline comment(s) and 1 general section(s) for commit `feedfeedfeedfeedfeedfeedfeedfeedfeedfeed`.\n\n**Warnings:**\n\n- `delivery-fallback` at `/runs/0/results/0`: The edit of `src/client.ts` line 2 is delivered as `review-body`. `edits` is `[native, review-body]`, set by the caller (`--edits`, `delivery.edits`), and the mechanisms listed before it are unavailable:\n\n  - `native`: Lines 2-2 of src/client.ts cannot carry a native suggestion (file-not-in-diff).\n\nNothing was published and no publication state was written.\n\nNo pending review of this account was found on the pull request. This is not an approval: publication repeats every check against the pull request as it is then. GitHub can still refuse the review, for example if this account starts a pending review on the pull request before publication.",
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "code": "delivery-fallback",
+      "title": "A proposal is delivered by a later mechanism of its delivery list",
+      "message": "The edit of `src/client.ts` line 2 is delivered as `review-body`. `edits` is `[native, review-body]`, set by the caller (`--edits`, `delivery.edits`), and the mechanisms listed before it are unavailable:\n\n- `native`: Lines 2-2 of src/client.ts cannot carry a native suggestion (file-not-in-diff).",
+      "location": {
+        "pointer": "/runs/0/results/0"
+      },
+      "remedies": [
+        "Remove the fix.",
+        "To use an earlier mechanism, remove the obstacle the message names, then publish again.",
+        "To refuse rather than fall back, list only the mechanism you require."
+      ]
+    }
+  ]
+}
+
+--- stderr
+
+--- input SARIF (as given to --sarif, before the command)
+{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"Review bot","version":"1.0.0"}},"columnKind":"utf16CodeUnits","versionControlProvenance":[{"repositoryUri":"https://github.com/octo/widgets","revisionId":"feedfeedfeedfeedfeedfeedfeedfeedfeedfeed"}],"artifacts":[],"results":[{"message":{"text":"Retry once on timeout."},"locations":[{"physicalLocation":{"artifactLocation":{"uri":"src/client.ts"},"region":{"startLine":2}}}],"fixes":[{"artifactChanges":[{"artifactLocation":{"uri":"src/client.ts"},"replacements":[{"deletedRegion":{"startLine":2},"insertedContent":{"text":"  const response = await request(id).catch(() => request(id));"}}]}]}]}]}]}
+--- fake host after the command (writes so far, review requests, pull requests)
+{
+  "writesSoFar": [],
+  "reviews": [],
+  "pulls": []
+}

@@ -1,0 +1,30 @@
+# 093 a usage error in json format is still one JSON document on stdout
+feature: every --format
+
+$ sarif-to-comment inspect --format json
+exit status: 1
+
+checks:
+  PASS  exit 1, usage-error document
+
+--- stdout
+{
+  "command": "inspect",
+  "status": "usage-error",
+  "message": "missing required option --sarif",
+  "usage": "sarif-to-comment inspect — show the findings and fixes in a SARIF file\n\nUsage:\n  sarif-to-comment inspect --sarif FILE [--preview-lines N|all]\n                           [--preview-chars N|all]\n                           [--source-root ABSOLUTE_FILE_URI]\n                           [--format human|json|toon]\n\nShows every finding with its full text, locations, fixes and suggestion group,\nand the selector remove-comment, group-fixes and ungroup-fixes take. Only fix\npreviews are shortened, and visibly so. The file is not changed and nothing is\ncontacted. Inspection is not a check that the file can be published.\n\nOptions:\n  --sarif FILE                   SARIF file to inspect.\n  --preview-lines N|all          Lines shown per fix preview (default 20).\n  --preview-chars N|all          Characters shown per fix preview (default\n                                 2000).\n  --source-root ABSOLUTE_FILE_URI\n                                 Repository root in the SARIF producer's file\n                                 system (file:///.../ ending in \"/\").\n  --format human|json|toon       Output format (default human). JSON and TOON\n                                 print one document on stdout for every outcome.\n  --color auto|always|never      Color diagnostics (default auto: only on a\n                                 terminal; NO_COLOR and FORCE_COLOR apply).\n\nExit status: 0 inspected; 2 not valid SARIF; 1 usage error or unreadable file.\n",
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "usage-error",
+      "title": "The command line is not valid",
+      "message": "missing required option --sarif",
+      "subject": "inspect",
+      "remedies": [
+        "Run `sarif-to-comment inspect --help` for usage."
+      ]
+    }
+  ]
+}
+
+--- stderr

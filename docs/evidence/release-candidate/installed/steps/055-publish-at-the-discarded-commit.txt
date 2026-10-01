@@ -1,0 +1,131 @@
+# 055 publish at the discarded commit
+feature: historical placement
+
+$ GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/historical-placement-OzriJb/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/historical-placement-OzriJb/review.sarif --repo octo/gadgets --pull 12 --commit d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1 --state <tmp>/historical-placement-OzriJb/state/review.json --format json
+exit status: 0
+
+checks:
+  PASS  the token never appears in stdout or stderr
+  PASS  exit 0, published
+  PASS  the review is pinned to the discarded commit (commit_id R, not the head)
+  PASS  two inline comments on RIGHT lines 2 and 6; line 6 carries the native suggestion
+
+--- stdout
+{
+  "command": "publish",
+  "status": "published",
+  "review": {
+    "id": 5000,
+    "url": "https://github.com/octo/gadgets/pull/12#pullrequestreview-5000"
+  },
+  "statePath": "<tmp>/historical-placement-OzriJb/state/review.json",
+  "message": "## Draft review published\n\nCreated the draft [review 5000](https://github.com/octo/gadgets/pull/12#pullrequestreview-5000) on octo/gadgets#12 at commit `d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1`. It stays a draft until someone submits it on GitHub.",
+  "diagnostics": []
+}
+
+--- stderr
+
+--- input SARIF (as given to --sarif, before the command)
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Review bot",
+          "version": "1.0.0"
+        }
+      },
+      "columnKind": "utf16CodeUnits",
+      "results": [
+        {
+          "message": {
+            "text": "Line 2 context."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "docs/sample.md"
+                },
+                "region": {
+                  "startLine": 2
+                }
+              }
+            }
+          ]
+        },
+        {
+          "message": {
+            "text": "Reword line 6."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "docs/sample.md"
+                },
+                "region": {
+                  "startLine": 6
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "docs/sample.md"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 6
+                      },
+                      "insertedContent": {
+                        "text": "Line 06: suggested."
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+--- fake host after the command (writes so far, review requests, pull requests)
+{
+  "writesSoFar": [
+    "POST /repos/octo/gadgets/pulls/12/reviews"
+  ],
+  "reviews": [
+    {
+      "id": 5000,
+      "state": "PENDING",
+      "request": {
+        "commit_id": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+        "body": "\n\n<!-- sarif-to-comment:review:c808baa2-d316-43c0-953b-aa3830164b6c -->",
+        "comments": [
+          {
+            "path": "docs/sample.md",
+            "body": "Line 2 context.\n\n<sub>— Review bot 1.0.0</sub>",
+            "line": 2,
+            "side": "RIGHT"
+          },
+          {
+            "path": "docs/sample.md",
+            "body": "Reword line 6.\n\n<sub>— Review bot 1.0.0</sub>\n\n```suggestion\nLine 06: suggested.\n```",
+            "line": 6,
+            "side": "RIGHT"
+          }
+        ]
+      }
+    }
+  ],
+  "pulls": []
+}

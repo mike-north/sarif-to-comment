@@ -1,0 +1,4 @@
+{"baseRefName":"main","closedAt":null,"headRefName":"sarif-rc030-crlf-20261001","isDraft":true,"mergedAt":null,"number":107,"state":"OPEN"}
+{"baseRefName":"sarif-rc030-crlf-20261001","closedAt":null,"headRefName":"suggestion-pr/107/7e5f9d0c-d206-4fa4-b752-7daa9659ede1","isDraft":true,"mergedAt":null,"number":108,"state":"OPEN"}
+{"baseRefName":"main","closedAt":"2026-09-30T03:28:06Z","headRefName":"sarif-issue27-20260929-b","isDraft":true,"mergedAt":null,"number":57,"state":"CLOSED"}
+{"baseRefName":"sarif-issue27-20260929-b","closedAt":"2026-09-30T03:28:19Z","headRefName":"suggestion-pr/57/81e4d9fe-25d2-48e4-b421-9115dce6f808","isDraft":false,"mergedAt":null,"number":59,"state":"CLOSED"}

@@ -1,0 +1,23 @@
+# 089 decode the TOON output with the installed @toon-format/toon and compare it with the JSON output
+feature: every --format
+
+$ TOON='command: validate
+status: ready
+message: "## Ready to publis…(1841 chars)' JSON_DOC='{
+  "command": "validate",
+  "status": "ready",
+  "message":…(1969 chars)' node <consumer>/u8-toon-decode.mjs
+exit status: 0
+
+checks:
+  PASS  TOON decodes to exactly the JSON document
+
+--- script
+import assert from 'node:assert/strict';
+import { decode } from '@toon-format/toon';
+assert.deepEqual(decode(process.env.TOON), JSON.parse(process.env.JSON_DOC));
+process.stdout.write('equal');
+
+--- stdout
+equal
+--- stderr

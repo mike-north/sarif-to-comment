@@ -1,0 +1,159 @@
+# 106 publish: one suggestion pull request whose description shows the projected diff
+feature: projected diff
+
+$ GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/force-push-composition-5N4oXC/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/force-push-composition-5N4oXC/review.sarif --repo octo/widgets --pull 7 --commit c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1 --edits companion --state <tmp>/force-push-composition-5N4oXC/state/review.json --format json
+exit status: 0
+
+checks:
+  PASS  the token never appears in stdout or stderr
+  PASS  exit 0, published, no diagnostics
+  PASS  exactly one suggestion pull request, draft, into the pull request's branch
+  PASS  the description holds the projection section exactly: the hunk states "CRLF line endings become LF line endings", U+200B is written {U+200B}, and the escapes note follows (§2.11)
+  PASS  no raw U+200B (or other unshown character) reaches the description
+  PASS  the committed bytes of docs/crlf.txt are exactly "Only line,\u200Bwith LF.\n" (e2 80 8b, one LF, no CR)
+  PASS  docs/sample.md on the branch is the reviewed commit's, unchanged
+  PASS  the proposal commit's parent is the reviewed commit
+  PASS  the plan is version 3 and records a faithful projection onto the head
+  PASS  the review is pinned to the reviewed commit
+
+--- stdout
+{
+  "command": "publish",
+  "status": "published",
+  "review": {
+    "id": 5000,
+    "url": "https://github.com/octo/widgets/pull/7#pullrequestreview-5000"
+  },
+  "suggestions": [
+    {
+      "number": 101,
+      "url": "https://github.com/octo/widgets/pull/101",
+      "branch": "suggestion-pr/7/197990a1-03db-4a67-ad4c-ac806ff22844"
+    }
+  ],
+  "statePath": "<tmp>/force-push-composition-5N4oXC/state/review.json",
+  "message": "## Draft review published\n\nCreated the draft [review 5000](https://github.com/octo/widgets/pull/7#pullrequestreview-5000) on octo/widgets#7 at commit `c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1`. It stays a draft until someone submits it on GitHub.\n\nSuggestion pull requests (drafts into `feature/retry`, labeled `suggestion-pr`, proposed on the reviewed commit and projected onto the head `a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1`):\n\n- [#101](https://github.com/octo/widgets/pull/101) from `suggestion-pr/7/197990a1-03db-4a67-ad4c-ac806ff22844`",
+  "diagnostics": []
+}
+
+--- stderr
+
+--- input SARIF (as given to --sarif, before the command)
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Review bot",
+          "version": "1.0.0"
+        }
+      },
+      "columnKind": "utf16CodeUnits",
+      "versionControlProvenance": [
+        {
+          "repositoryUri": "https://github.com/octo/widgets",
+          "revisionId": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1"
+        }
+      ],
+      "artifacts": [
+        {
+          "location": {
+            "uri": "docs/new.md"
+          }
+        },
+        {
+          "location": {
+            "uri": "obsolete.txt"
+          }
+        }
+      ],
+      "results": [
+        {
+          "message": {
+            "text": "A general remark."
+          }
+        },
+        {
+          "message": {
+            "text": "End this line with LF."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "docs/crlf.txt"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "docs/crlf.txt"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 1,
+                        "startColumn": 1,
+                        "endLine": 2,
+                        "endColumn": 1
+                      },
+                      "insertedContent": {
+                        "text": "Only line,​with LF.\n"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+--- fake host after the command (writes so far, review requests, pull requests)
+{
+  "writesSoFar": [
+    "POST /repos/octo/widgets/git/blobs",
+    "POST /repos/octo/widgets/git/trees",
+    "POST /repos/octo/widgets/git/commits",
+    "POST /repos/octo/widgets/git/refs",
+    "POST /repos/octo/widgets/pulls",
+    "POST /repos/octo/widgets/issues/101/labels",
+    "POST /repos/octo/widgets/pulls/7/reviews"
+  ],
+  "reviews": [
+    {
+      "id": 5000,
+      "state": "PENDING",
+      "request": {
+        "commit_id": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+        "body": "**Companion pull requests of this review:**\n\n- [#101](https://github.com/octo/widgets/pull/101): `Suggestion for #7: edit docs/crlf.txt` — created with this review\n\n---\n\nA general remark.\n\n<sub>— Review bot 1.0.0</sub>\n\n---\n\n**Suggestion pull request:** [#101](https://github.com/octo/widgets/pull/101)\n\nMerging it into `feature/retry` applies this change:\n\n- Edited [docs/crlf.txt line 1 at c1c1c1c](https://github.com/octo/widgets/blob/c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1/docs/crlf.txt?plain=1#L1)\n\n**Source:** [docs/crlf.txt line 1 at c1c1c1c](https://github.com/octo/widgets/blob/c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1/docs/crlf.txt?plain=1#L1)\n\n```\nOnly line, with CRLF.\n```\n\nEnd this line with LF.\n\n<sub>— Review bot 1.0.0</sub>\n\n<!-- sarif-to-comment:review:fc68f4d6-337f-4df7-94ab-15d36b14477e -->",
+        "comments": []
+      }
+    }
+  ],
+  "pulls": [
+    {
+      "number": 101,
+      "title": "Suggestion for #7: edit docs/crlf.txt",
+      "head": "suggestion-pr/7/197990a1-03db-4a67-ad4c-ac806ff22844",
+      "base": "feature/retry",
+      "draft": true,
+      "state": "open",
+      "labels": [
+        "suggestion-pr"
+      ],
+      "body": "Suggested in a review of #7 at commit c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1.\n\n**The reviewed commit is not part of the branch of #7:** the branch was rewritten after commit c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1 (its head was a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1 when this was proposed). GitHub shows this pull request's changes from an older merge base, so they also list changes of the reviewed commit itself. Projected onto that head before this pull request was created, merging it applies only its own changes, which are these:\n\n```diff\n--- a/docs/crlf.txt\n+++ b/docs/crlf.txt\n@@ -1 +1 @@ CRLF line endings become LF line endings\n-Only line, with CRLF.\n+Only line,{U+200B}with LF.\n```\n\nIn this diff, each `{U+XXXX}` stands for the character with that code point, written visibly; this pull request's commit has the exact bytes.\n\nMerging this pull request into `feature/retry` applies this change:\n\n- Edited [docs/crlf.txt line 1 at c1c1c1c](https://github.com/octo/widgets/blob/c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1/docs/crlf.txt?plain=1#L1)\n\n**How this suggestion is accepted:** it is a draft pull request into `feature/retry`, the branch of #7. A draft cannot be merged: someone with write access first marks it ready for review. The author of #7 then decides whether to merge it, and #7 carries the change to its base. Once #7 is merged or closed, this pull request can be closed.\n\n---\n\n**Source:** [docs/crlf.txt line 1 at c1c1c1c](https://github.com/octo/widgets/blob/c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1/docs/crlf.txt?plain=1#L1)\n\n```\nOnly line, with CRLF.\n```\n\nEnd this line with LF.\n\n<sub>— Review bot 1.0.0</sub>\n\n<!-- suggestion-pr {\"version\":1,\"original\":{\"owner\":\"octo\",\"repo\":\"widgets\",\"pullNumber\":7},\"reviewedCommit\":\"c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1\",\"id\":\"197990a1-03db-4a67-ad4c-ac806ff22844\",\"batch\":\"479e925a-07e9-4274-922a-eb062b1033a3\"} -->"
+    }
+  ]
+}

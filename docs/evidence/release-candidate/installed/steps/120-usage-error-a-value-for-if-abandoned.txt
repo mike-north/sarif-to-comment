@@ -1,0 +1,139 @@
+# 120 usage error: a value for --if-abandoned
+feature: --if-abandoned
+
+$ GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/abandon-YqbKgx/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment close-suggestion-prs --repo octo/cleanup-ab --original 52 --if-abandoned=yes
+exit status: 1
+
+checks:
+  PASS  the token never appears in stdout or stderr
+  PASS  exit 1, stdout empty, stderr names "--if-abandoned takes no value" and the command's --help, no request
+
+--- stdout
+
+--- stderr
+✖ error  The command line is not valid  [usage-error]
+  close-suggestion-prs
+  --if-abandoned takes no value
+  → Run `sarif-to-comment close-suggestion-prs --help` for usage.
+
+1 error
+
+--- fake host after the command (writes so far, review requests, pull requests)
+{
+  "writesSoFar": [
+    "PATCH /repos/octo/cleanup-ab/pulls/62"
+  ],
+  "reviews": [],
+  "pulls": [
+    {
+      "number": 50,
+      "title": "Original 50",
+      "head": "feature-50",
+      "base": "main",
+      "draft": false,
+      "state": "open",
+      "labels": [],
+      "body": ""
+    },
+    {
+      "number": 51,
+      "title": "Original 51",
+      "head": "feature-51",
+      "base": "main",
+      "draft": false,
+      "state": "closed",
+      "labels": [],
+      "body": ""
+    },
+    {
+      "number": 52,
+      "title": "Original 52",
+      "head": "feature-52",
+      "base": "main",
+      "draft": false,
+      "state": "closed",
+      "labels": [],
+      "body": ""
+    },
+    {
+      "number": 53,
+      "title": "Original 53",
+      "head": "feature-53",
+      "base": "main",
+      "draft": false,
+      "state": "closed",
+      "labels": [],
+      "body": ""
+    },
+    {
+      "number": 54,
+      "title": "Original 54",
+      "head": "feature-54",
+      "base": "main",
+      "draft": false,
+      "state": "closed",
+      "labels": [],
+      "body": ""
+    },
+    {
+      "number": 60,
+      "title": "Suggestion for #50",
+      "head": "suggestion-pr/50/00000000-0000-4000-8000-000000000060",
+      "base": "feature-50",
+      "draft": true,
+      "state": "open",
+      "labels": [
+        "suggestion-pr"
+      ],
+      "body": "Suggested in a review of #50 at commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed.\n\n<!-- suggestion-pr {\"version\":1,\"original\":{\"owner\":\"octo\",\"repo\":\"cleanup-ab\",\"pullNumber\":50},\"reviewedCommit\":\"feedfeedfeedfeedfeedfeedfeedfeedfeedfeed\",\"id\":\"00000000-0000-4000-8000-000000000060\",\"batch\":\"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb\"} -->"
+    },
+    {
+      "number": 61,
+      "title": "Suggestion for #51",
+      "head": "suggestion-pr/51/00000000-0000-4000-8000-000000000061",
+      "base": "feature-51",
+      "draft": true,
+      "state": "open",
+      "labels": [
+        "suggestion-pr"
+      ],
+      "body": "Suggested in a review of #51 at commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed.\n\n<!-- suggestion-pr {\"version\":1,\"original\":{\"owner\":\"octo\",\"repo\":\"cleanup-ab\",\"pullNumber\":51},\"reviewedCommit\":\"feedfeedfeedfeedfeedfeedfeedfeedfeedfeed\",\"id\":\"00000000-0000-4000-8000-000000000061\",\"batch\":\"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb\"} -->"
+    },
+    {
+      "number": 62,
+      "title": "Suggestion for #52",
+      "head": "suggestion-pr/52/00000000-0000-4000-8000-000000000062",
+      "base": "feature-52",
+      "draft": true,
+      "state": "closed",
+      "labels": [
+        "suggestion-pr"
+      ],
+      "body": "Suggested in a review of #52 at commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed.\n\n<!-- suggestion-pr {\"version\":1,\"original\":{\"owner\":\"octo\",\"repo\":\"cleanup-ab\",\"pullNumber\":52},\"reviewedCommit\":\"feedfeedfeedfeedfeedfeedfeedfeedfeedfeed\",\"id\":\"00000000-0000-4000-8000-000000000062\",\"batch\":\"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb\"} -->"
+    },
+    {
+      "number": 63,
+      "title": "Suggestion for #53",
+      "head": "suggestion-pr/53/00000000-0000-4000-8000-000000000063",
+      "base": "feature-53",
+      "draft": true,
+      "state": "open",
+      "labels": [
+        "suggestion-pr"
+      ],
+      "body": "Suggested in a review of #53 at commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed.\n\n<!-- suggestion-pr {\"version\":1,\"original\":{\"owner\":\"octo\",\"repo\":\"cleanup-ab\",\"pullNumber\":53},\"reviewedCommit\":\"feedfeedfeedfeedfeedfeedfeedfeedfeedfeed\",\"id\":\"00000000-0000-4000-8000-000000000063\",\"batch\":\"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb\"} -->"
+    },
+    {
+      "number": 64,
+      "title": "Suggestion for #54",
+      "head": "suggestion-pr/54/00000000-0000-4000-8000-000000000064",
+      "base": "feature-54",
+      "draft": true,
+      "state": "open",
+      "labels": [
+        "suggestion-pr"
+      ],
+      "body": "Suggested in a review of #54 at commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed.\n\n<!-- suggestion-pr {\"version\":1,\"original\":{\"owner\":\"octo\",\"repo\":\"cleanup-ab\",\"pullNumber\":54},\"reviewedCommit\":\"feedfeedfeedfeedfeedfeedfeedfeedfeedfeed\",\"id\":\"00000000-0000-4000-8000-000000000064\",\"batch\":\"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb\"} -->"
+    }
+  ]
+}
