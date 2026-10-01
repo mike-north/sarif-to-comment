@@ -57,7 +57,7 @@ All of them were left in place. The validation runs and the retry wrote nothing.
 
 Each review body GitHub stores is byte for byte the body recorded in its state file before it was sent (`request.body` of [`state/first.json.review`](state/first.json.review) and [`state/second.json`](state/second.json), compared with [`08`](08-reviews-after.json)). That recorded request is what recovery after a lost response matches; a lost response was not provoked live.
 
-Every run's standard error held only a warning from the shell's own environment, that Node ignores `NO_COLOR` when `FORCE_COLOR` is set. The tool wrote nothing to it.
+The standard error of runs 0, 1, 2, 5 and 6 held only a warning from the shell's own environment, that Node ignores `NO_COLOR` when `FORCE_COLOR` is set; that of run 7 is empty. The tool wrote nothing to it.
 
 ## Afterwards
 

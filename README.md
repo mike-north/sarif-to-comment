@@ -280,6 +280,8 @@ Library callers can replace the Markdown of named review elements with their own
 | `fileDeletion` | A proposed file deletion in the review body, with its findings. |
 | `manualEdit` | An edit made by hand in the review body: its location link, replacement block and details, with its findings. In a group made by hand, the group's guidance and change labels stay the tool's. |
 | `lifecycleNote` | How a suggestion pull request is accepted, in its description. |
+| `companionIndex` | The review body's index of its suggestion pull requests: those it creates and the existing ones you name. |
+| `companionReference` | A suggestion pull request's section in the review body: its link, what merging it applies and its findings. |
 
 ```js
 const outcome = await publishSarifReview({
@@ -313,7 +315,9 @@ Results are read with a conformant CommonMark + GFM parser (`micromark`, as rema
 - spans several lines, for `attribution`;
 - once composed into its comment, body or suggestion pull request description, leaves something open there that the built-in presentation does not, or disturbs a suggestion block or marker. Every composed text is checked this way, with or without callbacks.
 
-The context your callback receives is a deeply frozen copy. An exception your callback throws propagates unchanged. Callbacks are not part of the publication identity: a retry with the same state path never re-renders what an earlier call already planned or sent. The review body's companion index and its section linking each suggestion pull request are not customizable (they name pull request numbers that exist only once the pull requests are created, after every callback has run), and there is no command-line equivalent; repository-level templates are not supported.
+The context your callback receives is a deeply frozen copy. An exception your callback throws propagates unchanged. Callbacks are not part of the publication identity: a retry with the same state path never re-renders what an earlier call already planned or sent. There is no command-line equivalent, and repository-level templates are not supported.
+
+**The companion index and each suggestion pull request's section** take `companionIndex` and `companionReference`. Each companion arrives with its `number`, `url`, raw `title`, `origin` (`created` or `reused`), `state` (reused ones) and `link` (`[#N](URL)`), and every `link` is required: your result must list every companion, each number leading to its own pull request, and may add no other link (an autolink included). Suggestion pull requests a review creates have no number until they exist, so these two callbacks run twice: while the review is prepared, with placeholder numbers (above 2,000,000,000), so a bad result is refused before anything is written; and once more with the real numbers, when the review is composed after they exist and before it is recorded and sent. A result refused only then (a callback that is not deterministic) stops the publication after its suggestion pull requests exist; retry with the same state path and a corrected callback. Once the review is recorded, recovery and retries reuse it byte for byte and call no callback.
 
 ## One pending review per account
 
@@ -394,11 +398,11 @@ Every review that has companion pull requests begins with an index of them, so y
 ```markdown
 **Companion pull requests of this review:**
 
-- [#101](https://github.com/acme/widgets/pull/101): Suggestion for \#42: create docs/guide.md — created with this review
-- [#97](https://github.com/acme/widgets/pull/97): Suggestion for \#42: edit README.md — reused; it was a draft when this review was prepared
+- [#101](https://github.com/acme/widgets/pull/101): `Suggestion for #42: create docs/guide.md` — created with this review
+- [#97](https://github.com/acme/widgets/pull/97): `Suggestion for #42: edit README.md` — reused; it was a draft when this review was prepared
 ```
 
-It lists every suggestion pull request the publication creates, then every **existing** one you name. Each created one also keeps its own section, with its changes and findings, where its first finding is. A later review can carry an earlier proposal forward without creating a copy:
+It lists every suggestion pull request the publication creates, then every **existing** one you name. Titles are shown as code spans, so they are never Markdown or links, and any invisible or bidirectional character in them is shown as `{U+XXXX}`. Library callers can reshape the index with a `companionIndex` callback (see [Customizing how the review reads](#customizing-how-the-review-reads-library)). Each created one also keeps its own section, with its changes and findings, where its first finding is. A later review can carry an earlier proposal forward without creating a copy:
 
 | Library (`options`) | CLI | Meaning |
 | --- | --- | --- |
