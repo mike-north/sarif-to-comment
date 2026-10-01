@@ -1,0 +1,29 @@
+{
+  "command": "close-suggestion-prs",
+  "status": "original-not-abandoned",
+  "dryRun": true,
+  "owner": "me",
+  "originals": [
+    {
+      "number": 9999,
+      "state": "not-found"
+    }
+  ],
+  "suggestions": [],
+  "counts": {
+    "candidates": 0,
+    "checked": 0,
+    "labeled": 0,
+    "conforming": 0
+  },
+  "message": "## Suggestion pull request cleanup skipped: the original is not closed without merging\n\nmike-north/doc-linter has no pull request #9999 that this account can read, so nothing was checked or closed.",
+  "diagnostics": [
+    {
+      "severity": "note",
+      "code": "original-pull-request-not-abandoned",
+      "title": "The original pull request is not closed without merging",
+      "message": "mike-north/doc-linter has no pull request #9999 that this account can read, so nothing was checked or closed.",
+      "subject": "mike-north/doc-linter#9999"
+    }
+  ]
+}

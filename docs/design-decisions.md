@@ -678,6 +678,22 @@ D48–D60 record the owner's later decisions of September 30, 2026 on caller-con
 
 **Evidence and open implementation:** GH-02 in the [behavior register](github-behavior.md#gh-02--closing-the-original-without-merging-left-its-companion-open) establishes that the tested abandoned original left its companion open. GitHub advertises `closed` PR events and an event payload merge flag; this documents a feasible trigger, not a tested workflow. Source: [Actions event documentation](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#pull_request). Workflow event choice, trusted-code execution, token permissions, fork scope, repeat-run behavior and a bounded positive/negative experiment remain design work. No workflow has been installed, run or authorized for execution during this discussion.
 
+**October 1, 2026 update: implemented.** The guard is `requireAbandonedOriginal` / `--if-abandoned` on targeted cleanup ([cleanup contract §2.12](suggestion-cleanup-contract.md#212-requiring-an-abandoned-original-requireabandonedoriginal---if-abandoned)), unreleased. The tool reads the exact original after resolving the label and before listing anything. That read is targeted discovery's own, not a second one.
+
+- **Closed and not merged:** the established targeted cleanup runs unchanged, keeping every positive identification.
+- **Open (including reopened), merged or not found:** a skip, not a failure. The status is `original-not-abandoned` (exit 0), with the note `original-pull-request-not-abandoned` naming the state.
+- **Unreadable:** an operational error, and nothing is closed.
+
+The two-minute grace period belongs to the workflow. The tool never waits, deletes a branch, or reopens or recreates a proposal. The workflow is shipped as an example only ([`docs/examples/abandonment-cleanup.workflow.yml`](examples/abandonment-cleanup.md)). Its page records:
+
+- the choice of `pull_request` over `pull_request_target`;
+- forks;
+- repeat runs;
+- `--owner all` with the workflow's own token, which the support profile does not yet claim;
+- reopening companions by hand.
+
+Live dry runs in doc-linter skipped open, merged and missing originals, and proceeded for a closed, unmerged one ([evidence](evidence/abandonment-cleanup/README.md)). The workflow experiment (E7: trigger, delay, a quick close and reopen) remains pending. It needs the owner's authority to install a workflow in a fixture repository's branch. No workflow has been installed or run. The text above is kept as decided.
+
 ### D55. Report unavailable explicit delivery requests without silently substituting — owner-selected direction
 
 **Acceptance basis:** Closing the delivery-policy discussion on September 30, 2026, the user confirmed that clear intent to use a particular delivery mechanism must be honored. If that mechanism is unavailable, switching to another would be surprising; report the problem and exit cleanly.
