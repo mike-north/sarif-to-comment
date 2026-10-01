@@ -1,6 +1,6 @@
 # Delivery policy: contract
 
-Draft contract · September 30, 2026. It turns the owner's delivery decisions of September 30, 2026 into a normative policy: [D48](design-decisions.md#d48-make-publication-policy-caller-controlled--accepted-product-direction-implementation-design-open) (caller control and precedence), [D49](design-decisions.md#d49-keep-each-supplied-group-available-for-collective-application-in-one-pr--owner-selected-direction-host-verification-open) (a group stays whole), [D50](design-decisions.md#d50-use-one-delivery-setting-for-whole-file-additions-and-deletions--owner-selected-direction) (one setting for whole-file additions and deletions), [D51](design-decisions.md#d51-propagate-whole-file-delivery-over-its-explicit-group--owner-selected-precedence) (a group follows its whole-file operation), [D52](design-decisions.md#d52-organize-companion-prs-around-caller-selected-acceptance-choices--owner-scenarios-representation-design-open) (companion bundles), [D53](design-decisions.md#d53-offer-alternative-remedies-as-a-related-family-of-companion-prs--owner-scenario-cleanup-mechanism-unverified) (alternatives stay separate), [D55](design-decisions.md#d55-report-unavailable-explicit-delivery-requests-without-silently-substituting--owner-selected-direction) (no silent substitution) and [D56](design-decisions.md#d56-make-each-review-an-explicit-index-of-its-companion-proposals--owner-selected-scope-extension) (the review indexes its companions). Values marked **owner confirmation** are engineering choices that the owner confirms or replaces at release review (§15).
+Draft contract · September 30, 2026. It turns the owner's delivery decisions of September 30, 2026 into a normative policy: [D48](design-decisions.md#d48-make-publication-policy-caller-controlled--accepted-product-direction-implementation-design-open) (caller control and precedence), [D49](design-decisions.md#d49-keep-each-supplied-group-available-for-collective-application-in-one-pr--owner-selected-direction-host-verification-open) (a group stays whole), [D50](design-decisions.md#d50-use-one-delivery-setting-for-whole-file-additions-and-deletions--owner-selected-direction) (one setting for whole-file additions and deletions), [D51](design-decisions.md#d51-propagate-whole-file-delivery-over-its-explicit-group--owner-selected-precedence) (a group follows its whole-file operation), [D52](design-decisions.md#d52-organize-companion-prs-around-caller-selected-acceptance-choices--owner-scenarios-representation-design-open) (companion bundles), [D53](design-decisions.md#d53-offer-alternative-remedies-as-a-related-family-of-companion-prs--owner-scenario-cleanup-mechanism-unverified) (alternatives stay separate), [D55](design-decisions.md#d55-report-unavailable-explicit-delivery-requests-without-silently-substituting--owner-selected-direction) (no silent substitution) and [D56](design-decisions.md#d56-make-each-review-an-explicit-index-of-its-companion-proposals--owner-selected-scope-extension) (the review indexes its companions). The value marked **owner confirmation** is an engineering choice that the owner confirms or replaces at release review (§15).
 
 **Status.** The resolution and planning rules of §3–§10 and the configuration validation of §11 are implemented as an internal module, `src/delivery-policy.cts`. Publication, readiness assessment and the command line do not use it yet: until they do, the [companion contract](companion-suggestion-pr-contract.md) (its single `allowSuggestionPullRequests` setting, §2.1–§2.5) describes what the tool does. Where the two differ, this contract is the target.
 
@@ -30,7 +30,7 @@ The key words MUST, MUST NOT, SHOULD and MAY are used as in [RFC 2119](https://w
 
 A review proposes changes. This contract decides, for each proposed change or group of changes, **which mechanism delivers it**: a native suggestion, a section of the review body, or a companion pull request. It decides nothing else.
 
-- **Caller control (D48).** Defaults are replaceable. For each dimension, the caller's explicit setting wins over the repository's configuration, which wins over the default. A caller can keep everything on the original pull request, or send every group and every whole-file operation to companion pull requests (§6).
+- **Caller control (D48).** Defaults are replaceable. For each dimension, the caller's explicit setting wins over the repository's configuration, which wins over the default. A caller can keep everything on the original pull request, or send every proposed change, ungrouped edits included, to companion pull requests (§6).
 - **No silent substitution (D55).** Only a mechanism the policy lists is ever used. When no listed mechanism can deliver a unit, the whole publication is blocked before any write.
 - **Groups stay whole (D49, D51).** A group has exactly one destination for all of its members.
 - **Delivery only.** Whether a mechanism *can* deliver a unit (native eligibility, companion obstacles such as a fork or a size limit, body limits) is decided by preparation and is an input here (§8.7). How each mechanism is presented is the business of the presentation contracts. This contract does not invent edits for findings without fixes (D48).
@@ -56,6 +56,7 @@ Each dimension has a fixed vocabulary. No other value is valid.
 | --- | --- | --- |
 | `edits` | `native` | A native suggestion on the original pull request, in an inline review comment. |
 | | `review-body` | The exact replacement shown on the original pull request in the review body, for the author to apply by hand. It is not an applicable suggestion. |
+| | `companion` | One companion pull request holding the edit (D48: companion pull requests for all proposed changes). |
 | `groupedEdits` | `native-batch` | Every member as a native suggestion on the original pull request, in the same review, with guidance that lists the members by path and line so the author can add all of them to one GitHub suggestion batch (D49). |
 | | `companion` | The whole group in one companion pull request. |
 | | `manual-group` | One review-body section on the original pull request holding every member's replacement, to be applied together by hand in one commit (D49's manual route). |
@@ -87,12 +88,12 @@ Every dimension has an explicit default. The defaults never create a companion p
 
 | Dimension | Default |
 | --- | --- |
-| `edits` | `[native, review-body]` |
+| `edits` | `[native]` |
 | `groupedEdits` | `[native-batch]` (**owner confirmation**: §15, item 1) |
 | `fileOperations` | `[manual]` |
 | `companionBundle` | `per-unit` |
 
-- `edits`: a native suggestion where the edit is eligible, otherwise the review body, with a fallback warning.
+- `edits`: a native suggestion, strictly. An edit that cannot be a native suggestion is blocked, exactly as it is refused without this policy (for example `suggestion-not-inline`). The review body and companion pull requests are the caller's to list.
 - `groupedEdits`: a group whose members are all eligible for native suggestions is offered as one native batch. Any other edit group is blocked. The manual group is never a default (§8.4).
 - `fileOperations`: the review-body section, as the file-operation contract has always published it.
 
@@ -103,11 +104,11 @@ A preset is a named set of lists. It sets only the dimensions it names; the othe
 | Preset | `edits` | `groupedEdits` | `fileOperations` | `companionBundle` |
 | --- | --- | --- | --- | --- |
 | `original-pr` | `[native, review-body]` | `[native-batch, manual-group]` | `[manual]` | not set |
-| `companion` | not set | `[companion]` | `[companion]` | not set |
+| `companion` | `[companion]` | `[companion]` | `[companion]` | not set |
 
 - **`original-pr`** keeps every proposal on the original pull request and never creates a companion pull request (D48's all-native mode; D51's no-companion workflow). It lists both original-pull-request forms of a group, so choosing the preset authorizes the manual group as an announced fallback (§8.4).
-- **`companion`** sends every group and every whole-file operation to companion pull requests, strictly (D48's all-companion mode, D55). It does not set `edits`: the `edits` vocabulary has no companion mechanism, so an ungrouped edit keeps its own setting (§15, item 3).
-- Both expansions are **owner confirmation** (§15, item 2).
+- **`companion`** sends every proposed change to companion pull requests, strictly: ungrouped edits, groups and whole-file operations (D48's all-companion mode, D55). It leaves `companionBundle` to lower layers; when the limit on companion pull requests blocks a publication, the error names the `single` bundle as a remedy (§9).
+- A preset counts as the caller listing its mechanisms, so choosing `original-pr` satisfies §8.4.
 
 ## 7. Layers and precedence
 
@@ -134,7 +135,7 @@ Each unit is routed by the list of the dimension that governs it (§2), to the *
 
 ### 8.2 Edits
 
-An edit follows `edits`.
+An edit follows `edits`. `companion` delivers it in a companion pull request of its own, or as a section of the `single` bundle (§9).
 
 ### 8.3 Edit groups and native batches
 
@@ -172,7 +173,20 @@ The units delivered by `companion` are packaged by `companionBundle` (D52):
 - **`per-unit`**: one companion pull request per unit, in the order the units are found.
 - **`single`**: one companion pull request holding every companion-delivered unit, in the order they are found. Each unit is its own **section**, keeping its identity (the group's name, or the change). A group is one section and is never split across sections or companion pull requests. When no unit is delivered by `companion`, no companion pull request is created.
 
-Bundling packages proposals for one convenient merge. It does not claim that the bundled groups depend on one another, and keeping them separate does not claim that they are independent (D52). Alternatives are never bundled (§8.6). The companion contract's limit on the number of companion pull requests one review creates (`too-many-suggestion-prs`) counts the pull requests the bundling produces.
+Bundling packages proposals for one convenient merge. It does not claim that the bundled groups depend on one another, and keeping them separate does not claim that they are independent (D52). Alternatives are never bundled (§8.6).
+
+**The limit.** One review creates at most **10** companion pull requests ([companion contract §2.8](companion-suggestion-pr-contract.md#28-readiness)), counted after bundling. When the planned companion pull requests exceed it, the publication is blocked before any write with one `too-many-suggestion-prs` error, reported after any `delivery-unavailable` errors. Its message is unchanged:
+
+```text
+The review needs N suggestion pull requests; the limit is 10. Nothing is split or dropped.
+```
+
+and its remedies are, in order:
+
+1. ``Bundle them into one companion pull request (`--companion-bundle single`, `delivery.companionBundle: 'single'`).``
+2. `Publish fewer proposals in one review, or group related changes.`
+
+Under `single` there is at most one companion pull request, so the limit never blocks it.
 
 ## 10. Blocking and announced fallback
 
@@ -227,6 +241,7 @@ with one bullet per earlier mechanism, in list order, and the other parts as in 
 | `delivery-unavailable` | error | No delivery mechanism the policy lists is available for a proposal | Remove the obstacle the message names, then publish again.<br>Or list a mechanism that is available for this kind of proposal (`--edits`, `--grouped-edits`, `--file-operations`, the `delivery` option, or `.github/sarif-to-comment.json`). |
 | `delivery-fallback` | warning | A proposal is delivered by a later mechanism of its delivery list | To use an earlier mechanism, remove the obstacle the message names, then publish again.<br>To refuse rather than fall back, list only the mechanism you require. |
 | `delivery-configuration-invalid` | error | The delivery configuration is not valid | Fix `.github/sarif-to-comment.json` on the default branch. |
+| `companion-options-unused` | note | Companion pull request options have no effect | — |
 
 **Reconciliation with the companion contract's codes.** These codes replace, rather than sit beside, the codes of the single allow/disallow setting, none of which was released:
 
@@ -244,7 +259,8 @@ A repository MAY set its delivery policy in **`.github/sarif-to-comment.json`**.
 - It is read from the **current commit of the repository's default branch**, never from the pull request's branch, so a pull request cannot change its own delivery policy.
 - It is read through Git objects (the default branch's reference, its commit, the trees on the path and the blob), never the Contents API, which would follow a symbolic link to another path's text. This is the same read, with the same trust rules, as `.github/suggestion-prs.json` ([companion contract §2.7](companion-suggestion-pr-contract.md#27-relationship-reference-marker-and-labels)).
 - It is optional, read-only and maintained by hand. The tool never writes it.
-- It is read once when a publication is planned, by `publish` and `validate` alike, because any dimension may come from it.
+- It is read once when a publication is planned, by `publish` and `validate` alike, **unless the caller layers decide every setting**. When the caller's specific settings and the caller's preset together set `edits`, `groupedEdits`, `fileOperations` and `companionBundle`, nothing in the file could change the policy (§7), so it is not read: its content, valid or not, has no effect, and no read can fail. Otherwise it is read. For example, `--delivery companion` alone leaves `companionBundle` to lower layers, so the file is read; `--delivery companion --companion-bundle single` decides everything, so it is not.
+- A failed read is operational (§11.4), never a silent default.
 
 ### 11.2 Distinct from the convention file
 
@@ -284,7 +300,7 @@ Every member is optional. Its JSON Schema:
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,
-          "items": { "enum": ["native", "review-body"] }
+          "items": { "enum": ["native", "review-body", "companion"] }
         },
         "groupedEdits": {
           "type": "array",
@@ -348,7 +364,7 @@ The caller layer has the same members as the configuration's `delivery` object.
 | Library (`options.delivery`) | CLI | Value |
 | --- | --- | --- |
 | `preset?: 'original-pr' \| 'companion'` | `--delivery <preset>` | A preset (§6). |
-| `edits?: ('native' \| 'review-body')[]` | `--edits <list>` | An ordered list. |
+| `edits?: ('native' \| 'review-body' \| 'companion')[]` | `--edits <list>` | An ordered list. |
 | `groupedEdits?: ('native-batch' \| 'companion' \| 'manual-group')[]` | `--grouped-edits <list>` | An ordered list. |
 | `fileOperations?: ('manual' \| 'companion')[]` | `--file-operations <list>` | An ordered list. |
 | `companionBundle?: 'per-unit' \| 'single'` | `--companion-bundle <bundle>` | A single value. |
@@ -357,6 +373,14 @@ The caller layer has the same members as the configuration's `delivery` object.
 - An invalid caller setting is refused before anything is read, by the rules of §11.4 (an unknown member, an empty list, a value outside the vocabulary, a repeated mechanism): the library throws a `TypeError` naming the member and the problem, and the command line reports a usage error and exits **1**. A caller's mistake is a usage error; a repository's is a blocked publication.
 - `validateSarifReview` and `validate` take the same settings, because they take publication's options.
 - `allowSuggestionPullRequests` and `--allow-suggestion-prs` are replaced by these settings: a companion pull request is requested by listing `companion`.
+
+**Companion pull request options.** `pullRequestLabels` / `--pr-labels` and `markSuggestionPullRequestsReady` / `--mark-suggestion-prs-ready` ([companion contract §2.2](companion-suggestion-pr-contract.md#22-options)) apply only to companion pull requests. They are valid with any delivery policy and are never a usage error or a `TypeError` for that reason: whether a companion is planned is known only after the configuration is read and the units are routed. When a publication is planned with **no** companion pull request, and the caller gave either option with an effect (`pullRequestLabels` with at least one label; `markSuggestionPullRequestsReady: true`, which is what the switch gives), the outcome carries one `companion-options-unused` note, after its warnings, whose message is exactly:
+
+```text
+No companion pull request is planned, so these options have no effect: OPTIONS.
+```
+
+where `OPTIONS` names each given option as its flag and its library name, in this order, joined by `, `: `` `--pr-labels` (`pullRequestLabels`) ``, `` `--mark-suggestion-prs-ready` (`markSuggestionPullRequestsReady`) ``. For example: ``No companion pull request is planned, so these options have no effect: `--pr-labels` (`pullRequestLabels`), `--mark-suggestion-prs-ready` (`markSuggestionPullRequestsReady`).`` A blocked publication does not carry the note. The note changes nothing else: the exit status stays 0.
 
 ## 13. Recording the resolved policy
 
@@ -373,11 +397,11 @@ Each example gives its inputs and the hand-derived expectation. "Eligible" means
 
 **D-A1 (D48: an explicit choice over configuration).** F: `{"delivery":{"groupedEdits":["native-batch"]}}`. C: `--grouped-edits companion`. `groupedEdits` resolves to `[companion]`, source `caller`. A group of two eligible edits whose companion pull request can be made is delivered by `companion`; no warning.
 
-**D-A2 (D48: presets, the same precedence).** F: `{"delivery":{"preset":"original-pr"}}`. C: `--delivery companion`. `groupedEdits` is `[companion]` and `fileOperations` is `[companion]`, both source `caller-preset` `companion`; `edits` is `[native, review-body]`, source `configuration-preset` `original-pr` (the `companion` preset does not set `edits`); `companionBundle` is `per-unit`, source `default`.
+**D-A2 (D48: presets, the same precedence).** F: `{"delivery":{"preset":"original-pr","companionBundle":"single"}}`. C: `--delivery companion`. `edits`, `groupedEdits` and `fileOperations` are each `[companion]`, source `caller-preset` `companion`; `companionBundle` is `single`, source `configuration` (no preset sets it).
 
 **D-A3 (D48: no configuration, an explicit native choice).** No file. C: `--edits native`. `edits` resolves to `[native]`, source `caller`. An eligible edit is delivered as `native`. An edit that is not eligible is blocked with `delivery-unavailable`, naming `` `[native]` `` and ``set by the caller (`--edits`, `delivery.edits`)``; it is not moved to the review body.
 
-**D-A4 (D48: nothing set).** No file, no caller setting. `edits` `[native, review-body]`, `groupedEdits` `[native-batch]`, `fileOperations` `[manual]`, `companionBundle` `per-unit`, every source `default`. No companion pull request is created for any document.
+**D-A4 (D48: nothing set).** No file, no caller setting. `edits` `[native]`, `groupedEdits` `[native-batch]`, `fileOperations` `[manual]`, `companionBundle` `per-unit`, every source `default`. No companion pull request is created for any document, and an edit that cannot be a native suggestion is blocked, as it is refused today.
 
 **D-A5 (D49: two edits delivered natively).** Defaults. An edit group of two members, both eligible. The group is delivered as `native-batch`: both members stay on the original pull request, in one plan entry for the group; no warning.
 
@@ -407,11 +431,24 @@ Each example gives its inputs and the hand-derived expectation. "Eligible" means
 
 **D-A17 (invalid caller setting).** `--file-operations ""` or `delivery: { fileOperations: [] }`: a usage error (exit 1) or `TypeError`, before anything is read.
 
+**D-A18 (D48: every proposed change in companions).** C: `--delivery companion --companion-bundle single`. An ungrouped eligible edit, an edit group and a standalone deletion, all with companions possible. Each is delivered by `companion`, the edit included; one companion pull request holds three sections, in document order. No native suggestion is created.
+
+**D-A19 (the limit and its remedy).** C: `--delivery companion`. Eleven ungrouped edits, all with companions possible: `per-unit` would create 11 companion pull requests, so the publication is blocked with one `too-many-suggestion-prs`: `The review needs 11 suggestion pull requests; the limit is 10. Nothing is split or dropped.`, whose first remedy names `--companion-bundle single`. With `--companion-bundle single` added: one companion pull request with eleven sections.
+
+**D-A20 (companion options without companions).** Defaults; C: `--pr-labels team-a --mark-suggestion-prs-ready`; one eligible edit. Delivered as `native`, with one `companion-options-unused` note: ``No companion pull request is planned, so these options have no effect: `--pr-labels` (`pullRequestLabels`), `--mark-suggestion-prs-ready` (`markSuggestionPullRequestsReady`).`` Under `--delivery companion` the same options carry no note.
+
+**D-A21 (when the configuration is read).** `--delivery companion --companion-bundle per-unit`: every setting is decided by the caller, so the file is not read, and an invalid file there blocks nothing. `--delivery companion` alone, `--delivery original-pr`, or `--edits native` alone: the file is read.
+
 ## 15. Owner confirmation and open questions
 
-1. **`groupedEdits` default `[native-batch]`** (owner confirmation). Today an edit group without suggestion pull requests is refused; under this default it is delivered as a native batch when every member is eligible. The alternative is a default that blocks every edit group unless the caller chooses.
-2. **The presets' expansions** (owner confirmation, §6). In particular, whether `original-pr` should list `manual-group` after `native-batch`, or be strict (`[native-batch]`), and whether `companion` should set `companionBundle`.
-3. **All-companion delivery of ungrouped edits.** D48 asks that a caller can request companion pull requests for all proposed changes. The `edits` vocabulary (`native`, `review-body`) has no companion mechanism, so an ungrouped edit can never be delivered by a companion pull request, even under the `companion` preset. Whether `edits` gains `companion` is open.
-4. **`review-body` for an ungrouped edit.** Today an edit that cannot be a native suggestion blocks the review (for example `suggestion-not-inline`). The default `edits` list names `review-body`, so once that form exists such an edit is delivered in the review body with a fallback warning instead. Until the form exists, preparation reports it unavailable, and the behavior is unchanged.
-5. **Companion-only caller settings.** `pullRequestLabels` / `--pr-labels` and `markSuggestionPullRequestsReady` / `--mark-suggestion-prs-ready` only affect companions. Whether they are refused when the resolved policy can create none, and how (a usage error cannot see the configuration), is open.
-6. **The cost of reading the configuration.** Every publication now reads `.github/sarif-to-comment.json`, so a failed read becomes an operational failure even for a caller who configured nothing and set every dimension. Whether the read is skipped when the caller layer sets every dimension is open.
+**Owner confirmation at release review.**
+
+1. **`groupedEdits` default `[native-batch]`.** Today an edit group without suggestion pull requests is refused; under this default it is delivered as a native batch when every member is eligible. The alternative is a default that blocks every edit group unless the caller chooses.
+
+**Resolved since the first draft.**
+
+- **All-companion delivery of ungrouped edits.** `edits` accepts `companion`, and the `companion` preset sets `edits: [companion]` (§3, §6), as D48's request for companion pull requests for all proposed changes requires.
+- **The `edits` default.** `[native]`, strict (§5): an edit that cannot be a native suggestion is blocked exactly as it is refused today. `review-body` and `companion` are the caller's to list.
+- **The presets.** `original-pr` lists `manual-group` after `native-batch`, because a preset counts as the caller listing it (§8.4). `companion` does not set `companionBundle`; when the limit blocks, its error names the `single` bundle as a remedy (§9). The library accepts `delivery.preset`, like the command line's `--delivery` (§12).
+- **Companion-only options.** `--pr-labels` and `--mark-suggestion-prs-ready` are never usage errors; with no companion planned, publication carries a `companion-options-unused` note naming them (§12).
+- **Reading the configuration.** The file is read only when the caller layers leave some setting undecided; a failed read is operational (§11.1).
