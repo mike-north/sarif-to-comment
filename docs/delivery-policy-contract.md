@@ -164,9 +164,9 @@ Alternatives (§2) are presented with their finding (D44). They are never placed
 
 ### 8.7 Availability is an input
 
-Whether each mechanism is available for each unit is decided by preparation and validation: the native-suggestion eligibility rules (R8, [companion contract §2.4](companion-suggestion-pr-contract.md#24-presentation-form-selection)), what prevents a companion pull request ([companion contract §2.5](companion-suggestion-pr-contract.md#25-repository-target-branch-and-revision): a fork, another base, a size limit, a description limit, …), and the limits of the review-body forms. An unavailable mechanism always carries at least one **obstacle**: a concrete Markdown sentence saying what prevents it. A mechanism is never reported unavailable without one. An obstacle may come with a **remedy**: one sentence saying how to remove that obstacle (§8.9, §10.1).
+Whether each mechanism is available for each unit is decided by preparation and validation: the native-suggestion eligibility rules (R8, [companion contract §2.4](companion-suggestion-pr-contract.md#24-presentation-form-selection)), what prevents a companion pull request ([companion contract §2.5](companion-suggestion-pr-contract.md#25-repository-target-branch-and-revision): a fork, another base, after a rewritten history a projection that merging it would not apply exactly its own changes or cannot decide it ([§2.5.1](companion-suggestion-pr-contract.md#251-fidelity-after-a-rewritten-history)), a size limit, a description limit, …), and the limits of the review-body forms. An unavailable mechanism always carries at least one **obstacle**: a concrete Markdown sentence saying what prevents it. A mechanism is never reported unavailable without one. An obstacle may come with a **remedy**: one sentence saying how to remove that obstacle (§8.9, §10.1).
 
-Availability is asked for **lazily**, so preparation never works out obstacles nobody needs (for example a companion body under the defaults, which list no companion). For each unit, it is asked only for mechanisms the resolved list names, in list order, at most once each, and never after the first available one. A group member's native eligibility is asked only when `native-batch` is asked for. In particular, the pull request's branches and repositories are read for companion pull requests only when a unit's `companion` availability is first asked, and the ancestry of a moved head only then too ([companion contract §2.8](companion-suggestion-pr-contract.md#28-readiness)): a publication whose lists never reach `companion` never reads them, so their failure can never refuse it.
+Availability is asked for **lazily**, so preparation never works out obstacles nobody needs (for example a companion body under the defaults, which list no companion). For each unit, it is asked only for mechanisms the resolved list names, in list order, at most once each, and never after the first available one. A group member's native eligibility is asked only when `native-batch` is asked for. In particular, the pull request's branches and repositories are read for companion pull requests only when a unit's `companion` availability is first asked, and the ancestry of a moved head, and after a rewritten history the trees and blobs of its projection, only then too ([companion contract §2.8](companion-suggestion-pr-contract.md#28-readiness), [§2.5.1](companion-suggestion-pr-contract.md#251-fidelity-after-a-rewritten-history)): a publication whose lists never reach `companion` never reads them, so their failure can never refuse it.
 
 ### 8.8 What this version supports
 
@@ -209,7 +209,7 @@ An edit can be a native suggestion exactly when the rules that previously refuse
 | `GitHub's observed application would not reproduce the intended end of the file.` | `Change the replacement.` | `suggestion-final-newline-unverified` |
 | `Lines A-B of PATH cannot carry a native suggestion (REASON).`, where REASON is the placement's reason | `Remove the fix.` | `suggestion-not-inline` |
 
-The obstacles of `companion` ([companion contract §2.5.1](companion-suggestion-pr-contract.md#251-re-application-after-a-rewritten-history)) carry the remedies the retired `suggestion-group-pr-unavailable` gave them: a rewritten history it cannot be re-applied onto, `Review the pull request's current head again, and publish that review.`; a created file over the per-file limit, `Reduce the proposed file to at most 1,000,000 bytes.`; a description over the body limit, `Shorten the findings' messages.` A fork, another base and a mechanism this version does not support have no remedy of their own.
+The obstacles of `companion` ([companion contract §2.5.1](companion-suggestion-pr-contract.md#251-fidelity-after-a-rewritten-history)) carry the remedies the retired `suggestion-group-pr-unavailable` gave them: a projection, after a rewritten history, that merging it would not apply exactly its own changes, or that cannot decide whether it would, `Review the pull request's current head again, and publish that review.`; a created file over the per-file limit, `Reduce the proposed file to at most 1,000,000 bytes.`; a description over the body limit, `Shorten the findings' messages.` A fork, another base and a mechanism this version does not support have no remedy of their own.
 
 A problem with the fix itself (a replacement that does not apply, a fix of another revision, a diff inconsistent with the source) is not an obstacle: it blocks the review with its own code, whatever the policy.
 
@@ -301,6 +301,7 @@ with one bullet per earlier mechanism, in list order, and the other parts and th
 | `delivery-fallback` | warning | A proposal is delivered by a later mechanism of its delivery list | To use an earlier mechanism, remove the obstacle the message names, then publish again.<br>To refuse rather than fall back, list only the mechanism you require. |
 | `delivery-configuration-invalid` | error | The delivery configuration is not valid | Fix `.github/sarif-to-comment.json` on the default branch. |
 | `companion-options-unused` | note | Companion pull request options have no effect | — |
+| `companion-conflicts-at-head` | warning | A suggestion pull request is projected to conflict with the pull request's head | Review the pull request's current head again, and publish that review.<br>Or resolve the conflict when merging the suggestion pull request. |
 
 **Reconciliation with the companion contract's codes.** These codes replace, rather than sit beside, the codes of the single allow/disallow setting, none of which was released:
 
@@ -310,6 +311,14 @@ with one bullet per earlier mechanism, in list order, and the other parts and th
 - **`suggestion-reviewed-commit-not-head`** is retired with no replacement: a native suggestion no longer needs the reviewed commit to be the pull request's head ([specification R13.1](specification.md#r131-the-reviewed-diff-historical-placement-and-native-suggestions)), so the condition is no obstacle.
 
 Publication reports only the codes of this section; [Diagnostics](diagnostics.md#retired-codes) lists the retired ones. None of them was released.
+
+**`companion-conflicts-at-head`** is not about which mechanism delivers a unit: `companion` delivers it, as listed. It says that, after a rewritten history, the suggestion pull request's projection ([companion contract §2.5.1](companion-suggestion-pr-contract.md#251-fidelity-after-a-rewritten-history)) found a conflict with the head, and no worse. Its message is exactly:
+
+```text
+Projected onto the head `H` of #PULL, merging the suggestion pull request for UNIT would conflict in PATHS. It is created on the reviewed commit, as planned; GitHub shows the conflict to whoever merges it.
+```
+
+where `UNIT` is the unit's description starting with a lowercase letter (`the suggestion pull request bundling M proposals` replaces `the suggestion pull request for UNIT` for a bundle of several), and `PATHS` the conflicting paths as code spans joined like `` `a` ``, `` `a` and `b` ``, `` `a`, `b` and `c` ``. Its location is the first unit's. Like every preparation warning, it is recorded with the plan and reported by every call ([companion contract §2.11](companion-suggestion-pr-contract.md#211-presentation)). A blocked publication carries none.
 
 ## 11. The configuration file
 
@@ -455,7 +464,7 @@ The recorded form of each dimension is `{ "value": <list or value>, "source": "<
 Where it is recorded:
 
 - **A review without companion pull requests** is the publication record at the state path ([companion contract §2.9](companion-suggestion-pr-contract.md#29-durable-identity-and-the-order-of-writes)). It is **version 3**: version 1's fields plus `delivery`, the recorded policy, and `warnings` when preparation reported any. Records of versions 1 (written by 0.2.x) and 2 (version 1 plus `warnings`) are still read and continued exactly as before; they record no policy.
-- **A review with companion pull requests** is the companion plan at the state path, whose `delivery` member is the recorded policy.
+- **A review with companion pull requests** is the companion plan at the state path, whose `delivery` member is the recorded policy. When its suggestions were projected after a rewritten history, the plan is version 3 and also records the projection ([companion contract §2.9](companion-suggestion-pr-contract.md#29-durable-identity-and-the-order-of-writes)).
 
 The caller's identity document never holds the configuration's values, so a changed configuration never turns a retry into a `state-mismatch`: the retry finds the record and continues it.
 

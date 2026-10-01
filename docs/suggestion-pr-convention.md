@@ -1,6 +1,6 @@
 # Suggestion pull request convention
 
-**Version 2** · September 29, 2026 · Owner-accepted in [issue #27](https://github.com/mike-north/sarif-to-comment/issues/27) ([D41](design-decisions.md#d41-the-suggestion-pull-request-convention-and-options--owner-decisions)). Version 2 adds suggestions re-applied after the original's history was rewritten (§5.1), the owner's decision on [issue #28](https://github.com/mike-north/sarif-to-comment/issues/28) ([D42](design-decisions.md#d42-test-ancestry-when-the-originals-branch-has-moved--owner-decision)), based on the [force-push experiment](force-push-experiment.md). The details listed under [Open questions](#10-open-questions) are proposals awaiting the owner.
+**Version 2** · September 29, 2026 · Owner-accepted in [issue #27](https://github.com/mike-north/sarif-to-comment/issues/27) ([D41](design-decisions.md#d41-the-suggestion-pull-request-convention-and-options--owner-decisions)). Version 2 adds suggestions re-applied after the original's history was rewritten (§5.1), the owner's decision on [issue #28](https://github.com/mike-north/sarif-to-comment/issues/28) ([D42](design-decisions.md#d42-test-ancestry-when-the-originals-branch-has-moved--owner-decision)), based on the [force-push experiment](force-push-experiment.md). Revised October 1, 2026, by the owner's decisions [D58](design-decisions.md#d58-do-not-abort-historical-review-publication-merely-because-the-pr-branch-changes--owner-selected-force-push-direction) and [D59](design-decisions.md#d59-treat-force-push-review-lifecycle-as-host-behavior-not-a-new-publisher-service--owner-selected-boundary): a suggestion is always proposed on the reviewed commit and is never re-applied (§5.1), so producers write version 1 only; version 2 stays defined, so that consumers keep recognizing the suggestions already marked with it (§7, §11). The details listed under [Open questions](#10-open-questions) are proposals awaiting the owner.
 
 A **suggestion pull request** proposes a change to someone else's pull request as a pull request of its own, into that pull request's branch. This document defines how such pull requests look on GitHub, so that any tool can create them, find them and tidy them up, and so that a person looking at one sees only a suggestion. Nothing in it depends on SARIF or on any particular tool. sarif-to-comment implements it: `publish` creates suggestion pull requests ([companion contract](companion-suggestion-pr-contract.md)) and `close-suggestion-prs` closes them ([cleanup contract](suggestion-cleanup-contract.md)).
 
@@ -64,21 +64,22 @@ suggestion-pr/<original pull number>/<id>
 
 in the original's repository, where `<id>` is the suggestion's identifier from its marker (§7).
 
-- The branch holds exactly one commit, so the pull request's changes are exactly the suggested change. Its parent is the commit the suggestion was proposed on: the commit that was reviewed (the marker's `reviewedCommit`), or, for a suggestion re-applied after the original's history was rewritten (§5.1), the marker's `reappliedOnto`.
+- The branch holds exactly one commit, so the pull request's changes are exactly the suggested change. Its parent is the commit the suggestion was proposed on: the commit that was reviewed (the marker's `reviewedCommit`). A suggestion marked with version 2 (§7) was re-applied by an earlier producer; its parent is the marker's `reappliedOnto`.
 - A producer creates each branch once and MUST NOT update, force-push or delete it afterwards. People may push to it; producers never overwrite their changes.
 - Consumers close pull requests only. Deleting a branch is left to people, or to GitHub's automatic deletion of merged branches.
 
 ### 5.1 When the original's branch has moved since the review
 
-> **September 30, 2026 note.** This section describes the current implemented behavior. The owner's decisions [D48–D60](design-decisions.md#owner-decisions-of-september-30-2026-delivery-policy-and-the-force-push-boundary) set a different target: [D58](design-decisions.md#d58-do-not-abort-historical-review-publication-merely-because-the-pr-branch-changes--owner-selected-force-push-direction) keeps feedback about the explicitly reviewed commit when the branch moves, and does not authorize automatic re-application or rebasing of proposals. [D59](design-decisions.md#d59-treat-force-push-review-lifecycle-as-host-behavior-not-a-new-publisher-service--owner-selected-boundary) treats a companion that would unintentionally include discarded changes as a proposal-fidelity issue to investigate as such, rather than a rule keyed to branch movement. Re-application, and version 2 markers naming `reappliedOnto`, are therefore not the target direction for this tool. The convention's rule never to propose a suggestion on a discarded commit records the [force-push experiment](force-push-experiment.md)'s observations, which the [behavior register](github-behavior.md) keeps as GH-14. Implementing that target is pending; until then, the behavior below is what the tool does.
+> **October 1, 2026.** This section records the owner's decisions [D58](design-decisions.md#d58-do-not-abort-historical-review-publication-merely-because-the-pr-branch-changes--owner-selected-force-push-direction) and [D59](design-decisions.md#d59-treat-force-push-review-lifecycle-as-host-behavior-not-a-new-publisher-service--owner-selected-boundary), and replaces the re-application this section used to require. Re-application was never released by this tool.
 
-A producer tests **ancestry, not equality**: when the reviewed commit is not the original's current head, it asks whether the reviewed commit is still an ancestor of that head.
+A suggestion is always proposed on the commit that was reviewed. A producer MUST NOT re-apply, rebase or cherry-pick it onto a later commit, and a moved branch alone is never a reason not to propose it.
 
-- **The branch only moved forward** (the reviewed commit is an ancestor of the head): the suggestion is proposed on the reviewed commit, as usual. GitHub shows its own changes, and any conflict with the later commits, to the person accepting it.
-- **The history was rewritten** (a force-push, amend or rebase left the reviewed commit out of the branch): a producer MUST NOT propose a suggestion on the reviewed commit. GitHub would list the discarded commit in the suggestion pull request, repeat its diff, and could report it mergeable while merging it would silently restore changes the author had removed ([experiment](force-push-experiment.md)). For each suggestion instead:
-  - **re-apply** its change onto the head, as read when the suggestion is planned, but only if everything the change touches is byte-identical there to what was reviewed: every replaced range of an edited file holds exactly the reviewed bytes, at the same lines; a file to be created is still absent; a file to be deleted is still present, with the reviewed content and mode. The re-applied suggestion's marker has version 2 and names that head as `reappliedOnto` (§7);
-  - otherwise **do not create** it, never proposing it on the reviewed commit instead, and state why. What the producer publishes in its place is its own policy; for example, this tool presents the change exactly as it would without suggestion pull requests, and refuses the review when that cannot keep a group's changes together ([companion contract §2.5.1](companion-suggestion-pr-contract.md#251-re-application-after-a-rewritten-history)).
-- A re-application is a snapshot of the head it was made on. The head may be rewritten again afterwards; a producer never chases it, and never updates the branch (§5).
+- **The branch only moved forward** (the reviewed commit is an ancestor of the original's current head): GitHub shows the suggestion's own changes, and any conflict with the later commits, to the person accepting it.
+- **The history was rewritten** (a force-push, amend or rebase left the reviewed commit out of the branch): GitHub measures the suggestion from an older merge base, so it lists the discarded commit and repeats its diff, and it can report the suggestion mergeable while merging it would silently bring back changes the author removed ([force-push experiment](force-push-experiment.md), GH-14 and GH-18 in the [behavior register](github-behavior.md)). A producer therefore:
+  - MUST NOT create a suggestion that it knows would, when merged, bring back content the rewrite removed, or would not apply its own change. Whether it would is the merge's question, not the branch's: a suggestion whose merge applies exactly its own changes is **faithful**, and is proposed like any other. This tool decides it by a projection of the merge, made before creating the suggestion ([companion contract §2.5.1](companion-suggestion-pr-contract.md#251-fidelity-after-a-rewritten-history)); a suggestion it cannot decide is not created either. What the producer publishes in its place is its own policy.
+  - SHOULD say so in the body (§6), and show the suggestion's own changes separately from what GitHub displays.
+  - MAY create a suggestion whose merge would conflict, saying so: GitHub shows the conflict to whoever merges it.
+- The head may move again afterwards; a producer never chases it, and never updates the branch (§5).
 
 ## 6. The pull request
 
@@ -89,7 +90,7 @@ A producer tests **ancestry, not equality**: when the reviewed commit is not the
 | Head | The branch of §5. |
 | Draft | A draft by default. A producer MAY create it ready for review when its caller asks. |
 | Title | Neutral, beginning `Suggestion for #N: ` followed by a short summary. Consumers MUST NOT rely on the title. |
-| Body | Begins `Suggested in a review of #N at commit SHA.`, where SHA is the full reviewed commit. A re-applied suggestion (§5.1) SHOULD then say which commit it was re-applied onto, and why. It SHOULD then say what merging applies, and SHOULD include a brief note of the lifecycle (§8). Its last line is the marker (§7). |
+| Body | Begins `Suggested in a review of #N at commit SHA.`, where SHA is the full reviewed commit. When that commit is no longer part of the original's branch (§5.1), it SHOULD then say so and show the suggestion's own changes, separately from the diff GitHub displays. It SHOULD then say what merging applies, and SHOULD include a brief note of the lifecycle (§8). Its last line is the marker (§7). |
 | References | The body references the original only with an ordinary `#N` reference, never with a closing keyword. The original pull request's description is never edited. |
 | Labels | The canonical label, and any extra labels (§3). |
 
@@ -97,26 +98,24 @@ The `#N` reference makes GitHub record a cross-reference on the original, which 
 
 ## 7. The marker
 
-The body's last line is a hidden marker. A suggestion proposed on the reviewed commit carries a **version 1** marker:
+The body's last line is a hidden marker. A producer writes a **version 1** marker:
 
 ```text
 <!-- suggestion-pr {"version":1,"original":{"owner":"OWNER","repo":"REPO","pullNumber":N},"reviewedCommit":"SHA","id":"ID","batch":"BATCH"} -->
 ```
 
-A suggestion re-applied onto a later commit after the original's history was rewritten (§5.1) carries a **version 2** marker, which adds `reappliedOnto`:
+A **version 2** marker, which adds `reappliedOnto`, marked a suggestion an earlier producer re-applied onto a later commit after the original's history was rewritten. Producers no longer write it (§5.1), but it stays defined, so that consumers recognize the suggestions already marked with it:
 
 ```text
 <!-- suggestion-pr {"version":2,"original":{"owner":"OWNER","repo":"REPO","pullNumber":N},"reviewedCommit":"SHA","reappliedOnto":"SHA","id":"ID","batch":"BATCH"} -->
 ```
-
-A producer writes version 1 whenever the suggestion was not re-applied, so that version-1 consumers keep working for it, and version 2 only for a re-applied one.
 
 - The line is `<!-- suggestion-pr `, a JSON object, and ` -->`, with nothing else on the line.
 - The JSON is **canonical**: exactly the members shown for its version, in exactly this order (`version`, `original` with `owner`, `repo`, `pullNumber`, then `reviewedCommit`, for version 2 `reappliedOnto`, then `id`, `batch`), with no whitespace. Every value below is plain ASCII that JSON writes without escapes, so the line is a pure function of its values.
 
 | Member | Value |
 | --- | --- |
-| `version` | `1`, or `2` for a re-applied suggestion |
+| `version` | `1`; `2` only for a suggestion an earlier producer re-applied |
 | `original.owner`, `original.repo` | The original's repository: GitHub names of letters, digits, `.`, `_` and `-` (never `.` or `..`). |
 | `original.pullNumber` | The original's number, a positive integer. |
 | `reviewedCommit` | The full commit the review was about, 40 lowercase hexadecimal digits. In version 1, the parent of the branch's commit. |
@@ -136,7 +135,7 @@ A person may edit the rest of the body or add text after the marker; the marker 
 
 ## 8. Lifecycle
 
-1. A suggestion branch is created from the reviewed commit, or from the original's head when the change is re-applied after a rewritten history (§5.1), and the change is committed (§5).
+1. A suggestion branch is created from the reviewed commit, and the change is committed (§5). After a rewritten history, it is created only when it is faithful (§5.1).
 2. A draft pull request is opened into the original's head branch (§6).
 3. **Someone with write access marks it "Ready for review".** A draft cannot be merged. A suggestion created ready for review starts here.
 4. The original's author merges it, or not. The original pull request then carries the change to its own base.
@@ -161,7 +160,7 @@ Consumers act only on conforming pull requests, whichever tool produced them. A 
 
 ## 10. Open questions
 
-> **September 30, 2026 note.** This section describes the current implemented behavior. The owner's decisions [D48–D60](design-decisions.md#owner-decisions-of-september-30-2026-delivery-policy-and-the-force-push-boundary) set a different target: questions 5 and 6 concern re-application, which [D58](design-decisions.md#d58-do-not-abort-historical-review-publication-merely-because-the-pr-branch-changes--owner-selected-force-push-direction) and [D59](design-decisions.md#d59-treat-force-push-review-lifecycle-as-host-behavior-not-a-new-publisher-service--owner-selected-boundary) no longer target. They stay listed because the implemented behavior still depends on them.
+> **October 1, 2026 note.** Questions 5 and 6 concerned re-application, which the owner's decisions [D58](design-decisions.md#d58-do-not-abort-historical-review-publication-merely-because-the-pr-branch-changes--owner-selected-force-push-direction) and [D59](design-decisions.md#d59-treat-force-push-review-lifecycle-as-host-behavior-not-a-new-publisher-service--owner-selected-boundary) removed (§5.1). They are kept for the record; neither is open any longer.
 
 These details are proposals of this document, awaiting the owner's decision:
 
@@ -169,11 +168,13 @@ These details are proposals of this document, awaiting the owner's decision:
 2. **The member order** of the canonical marker (§7) follows the order the owner's decision lists the members in, rather than sorted keys.
 3. **Unknown members of `.github/suggestion-prs.json` are ignored** (§4), so later versions can add members; the cost is that a misspelled `label` silently leaves the default in place.
 4. **Label creation by GitHub.** GitHub's "add labels to an issue" endpoint is reported to create a label that does not exist (for example [hub#1906](https://github.com/mislav/hub/issues/1906)); this was not probed live. Producers check every label before any write, but a label deleted between that check and the write would be recreated.
-5. **Where a replaced range is compared** (§5.1): at the same line numbers on the head. A range that only moved (lines were added or removed above it) is treated as changed, and the suggestion is not created; it is never relocated by searching for its text, which could pick the wrong occurrence.
-6. **Versioning re-application** (§7, §11): a new marker version with a required `reappliedOnto`, rather than an optional member of version 1, so that a version-1 consumer, which cannot know that the branch is not based on the reviewed commit, does not recognize a re-applied suggestion at all.
+5. **Where a replaced range is compared** (closed: re-application was removed): at the same line numbers on the head. A range that only moved (lines were added or removed above it) is treated as changed, and the suggestion is not created; it is never relocated by searching for its text, which could pick the wrong occurrence.
+6. **Versioning re-application** (closed: version 2 is no longer written, and stays recognized, §7, §11): a new marker version with a required `reappliedOnto`, rather than an optional member of version 1, so that a version-1 consumer, which cannot know that the branch is not based on the reviewed commit, does not recognize a re-applied suggestion at all.
 
 ## 11. Versioning
 
 The marker's `version` names the version of this convention a suggestion pull request follows. A change to the marker, branch or label rules that an earlier consumer would misread requires a new version; a consumer never acts on a marker of a version it does not know. Additions that earlier readers can ignore (for example a new member of the repository configuration) do not.
 
 **Version 2** (issue #28) adds the re-applied suggestion: its branch's commit is based on `reappliedOnto`, not on the reviewed commit (§5, §5.1). A version-1 consumer does not recognize a version-2 marker, so it leaves a re-applied suggestion alone rather than misreading it; every suggestion that was not re-applied still carries a version-1 marker, which version-1 consumers keep acting on. A version-2 consumer recognizes both versions.
+
+**Since October 1, 2026** suggestions are never re-applied (§5.1), so producers write version 1 only. Version 2 stays defined for consumers: a pull request that carries it is still a suggestion pull request, and its branch's commit is still based on `reappliedOnto`.
