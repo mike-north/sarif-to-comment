@@ -18,10 +18,11 @@
  *     before anything is written.
  *
  * Expected Markdown is written by hand: the callbacks' own text, composed
- * with the core's parts as the rendering grammar of src/prepare-review.cts
- * and the contracts define them.
+ * with the core's parts as docs/review-presentation-contract.md and the
+ * contracts it cites define them.
  *
  * @see ../docs/design-decisions.md (D60)
+ * @see ../docs/review-presentation-contract.md (§2–§5, §7 customization)
  * @see ../docs/companion-suggestion-pr-contract.md (§2.7 marker, §2.11 presentation)
  * @see ../docs/file-operation-publication-contract.md (§2 presentation)
  * @see https://github.github.com/gfm/#fenced-code-blocks

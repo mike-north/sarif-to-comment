@@ -16,7 +16,7 @@
  * and, for a line range, a literal quote of those lines, so feedback that
  * cannot be anchored inline still points at exactly what it is about.
  *
- * Rendering (the module grammar of src/prepare-review.cts):
+ * Rendering (docs/review-presentation-contract.md §2 and §5):
  *
  *   finding = [ status "\n\n" ] message [ "\n\n**At this location:** " location message ]
  *             [ "\n\n**Fix:** " fix description ] [ "\n\n" alternatives ]

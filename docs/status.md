@@ -110,7 +110,7 @@ Open issues, in no priority order:
 - [#8](https://github.com/mike-north/sarif-to-comment/issues/8): new-file action links (O5, O10), with security requirements S4 and S6.
 - [#12](https://github.com/mike-north/sarif-to-comment/issues/12): decisions on optional expansion, such as other hosts, forks, helper consolidation and private test seams.
 
-Not yet referenced by an issue here: implementing the owner's decisions of September 30, 2026 ([D48–D60](design-decisions.md#owner-decisions-of-september-30-2026-delivery-policy-and-the-force-push-boundary)). They cover caller-controlled delivery policy, group handling, reporting an unavailable explicit request, companion references in each review, the rewritten-history direction and Markdown presentation components. Of D60, the components, the link builder and library presentation callbacks are implemented and unreleased; repository templates remain open.
+Not yet referenced by an issue here: implementing the owner's decisions of September 30, 2026 ([D48–D60](design-decisions.md#owner-decisions-of-september-30-2026-delivery-policy-and-the-force-push-boundary)). They cover caller-controlled delivery policy, group handling, reporting an unavailable explicit request, companion references in each review, the rewritten-history direction and Markdown presentation components. Of D60, the components, the link builder and library presentation callbacks are implemented and unreleased, and the built-in presentation they render is written down in the [review presentation contract](review-presentation-contract.md), not yet accepted; repository templates remain open.
 
 ## Explicit non-goals
 

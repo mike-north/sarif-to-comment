@@ -3,16 +3,19 @@
  * each component in isolation, on edge cases the whole-review tests reach
  * only indirectly.
  *
- * Expected Markdown is written by hand from the rendering grammars in each
- * component's module documentation, which restate the contracts:
+ * Expected Markdown is written by hand from the contracts:
+ * docs/review-presentation-contract.md (findings, attribution, alternatives,
+ * finding sections and the warnings list),
  * docs/file-operation-publication-contract.md §2 (additions, deletions and
  * file details), docs/companion-suggestion-pr-contract.md §2.11 (companion
  * change lists, references, descriptions and lifecycle notes) and the
  * alternatives grammar of issue #30; docs/diagnostics.md for the warnings
  * list of an outcome report.
  *
+ * @see ../docs/review-presentation-contract.md
  * @see ../docs/file-operation-publication-contract.md
  * @see ../docs/companion-suggestion-pr-contract.md
+ * @see ../docs/diagnostics.md
  * @see https://github.com/mike-north/sarif-to-comment/issues/30
  * @see https://spec.commonmark.org/0.31.2/#code-spans
  * @see https://github.github.com/gfm/#fenced-code-blocks

@@ -21,11 +21,12 @@
  * - `inspect` still lists every fix.
  *
  * Every expected body below is written by hand from those rules and from the
- * rendering grammar in the module documentation of src/prepare-review.cts
- * (item, alternative). None is captured from the implementation. The
+ * review presentation contract (docs/review-presentation-contract.md §2 and
+ * §4: the finding and its alternatives). None is captured from the implementation. The
  * whole-line ranges and replacement lines come from the SARIF region rules
  * (a region with only startLine covers that line's text, not its newline).
  *
+ * @see ../docs/review-presentation-contract.md
  * @see https://github.com/mike-north/sarif-to-comment/issues/30
  * @see https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/sarif-v2.1.0-errata01-os-complete.html (3.27.30 fixes, 3.55 fix, 3.56 artifactChange, 3.57 replacement, 3.30 region)
  * @see https://github.github.com/gfm/#fenced-code-blocks

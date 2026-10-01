@@ -9,7 +9,7 @@
  * code blocks that no content can close, with a CRLF line-ending style stated
  * beside the block (the block itself shows LF breaks).
  *
- * Rendering (the module grammar of src/prepare-review.cts):
+ * Rendering (docs/review-presentation-contract.md §4):
  *
  *   alternatives = "**Alternatives to consider:**" { "\n\n" alternative }
  *   alternative  = "(" n ") " [ description "\n\n" ] changes     (n = 1, 2, …)

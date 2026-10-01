@@ -23,7 +23,7 @@
  * @see ../docs/suggestion-pr-convention.md (§7 marker, §8 lifecycle)
  * @see ../docs/diagnostics.md ("Headline", "Warnings on every call for a publication", the catalog)
  * @see https://github.com/mike-north/sarif-to-comment/issues/42
- * @see ../src/prepare-review.cts (the rendering grammar in the module documentation)
+ * @see ../docs/review-presentation-contract.md (§2 finding, §3 attribution, §4 alternatives, §5 finding section, §6 warnings list)
  * @see https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/sarif-v2.1.0-errata01-os-complete.html
  * @see https://github.github.com/gfm/#fenced-code-blocks
  * @see https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/creating-a-permanent-link-to-a-code-snippet

@@ -12,7 +12,7 @@
  * directory despite the shared word.)
  *
  * Rendered as one line of inline Markdown, every supplied name and version
- * shown literally:
+ * shown literally (docs/review-presentation-contract.md §3):
  *
  *   tool [ " " version ] [ " · " component [ " " version ] ] [ " · rule " code span of ruleId ]
  *

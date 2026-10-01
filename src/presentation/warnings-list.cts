@@ -11,7 +11,7 @@
  * (issue #42). This is report presentation for the caller, never part of the
  * review posted to GitHub, and it is not customizable.
  *
- * Rendering:
+ * Rendering (docs/review-presentation-contract.md §6):
  *
  *   line     = "- " code span of code [ " at " code span of pointer ] ": " message
  *   warnings = "**Warnings:**\n\n" lines joined by "\n"
