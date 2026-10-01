@@ -4,8 +4,11 @@
  * (tool, extension component and rule), an inline finding, a native
  * suggestion comment with its fix description and listed alternatives,
  * whole-file creation and deletion sections, the review body with its hidden
- * publication marker, and a companion suggestion pull request's reference in
- * the review together with its own body and lifecycle note (draft and ready).
+ * publication marker, a companion suggestion pull request's reference in
+ * the review together with its own body and lifecycle note (draft and ready),
+ * and the reports around them: preparation's warnings list, the warnings a
+ * publication reports on its first and every later call (issue #42), and the
+ * refusal of a change shared with a suggestion group.
  *
  * These tests guard the refactoring of the renderers into presentation
  * components: they exercise only stable boundaries (whole-review preparation,
@@ -18,6 +21,8 @@
  * @see ../docs/file-operation-publication-contract.md (§2 presentation, §4 worked examples)
  * @see ../docs/companion-suggestion-pr-contract.md (§2.7 marker, §2.11 presentation)
  * @see ../docs/suggestion-pr-convention.md (§7 marker, §8 lifecycle)
+ * @see ../docs/diagnostics.md ("Headline", "Warnings on every call for a publication", the catalog)
+ * @see https://github.com/mike-north/sarif-to-comment/issues/42
  * @see ../src/prepare-review.cts (the rendering grammar in the module documentation)
  * @see https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/sarif-v2.1.0-errata01-os-complete.html
  * @see https://github.github.com/gfm/#fenced-code-blocks
@@ -30,7 +35,7 @@ import { describe, test } from 'node:test';
 
 import {
   GUIDE_DOCUMENT, HEAD, SEP, SHORT, SUGGESTION_MARKER,
-  at, carrying, hostDocument, hostWorld, lineFix, log, permalink, prepare, publish, reviewBodyWithoutMarker, run,
+  at, carrying, hostDocument, hostWorld, lineFix, log, permalink, prepare, prepareOutcome, publish, reviewBodyWithoutMarker, run,
 } from './support/presentation-fixtures.mts';
 import { asRecord, asString, parseJson } from './support/runtime-types.mts';
 
@@ -343,4 +348,120 @@ describe('golden presentation: the published review and its companions', () => {
       ].join('\n'));
     });
   }
+});
+
+// ---------------------------------------------------------------------------
+// Reports: preparation's warnings, publication warnings on every call, and a
+// change shared with a suggestion group (issue #42)
+
+/**
+ * diagnostics.md catalog: `taxa-uninterpreted` (warning), "Taxonomy
+ * classifications are not shown"; a result's taxa are retained in evidence
+ * but not rendered in the review.
+ */
+const TAXA_LINE = '- `taxa-uninterpreted` at `/runs/0/results/0`: Taxonomy classifications are retained in evidence but not rendered in the review.';
+
+/** One inline finding on the changed README line, with a taxonomy reference the review does not show. */
+const TAXA_DOCUMENT = hostDocument([{
+  message: { text: 'Explain more.' },
+  locations: [at('README.md', { startLine: 2 })],
+  taxa: [{ id: 'CWE-1059' }],
+}]);
+
+describe('golden presentation: warnings and refusals in the reports', () => {
+  test('a prepared review states its size, then lists each warning with its code, pointer and message', async () => {
+    const sarif = log(run({ driver: { name: 'T' } }, [{ message: { text: 'Note.' }, locations: [at('src/app.js', { startLine: 2 })], taxa: [{ id: 'CWE-1059' }] }]));
+    const ready = await prepare(sarif);
+    // The prepared summary, then diagnostics.md's "**Warnings:**" list:
+    // "- `CODE` at `POINTER`: MESSAGE" per warning.
+    assert.equal(ready.markdown, [
+      `**Review prepared:** 1 inline comment(s) and 0 general section(s) for commit \`${'2'.repeat(40)}\`.`,
+      '',
+      '**Warnings:**',
+      '',
+      TAXA_LINE,
+    ].join('\n'));
+  });
+
+  test('a published outcome with warnings: the headline under the heading, the warnings list last, no prepared summary; a retry says the same', async () => {
+    const world = hostWorld();
+    const first = await publish(world, TAXA_DOCUMENT);
+    assert.equal(first.status, 'published', first.markdown);
+    const link = `[review ${String(first.review.id)}](${first.review.url})`;
+    const where = `octo/widgets#7 at commit \`${HEAD}\``;
+    // diagnostics.md "Headline": "**Published with N warning(s):**", then a
+    // sentence per code — for an ordinary code, its catalog title.
+    const headline = '**Published with 1 warning:** Taxonomy classifications are not shown.';
+    assert.equal(first.markdown, [
+      '## Draft review published',
+      '',
+      headline,
+      '',
+      `Created the draft ${link} on ${where}. It stays a draft until someone submits it on GitHub.`,
+      '',
+      '**Warnings:**',
+      '',
+      TAXA_LINE,
+    ].join('\n'));
+    assert.ok(!first.markdown.includes('**Review prepared:**'), 'the prepared summary is not part of a published outcome');
+    // "Warnings on every call for a publication": a retry that finds the
+    // completion recorded reports them again, identically.
+    const retry = await publish(world, TAXA_DOCUMENT);
+    assert.equal(retry.status, 'published', retry.markdown);
+    assert.equal(retry.markdown, [
+      '## Draft review published',
+      '',
+      headline,
+      '',
+      `The draft ${link} on ${where} was already published; its completion is recorded at \`${world.statePath}\`. Nothing was sent.`,
+      '',
+      '**Warnings:**',
+      '',
+      TAXA_LINE,
+    ].join('\n'));
+    assert.deepEqual(retry.diagnostics, first.diagnostics);
+  });
+
+  /** A group of two edits, and a third result outside it that carries the group's first edit too. */
+  const shared = (secondGroup: string | undefined): Record<string, unknown> => {
+    const member = (text: string, uri: string, line: number, replacement: string, group: string | undefined): Record<string, unknown> => ({
+      message: { text },
+      locations: [at(uri, { startLine: line })],
+      fixes: [lineFix(uri, line, replacement, text)],
+      ...(group === undefined ? {} : { properties: { sarifToComment: { suggestionGroup: group } } }),
+    });
+    return log(run({ driver: { name: 'T' } }, [
+      member('Uppercase.', 'src/app.js', 2, 'C', 'a'),
+      member('Capitalize.', 'docs/notes.md', 1, 'First', 'a'),
+      member('Uppercase too.', 'src/app.js', 2, 'C', secondGroup),
+      ...(secondGroup === undefined ? [] : [member('Capitalize more.', 'docs/notes.md', 3, 'Third', secondGroup)]),
+    ]));
+  };
+  const SUGGESTION_PRS = { suggestionPullRequests: { headRef: 'feature', ready: false } };
+
+  test('a group\'s change also carried outside the group blocks the review, naming the group, both findings and the change', async () => {
+    const outcome = await prepareOutcome(shared(undefined), SUGGESTION_PRS);
+    assert.equal(outcome.status, 'blocked');
+    // Companion contract §2.3 "A change is carried by one group or by none";
+    // diagnostics.md catalog `suggestion-group-change-shared`.
+    assert.equal(outcome.markdown, [
+      '**Review blocked:** 1 problem must be resolved before publication; nothing was published.',
+      '',
+      '- `suggestion-group-change-shared` at `/runs/0/results/2`: The replacement of `src/app.js` line 2 is proposed both by '
+        + 'suggestion group "a" (`/runs/0/results/0`) and by `/runs/0/results/2`, which is not in the group; '
+        + 'one change cannot be accepted both as part of the group and on its own.',
+    ].join('\n'));
+  });
+
+  test('a change carried by two groups blocks the review, naming both groups: groups are never joined', async () => {
+    const outcome = await prepareOutcome(shared('b'), SUGGESTION_PRS);
+    assert.equal(outcome.status, 'blocked');
+    assert.equal(outcome.markdown, [
+      '**Review blocked:** 1 problem must be resolved before publication; nothing was published.',
+      '',
+      '- `suggestion-group-change-shared` at `/runs/0/results/2`: The replacement of `src/app.js` line 2 is proposed both by '
+        + 'suggestion group "a" (`/runs/0/results/0`) and by suggestion group "b" (`/runs/0/results/2`); '
+        + 'one change cannot be accepted as part of two groups, and groups are never joined.',
+    ].join('\n'));
+  });
 });
