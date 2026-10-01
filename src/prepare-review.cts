@@ -263,11 +263,12 @@
  * Rendering. Each element is a presentation component in src/presentation/
  * (finding and finding section, attribution, alternatives, file addition,
  * file deletion, companion reference, companion description, lifecycle
- * note), with links from src/github-urls.cts; this module decides what is
- * published and where, and composes them. The contract for the built-in
- * presentation is docs/review-presentation-contract.md (with
- * docs/file-operation-publication-contract.md §2 and
- * docs/companion-suggestion-pr-contract.md §2.11); the summary below is a
+ * note, native batch), with links from src/github-urls.cts; this module
+ * decides what is published and where, and composes them. The contract for
+ * the built-in presentation is docs/review-presentation-contract.md (with
+ * docs/file-operation-publication-contract.md §2,
+ * docs/companion-suggestion-pr-contract.md §2.11 and
+ * docs/delivery-policy-contract.md §8.8); the summary below is a
  * reading aid, and the contract governs where they differ. (The reports about
  * a review — its outcome Markdown — list diagnostics through
  * src/presentation/warnings-list.cts.) Producer Markdown is checked with the
