@@ -1315,8 +1315,16 @@ const BOM = '\uFEFF';
  */
 const INVISIBLE_IN_CONTENT = UNSHOWN_IN_CODE_BLOCK;
 
-/** The same, plus tab, LF and CR: a path is shown on one line, in a code span or link text. */
-const INVISIBLE_IN_PATH = /[\u0000-\u001F\u007F-\u009F\uFEFF\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069\u2028\u2029]/;
+/**
+ * Characters a path may not hold (docs/delivery-policy-contract.md §8.10:
+ * "a control or invisible formatting character"): every character a code
+ * block does not show, UNSHOWN_IN_CODE_BLOCK (every format character, Cf,
+ * U+00A0 and the controls), plus tab, LF and CR, because a path is shown on
+ * one line, in a code span or link text. Unlike a title, a path has no
+ * exemption for a zero-width joiner inside an emoji sequence: it names a
+ * destination, so every character of it must be visible.
+ */
+const INVISIBLE_IN_PATH = new RegExp(`${UNSHOWN_IN_CODE_BLOCK.source}|[\\t\\n\\r]`, 'u');
 
 /** A UTF-16 surrogate without its pair: not a Unicode scalar value, so not UTF-8 text. */
 const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;

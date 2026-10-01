@@ -254,7 +254,7 @@ with the remedy `Change the replacement.`, where `REASON` is the first of these 
 
 | `REASON` | When |
 | --- | --- |
-| `the file path contains U+XXXX, which cannot be shown exactly` | the path holds a control or invisible formatting character |
+| `the file path contains U+XXXX, which cannot be shown exactly` | the path holds a control or invisible formatting character: any character a code block does not show (a C0 control, DEL or a C1 control, any format character of Unicode category `Cf`, a zero-width joiner in an emoji sequence included, U+00A0, U+2028 or U+2029), or a tab, LF or CR |
 | `the file path begins or ends with whitespace, which Markdown does not show` | |
 | `replacement line N contains an unpaired surrogate, which is not UTF-8 text` | |
 | `replacement line N contains U+XXXX, which a code block does not show` | a C0 control other than tab, LF and the CR of CRLF; DEL or a C1 control; any format character (Unicode category `Cf`: a zero-width space or joiner, a word joiner, a soft hyphen, a bidirectional control, a tag character, a byte-order mark other than the file's own, …); U+00A0, which renders as a space; U+2028 or U+2029 |
