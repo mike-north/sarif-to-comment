@@ -21,7 +21,10 @@
  * then faithful, conflicting, or unfaithful for a named reason, and the
  * suggestion pull request takes the worst of them (unfaithful over
  * conflicting over faithful). Cases the projection cannot decide are limits,
- * which make it unfaithful too.
+ * which make it unfaithful too, among them a file whose `.gitattributes` at
+ * the head assign a merge driver other than the text merge
+ * (src/git-attributes.cts), and a `.gitattributes` file that differs between
+ * the commits and could assign one.
  *
  * Boundary: it decides and explains; it never reads GitHub itself (the
  * caller supplies trees and blobs) and never writes anything. Its verdict is a
@@ -30,6 +33,8 @@
 
 import * as crypto from 'node:crypto';
 
+import { couldAssignMerge, mergeDriverOf, parseAttributes } from './git-attributes.cjs';
+import type { IAttributesFile } from './git-attributes.cjs';
 import { isBinaryContent, mergeText } from './three-way-merge.cjs';
 
 // ---------------------------------------------------------------------------
@@ -86,6 +91,8 @@ export type ProjectedChange =
 export type UnfaithfulReason =
   /** The merge brings back an entry, a mode or lines the head no longer has (or changes the head otherwise). */
   | 'restores'
+  /** The merge deletes a file the head has, beyond the proposal's own changes. */
+  | 'removes'
   /** The merge conflicts, and outside its conflicts it would bring back content the head no longer has. */
   | 'restores-beside-conflict'
   /** The merge leaves the head's entry, though the proposal changes it. */
@@ -104,11 +111,21 @@ export type ProjectionLimit =
   | { readonly kind: 'submodule'; readonly path: string }
   | { readonly kind: 'kind-change'; readonly path: string }
   | { readonly kind: 'too-large'; readonly path: string }
+  /** A blob the projection would have to read is listed without its size, so it cannot be read within the limit. */
+  | { readonly kind: 'size-unknown'; readonly path: string }
+  /** A `.gitattributes` merge driver other than the text merge applies to the path. */
+  | { readonly kind: 'merge-attribute'; readonly path: string; readonly attribute: string }
+  /** A `.gitattributes` file differs between the commits, and could assign a merge driver. */
+  | { readonly kind: 'attributes-changed'; readonly path: string }
+  /** A `.gitattributes` on the path's way at the head is not a regular file, so its attributes cannot be read. */
+  | { readonly kind: 'attributes-unreadable'; readonly path: string }
+  /** A path added under a directory the other side removed entirely, by a rename or a deletion. */
   | { readonly kind: 'directory-rename'; readonly directory: string };
 
 /** The projection of one suggestion pull request onto the head. */
 export type CompanionProjection =
-  | { readonly verdict: 'faithful' }
+  /** `headUnchanged` when the head already has the suggestion's changes, so the merge changes nothing. */
+  | { readonly verdict: 'faithful'; readonly headUnchanged?: true }
   | { readonly verdict: 'conflicts'; readonly conflicts: readonly string[] }
   | {
       readonly verdict: 'unfaithful';
@@ -219,6 +236,46 @@ class Projection {
     return { mode, oid, size: bytes.length };
   }
 
+  /**
+   * The text of a `.gitattributes` entry, or the limit that prevents
+   * reading it: not a regular file, no listed size, or over the read limit.
+   */
+  async attributesText(path: string, entry: IProjectedEntry): Promise<{ readonly text: string } | { readonly limit: ProjectionLimit }> {
+    if (kindOf(entry) !== 'file') return { limit: { kind: 'attributes-unreadable', path } };
+    if (!this.#local.has(entry.oid)) {
+      if (entry.size === undefined) return { limit: { kind: 'size-unknown', path } };
+      if (entry.size > this.#basis.maxBlobBytes) return { limit: { kind: 'too-large', path } };
+    }
+    return { text: Buffer.from(await this.bytes(entry)).toString('utf8') };
+  }
+
+  /** The head's attributes files read so far, by directory ('' for the root). */
+  readonly #headAttributes = new Map<string, IAttributesFile | ProjectionLimit>();
+
+  /**
+   * The merge driver the head's `.gitattributes` files assign to `path`,
+   * reading those on its way (each once), or the limit that prevents
+   * knowing it.
+   */
+  async driverOf(path: string, head: ReadonlyMap<string, IProjectedEntry>): Promise<{ readonly attribute: string | null } | { readonly limit: ProjectionLimit }> {
+    const files = new Map<string, IAttributesFile>();
+    for (const dir of ['', ...ancestors(path)]) {
+      const filePath = dir === '' ? '.gitattributes' : `${dir}/.gitattributes`;
+      const entry = head.get(filePath);
+      if (entry === undefined) continue;
+      let known = this.#headAttributes.get(dir);
+      if (known === undefined) {
+        const read = await this.attributesText(filePath, entry);
+        known = 'limit' in read ? read.limit : parseAttributes(read.text);
+        this.#headAttributes.set(dir, known);
+      }
+      if ('kind' in known) return { limit: known };
+      files.set(dir, known);
+    }
+    const driver = mergeDriverOf(path, files);
+    return { attribute: driver.kind === 'text' ? null : driver.attribute };
+  }
+
   /** A blob's bytes: the proposal's own, or read. */
   async bytes(entry: IProjectedEntry): Promise<Uint8Array> {
     return this.#local.get(entry.oid) ?? this.#basis.sources.blob(entry.oid);
@@ -235,9 +292,9 @@ class Projection {
     if (merged.kind === 'conflict') return favorOurs ? { kind: 'entry', entry: ours } : { kind: 'conflict', lines: false };
     const sides = [merged.base, merged.ours, merged.theirs];
     const limit = this.#basis.maxBlobBytes;
-    if (sides.some((e) => e !== null && !this.#local.has(e.oid) && e.size !== undefined && e.size > limit)) {
-      return { kind: 'limit', limit: { kind: 'too-large', path } };
-    }
+    const read = sides.filter((e): e is IProjectedEntry => e !== null && !this.#local.has(e.oid));
+    if (read.some((e) => e.size === undefined)) return { kind: 'limit', limit: { kind: 'size-unknown', path } };
+    if (read.some((e) => e.size !== undefined && e.size > limit)) return { kind: 'limit', limit: { kind: 'too-large', path } };
     const base = merged.base === null ? new Uint8Array(0) : await this.bytes(merged.base);
     const head = await this.bytes(merged.ours);
     const other = await this.bytes(merged.theirs);
@@ -289,8 +346,42 @@ export async function projectCompanion(basis: IProjectionBasis, changes: readonl
     .filter((path) => !same(entryOf(P, path), entryOf(M, path)) || !same(entryOf(P, path), entryOf(R, path)))
     .sort(byPath);
 
+  // A `.gitattributes` that differs between the commits: which commit's
+  // attributes Git's merge reads is not modelled, so a version that could
+  // assign a merge driver (or cannot be read) makes the projection
+  // undecidable. Whether one could depends on the macros of the root file,
+  // so every version of the root file is read too.
+  const versions = [M, R, H, P];
+  const changedAttributes = [...new Set(versions.flatMap((tree) => [...tree.keys()]))]
+    .filter((path) => (path === '.gitattributes' || path.endsWith('/.gitattributes')) && !versions.every((tree) => same(entryOf(tree, path), entryOf(H, path))))
+    .sort(byPath);
+  if (changedAttributes.length > 0) {
+    const parsed = async (path: string, entry: IProjectedEntry | null): Promise<IAttributesFile | null | 'unreadable'> => {
+      if (entry === null) return null;
+      const read = await projection.attributesText(path, entry);
+      return 'limit' in read ? 'unreadable' : parseAttributes(read.text);
+    };
+    const rootMacros: IAttributesFile['macros'][] = [];
+    let rootUnreadable = false;
+    for (const tree of versions) {
+      const root = await parsed('.gitattributes', entryOf(tree, '.gitattributes'));
+      if (root === 'unreadable') rootUnreadable = true;
+      else if (root !== null) rootMacros.push(root.macros);
+    }
+    for (const path of changedAttributes) {
+      let could = rootUnreadable;
+      for (const tree of versions) {
+        if (could) break;
+        const file = await parsed(path, entryOf(tree, path));
+        could = file === 'unreadable' || (file !== null && couldAssignMerge(file, rootMacros));
+      }
+      if (could) projection.limits.push({ kind: 'attributes-changed', path });
+    }
+  }
+
   const reasons: { path: string; reason: UnfaithfulReason }[] = [];
   const conflicts: string[] = [];
+  let changesHead = false;
   /** Each path's clean result in the merge and in the target, for the file-and-directory check. */
   const mergeResults = new Map<string, IProjectedEntry | null>();
   const targetResults = new Map<string, IProjectedEntry | null>();
@@ -299,8 +390,23 @@ export async function projectCompanion(basis: IProjectionBasis, changes: readonl
     const r = entryOf(R, path);
     const h = entryOf(H, path);
     const p = entryOf(P, path);
-    const target = await projection.resolve(path, mergeEntries(path, r, h, p), false, h);
-    const merge = await projection.resolve(path, mergeEntries(path, m, h, p), false, h);
+    const targetEntries = mergeEntries(path, r, h, p);
+    const mergeEntriesOfPath = mergeEntries(path, m, h, p);
+    // Where Git would merge the file's contents, or report a conflict, a merge
+    // driver the head's attributes assign decides instead of the text merge.
+    if (targetEntries.kind === 'lines' || mergeEntriesOfPath.kind === 'lines' || mergeEntriesOfPath.kind === 'conflict') {
+      const driver = await projection.driverOf(path, H);
+      if ('limit' in driver) {
+        projection.limits.push(driver.limit);
+        continue;
+      }
+      if (driver.attribute !== null) {
+        projection.limits.push({ kind: 'merge-attribute', path, attribute: driver.attribute });
+        continue;
+      }
+    }
+    const target = await projection.resolve(path, targetEntries, false, h);
+    const merge = await projection.resolve(path, mergeEntriesOfPath, false, h);
     if (target.kind === 'limit') {
       projection.limits.push(target.limit);
       continue;
@@ -329,8 +435,11 @@ export async function projectCompanion(basis: IProjectionBasis, changes: readonl
     }
     mergeResults.set(path, merge.entry);
     targetResults.set(path, target.entry);
-    if (same(merge.entry, target.entry)) continue;
-    reasons.push({ path, reason: same(merge.entry, h) ? 'loses' : 'restores' });
+    if (same(merge.entry, target.entry)) {
+      if (!same(merge.entry, h)) changesHead = true;
+      continue;
+    }
+    reasons.push({ path, reason: same(merge.entry, h) ? 'loses' : merge.entry === null ? 'removes' : 'restores' });
   }
 
   // A path that would be both a file and a directory, in either result.
@@ -340,10 +449,11 @@ export async function projectCompanion(basis: IProjectionBasis, changes: readonl
   }
   reasons.sort((a, b) => byPath(a.path, b.path));
 
-  const limits = [...projection.limits, ...directoryRenameTriggers(M, H, P)];
+  // A limit found for several paths (an unreadable attributes file on their way) is stated once.
+  const limits = [...new Map([...projection.limits, ...directoryRenameTriggers(M, H, P)].map((l) => [JSON.stringify(l), l])).values()];
   if (reasons.length > 0 || limits.length > 0) return { verdict: 'unfaithful', reasons, limits };
   if (conflicts.length > 0) return { verdict: 'conflicts', conflicts };
-  return { verdict: 'faithful' };
+  return changesHead ? { verdict: 'faithful' } : { verdict: 'faithful', headUnchanged: true };
 }
 
 /**

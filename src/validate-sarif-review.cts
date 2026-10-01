@@ -286,7 +286,11 @@ function projectionSentence(prepared: IDestinationReady, captured: ICapturedRevi
   const faithful = companions.length - conflicting;
   if (companions.length === 1) {
     return ` The history of ${pull} was rewritten after the reviewed commit, so it is proposed on that commit and was projected onto the head ${code(head)}: `
-      + (conflicting === 1 ? 'merging it would conflict.' : 'merging it applies only its own changes.');
+      + (conflicting === 1
+        ? 'merging it would conflict.'
+        : companions[0]?.projection?.alreadyAtHead === true
+          ? 'merging it changes nothing, because the head already has its own changes.'
+          : 'merging it applies only its own changes.');
   }
   const parts = [
     ...(faithful > 0 ? [`merging ${String(faithful)} applies only ${faithful === 1 ? 'its' : 'their'} own changes`] : []),

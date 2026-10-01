@@ -3449,6 +3449,7 @@ function unfaithfulReason(path: string, reason: UnfaithfulReason): string {
   switch (reason) {
     case 'restores': return `${codeSpan(path)} would bring back content the head no longer has`;
     case 'restores-beside-conflict': return `${codeSpan(path)} would bring back content the head no longer has, beside a conflict`;
+    case 'removes': return `${codeSpan(path)} would be removed from the head`;
     case 'loses': return `${codeSpan(path)} would lose its change`;
     case 'not-expressible': return `its change to ${codeSpan(path)} cannot be expressed at the head`;
     case 'file-and-directory': return `${codeSpan(path)} would be both a file and a directory`;
@@ -3465,6 +3466,10 @@ function projectionLimit(limit: ProjectionLimit, maxBlobBytes: number): string {
     case 'submodule': return `${codeSpan(limit.path)} is a submodule changed on both sides`;
     case 'kind-change': return `${codeSpan(limit.path)} changes kind on one side and changes on the other`;
     case 'too-large': return `${codeSpan(limit.path)} is larger than the ${maxBlobBytes.toLocaleString('en-US')}-byte read limit`;
+    case 'size-unknown': return `GitHub listed ${codeSpan(limit.path)} without its size`;
+    case 'merge-attribute': return `a merge attribute (${codeSpan(limit.attribute)}) applies to ${codeSpan(limit.path)}; its merge cannot be projected`;
+    case 'attributes-changed': return `${codeSpan(limit.path)} differs between the commits and could assign a merge attribute`;
+    case 'attributes-unreadable': return `${codeSpan(limit.path)} is not a regular file, so its attributes cannot be read`;
     case 'directory-rename':
       return `a new file under ${codeSpan(`${limit.directory}/`)} lands in a directory the other side removed, which Git's directory-rename detection could move`;
   }
@@ -3749,6 +3754,7 @@ function preparedProjection(
     mergeBase: basis.mergeBase,
     verdict: projection.verdict,
     conflicts: projection.verdict === 'conflicts' ? projection.conflicts : [],
+    ...(projection.verdict === 'faithful' && projection.headUnchanged === true ? { alreadyAtHead: true as const } : {}),
     files,
   };
 }

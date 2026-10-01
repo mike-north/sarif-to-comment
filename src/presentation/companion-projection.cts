@@ -8,7 +8,8 @@
  * GitHub shows the suggestion from an older merge base, so its displayed diff
  * also lists the reviewed commit's own changes. This section says so, names
  * the head the suggestion was projected onto, states the projection's verdict
- * (it applies only its own changes, or it conflicts, and where), and shows
+ * (it applies only its own changes, changes nothing because the head already
+ * has them, or it conflicts, and where), and shows
  * the suggestion's own changes as a unified diff, separately from GitHub's.
  * It is a fixed part of the description: not customizable, because it is what
  * keeps the proposal's meaning exact.
@@ -20,6 +21,7 @@
  *              "older merge base, so they also list changes of the reviewed commit itself. Projected onto that head before "
  *              "this pull request was created, merging it " verdict [ "\n\n" diff ]
  *   verdict  = "applies only its own changes, which are " ( "these:" | "listed below." )
+ *            | "changes nothing, because the head already has its own changes, which are " ( "these:" | "listed below." )
  *            | "conflicts in " paths "; its own changes are " ( "these:" | "listed below." )
  *   diff     = fence "diff\n" { "--- a/" PATH "\n+++ b/" PATH "\n" { hunk } } fence
  *   hunk     = "@@ -" A [ "," B ] " +" C [ "," D ] " @@\n" { ( " " | "-" | "+" ) line "\n" [ "\ No newline at end of file\n" ] }
@@ -41,6 +43,8 @@ export interface ICompanionProjectionView {
   /** The head the suggestion was projected onto. */
   readonly head: string;
   readonly verdict: 'faithful' | 'conflicts';
+  /** Set when faithful and the head already has the suggestion's changes, so merging it changes nothing. */
+  readonly alreadyAtHead?: true;
   /** The paths the projection found conflicting, in path order (empty when faithful). */
   readonly conflicts: readonly string[];
   /** Each edited file's hunks from the reviewed file to the proposed one, in change-list order. */
@@ -80,9 +84,12 @@ function ownDiff(files: ICompanionProjectionView['files']): string {
 export function renderCompanionProjection(view: ICompanionProjectionView, target: { readonly pullNumber: number; readonly reviewedCommit: string }): string {
   const pull = `#${String(target.pullNumber)}`;
   const shown = view.files.length > 0;
-  const verdict = view.verdict === 'faithful'
-    ? `applies only its own changes, which are ${shown ? 'these:' : 'listed below.'}`
-    : `conflicts in ${pathList(view.conflicts)}; its own changes are ${shown ? 'these:' : 'listed below.'}`;
+  const which = shown ? 'these:' : 'listed below.';
+  const verdict = view.verdict === 'conflicts'
+    ? `conflicts in ${pathList(view.conflicts)}; its own changes are ${which}`
+    : view.alreadyAtHead === true
+      ? `changes nothing, because the head already has its own changes, which are ${which}`
+      : `applies only its own changes, which are ${which}`;
   const lead = `**The reviewed commit is not part of the branch of ${pull}:** the branch was rewritten after commit ${target.reviewedCommit} `
     + `(its head was ${view.head} when this was proposed). GitHub shows this pull request's changes from an older merge base, `
     + `so they also list changes of the reviewed commit itself. Projected onto that head before this pull request was created, merging it ${verdict}`;
