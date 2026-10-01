@@ -44,7 +44,7 @@ Both agree with the tool's verdicts. The D case uses the commit created at A. It
 **Observed on GitHub (after #97 existed).**
 
 - **Its description** ([`04`](04-companion-pr-view.json), `body`) begins `Suggested in a review of #96 at commit 07791aa….`, followed by the projection section. That section says the reviewed commit is not part of the branch of #96, names A, and says merging it applies only its own changes. It then shows them as one hunk at line 10 (`-Line 10.`, `+Line 10, suggested.`), then the change list, lifecycle note, finding and version 1 marker.
-- **GitHub's own view of #97** ([`04`](04-companion-pr-view.json), [`05`](05-companion-files.json)) lists two commits: C1, which the branch no longer contains, and the proposal commit. It shows `sample.md` +3 −3, at lines 5, 6 and 10. This is the diff from the merge base C0, as GH-18 recorded for other companions, and not the one-line change the description shows.
+- **GitHub's own view of #97** ([`04`](04-companion-pr-view.json), [`05`](05-companion-files.json)) lists two commits: C1, which the branch no longer contains, and the proposal commit. It shows `sample.md` +3 −3, at lines 5, 6 and 10. This is the diff from the merge base C0, as GH-18 recorded for other companions, and not the one-line change the description shows. The [behavior register](../../github-behavior.md) records these readbacks as GH-20.
 - **Mergeability:** `MERGEABLE` from `gh pr view` ([`04`](04-companion-pr-view.json)), and `mergeable: true`, `mergeable_state: clean` from REST ([`06`](06-companion-pull-rest.json)).
 - **#96 afterwards** ([`09`](09-original-pr-view.json)): an open draft into `main`, head A.
 
