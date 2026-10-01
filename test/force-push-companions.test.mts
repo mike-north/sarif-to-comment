@@ -70,13 +70,13 @@ const REWORD: IUnit = {
   title: 'Suggestion for #7: reword (2 changes)',
   what: 'these 2 changes together:',
   changes: [
-    `- Edited [docs/sample.md line 6 at ${SHORT}](${blob('docs/sample.md', '#L6')})`,
-    `- Edited [docs/sample.md line 10 at ${SHORT}](${blob('docs/sample.md', '#L10')})`,
+    `- Edited [docs/sample.md line 6 at ${SHORT}](${blob('docs/sample.md', '?plain=1#L6')})`,
+    `- Edited [docs/sample.md line 10 at ${SHORT}](${blob('docs/sample.md', '?plain=1#L10')})`,
   ],
   items: [
-    `**Source:** [docs/sample.md line 6 at ${SHORT}](${blob('docs/sample.md', '#L6')})`, '', '```', 'Line 6, reviewed.', '```', '', LINE6_MESSAGE, '', ATTRIBUTION,
+    `**Source:** [docs/sample.md line 6 at ${SHORT}](${blob('docs/sample.md', '?plain=1#L6')})`, '', '```', 'Line 6, reviewed.', '```', '', LINE6_MESSAGE, '', ATTRIBUTION,
     '', '---', '',
-    `**Source:** [docs/sample.md line 10 at ${SHORT}](${blob('docs/sample.md', '#L10')})`, '', '```', 'Line 10.', '```', '', LINE10_MESSAGE, '', ATTRIBUTION,
+    `**Source:** [docs/sample.md line 10 at ${SHORT}](${blob('docs/sample.md', '?plain=1#L10')})`, '', '```', 'Line 10.', '```', '', LINE10_MESSAGE, '', ATTRIBUTION,
   ],
 };
 const CREATE: IUnit = {
