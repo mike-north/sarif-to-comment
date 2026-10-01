@@ -2,11 +2,12 @@
 "sarif-to-comment": minor
 ---
 
-**Command line: `--version`, new commands in the help, and help that fits 80 columns.**
+**Command line: `--version`, new commands in the help, a title covering both review modes, and help that fits 80 columns.**
 
 - **`sarif-to-comment --version`** prints the installed package's version, read from its `package.json` when the command runs (exit status 0). With `--format json` or `toon` it is one document, `{ command, status: "version", version, diagnostics }`. Like `--help`, it can follow a command, which is then not run. 0.2.1 refused it as an unknown option.
 - **New commands:** `validate`, `remove-comment`, `group-fixes`, `ungroup-fixes` and `close-suggestion-prs` (see their entries). `publish`, `validate` and the original form gain `--submit`, the delivery options and `--existing-companion`.
 - **Output options on every command:** `--format human|json|toon` and `--color auto|always|never` (see the diagnostics entry).
+- **The help's title** no longer says the review is always a draft: `--submit` creates a submitted comment review.
 - **Help text** fits in 80 columns: prose is filled, synopses wrap by option group, and every command's title is the command and a lowercase phrase. `add-staged-changes --help` opens with its help sentence.
 - **Exit statuses** are listed for the new outcomes: `validate`'s `ready` (0), `blocked` (2) and `incomplete` (1); a refused grouping or a stale finding selector (2); and cleanup's statuses.
 
@@ -20,9 +21,13 @@
 
 Exit status 1 → 0.
 
-### `sarif-to-comment --help`: usage, commands and exit status
+### `sarif-to-comment --help`: title, usage, commands and exit status
 
 ```diff
+@@ -1,2 +1,2 @@
+-sarif-to-comment — author, inspect and publish SARIF as one GitHub draft review
++sarif-to-comment — author, inspect, publish SARIF as a draft or submitted review
+ 
 @@ -4,6 +4,16 @@
    sarif-to-comment init --output FILE [options]
 -  sarif-to-comment add-comment --sarif FILE --file PATH --line N (--message TEXT | --message-file FILE|-) [options]
