@@ -19,7 +19,7 @@ It performs the publisher's checks by running the publisher's code, not a copy o
 
 ## Guarantees
 
-- **No remote writes.** Assessment uses only GitHub reads: the pull request, its files, the comparison, Git objects, the authenticated user and the pull request's review list. It never creates, submits, edits or deletes a review.
+- **No remote writes.** Assessment uses only GitHub reads: the pull request, its files or the comparisons that give the reviewed diff, the force-push events of its timeline when they are needed to associate the reviewed commit ([specification R17](specification.md#r17-publish-only-about-a-commit-of-the-pull-request)), Git objects, the authenticated user and the pull request's review list. It never creates, submits, edits or deletes a review.
 - **No durable state.** Assessment takes no state path and never creates, reads or changes a publication state file. It writes no file of any kind.
 - **No approval stamp.** A `ready` outcome carries no token, fingerprint or identifier that publication accepts. Publication has no input for one; unknown fields are refused. `publish` performs every check itself, against the pull request as it is at that moment.
 - **Not a delivery promise.** `ready` does not mean that delivery will succeed. The pull request can change after assessment; for example, a pending review of the account can be started before publication. GitHub can also refuse the create request for reasons that only the write reveals. Delivery recovery questions are answered only by the publication state contract.
@@ -87,7 +87,9 @@ The pull request `acme/gizmos#7` changes `src/app.js`, and its head is the revie
 3. **Blocked (source inconsistency).** A finding's region snippet is `const MIN = 1;`, but line 4 of `src/app.js` at `2222…` is `const MAX = 100;`. The result is `blocked`, for the same reason that `publish` gives.
 4. **Incomplete (authentication).** GitHub answers 401 to the pull-request read. `validate` exits 1 with `status: "incomplete"`. The Markdown names the failure (with the token redacted) and says that this is not a verdict. It is never `ready`.
 5. **Incomplete (source read).** The pull request is readable but a source blob read fails. The result is `incomplete`, and `publish` would reject at the same point without writing.
-6. **Remote context changes.** `validate` reports `ready` for a finding with a suggested fix on line 4. The author then pushes, so the pull request's head advances past the reviewed commit. A later `publish` fetches the context again and finds that the fix can no longer be a native suggestion on the current diff. Publication returns `blocked`: the earlier `ready` authorizes nothing.
+6. **Remote context changes.** `validate` reports `ready` for a finding with a suggested fix on line 4. The author then pushes, so the pull request's head advances past the reviewed commit. A later `publish` fetches the context again and repeats every check, including the association of the reviewed commit with the pull request. Since October 1, 2026 the fix stays a native suggestion at the reviewed commit ([specification R13.1](specification.md#r131-the-reviewed-diff-historical-placement-and-native-suggestions)), so this push alone does not change the verdict. A push can still change it, for example by moving the base so that line 4 has no patch in the reviewed diff: the earlier `ready` authorizes nothing.
+
+   *Before October 1, 2026, a fix at a reviewed commit that was no longer the head could not be a native suggestion, and this example ended with publication returning `blocked`.*
 7. **Blocked (pending review of this account).** The document of example 1 is ready, but the authenticated account (numeric id 7001001) has a pending review, 1001, on `acme/gizmos#7`. `validate` exits 2 with `status: "blocked"`, with or without `--submit`. Its one problem, without a pointer, names review 1001 and its URL and says that GitHub would refuse the review as a draft or as a submitted comment review. A `publish` of the same input would send its create request, and GitHub would refuse it with 422: `rejected`. Nothing is written by `validate`.
 8. **Ready despite other reviews.** Another account has a pending review on the pull request, and the authenticated account has a submitted comment review there. Both are ignored, and `validate` exits 0.
 9. **Incomplete (review list).** The first page of reviews is readable, but GitHub answers 403 for the second. `validate` exits 1 with `status: "incomplete"`, even if the first page showed a pending review of the account. It is never `ready` or `blocked` from a partial list.
@@ -97,7 +99,8 @@ The pull request `acme/gizmos#7` changes `src/app.js`, and its head is the revie
 Publication and assessment call the same private functions for everything that precedes the publication identity:
 
 - input validation and capture;
-- the GitHub client's context fetch and its verification against the requested pull request and reviewed commit;
+- the GitHub client's context fetch and its verification against the requested pull request and reviewed commit, including that its diff is the reviewed diff;
+- the association of the reviewed commit with the pull request ([specification R17](specification.md#r17-publish-only-about-a-commit-of-the-pull-request)): `blocked` with `reviewed-commit-not-in-pull-request` when it is not associated, and a `reviewed-commit-association-unknown` note when that cannot be established;
 - whole-review preparation, and the check that it produced a review for the reviewed commit;
 - the blocked explanation.
 

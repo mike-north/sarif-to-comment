@@ -20,10 +20,13 @@
  *     reviewedCommit: string,  // full 40-hex; the review's commit and the
  *                              // default source revision
  *     diff: { baseCommit, headCommit, files },  // placement diff contract for
- *                              // the pull request's current diff. Inline
- *                              // anchors exist only when headCommit equals
- *                              // reviewedCommit; an earlier reviewedCommit
- *                              // yields exact historical general feedback.
+ *                              // the reviewed diff (docs/specification.md
+ *                              // R13.1): from the pull request's diff base
+ *                              // to reviewedCommit, so headCommit must equal
+ *                              // reviewedCommit. Whether reviewedCommit is
+ *                              // still the pull request's head does not
+ *                              // matter here: inline anchors and native
+ *                              // suggestions follow the reviewed diff.
  *     sourceRootUri?: string,  // absolute file: URI of the repository root in
  *                              // the producer's filesystem, ending in "/";
  *                              // read-only path interpretation only
@@ -171,10 +174,10 @@
  *   line that could open a suggestion block and never an unclosed fence:
  *   only a validated SARIF fix creates a native suggestion.
  * - Fixes: a result's first fix is its suggested change: its exact edits of
- *   the reviewed files. Whether a fix with one artifactChange and one text
- *   replacement can be a native suggestion (its reviewed commit is the diff
- *   head, GitHub's observed application reproduces it, its lines are on the
- *   new side of the diff) is an availability of the delivery policy, asked
+ *   the files at the reviewed commit. Whether a fix with one artifactChange
+ *   and one text replacement can be a native suggestion (GitHub's observed
+ *   application reproduces it, its lines are on the new side of the reviewed
+ *   diff) is an availability of the delivery policy, asked
  *   only when a list names `native` or `native-batch`; a first fix with
  *   several changes (see delivery below) is accepted whole. A located result's own lines must lie within its
  *   replacement lines (one of them, for a fix with several changes);
@@ -1414,6 +1417,9 @@ function validateCallerInput(input: unknown): asserts input is IPrepareReviewInp
   if (!isPlainObject(diff) || !isFullCommit(diff['baseCommit']) || !isFullCommit(diff['headCommit']) || !Array.isArray(diff['files'])) {
     fail('`context.diff` must name full base and head commits and list its files.');
   }
+  if (diff['headCommit'] !== context['reviewedCommit']) {
+    fail('`context.diff` must be the reviewed diff: its head commit must be `context.reviewedCommit`.');
+  }
   const sourceRootUri = context['sourceRootUri'];
   if (sourceRootUri !== undefined) {
     const root = typeof sourceRootUri === 'string' ? parseBaseUri(sourceRootUri) : null;
@@ -2594,24 +2600,21 @@ async function prepareSingleFix(
  * "enable suggestion pull requests", which listing another mechanism replaced.
  */
 const NATIVE_REMEDIES = Object.freeze({
-  notHead: 'Review the pull request\'s head commit, and publish that review.',
   unreproducible: 'Change the replacement.',
   notInline: 'Remove the fix.',
 });
 
 /**
  * Whether one exact edit can be a native suggestion
- * (docs/delivery-policy-contract.md §8.9): the reviewed commit is the pull
- * request's head, GitHub's observed application of the suggestion reproduces
- * exactly the intended file, and the lines are on the new side of the diff,
- * checked in that order. The suggestion when it can; otherwise every
+ * (docs/delivery-policy-contract.md §8.9): GitHub's observed application of
+ * the suggestion reproduces exactly the intended file, and the lines are on
+ * the new side of the reviewed diff, checked in that order. The context's diff
+ * ends at the reviewed commit (docs/specification.md R13.1), so whether that
+ * commit is still the pull request's head is not a condition. The suggestion when it can; otherwise every
  * obstacle, each the sentence the condition always had, with its remedy.
  */
 function nativeEligibility(edit: IPreparedEdit, context: IPreparationContext): NativeEligibility {
   const unavailable = (obstacle: string, remedy: string): NativeEligibility => ({ available: false, obstacles: [obstacle], remedies: [remedy] });
-  if (context.reviewedCommit !== context.diff.headCommit) {
-    return unavailable('The reviewed commit is not the pull request head, so a native suggestion could not be applied to the reviewed text.', NATIVE_REMEDIES.notHead);
-  }
   const { path: filePath, startLine, endLine, originalText, replacementText } = edit;
   const payload = suggestionPayload(edit.sourceText, startLine, endLine, replacementText, edit.editedText);
   if (payload.error !== undefined) return unavailable(payload.error, NATIVE_REMEDIES.unreproducible);

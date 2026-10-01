@@ -17,18 +17,43 @@
  *                                                  status identical | ahead | behind |
  *                                                  diverged and their merge base, as
  *                                                  GitHub reports them (404 for a
- *                                                  commit the host does not have)
+ *                                                  commit the host does not have),
+ *                                                  and the files changed from the
+ *                                                  merge base to b (unified-diff.mts;
+ *                                                  none without a merge base)
  *   GET  /repos/{o}/{r}/git/commits|trees|blobs/*  real git object ids (blob
  *                                                  SHA-1 over "blob <n>\0")
  *   POST /repos/{o}/{r}/pulls/{n}/reviews          stores a pending review, or a
- *                                                  COMMENTED one for event COMMENT
+ *                                                  COMMENTED one for event COMMENT.
+ *                                                  Modelling GH-16, it resolves
+ *                                                  each comment's line and side on
+ *                                                  the diff of its commit_id: the
+ *                                                  pull request's files at the head,
+ *                                                  otherwise the two-dot diff from
+ *                                                  the pull request's base commit
+ *                                                  (base.sha, `commits.base`) to
+ *                                                  that commit. GH-16 cannot tell
+ *                                                  base.sha from merge-base(base,
+ *                                                  head), which were equal there;
+ *                                                  the host models base.sha, the
+ *                                                  hypothesis the tool must
+ *                                                  survive when they differ;
+ *                                                  a line outside it is 422 "Line
+ *                                                  could not be resolved", and
+ *                                                  nothing is created. A commit the
+ *                                                  host has no snapshot of is not
+ *                                                  checked (GH-16 accepted commits
+ *                                                  outside the pull request).
  *   GET  /repos/{o}/{r}/pulls/{n}/reviews          review list
  *   GET  /repos/{o}/{r}/pulls/{n}/reviews/{id}/comments
  *                                                  pending comments: like the
  *                                                  live probe, line/side null;
  *                                                  submitted: with REST anchors
  *   POST /graphql                                  reviewThreads with the
- *                                                  original anchors
+ *                                                  original anchors, and the
+ *                                                  HeadRefForcePushedEvent items of
+ *                                                  the timeline (`forcePushes`),
+ *                                                  paginated with filteredCount
  * and the branches, pull requests and labels of companion suggestion pull
  * requests (fake-http-companion.mts), and the GraphQL sweeps and
  * cross-references, pull request reads and closes that suggestion cleanup
@@ -73,6 +98,11 @@
  *   failTreeReads?: boolean          answer 502 to every Git tree read (an
  *                                    operational failure of any source read
  *                                    or existence check)
+ *   forcePushPageSize?: number       force-push events per timeline page
+ *                                    (default: the query's `first`)
+ *   failForcePushes?: boolean        answer the force-push query with a
+ *                                    GraphQL error, as GitHub does when it
+ *                                    cannot serve it
  *   companion?: see fake-http-companion.mts
  *
  * Every document the host reads back (its repository, config, reviews, log
@@ -110,6 +140,7 @@ import {
 } from '../../support/runtime-types.mts';
 import type { Guard, UnknownRecord } from '../../support/runtime-types.mts';
 import { cleanupRoute, sweepQuery, timelineQuery } from './fake-http-cleanup.mts';
+import { diffFiles, hunkLines, unifiedPatch } from './unified-diff.mts';
 import {
   EMPTY_COMPANION_STATE,
   companionRoute,
@@ -166,6 +197,12 @@ export interface IHttpRepository {
    * request's own base...head comparison is served.
    */
   readonly parents?: Readonly<Record<string, readonly string[]>> | undefined;
+  /**
+   * The heads force-pushes replaced on the pull request's branch, oldest
+   * first: each HeadRefForcePushedEvent's `beforeCommit` oid, null for an
+   * event that names none (default: no force-push events).
+   */
+  readonly forcePushes?: readonly (string | null)[] | undefined;
   /** Hand-authored expectations for tests (repository.json only); the host does not read them. */
   readonly expected?: unknown;
 }
@@ -191,6 +228,8 @@ export interface IHttpHostConfig {
   readonly failBlobReads?: boolean | undefined;
   readonly failTreeReads?: boolean | undefined;
   readonly failAncestryCompare?: number | undefined;
+  readonly forcePushPageSize?: number | undefined;
+  readonly failForcePushes?: boolean | undefined;
   readonly companion?: ICompanionConfig | undefined;
 }
 
@@ -266,6 +305,7 @@ const isHttpRepository: Guard<IHttpRepository> = isShape({
   push: isOptional(isBoolean),
   labels: isOptional(isArrayOf(isString)),
   parents: isOptional(isRecordOf(isArrayOf(isString))),
+  forcePushes: isOptional(isArrayOf(isEither(isString, isNull))),
   expected: isUnknown,
 });
 
@@ -276,6 +316,8 @@ const isHostConfig: Guard<IHttpHostConfig> = isShape({
   failBlobReads: isOptional(isBoolean),
   failTreeReads: isOptional(isBoolean),
   failAncestryCompare: isOptional(isNumber),
+  forcePushPageSize: isOptional(isNumber),
+  failForcePushes: isOptional(isBoolean),
   companion: isOptional(isCompanionConfig),
 });
 
@@ -572,7 +614,10 @@ export class FakeHttpGitHub {
     }
     if (method === 'POST' && p === '/graphql') {
       const query = parseJson(bodyText(init));
-      return timelineQuery(this.companionHost(), query, json) ?? sweepQuery(this.companionHost(), query, json) ?? this.reviewThreads(query, json);
+      return this.forcePushQuery(query, json)
+        ?? timelineQuery(this.companionHost(), query, json)
+        ?? sweepQuery(this.companionHost(), query, json)
+        ?? this.reviewThreads(query, json);
     }
     const cleanup = cleanupRoute(this.companionHost(), method, u, () => bodyText(init), json);
     if (cleanup) return cleanup;
@@ -659,11 +704,86 @@ export class FakeHttpGitHub {
     const ofB = ancestry(b);
     const mergeBase = ofB.find((c) => ofA.includes(c));
     const status = a === b ? 'identical' : ofB.includes(a) ? 'ahead' : ofA.includes(b) ? 'behind' : 'diverged';
+    // Like GitHub's three-dot comparison, the files run from the merge base to b.
+    const files = mergeBase === undefined ? [] : diffFiles(this.snapshotTexts(mergeBase), this.snapshotTexts(b));
     return json({
       status,
       ahead_by: ofB.filter((c) => !ofA.includes(c)).length,
       behind_by: ofA.filter((c) => !ofB.includes(c)).length,
       ...(mergeBase === undefined ? {} : { merge_base_commit: { sha: mergeBase } }),
+      files: files.map((f) => ({ ...f, patch: f.patch.join('') })),
+    });
+  }
+
+  /** A snapshot's text files, path -> text (files given as raw bytes are left out). */
+  snapshotTexts(commit: string): Record<string, string> {
+    const snapshot = this.served().repository.snapshots[commit] ?? {};
+    return Object.fromEntries(Object.entries(snapshot).map(([filePath, lines]) => [filePath, lines.join('')]));
+  }
+
+  /**
+   * The patch the host resolves a review comment's line against, modelling
+   * GH-16: the pull request's own patch of the file at the head, otherwise
+   * the two-dot diff from the pull request's base commit (`base.sha`, which
+   * may have moved past its merge base with the head) to `commit`. GH-16
+   * cannot tell base.sha from merge-base(base, head); this is the
+   * hypothesis under which the tool's placement is hardest to keep valid. Undefined when the host has no
+   * snapshot of `commit`, and null when the file has no patch there.
+   */
+  reviewPatch(commit: string, filePath: string): readonly string[] | null | undefined {
+    const { repository } = this.served();
+    if (commit === repository.commits.head) {
+      return repository.pullFiles.find((f) => f.filename === filePath)?.patch ?? null;
+    }
+    if (repository.snapshots[commit] === undefined) return undefined;
+    const before = this.snapshotTexts(repository.commits.base)[filePath] ?? null;
+    const after = this.snapshotTexts(commit)[filePath] ?? null;
+    return unifiedPatch(before, after);
+  }
+
+  /**
+   * The HeadRefForcePushedEvent items of the pull request's timeline, as the
+   * GraphQL query restricted to them answers: `filteredCount` counts the
+   * events, and pages follow `first` (or the configured page size) and the
+   * opaque cursor. Null when the query is not that one.
+   */
+  forcePushQuery(request: unknown, json: (body: unknown, status?: number) => Response): Response | null {
+    if (!isRecord(request) || typeof request['query'] !== 'string' || !request['query'].includes('HEAD_REF_FORCE_PUSHED_EVENT')) return null;
+    const query = request['query'];
+    const vars = request['variables'];
+    if (!query.startsWith('query') || !query.includes('filteredCount') || !isRecord(vars) || Object.keys(vars).sort().join(',') !== 'after,number,owner,repo') {
+      return json({ message: 'fake host: unexpected force-push query' }, 400);
+    }
+    const { repository } = this.served();
+    const { owner, repo, pullNumber } = repository.destination;
+    if (vars['owner'] !== owner || vars['repo'] !== repo || vars['number'] !== pullNumber) {
+      return json({ data: { repository: { pullRequest: null } }, errors: [{ type: 'NOT_FOUND', message: 'no such pull request' }] });
+    }
+    if (this.config().failForcePushes === true) {
+      return json({ data: null, errors: [{ type: 'SERVICE_UNAVAILABLE', message: 'Something went wrong while executing your query.' }] });
+    }
+    const first = /first: (\d+)/.exec(query);
+    const size = this.config().forcePushPageSize ?? Number(first?.[1] ?? 100);
+    const events = (repository.forcePushes ?? []).map((before) => ({
+      __typename: 'HeadRefForcePushedEvent',
+      beforeCommit: before === null ? null : { oid: before },
+    }));
+    const after = vars['after'];
+    const start = typeof after === 'string' ? Number(after.replace(/^cursor:/, '')) : 0;
+    const nodes = events.slice(start, start + size);
+    const end = start + nodes.length;
+    return json({
+      data: {
+        repository: {
+          pullRequest: {
+            timelineItems: {
+              filteredCount: events.length,
+              pageInfo: { hasNextPage: end < events.length, endCursor: nodes.length === 0 ? null : `cursor:${String(end)}` },
+              nodes,
+            },
+          },
+        },
+      },
     });
   }
 
@@ -720,11 +840,25 @@ export class FakeHttpGitHub {
     if (reviews.some((r) => r.state === 'PENDING')) {
       return json({ message: 'Unprocessable Entity', errors: ['User can only have one pending review per pull request'] }, 422);
     }
+    if (request.comments.some((c) => !this.resolves(request.commit_id, c))) {
+      // As recorded in GH-16 (docs/evidence/realignment/e1-41-d-head-only-right15-create.json).
+      return json({ message: 'Unprocessable Entity', errors: ['Line could not be resolved'] }, 422);
+    }
     const id = 5000 + reviews.length;
     const { owner, repo, pullNumber } = this.served().repository.destination;
     this.write('reviews.json', [...reviews, { id, request, body: request.body, state: request.event ? 'COMMENTED' : 'PENDING' }]);
     if (config.create === 'lose-response') throw new TypeError('fetch failed: socket hang up');
     return json({ id, html_url: `https://github.com/${owner}/${repo}/pull/${String(pullNumber)}#pullrequestreview-${String(id)}` });
+  }
+
+  /** Whether GitHub would resolve a comment's line(s) on its side of the diff of `commit` (GH-16). */
+  resolves(commit: string, comment: IWireComment): boolean {
+    const patch = this.reviewPatch(commit, comment.path);
+    if (patch === undefined) return true;
+    if (patch === null) return false;
+    const lines = hunkLines(patch);
+    const onSide = (side: string | undefined, line: number): boolean => (side === 'LEFT' ? lines.left : lines.right).has(line);
+    return onSide(comment.side, comment.line) && (comment.start_line === undefined || onSide(comment.start_side, comment.start_line));
   }
 
   reviewThreads(query: unknown, json: (body: unknown, status?: number) => Response): Response {

@@ -1,0 +1,41 @@
+{
+  "format": "sarif-to-comment.publication-state",
+  "version": 1,
+  "phase": "completed",
+  "marker": "<!-- sarif-to-comment:review:48d88810-bcab-4009-af74-8b2291f32983 -->",
+  "destination": {
+    "owner": "mike-north",
+    "repo": "doc-linter",
+    "pullNumber": 41
+  },
+  "reviewedCommit": "e69981ed42926b07d0ff3f25d98558229afd348e",
+  "inputFingerprint": "sha256:322644c19b7b633f8f2ffb8272bb140af1820f0d2ff7a626ad3fd2ed8d1f9ec1",
+  "authorId": 558005,
+  "request": {
+    "owner": "mike-north",
+    "repo": "doc-linter",
+    "pullNumber": 41,
+    "commitId": "e69981ed42926b07d0ff3f25d98558229afd348e",
+    "body": "\n\n<!-- sarif-to-comment:review:48d88810-bcab-4009-af74-8b2291f32983 -->",
+    "comments": [
+      {
+        "path": "docs/experiments/forcepush/sample-amend.md",
+        "side": "RIGHT",
+        "line": 3,
+        "body": "Historical placement check: this unchanged context line is anchored inline at the reviewed commit e69981e, which a force-push replaced. Fixture only; do not act on this review.\n\n<sub>— Historical placement check 1.0.0</sub>"
+      },
+      {
+        "path": "docs/experiments/forcepush/sample-amend.md",
+        "side": "RIGHT",
+        "line": 6,
+        "body": "Historical placement check: a native suggestion at the reviewed commit, on line 6, which the current head left unchanged. Fixture only; do not apply.\n\n**Fix:** Mark line 6 as checked.\n\n<sub>— Historical placement check 1.0.0</sub>\n\n```suggestion\nLine 06: reviewed change two (added by C1), checked historically.\n```"
+      }
+    ]
+  },
+  "requestFingerprint": "sha256:a2fb9a0ebc3d2dbefa195a47811a334132665b145d60c8ed5c6b109cfad2fe1c",
+  "receipt": {
+    "reviewId": 5374560867,
+    "htmlUrl": "https://github.com/mike-north/doc-linter/pull/41#pullrequestreview-5374560867",
+    "via": "created"
+  }
+}

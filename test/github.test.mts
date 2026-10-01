@@ -884,7 +884,7 @@ describe('client construction', () => {
     assert.equal(typeof createGitHubClient({ token: TOKEN }).getAuthenticatedUser, 'function');
   });
 
-  test('the client exposes exactly the transport methods, fetchContext, the suggestion pull request transport and the cleanup transport', () => {
+  test('the client exposes exactly the transport methods, fetchContext, the association reads, the suggestion pull request transport and the cleanup transport', () => {
     const c = client(new FakeHost());
     assert.deepEqual(Object.keys(c).sort(), [
       'addLabels',
@@ -901,6 +901,7 @@ describe('client construction', () => {
       'getPullRequest',
       'listBranchPullRequests',
       'listCrossReferencingPullRequests',
+      'listHeadRefForcePushes',
       'listLabels',
       'listOpenPullRequestsByBranchPrefix',
       'listOpenPullRequestsByLabel',
@@ -1360,12 +1361,8 @@ describe('fetchContext', () => {
     await rejectsWith(contextFor(host), 'head-race');
   });
 
-  test('a historical reviewed commit keeps the actual current pull diff and its candidate', async () => {
-    const host = pullScenario();
-    const { context } = await contextFor(host, { reviewedCommit: HISTORICAL });
-    assert.deepEqual(context, { ...PR.expectedContext, reviewedCommit: HISTORICAL });
-    assert.deepEqual(host.urls(), [PR.pullUrl, ...PR.filesPages.map((p) => p.url), PR.pullUrl, PR.compareUrl]);
-  });
+  // A reviewed commit that is not the head reads the reviewed diff through
+  // comparisons instead (docs/specification.md R13.1): test/github-reviewed-diff.test.mts.
 
   test('an explicit old-source commit is the candidate and replaces the compare request', async () => {
     const host = pullScenario();
@@ -1755,13 +1752,8 @@ describe('readSource', () => {
     assert.equal(host.requests.length, 0);
   });
 
-  test('a historical review still verifies old-side reads against the current pull head', async () => {
-    const { host, readSource } = await prepared({ request: { reviewedCommit: HISTORICAL } });
-    assert.equal(await readSource(MERGE_BASE, 'src/app.js'), contentsEntry(MERGE_BASE, 'src/app.js').text);
-    assert.ok(host.urls().includes(commitUrl(HEAD)), 'reverse-applied from the pinned head');
-    assert.equal(await readSource(HISTORICAL, 'src/app.js'), contentsEntry(HISTORICAL, 'src/app.js').text);
-    assertHttpDiscipline(host);
-  });
+  // Old-side reads of a historical review are verified against its reviewed
+  // diff instead (docs/specification.md R13.1): test/github-reviewed-diff.test.mts.
 });
 
 // The existence check behind whole-file proposals

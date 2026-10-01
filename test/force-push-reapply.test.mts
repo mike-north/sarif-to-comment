@@ -432,13 +432,18 @@ describe('the ancestry read is made only when a suggestion pull request could be
     return { ...doc, runs: [{ ...asRecord(run), results: results.slice(4) }] };
   };
 
-  test('a review that creates no suggestion pull request never reads it, so its failure cannot refuse the review', async () => {
-    const world = makeWorld(AMENDED, { failAncestryCompare: 404 });
+  test('a review that creates no suggestion pull request makes no ancestry read beyond the association of its reviewed commit', async () => {
+    // Since docs/specification.md R17, every review of a commit that is not
+    // the head compares it with the head once, to associate it with the pull
+    // request; that comparison fails like any read (the next test). Ancestry
+    // for suggestion pull requests is still read only when one could be made.
+    const world = makeWorld(AMENDED);
     const assessed = await validateWith(world, remarkOnly());
     assert.equal(status(assessed), 'ready', markdown(assessed));
     const outcome = await publishWith(world, remarkOnly());
     assert.equal(status(outcome), 'published', markdown(outcome));
-    assert.deepEqual(compareReads(world).filter((c) => !c.startsWith(`${BASE}...`)), [], 'no ancestry read');
+    assert.deepEqual(compareReads(world).filter((c) => !c.startsWith(`${BASE}...`)), [`${REVIEWED}...${AMENDED}`, `${REVIEWED}...${AMENDED}`],
+      'one association comparison per operation, and no ancestry read');
   });
 
   test('when one is needed, a failed read is operational: validate is incomplete, publish rejects, and nothing is written', async () => {

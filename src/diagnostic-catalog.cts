@@ -457,6 +457,16 @@ export const DIAGNOSTIC_CATALOG = {
     title: 'An artifact URI is outside the repository',
     remedies: ['Pass the producer\'s source root (`--source-root`, `sourceRootUri`), or use a repository-relative URI.'],
   },
+  'reviewed-commit-not-in-pull-request': {
+    severity: 'error',
+    title: 'The reviewed commit does not belong to the pull request',
+    remedies: ['Check the reviewed commit: review a commit of this pull request.', 'Check the pull request number.'],
+  },
+  'reviewed-commit-association-unknown': {
+    severity: 'note',
+    title: 'Whether the reviewed commit belongs to the pull request is not known',
+    remedies: [],
+  },
   'source-file-missing': {
     severity: 'error',
     title: 'The file does not exist at the source revision',
