@@ -135,11 +135,14 @@ Exit status 3 → 1.
    sarif-to-comment close-suggestion-prs --repo OWNER/REPO [options]
    sarif-to-comment --sarif FILE --repo OWNER/REPO --pull N --commit FULLSHA
                     --state ABSOLUTE_FILE [--source-root ABSOLUTE_FILE_URI]
--                   [--old-source-commit FULLSHA] [--ignore-approval-hold] [--submit]
--                   [--allow-suggestion-prs [--pr-labels A,B,C] [--mark-suggestion-prs-ready]]
+-                   [--old-source-commit FULLSHA] [--ignore-approval-hold] [--submit] [--delivery PRESET]
+-                   [--edits LIST] [--grouped-edits LIST] [--file-operations LIST] [--companion-bundle BUNDLE]
+-                   [--pr-labels A,B,C] [--mark-suggestion-prs-ready]
 +                   [--old-source-commit FULLSHA] [--ignore-approval-hold]
-+                   [--submit] [--allow-suggestion-prs [--pr-labels A,B,C]
-+                   [--mark-suggestion-prs-ready]]
++                   [--submit] [--delivery PRESET] [--edits LIST]
++                   [--grouped-edits LIST] [--file-operations LIST]
++                   [--companion-bundle BUNDLE] [--pr-labels A,B,C]
++                   [--mark-suggestion-prs-ready]
    sarif-to-comment [COMMAND] --help
 +  sarif-to-comment --version
 ```
