@@ -1054,6 +1054,8 @@ interface IUnitAssembly {
   /** The whole-file proposals presented in the body because they fell back (issue #37), named when the body is too large. */
   readonly proposals: readonly IRenderedProposal[];
   readonly suggestions?: IPreparedSuggestions;
+  /** The composed texts the checkpoint reads once the limits pass; none for a blocked assembly. */
+  readonly composed: readonly IComposedUnit[];
 }
 
 /** Whether one suggestion pull request is created (re-applied onto a head, with that head's edited files) or not. */
@@ -1322,6 +1324,9 @@ async function prepareReview(input: unknown, internals: IPrepareReviewInternals 
     if (report.errors.length > 0) return blocked(report);
     enforceLimits(units.review, units.proposals, state);
     if (report.errors.length > 0) return blocked(report);
+    // The composed-text checkpoint reads only a review within its limits.
+    checkComposed(units.composed, state);
+    if (report.errors.length > 0) return blocked(report);
     return {
       status: 'ready',
       review: units.review,
@@ -1335,6 +1340,8 @@ async function prepareReview(input: unknown, internals: IPrepareReviewInternals 
   const assembled = assemble(items, state);
   if (report.errors.length > 0) return blocked(report);
   enforceLimits(assembled.review, assembled.proposals, state);
+  if (report.errors.length > 0) return blocked(report);
+  checkComposed(assembled.composed, state);
   if (report.errors.length > 0) return blocked(report);
 
   return {
@@ -2974,6 +2981,7 @@ function assemble(
   readonly commentItems: ICommentEntry[];
   readonly sectionCount: number;
   readonly proposals: readonly IRenderedProposal[];
+  readonly composed: readonly IComposedUnit[];
 } {
   const { context, report } = state;
   const commentItems: ICommentEntry[] = [];
@@ -3065,19 +3073,19 @@ function assemble(
   // Each comment's body follows its coordinates, once every item it presents is known.
   const comments: PreparedComment[] = commentItems.map((entry) => ({ ...entry.coordinates, body: composeComment(entry, renderer) }));
   const body = rendered.join(SEPARATOR);
-  checkComposed([
+  const sectionUnits = sections.map((section, i): IComposedUnit => ({
+    what: `body section ${String(i + 1)}`,
+    text: itemAt(rendered, i),
+    expected: {},
+    items: section.kind === 'item' ? [section.item] : section.items,
+    compose: (r) => (section.kind === 'item' ? r.section(section.item) : r.proposal(section.operation, section.items)),
+  }));
+  const composed = [
     ...commentItems.map((entry, i) => commentUnit(entry, itemAt(comments, i).body, i)),
-    ...sections.map((section, i): IComposedUnit => ({
-      what: `body section ${String(i + 1)}`,
-      text: itemAt(rendered, i),
-      expected: {},
-      items: section.kind === 'item' ? [section.item] : section.items,
-      compose: (r) => (section.kind === 'item' ? r.section(section.item) : r.proposal(section.operation, section.items)),
-    })),
-    ...bodyUnits(body, sections.flatMap((section) => (section.kind === 'item' ? [section.item] : section.items)),
-      (r) => sections.map((section) => (section.kind === 'item' ? r.section(section.item) : r.proposal(section.operation, section.items))).join(SEPARATOR)),
-  ], state);
+    ...bodyUnits(body, sectionUnits, (r) => sectionUnits.map((unit) => unit.compose(r)).join(SEPARATOR)),
+  ];
   return {
+    composed,
     review: { commitId: context.reviewedCommit, body, comments },
     evidence,
     commentItems,
@@ -3343,7 +3351,7 @@ async function assembleWithSuggestions(items: readonly IPreparedItem[], state: I
     }
   }
   const comments: PreparedComment[] = commentItems.map((entry) => ({ ...entry.coordinates, body: composeComment(entry, renderer) }));
-  const blockedAssembly: IUnitAssembly = { review: { commitId: context.reviewedCommit, body: '', comments }, evidence, sectionCount: sections.length, proposals: [] };
+  const blockedAssembly: IUnitAssembly = { review: { commitId: context.reviewedCommit, body: '', comments }, evidence, sectionCount: sections.length, proposals: [], composed: [] };
   if (enabled === undefined) return blockedAssembly;
 
   // Ancestry is resolved only now that suggestion units exist (§2.8), even
@@ -3477,31 +3485,29 @@ async function assembleWithSuggestions(items: readonly IPreparedItem[], state: I
   };
   const sectionItems = (section: UnitSection): readonly IPreparedItem[] => (section.kind === 'item' ? [section.item] : itemAt(units, section.unit).items);
   const composedBody = (r: ReviewRenderer): string => sections.map((section) => sectionWith(section, r, false)).join(SEPARATOR);
-  const checkpoint = (body: string): void => {
-    checkComposed([
-      ...commentItems.map((entry, i) => commentUnit(entry, itemAt(comments, i).body, i)),
-      ...companionUnits,
-      ...sections.map((section, i): IComposedUnit => ({
-        what: `body section ${String(i + 1)}`,
-        text: sectionWith(section, renderer, true),
-        expected: {},
-        items: sectionItems(section),
-        compose: (r) => sectionWith(section, r, false),
-      })),
-      ...bodyUnits(body, sections.flatMap(sectionItems), composedBody),
-    ], state);
-  };
+  // Sections are read only to locate the culprit when the body fails.
+  const sectionUnits = sections.map((section, i): IComposedUnit => ({
+    what: `body section ${String(i + 1)}`,
+    get text(): string { return sectionWith(section, renderer, true); },
+    expected: {},
+    items: sectionItems(section),
+    compose: (r) => sectionWith(section, r, false),
+  }));
+  const composedFor = (body: string): IComposedUnit[] => [
+    ...commentItems.map((entry, i) => commentUnit(entry, itemAt(comments, i).body, i)),
+    ...companionUnits,
+    ...bodyUnits(body, sectionUnits, composedBody),
+  ];
   if (companions.length === 0) {
     const body = parts.map(String).join(SEPARATOR);
-    checkpoint(body);
-    return { review: { commitId: context.reviewedCommit, body, comments }, evidence: renumbered, sectionCount: sections.length, proposals };
+    return { review: { commitId: context.reviewedCommit, body, comments }, evidence: renumbered, sectionCount: sections.length, proposals, composed: composedFor(body) };
   }
   // A created companion always had its lifecycle note presented when it was prepared.
   if (lifecycleNote === undefined) throw new Error('Internal error: a suggestion pull request was prepared without its lifecycle note.');
   const suggestions: IPreparedSuggestions = { companions, sections: parts, lifecycleNote };
   const body = renderReviewBody(suggestions, companions.map(() => LARGEST_PULL_NUMBER), target);
-  checkpoint(body);
   return {
+    composed: composedFor(body),
     review: { commitId: context.reviewedCommit, body, comments },
     evidence: renumbered,
     sectionCount: sections.length,
@@ -3865,6 +3871,8 @@ interface IComposedUnit {
   readonly expected: IComposedExpectation;
   readonly items: readonly IPreparedItem[];
   readonly compose: (renderer: ReviewRenderer) => string;
+  /** The parts (the body's sections) read, only when this text fails, to locate the culprit. */
+  readonly parts?: readonly IComposedUnit[];
 }
 
 /** The native suggestion block the core appends to a suggestion comment. */
@@ -3888,15 +3896,20 @@ function commentUnit(entry: ICommentEntry, text: string, index: number): ICompos
   };
 }
 
-/** The review body as it will be sent, with the publication marker after it; none when the body is empty. */
-function bodyUnits(body: string, items: readonly IPreparedItem[], compose: (r: ReviewRenderer) => string): IComposedUnit[] {
+/**
+ * The review body as it will be sent, with a sample publication marker after
+ * it (the body is checked before its pull request numbers and marker exist);
+ * none when the body is empty. Its sections locate a failure.
+ */
+function bodyUnits(body: string, sections: readonly IComposedUnit[], compose: (r: ReviewRenderer) => string): IComposedUnit[] {
   if (body === '') return [];
   return [{
     what: 'the review body',
     text: `${body}\n\n${SAMPLE_REVIEW_MARKER}`,
     expected: { marker: SAMPLE_REVIEW_MARKER },
-    items,
+    items: sections.flatMap((section) => section.items),
     compose: (r) => `${compose(r)}\n\n${SAMPLE_REVIEW_MARKER}`,
+    parts: sections,
   }];
 }
 
@@ -3917,9 +3930,20 @@ function checkComposed(units: readonly IComposedUnit[], state: IPreparationState
   let builtIn: ReviewRenderer | undefined;
   const builtInRenderer = (): ReviewRenderer => (builtIn ??= state.renderer.customized ? new ReviewRenderer(state.context, {}) : state.renderer);
   const reported = new Set<string>();
-  for (const unit of units) {
-    const problem = composedProblem(unit.text, unit.expected);
-    if (problem === null) continue;
+  for (const whole of units) {
+    const wholeProblem = composedProblem(whole.text, whole.expected);
+    if (wholeProblem === null) continue;
+    // A failing body is narrowed to its first failing section, when one fails alone.
+    let unit = whole;
+    let problem = wholeProblem;
+    for (const part of whole.parts ?? []) {
+      const partProblem = composedProblem(part.text, part.expected);
+      if (partProblem !== null) {
+        unit = part;
+        problem = partProblem;
+        break;
+      }
+    }
     if (state.renderer.customized && composedProblem(unit.compose(builtInRenderer()), unit.expected) === null) {
       throw new TypeError(`Invalid presentation: options.presentation returned Markdown that, composed into ${unit.what}, ${problem}, `
         + 'which would hide or swallow what the core places after it (findings, a suggestion block or a marker). '

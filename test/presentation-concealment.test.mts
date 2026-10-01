@@ -33,7 +33,7 @@ import type {
   IFileDeletionPresentationContext,
   IFindingPresentationContext,
 } from '../dist/public-api.cjs';
-import { at, carrying, log, prepare, prepareOutcome, run } from './support/presentation-fixtures.mts';
+import { at, carrying, lineFix, log, prepare, prepareOutcome, run } from './support/presentation-fixtures.mts';
 
 /** Matches the refusal of a callback result for `component`, whose message matches `rule`. */
 const refusedBy = (component: string, rule: RegExp): ((error: unknown) => boolean) => (error) => {
@@ -184,6 +184,37 @@ describe('callbacks cannot hide a required fragment that is still "contained"', 
 
   test('a $ in code, or escaped, cannot make math', () => {
     assert.equal(present('finding', () => 'eslint costs `$5` and \\$6', { markdown: 'eslint', required: ['eslint'] }), 'eslint costs `$5` and \\$6');
+  });
+});
+
+describe('the composed-text checkpoint blames a callback when the built-in layout composes cleanly', () => {
+  // `eslint\` passes every check on its own, but composed into `<sub>— …</sub>`
+  // its trailing backslash escapes the `<` of `</sub>`, leaving <sub> open over
+  // the suggestion block (or the marker). The built-in attribution composes
+  // cleanly, so the callback is blamed.
+  const trailingBackslash = { attribution: (c: IAttributionPresentationContext) => `${c.tool}\\` };
+  const composedRefusal = (where: RegExp): ((error: unknown) => boolean) => (error) => {
+    assert.ok(error instanceof TypeError, 'a TypeError');
+    assert.match(error.message, /^Invalid presentation: options\.presentation returned Markdown that, composed into /);
+    assert.match(error.message, where);
+    return true;
+  };
+
+  test('in an inline comment', async () => {
+    const sarif = log(run(ESLINT, [{ message: { text: 'Plain.' }, locations: [at('src/app.js', { startLine: 2 })], fixes: [lineFix('src/app.js', 2, 'C', 'd')] }]));
+    await assert.rejects(prepareOutcome(sarif, { presentation: trailingBackslash }), composedRefusal(/composed into inline comment 1, leaves a <sub> element open/));
+  });
+
+  test('in a suggestion pull request\'s description', async () => {
+    const sarif = log(run(ESLINT, [{
+      message: { text: 'Plain.' }, locations: [at('src/app.js', { startLine: 2 })],
+      fixes: [{ description: { text: 'Both.' }, artifactChanges: [
+        { artifactLocation: { uri: 'src/app.js' }, replacements: [{ deletedRegion: { startLine: 2 }, insertedContent: { text: 'C' } }] },
+        { artifactLocation: { uri: 'docs/notes.md' }, replacements: [{ deletedRegion: { startLine: 1 }, insertedContent: { text: 'F' } }] },
+      ] }],
+    }]));
+    await assert.rejects(prepareOutcome(sarif, { suggestionPullRequests: { headRef: 'feature/x', ready: false }, presentation: trailingBackslash }),
+      composedRefusal(/composed into the description of the suggestion pull request for unit 1, leaves a <sub> element open/));
   });
 });
 
