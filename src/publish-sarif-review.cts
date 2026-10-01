@@ -53,6 +53,9 @@
  *       // delivery could not be confirmed; markdown names the preserved
  *       // state path, says to retry with the same path and not to delete it,
  *       // and that a new path would create a separate review
+ *   Preparation's warnings are recorded with the publication (in its state)
+ *   and reported by every published or uncertain outcome for it, on the call
+ *   that planned it and on every later call alike (issue #42).
  *   { status: 'rejected', statePath, markdown }
  *       // GitHub definitively refused the single create; never resent
  * Rejects (promise) for invalid input (TypeError, before any remote read),
@@ -106,7 +109,7 @@ import { continueCompanionPublication, hasCompanionPlan, startCompanionPublicati
 import type { BaseCheck, CompanionOutcome, ICompanionTransport, IEstablished } from './companion-publication.cjs';
 import { createGitHubClient as defaultCreateGitHubClient } from './github.cjs';
 import type { ICreateGitHubClientOptions } from './github.cjs';
-import type { IReadyOutcome } from './prepare-review.cjs';
+import { listWarnings } from './prepare-review.cjs';
 import { publishPreparedReview, recoverPublication } from './publication.cjs';
 import {
   blockedReviewMarkdown,
@@ -310,8 +313,10 @@ export interface IPublishedOutcome {
    * example a finding published in the review body, or a whole-file
    * proposal presented in the body because no suggestion pull request could
    * be made for it), a completion that could not be recorded, and a branch
-   * that moved while suggestions were created. The `markdown` states every
-   * warning in a headline under its heading.
+   * that moved while suggestions were created. Preparation's warnings are
+   * recorded with the publication, so every call with the same `statePath`
+   * reports the same ones. The `markdown` states every warning in a headline
+   * under its heading.
    */
   readonly diagnostics: readonly IDiagnostic[];
 }
@@ -345,7 +350,11 @@ export interface IUncertainOutcome {
   readonly statePath: string;
   /** What is known and what to do next. */
   readonly markdown: string;
-  /** A `delivery-unconfirmed` warning, and any note about the branch. */
+  /**
+   * Preparation's warnings (recorded with the publication, as for a
+   * published outcome), a `delivery-unconfirmed` warning, and any note about
+   * the branch.
+   */
   readonly diagnostics: readonly IDiagnostic[];
 }
 
@@ -525,10 +534,18 @@ type DeliveredReview = Pick<PublishedResult, 'via' | 'receiptPersisted'> & { rea
 // what the outcome's diagnostics already say (problems, warnings, the detail
 // of a failure), which the CLI renders once, on stderr.
 
+/**
+ * The section a full report ends with for preparation's warnings, as Markdown
+ * lines; none without warnings. The same on every call for a publication.
+ */
+function warningsMarkdown(warnings: readonly IDiagnostic[]): string[] {
+  return warnings.length === 0 ? [] : ['', listWarnings(warnings)];
+}
+
 function publishedMarkdown(
   result: DeliveredReview,
   captured: ICapturedInput,
-  prepared: IReadyOutcome | undefined,
+  warnings: readonly IDiagnostic[],
   diagnostics: readonly IDiagnostic[],
   full = true,
 ): string {
@@ -552,7 +569,7 @@ function publishedMarkdown(
       `Completion could not be recorded at ${code(captured.statePath)}. Keep that file: a later run with the same state path confirms the review without sending it again.`,
     );
   }
-  if (full && prepared && prepared.warnings.length > 0 && prepared.markdown) lines.push('', prepared.markdown.trim());
+  if (full) lines.push(...warningsMarkdown(warnings));
   return lines.join('\n');
 }
 
@@ -566,6 +583,7 @@ function uncertainMarkdown(result: UncertainResult, captured: ICapturedInput, fu
     '- Retry later with the same state path: it only checks GitHub for this review and never sends it again.',
     '- Do not delete that file: it is the only record that this review may already exist.',
     '- A new state path starts a new, separate review; use one only if you intend a separate review.',
+    ...(full ? warningsMarkdown(result.warnings) : []),
   ].join('\n');
 }
 
@@ -591,25 +609,36 @@ function rejectedMarkdown(result: RejectedResult, captured: ICapturedInput, full
 // ---------------------------------------------------------------------------
 
 /**
- * A published outcome's diagnostics: preparation's warnings (absent when the
- * publication was completed by an earlier call), a completion that could not
- * be recorded, and what a retry found about the branch.
+ * A published outcome's diagnostics: preparation's warnings (recorded with
+ * the publication, so the same on every call for it; issue #42), a
+ * completion that could not be recorded, and what a retry found about the
+ * branch.
  */
 function publishedDiagnostics(
-  result: Pick<PublishedResult, 'receiptPersisted'>,
+  result: Pick<PublishedResult, 'receiptPersisted' | 'warnings'>,
   captured: ICapturedInput,
-  prepared: IReadyOutcome | undefined,
   baseCheck?: BaseCheck,
 ): IDiagnostic[] {
   const unrecorded = result.receiptPersisted
     ? []
     : [createDiagnostic('publication-receipt-not-recorded', `Completion could not be recorded at ${code(captured.statePath)}.`, { subject: captured.statePath })];
-  return orderDiagnostics([...(prepared?.warnings ?? []), ...unrecorded, ...baseCheckDiagnostics(baseCheck, captured)]);
+  return orderDiagnostics([...result.warnings, ...unrecorded, ...baseCheckDiagnostics(baseCheck, captured)]);
 }
 
-/** The delivery that could not be confirmed, as a warning about the pull request. */
-function uncertainDiagnostics(detail: string, captured: ICapturedInput, baseCheck?: BaseCheck): IDiagnostic[] {
-  return orderDiagnostics([createDiagnostic('delivery-unconfirmed', detail, { subject: destinationLabel(captured) }), ...baseCheckDiagnostics(baseCheck, captured)]);
+/**
+ * An uncertain outcome's diagnostics: preparation's warnings (the review may
+ * exist, and they describe it), then the delivery that could not be
+ * confirmed, as a warning about the pull request, and any note about the
+ * branch.
+ */
+function uncertainDiagnostics(
+  warnings: readonly IDiagnostic[],
+  detail: string,
+  captured: ICapturedInput,
+  baseCheck?: BaseCheck,
+): IDiagnostic[] {
+  const unconfirmed = createDiagnostic('delivery-unconfirmed', detail, { subject: destinationLabel(captured) });
+  return orderDiagnostics([...warnings, unconfirmed, ...baseCheckDiagnostics(baseCheck, captured)]);
 }
 
 /** GitHub's definitive refusal of the review or of a suggestion pull request step, as an error about the pull request. */
@@ -618,26 +647,35 @@ function rejectedDiagnostics(detail: string, step: 'review' | 'suggestion', capt
   return orderDiagnostics([refused, ...baseCheckDiagnostics(baseCheck, captured)]);
 }
 
-/** The public outcome for a publication-core result. */
-function present(result: PublicationResult, captured: ICapturedInput, prepared?: IReadyOutcome): IReported<PublishSarifReviewOutcome> {
+/**
+ * The public outcome for a publication-core result. Preparation's warnings
+ * come from the result, which reads them from the record, so every call for
+ * a publication reports the same ones.
+ */
+function present(result: PublicationResult, captured: ICapturedInput): IReported<PublishSarifReviewOutcome> {
   const { statePath } = captured;
   switch (result.status) {
     case 'published': {
-      const diagnostics = publishedDiagnostics(result, captured, prepared);
+      const diagnostics = publishedDiagnostics(result, captured);
       return {
         outcome: {
           status: 'published',
           review: { id: result.review.id, url: result.review.htmlUrl },
           statePath,
-          markdown: publishedMarkdown(result, captured, prepared, diagnostics),
+          markdown: publishedMarkdown(result, captured, result.warnings, diagnostics),
           diagnostics,
         },
-        report: publishedMarkdown(result, captured, prepared, diagnostics, false),
+        report: publishedMarkdown(result, captured, result.warnings, diagnostics, false),
       };
     }
     case 'uncertain':
       return {
-        outcome: { status: 'uncertain', statePath, markdown: uncertainMarkdown(result, captured), diagnostics: uncertainDiagnostics(result.detail, captured) },
+        outcome: {
+          status: 'uncertain',
+          statePath,
+          markdown: uncertainMarkdown(result, captured),
+          diagnostics: uncertainDiagnostics(result.warnings, result.detail, captured),
+        },
         report: uncertainMarkdown(result, captured, false),
       };
     case 'rejected':
@@ -717,7 +755,7 @@ function baseCheckDiagnostics(check: BaseCheck | undefined, captured: ICapturedI
   return [createDiagnostic(check.kind === 'changed' ? 'suggestion-branch-moved' : 'suggestion-branch-unreadable', message, { subject })];
 }
 
-function presentCompanion(outcome: CompanionOutcome, captured: ICapturedInput, prepared?: IReadyOutcome): IReported<PublishSarifReviewOutcome> {
+function presentCompanion(outcome: CompanionOutcome, captured: ICapturedInput): IReported<PublishSarifReviewOutcome> {
   const { statePath } = captured;
   switch (outcome.status) {
     case 'published': {
@@ -725,9 +763,9 @@ function presentCompanion(outcome: CompanionOutcome, captured: ICapturedInput, p
       const listed = suggestions.map((s) => `- [#${String(s.number)}](${s.url}) from ${code(s.branch)}`);
       const form = outcome.ready ? `ready for review, into ${code(outcome.headRef)}` : `drafts into ${code(outcome.headRef)}`;
       const reapplied = outcome.reappliedOnto === undefined ? '' : `, re-applied onto commit ${code(outcome.reappliedOnto)}`;
-      const diagnostics = publishedDiagnostics(outcome, captured, prepared, outcome.baseCheck);
+      const diagnostics = publishedDiagnostics(outcome, captured, outcome.baseCheck);
       const text = (full: boolean): string => [
-        publishedMarkdown(outcome, captured, prepared, diagnostics, full),
+        publishedMarkdown(outcome, captured, outcome.warnings, diagnostics, full),
         '',
         ...(full ? baseCheckMarkdown(outcome.baseCheck, captured) : []),
         `Suggestion pull requests (${form}, labeled ${labelList(outcome.labels)}${reapplied}):`,
@@ -757,9 +795,15 @@ function presentCompanion(outcome: CompanionOutcome, captured: ICapturedInput, p
         '- Retry later with the same state path: it only checks GitHub for work that may already have been sent, never sends it again, and continues with work that was never sent.',
         '- Do not delete those files: they are the only record of what may already exist.',
         '- A new state path starts a new, separate publication; use one only if you intend a separate review.',
+        ...(full ? warningsMarkdown(outcome.warnings) : []),
       ].join('\n');
       return {
-        outcome: { status: 'uncertain', statePath, markdown: text(true), diagnostics: uncertainDiagnostics(outcome.detail, captured, outcome.baseCheck) },
+        outcome: {
+          status: 'uncertain',
+          statePath,
+          markdown: text(true),
+          diagnostics: uncertainDiagnostics(outcome.warnings, outcome.detail, captured, outcome.baseCheck),
+        },
         report: text(false),
       };
     }
@@ -827,6 +871,9 @@ async function run(captured: ICapturedInput, createGitHubClient: CreatePublishin
     };
   }
 
+  // Preparation's warnings are recorded with the publication, so that every
+  // later call reports them (issue #42); state never holds the credential.
+  const warnings = prepared.warnings.map((w) => mapDiagnosticText(w, (text) => redact(text, captured.token)));
   if (prepared.suggestions !== undefined && prepared.suggestionPullRequests !== undefined) {
     const outcome = await startCompanionPublication({
       ...identity,
@@ -837,15 +884,17 @@ async function run(captured: ICapturedInput, createGitHubClient: CreatePublishin
       labels: prepared.suggestionPullRequests.labels,
       ready: prepared.suggestionPullRequests.ready,
       ...(prepared.suggestionPullRequests.reappliedOnto === undefined ? {} : { reappliedOnto: prepared.suggestionPullRequests.reappliedOnto }),
+      warnings,
     });
-    return presentCompanion(outcome, captured, prepared);
+    return presentCompanion(outcome, captured);
   }
 
   const result = await publishPreparedReview({
     ...identity,
     preparedReview: { body: prepared.review.body, comments: prepared.review.comments },
+    warnings,
   });
-  return present(result, captured, prepared);
+  return present(result, captured);
 }
 
 /**

@@ -690,3 +690,143 @@ describe('CLI (#37): a base that is not the default branch, in every format', ()
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// Retries (issue #42)
+
+/**
+ * The warnings section a published or uncertain outcome's full Markdown
+ * carries for preparation's warnings (docs/diagnostics.md, "Warnings on
+ * every call for a publication"): each warning's code, pointer and message.
+ */
+const warningsSection = (warnings: readonly Json[]): string => `**Warnings:**\n\n${warnings.map(problemLine).join('\n')}`;
+
+/** The review a published outcome names. */
+function reviewOf(outcome: Json): { readonly id: number; readonly url: string } {
+  const review = asRecord(outcome['review']);
+  const { id, url } = review;
+  assert.ok(typeof id === 'number' && typeof url === 'string', 'a published outcome names its review');
+  return { id, url };
+}
+
+/** The contract's sentences for the review of `outcome` (§2.7 of the submitted-review contract; README "Publishing"). */
+function sentences(outcome: Json, statePath: string): { readonly created: string; readonly receipt: string; readonly recovered: string } {
+  const { id, url } = reviewOf(outcome);
+  const link = `[review ${String(id)}](${url})`;
+  const where = `${OWNER}/${REPO}#${String(PULL)} at commit \`${REVIEWED}\``;
+  return {
+    created: `Created the draft ${link} on ${where}. It stays a draft until someone submits it on GitHub.`,
+    receipt: `The draft ${link} on ${where} was already published; its completion is recorded at \`${statePath}\`. Nothing was sent.`,
+    recovered: `The draft ${link} on ${where} was confirmed on GitHub for this publication; nothing was resent.`,
+  };
+}
+
+describe('every later call for a publication reports the warnings the first call reported (#42)', () => {
+  const repository = { pull: { headRef: 'feature/retry', baseRef: 'release' } };
+  const warning = fallbackDiagnostic('/runs/0/results/0', 'obsolete.txt', fallbackFor(DELETION, BASE_REASON), []);
+
+  test('regression (#42): a retry that finds the completion recorded keeps the warning, the headline and the warnings section', async () => {
+    const world = makeWorld(REVIEWED, {}, repository);
+    const first = await publishDoc(world, documentWith(['delete', 'remark']));
+    assert.equal(status(first), 'published', markdown(first));
+    assertExactDiagnostics(first, [warning]);
+    assertPublishedHeadline(first, publishedHeadline(1));
+    assert.ok(markdown(first).endsWith(`\n\n${warningsSection([warning])}`), markdown(first));
+    const sent = writes(world);
+
+    for (let retry = 1; retry <= 2; retry += 1) {
+      const again = await publishDoc(world, documentWith(['delete', 'remark']));
+      assert.equal(status(again), 'published', markdown(again));
+      assert.deepEqual(again['review'], first['review']);
+      assertExactDiagnostics(again, [warning]);
+      const { created, receipt } = sentences(first, world.statePath);
+      assert.equal(markdown(again), markdown(first).replace(created, receipt), 'the same report, but for the sentence that says the review was already published');
+    }
+    assert.deepEqual(writes(world), sent, 'nothing is sent again');
+  });
+
+  test('regression (#42): an uncertain delivery carries the warning, and the retry that confirms it reports it again', async () => {
+    const world = makeWorld(REVIEWED, { shiftThreadLine: 0 }, repository);
+    const document = documentWith(['delete', 'remark']);
+    const [line6] = asArray(asRecord(asArray(reviewDocument()['runs'])[0])['results']);
+    asArray(asRecord(asArray(document['runs'])[0])['results']).push({ ...asRecord(line6), properties: {} });
+
+    const uncertain = await publishDoc(world, document);
+    assert.equal(status(uncertain), 'uncertain', markdown(uncertain));
+    const diagnostics = diagnosticsOf(uncertain).map((d) => asRecord(d));
+    assert.deepEqual(diagnostics.map((d) => d['code']), ['suggestion-pr-fallback', 'delivery-unconfirmed'], 'the warning first, as it was found first');
+    assert.deepEqual(diagnostics[0], warning);
+    assert.ok(markdown(uncertain).endsWith(`\n\n${warningsSection([warning])}`), markdown(uncertain));
+
+    world.host.setConfig({ shiftThreadLine: null });
+    const confirmed = await publishDoc(world, document);
+    assert.equal(status(confirmed), 'published', markdown(confirmed));
+    assertExactDiagnostics(confirmed, [warning]);
+    const { recovered, receipt } = sentences(confirmed, world.statePath);
+    assert.equal(markdown(confirmed), `## Draft review published\n\n${publishedHeadline(1)}\n\n${recovered}\n\n${warningsSection([warning])}`);
+    const recorded = await publishDoc(world, document);
+    assertExactDiagnostics(recorded, [warning]);
+    assert.equal(markdown(recorded), `## Draft review published\n\n${publishedHeadline(1)}\n\n${receipt}\n\n${warningsSection([warning])}`);
+    assert.equal(world.host.reviews().length, 1, 'one review, never resent');
+  });
+
+  test('regression (#42): with suggestion pull requests, a retry reports the planned fallback warning again', async () => {
+    const world = makeWorld(REWRITTEN);
+    const expected = [fallback('/runs/0/results/1', 'obsolete.txt', DELETION, REWRITTEN, ['`obsolete.txt` differs from the reviewed file'])];
+    const first = await publishDoc(world, documentWith(['create', 'delete', 'remark']));
+    assert.equal(status(first), 'published', markdown(first));
+    assertExactDiagnostics(first, expected);
+    assert.ok(markdown(first).includes(`\n\n${warningsSection(expected)}\n\n`), markdown(first));
+    const again = await publishDoc(world, documentWith(['create', 'delete', 'remark']));
+    assert.equal(status(again), 'published', markdown(again));
+    assert.deepEqual(again['suggestions'], first['suggestions']);
+    assertExactDiagnostics(again, expected);
+    const { created, receipt } = sentences(first, world.statePath);
+    assert.equal(markdown(again), markdown(first).replace(created, receipt));
+    assert.equal(world.host.pulls().length, 1);
+    assert.equal(world.host.reviews().length, 1);
+
+    // The plan records the warnings (contract §2.9), bound by its fingerprint: an edited warning is corrupt state, never re-rendered.
+    const plan = asRecord(parseJson(fs.readFileSync(world.statePath, 'utf8')));
+    assert.equal(plan['format'], 'sarif-to-comment.companion-publication-state');
+    assert.deepEqual(plan['warnings'], expected);
+    fs.writeFileSync(world.statePath, JSON.stringify({ ...plan, warnings: [{ ...expected[0], message: 'Edited.' }] }));
+    await assert.rejects(publishDoc(world, documentWith(['create', 'delete', 'remark'])), /not a valid record \(the plan does not match its fingerprint\)/);
+  });
+
+  test('a plan without warnings records none', async () => {
+    const world = makeWorld(AMENDED);
+    const outcome = await publishDoc(world, reviewDocument());
+    assert.equal(status(outcome), 'published', markdown(outcome));
+    const plan = asRecord(parseJson(fs.readFileSync(world.statePath, 'utf8')));
+    assert.equal(plan['format'], 'sarif-to-comment.companion-publication-state');
+    assert.equal(Object.hasOwn(plan, 'warnings'), false);
+    assertExactDiagnostics(await publishDoc(world, reviewDocument()), []);
+  });
+
+  test('regression (#42): CLI retries report the same warning in every format (exit 0)', () => {
+    const world = makeWorld(REVIEWED, {}, repository);
+    const flags = [...target(world, documentWith(['delete', 'remark'])), '--state', world.statePath];
+    const first = cli(world, ['publish', ...flags, '--format', 'json']);
+    assert.equal(first.status, 0, first.stdout + first.stderr);
+    const firstDoc = asRecord(parseJson(first.stdout));
+    assert.deepEqual(firstDoc['diagnostics'], [warning]);
+
+    const human = cli(world, ['publish', ...flags]);
+    assert.equal(human.status, 0, human.stdout + human.stderr);
+    assert.ok(human.stdout.startsWith(`## Draft review published\n\n${publishedHeadline(1)}\n\nThe draft [review `), human.stdout);
+    assert.equal(human.stderr, `${humanBlock(warning)}\n\n1 warning\n`);
+    assert.equal(human.stdout.includes(asString(warning['message'])), false, 'the warning is not repeated on stdout');
+
+    for (const format of ['json', 'toon'] as const) {
+      const run = cli(world, ['publish', ...flags, '--format', format]);
+      assert.equal(run.status, 0, run.stdout + run.stderr);
+      assert.equal(run.stderr, '');
+      const doc = asRecord(format === 'json' ? parseJson(run.stdout) : decode(run.stdout));
+      assert.equal(doc['status'], 'published');
+      assert.deepEqual(doc['diagnostics'], [warning]);
+      assert.ok(asString(doc['message']).startsWith(`## Draft review published\n\n${publishedHeadline(1)}\n\n`), asString(doc['message']));
+    }
+    assert.equal(world.host.reviews().length, 1);
+  });
+});

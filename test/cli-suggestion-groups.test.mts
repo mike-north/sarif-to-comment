@@ -439,3 +439,57 @@ describe('inspect shows each finding\'s group', () => {
     assert.ok(human.stdout.includes(`Finding /runs/0/results/2 — ${TOOL}\n`), human.stdout);
   });
 });
+
+describe('group-fixes never writes a group that publication refuses (#42)', () => {
+  /** Two findings explaining the identical change of src/client.ts line 2, and a test file creation. */
+  function explainedTwice(dir: string): string {
+    const file = path.join(dir, 'review.sarif');
+    const location = (uri: string, line: number): unknown => [{ physicalLocation: { artifactLocation: { uri }, region: { startLine: line } } }];
+    fs.writeFileSync(file, serialized({
+      version: '2.1.0',
+      runs: [{
+        tool: { driver: { name: TOOL } },
+        columnKind: 'utf16CodeUnits',
+        artifacts: [{ location: { uri: 'test/client.test.ts' }, contents: { text: 'test\n' } }],
+        results: [
+          { message: { text: 'Retry once on timeout.' }, locations: location('src/client.ts', 2), fixes: [lineFix('src/client.ts', 2, 'retry')] },
+          { message: { text: 'Log the retry.' }, locations: location('src/client.ts', 2), fixes: [lineFix('src/client.ts', 2, 'retry')] },
+          { message: { text: 'Cover the retry.' }, locations: location('test/client.test.ts', 3),
+            properties: { sarifToComment: { proposedFileChanges: [{ operation: 'create', artifactIndex: 0 }] } } },
+        ],
+      }],
+    }));
+    return file;
+  }
+
+  test('regression (#42): grouping one of two findings that carry the identical change exits 2, naming the other with its selector', () => {
+    const dir = tempDir('group-shared');
+    const file = explainedTwice(dir);
+    const before = bytesOf(file);
+    const [sibling] = selectorsFor(file, '/runs/0/results/1');
+    const selectors = selectorsFor(file, '/runs/0/results/0', '/runs/0/results/2');
+    const message = '`/runs/0/results/1` carries the same change as `/runs/0/results/0` of suggestion group "retry-with-test", but would stay outside the group; '
+      + 'publication always refuses that, because one change cannot be accepted both as part of the group and on its own. '
+      + `Name it in the group too: \`${String(sibling)}\`.`;
+
+    const result = run(['group-fixes', '--sarif', file, ...findingFlags(selectors), '--group', 'retry-with-test', '--format', 'json']);
+    assert.equal(result.status, 2, result.stdout);
+    const doc = json(result);
+    assert.equal(doc['status'], 'refused');
+    assert.deepEqual(asArray(doc['problems']).map((p) => [dig(p, 'code'), dig(p, 'message'), dig(p, 'pointer')]),
+      [['suggestion-group-change-shared', message, '/runs/0/results/1']]);
+    assert.deepEqual(bytesOf(file), before);
+
+    const human = run(['group-fixes', '--sarif', file, ...findingFlags(selectors), '--group', 'retry-with-test']);
+    assert.equal(human.status, 2);
+    assert.equal(human.stdout, `${file} was not changed.\n`);
+    assert.match(human.stderr, /^✖ error {2}A group's change is also proposed outside the group {2}\[suggestion-group-change-shared\]\n/);
+    assert.ok(human.stderr.endsWith('\n1 error\n'), human.stderr);
+    assert.deepEqual(bytesOf(file), before);
+
+    const all = selectorsFor(file, '/runs/0/results/0', '/runs/0/results/1', '/runs/0/results/2');
+    const grouped = json(run(['group-fixes', '--sarif', file, ...findingFlags(all), '--group', 'retry-with-test', '--format', 'json']));
+    assert.equal(grouped['status'], 'grouped');
+    assert.equal(grouped['changes'], 2);
+  });
+});

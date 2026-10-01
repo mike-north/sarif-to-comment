@@ -10,9 +10,12 @@
  * After a rewritten history, a whole-file deletion that cannot be re-applied
  * is published as a review-body proposal with a `suggestion-pr-fallback`
  * warning and a headline, and a group that cannot be re-applied refuses the
- * review with `suggestion-group-pr-unavailable`, writing nothing.
+ * review with `suggestion-group-pr-unavailable`, writing nothing. A retry
+ * with the same state path reports the same warning, in JSON and in human
+ * form (issue #42).
  *
  * @see https://github.com/mike-north/sarif-to-comment/issues/37
+ * @see https://github.com/mike-north/sarif-to-comment/issues/42
  * @see docs/companion-suggestion-pr-contract.md §2.5.1
  * @see docs/diagnostics.md
  */
@@ -76,6 +79,21 @@ describe('the installed package falls back, or refuses a group, after a rewritte
     assert.equal(warning['severity'], 'warning');
     assert.equal(warning['message'], FALLBACK_MESSAGE);
     assert.deepEqual(fallbackWorld.host.pulls(), []);
+
+    // Issue #42: a retry with the same state path reports the same warning, in every format.
+    const retried = run(fallbackWorld, ['publish', ...flags(fallbackWorld, ['delete', 'remark']), '--state', fallbackWorld.statePath, '--format', 'json']);
+    assert.equal(retried.status, 0, retried.stdout + retried.stderr);
+    const retriedDoc = asRecord(parseJson(retried.stdout));
+    assert.equal(retriedDoc['status'], 'published');
+    assert.deepEqual(retriedDoc['review'], doc['review']);
+    assert.deepEqual(retriedDoc['diagnostics'], doc['diagnostics']);
+    assert.ok(asString(retriedDoc['message']).startsWith(`## Draft review published\n\n${PUBLISHED_HEADLINE}\n\nThe draft [review `), asString(retriedDoc['message']));
+    const retriedHuman = run(fallbackWorld, ['publish', ...flags(fallbackWorld, ['delete', 'remark']), '--state', fallbackWorld.statePath]);
+    assert.equal(retriedHuman.status, 0, retriedHuman.stdout + retriedHuman.stderr);
+    assert.ok(retriedHuman.stdout.startsWith(`## Draft review published\n\n${PUBLISHED_HEADLINE}\n\n`), retriedHuman.stdout);
+    assert.ok(retriedHuman.stderr.startsWith('▲ warning  A change is handled as if suggestion pull requests were not allowed  [suggestion-pr-fallback]\n'), retriedHuman.stderr);
+    assert.ok(retriedHuman.stderr.endsWith('\n1 warning\n'), retriedHuman.stderr);
+    assert.equal(fallbackWorld.host.reviews().length, 1, 'the retries sent nothing');
 
     const refusedWorld = makeWorld(REWRITTEN);
     const refused = run(refusedWorld, ['publish', ...flags(refusedWorld, ['reword', 'remark']), '--state', refusedWorld.statePath, '--format', 'json']);

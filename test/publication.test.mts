@@ -833,6 +833,7 @@ describe('one draft create-review request carries the complete contribution', ()
       marker,
       statePath: world.statePath,
       receiptPersisted: true,
+      warnings: [], // none were given, so none are recorded or reported (#42)
     });
     assert.deepEqual(input.preparedReview, untouched, 'prepared review must not be mutated');
   });
@@ -1818,7 +1819,8 @@ describe('existing state is authoritative and fails closed', () => {
     'truncated JSON': JSON.stringify(valid).slice(0, 57),
     'JSON null': 'null',
     'JSON array': '[]',
-    'unknown version': JSON.stringify({ ...valid, version: 2 }),
+    // Versions 1 and 2 (which adds `warnings`, issue #42) are known; 3 is not.
+    'unknown version': JSON.stringify({ ...valid, version: 3 }),
     'unknown format': JSON.stringify({ ...valid, format: 'something-else' }),
     'unknown phase': JSON.stringify({ ...valid, phase: 'mystery' }),
     'unknown extra field': JSON.stringify({ ...valid, note: 'unexpected' }),
@@ -2180,6 +2182,7 @@ describe('submitted publication: one COMMENT create request (contract §2.1, §2
       marker,
       statePath: world.statePath,
       receiptPersisted: true,
+      warnings: [], // none were given, so none are recorded or reported (#42)
     });
   });
 
@@ -2436,4 +2439,126 @@ describe('PublicationStateError runtime shape', () => {
     assert.ok(err.cause instanceof SyntaxError, 'the JSON parse failure is the cause');
     assertNoCreateAttempt(world.remote);
   });
+});
+
+/**
+ * Preparation's warnings belong to the publication (issue #42): they are
+ * recorded in the same exclusive write that claims the identity, and every
+ * later call for the state path reports them from the record, never from a
+ * later preparation. A record with warnings is version 2 (`warnings`, a
+ * non-empty list of diagnostics of docs/diagnostic.v1.schema.json that are
+ * not errors); a record without them stays exactly version 1.
+ *
+ * @see https://github.com/mike-north/sarif-to-comment/issues/42
+ * @see docs/companion-suggestion-pr-contract.md §2.9, §2.11
+ * @see docs/diagnostic.v1.schema.json
+ */
+describe('preparation warnings are recorded with the publication and reported by every later call (#42)', () => {
+  const WARNING = {
+    severity: 'warning',
+    code: 'suggestion-pr-fallback',
+    title: 'A change is handled as if suggestion pull requests were not allowed',
+    message: 'Suggestion pull requests are allowed, but the deletion of `obsolete.txt` is not proposed as one: its base is not the default branch.',
+    location: { pointer: '/runs/0/results/0', path: 'obsolete.txt' },
+  };
+  const NOTE = { severity: 'note', code: 'suggestion-branch-moved', title: 'The branch changed', message: 'm', subject: 'octo-org/widgets#42', remedies: ['r'] };
+
+  const publishWarned = (world: IWorld, warnings: unknown, options?: IInputOptions): Promise<PublishOutcome> =>
+    publishPreparedReview({ ...makeInput(world, options), warnings });
+
+  test('the intent record is version 2 with the warnings, and the receipt keeps them', async () => {
+    const world = makeWorld();
+    const outcome = published(await publishWarned(world, [WARNING, NOTE]));
+    assert.deepEqual(outcome.warnings, [WARNING, NOTE]);
+    const record = asRecord(readJson(world.statePath));
+    assert.equal(record['version'], 2);
+    assert.equal(record['phase'], 'completed');
+    assert.deepEqual(record['warnings'], [WARNING, NOTE]);
+    assertExactlyOneCreateAttempt(world.remote);
+  });
+
+  test('every later call, publish or recover, reports the recorded warnings; a later preparation\'s are never taken', async () => {
+    const world = makeWorld();
+    published(await publishWarned(world, [WARNING]));
+    const again = published(await publishWarned(world, [NOTE]));
+    assert.equal(again.via, 'receipt');
+    assert.deepEqual(again.warnings, [WARNING]);
+    const recovered = published(await recover(world));
+    assert.deepEqual(recovered.warnings, [WARNING]);
+    const plain = published(await publish(world));
+    assert.deepEqual(plain.warnings, [WARNING]);
+    assertExactlyOneCreateAttempt(world.remote);
+  });
+
+  test('an uncertain delivery keeps the warnings, and the call that later confirms it reports them', async () => {
+    const world = makeWorld();
+    fs.writeFileSync(world.statePath, JSON.stringify({ ...handBuiltIntent(), version: 2, warnings: [WARNING] }), { mode: 0o600 });
+    const uncertain = await recover(world);
+    assert.equal(uncertain.status, 'uncertain');
+    assert.deepEqual(uncertain.warnings, [WARNING]);
+  });
+
+  test('a recorded refusal keeps the warnings', async () => {
+    const world = makeWorld();
+    const record = { ...handBuiltIntent(), version: 2, warnings: [WARNING], phase: 'rejected', rejection: { status: 422, message: 'Validation Failed' } };
+    fs.writeFileSync(world.statePath, JSON.stringify(record), { mode: 0o600 });
+    const rejected = await recover(world);
+    assert.equal(rejected.status, 'rejected');
+    assert.deepEqual(rejected.warnings, [WARNING]);
+  });
+
+  for (const [label, warnings] of [['absent', undefined], ['empty', []]] as const) {
+    test(`without warnings (${label}) the record is exactly version 1 and every outcome reports none`, async () => {
+      const world = makeWorld();
+      const outcome = published(await publishWarned(world, warnings));
+      assert.deepEqual(outcome.warnings, []);
+      const record = asRecord(readJson(world.statePath));
+      assert.equal(record['version'], 1);
+      assert.equal(Object.hasOwn(record, 'warnings'), false);
+      assert.deepEqual(published(await recover(world)).warnings, []);
+    });
+  }
+
+  for (const [label, warnings] of [
+    ['not a list', WARNING],
+    ['an error diagnostic', [{ ...WARNING, severity: 'error' }]],
+    ['a diagnostic without a title', [{ ...WARNING, title: undefined }]],
+    ['a diagnostic with an unknown field', [{ ...WARNING, extra: true }]],
+  ] as const) {
+    test(`warnings that are ${label} are caller misuse, refused before any I/O`, async () => {
+      const world = makeWorld();
+      await assert.rejects(publishWarned(world, warnings), TypeError);
+      assert.equal(fs.existsSync(world.statePath), false);
+      assert.deepEqual(world.remote.calls(), []);
+    });
+  }
+
+  const valid = handBuiltIntent();
+  const corrupt = {
+    'version 2 without warnings': { ...valid, version: 2 },
+    'version 2 with an empty warnings list': { ...valid, version: 2, warnings: [] },
+    'version 1 with warnings': { ...valid, warnings: [WARNING] },
+    'warnings that are not a list': { ...valid, version: 2, warnings: WARNING },
+    'a recorded error diagnostic': { ...valid, version: 2, warnings: [{ ...WARNING, severity: 'error' }] },
+    'a recorded diagnostic with an unknown severity': { ...valid, version: 2, warnings: [{ ...WARNING, severity: 'fatal' }] },
+    'a recorded diagnostic with an extra field': { ...valid, version: 2, warnings: [{ ...WARNING, extra: 1 }] },
+    'a recorded diagnostic without a message': { ...valid, version: 2, warnings: [{ ...WARNING, message: '' }] },
+    'a recorded diagnostic with a malformed code': { ...valid, version: 2, warnings: [{ ...WARNING, code: 'Not A Code' }] },
+    'a recorded diagnostic with a multi-line title': { ...valid, version: 2, warnings: [{ ...WARNING, title: 'a\nb' }] },
+    'a recorded diagnostic with an empty location': { ...valid, version: 2, warnings: [{ ...WARNING, location: {} }] },
+    'a recorded diagnostic with a location line of 0': { ...valid, version: 2, warnings: [{ ...WARNING, location: { path: 'a', startLine: 0 } }] },
+    'a recorded diagnostic with empty remedies': { ...valid, version: 2, warnings: [{ ...WARNING, remedies: [] }] },
+    'a recorded diagnostic with an empty subject': { ...valid, version: 2, warnings: [{ ...WARNING, subject: '' }] },
+  };
+  for (const [label, record] of Object.entries(corrupt)) {
+    test(`${label} is corrupt state, never absence`, async () => {
+      const world = makeWorld();
+      const contents = JSON.stringify(record);
+      fs.writeFileSync(world.statePath, contents, { mode: 0o600 });
+      await assert.rejects(recover(world), isStateError('state-corrupt'));
+      await assert.rejects(publishWarned(world, [WARNING]), isStateError('state-corrupt'));
+      assert.deepEqual(world.remote.calls(), []);
+      assert.equal(fs.readFileSync(world.statePath, 'utf8'), contents);
+    });
+  }
 });

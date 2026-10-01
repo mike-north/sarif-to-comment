@@ -324,7 +324,7 @@ describe('validateSarifReview', () => {
 describe('publishSarifReview', () => {
   const publish = (world: IWorld, sarif: Json): Promise<Json> => call('publishSarifReview', review(sarif, { statePath: world.statePath }), world.internals);
 
-  test('published: preparation warnings; a retry from the receipt has none', async () => {
+  test('published: preparation warnings; a retry from the receipt reports the same ones (#42)', async () => {
     const world = makeWorld();
     const outcome = await publish(world, WITH_TAXA);
     assert.equal(outcome['status'], 'published');
@@ -332,7 +332,7 @@ describe('publishSarifReview', () => {
     assertDiagnostics(outcome['diagnostics'], [{ code: 'taxa-uninterpreted', location: { pointer: '/runs/0/results/1' } }]);
     const again = await publish(world, WITH_TAXA);
     assert.equal(again['status'], 'published');
-    assertDiagnostics(again['diagnostics'], []);
+    assert.deepEqual(again['diagnostics'], outcome['diagnostics']);
   });
 
   test('blocked: the blocking problems and warnings as diagnostics; the outcome still has no problems field', async () => {

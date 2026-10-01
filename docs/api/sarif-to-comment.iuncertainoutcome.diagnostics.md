@@ -4,7 +4,7 @@
 
 ## IUncertainOutcome.diagnostics property
 
-A `delivery-unconfirmed` warning, and any note about the branch.
+Preparation's warnings (recorded with the publication, as for a published outcome), a `delivery-unconfirmed` warning, and any note about the branch.
 
 **Signature:**
 

@@ -1486,7 +1486,16 @@ function diagnosticLine(d: IDiagnostic): string {
 
 /** The warnings section a prepared review's Markdown ends with; empty without warnings. */
 function warningsSection(warnings: readonly IDiagnostic[]): string {
-  return warnings.length === 0 ? '' : `\n\n**Warnings:**\n\n${warnings.map(diagnosticLine).join('\n')}`;
+  return warnings.length === 0 ? '' : `\n\n${listWarnings(warnings)}`;
+}
+
+/**
+ * Preparation's warnings as the Markdown list a report states them in, each
+ * with its code, pointer and message, under `**Warnings:**`. Publication's
+ * outcomes end with it, on every call for a publication (issue #42).
+ */
+export function listWarnings(warnings: readonly IDiagnostic[]): string {
+  return `**Warnings:**\n\n${warnings.map(diagnosticLine).join('\n')}`;
 }
 
 function warningsMarkdown(report: Report): string {
@@ -3154,28 +3163,66 @@ function unitKeyOf(item: IPreparedItem, changes: readonly UnitChange[]): string 
 }
 
 /**
+ * Who proposes a registered change: the unit that owns it, that unit's
+ * explicit group (absent for any other unit), and the finding that first
+ * proposed it.
+ */
+interface IChangeProposer {
+  readonly owner: ChangeOwner;
+  readonly group?: string | undefined;
+  readonly pointer: string;
+}
+
+/** A registered change: its proposer and identity. */
+interface IRegisteredChange extends IChangeProposer {
+  readonly key: string;
+}
+
+/** A registered edit, with the lines it replaces. */
+interface IRegisteredEdit extends IRegisteredChange {
+  readonly startLine: number;
+  readonly endLine: number;
+}
+
+/** How a conflict names a change: the replaced lines, or the whole-file operation. */
+function changeDescription(change: UnitChange): string {
+  if (change.kind === 'operation') {
+    return `The ${change.operation.operation === 'create' ? 'creation' : 'deletion'} of ${codeSpan(change.operation.path)}`;
+  }
+  const { path: filePath, startLine, endLine } = change.edit;
+  const lines = startLine === endLine ? `line ${String(startLine)}` : `lines ${String(startLine)}-${String(endLine)}`;
+  return `The replacement of ${codeSpan(filePath)} ${lines}`;
+}
+
+/**
  * Tracks which unit proposes what, so that every unit stays acceptable on
  * its own: a path created or deleted by one unit is changed by no other,
- * and no two units change the same lines.
+ * no two units change the same lines, and a change of an explicit group is
+ * carried by no other unit (issue #42).
  */
 class ChangeRegistry {
-  private readonly operations = new Map<string, { readonly owner: ChangeOwner; readonly key: string }>();
-  private readonly edits = new Map<string, { readonly owner: ChangeOwner; readonly key: string; readonly startLine: number; readonly endLine: number }[]>();
+  private readonly operations = new Map<string, IRegisteredChange>();
+  private readonly edits = new Map<string, IRegisteredEdit[]>();
 
   constructor(private readonly report: Report) {}
 
   /**
-   * Admits `change` for `owner`: 'shared' when the same unit already has
-   * the equal change, 'new' after registering it, or false after recording
-   * the conflict.
+   * Admits `change` for `owner` (in `group`, when the owner is one):
+   * 'shared' when the same unit already has the equal change, 'new' after
+   * registering it, or false after recording the conflict.
    */
-  admit(change: UnitChange, owner: ChangeOwner, pointer: string): 'new' | 'shared' | false {
+  admit(change: UnitChange, owner: ChangeOwner, pointer: string, group?: string): 'new' | 'shared' | false {
     const key = changeKey(change);
     const filePath = changePath(change);
     const operation = this.operations.get(filePath);
     const pathEdits = this.edits.get(filePath) ?? [];
+    const proposer: IChangeProposer = { owner, group, pointer };
     if (change.kind === 'operation') {
       if (operation !== undefined && operation.owner === owner && operation.key === key) return 'shared';
+      if (operation !== undefined && operation.key === key && (operation.group !== undefined || group !== undefined)) {
+        this.sharedWithGroup(change, operation, proposer);
+        return false;
+      }
       if (operation !== undefined || pathEdits.length > 0) {
         const sameUnit = (operation === undefined || operation.owner === owner) && pathEdits.every((e) => e.owner === owner);
         this.report.error('file-operation-conflict', pointer, sameUnit
@@ -3183,7 +3230,7 @@ class ChangeRegistry {
           : `${filePath} already has a proposed change in another part of this review; one of them must be chosen before publication.`);
         return false;
       }
-      this.operations.set(filePath, { owner, key });
+      this.operations.set(filePath, { ...proposer, key });
       return 'new';
     }
     const { startLine, endLine } = change.edit;
@@ -3192,13 +3239,42 @@ class ChangeRegistry {
       return false;
     }
     if (pathEdits.some((e) => e.owner === owner && e.key === key)) return 'shared';
+    const identical = pathEdits.find((e) => e.key === key && (e.group !== undefined || group !== undefined));
+    if (identical !== undefined) {
+      this.sharedWithGroup(change, identical, proposer);
+      return false;
+    }
     if (pathEdits.some((e) => e.startLine <= endLine && startLine <= e.endLine)) {
       this.report.error('overlapping-replacements', pointer,
         `The replacement of ${filePath} lines ${String(startLine)}-${String(endLine)} overlaps a different replacement.`);
       return false;
     }
-    this.edits.set(filePath, [...pathEdits, { owner, key, startLine, endLine }]);
+    this.edits.set(filePath, [...pathEdits, { ...proposer, key, startLine, endLine }]);
     return 'new';
+  }
+
+  /**
+   * Records that `later` proposes the change `first` already carries, where
+   * at least one of them is an explicit group: the group's delivery and the
+   * other proposal could not both be accepted, and the change is never
+   * moved into the group (contract §2.3). Reported at `later`, naming the
+   * group (or both groups) and both findings.
+   */
+  private sharedWithGroup(change: UnitChange, first: IChangeProposer, later: IChangeProposer): void {
+    const what = changeDescription(change);
+    const path = changePath(change);
+    const named = (proposer: IChangeProposer): string => `suggestion group ${JSON.stringify(proposer.group)} (${codeSpan(proposer.pointer)})`;
+    if (first.group !== undefined && later.group !== undefined) {
+      this.report.error('suggestion-group-change-shared', later.pointer,
+        `${what} is proposed both by ${named(first)} and by ${named(later)}; one change cannot be accepted as part of two groups, and groups are never joined.`,
+        { path, remedies: ['Take one of the two findings out of its group (`ungroup-fixes`).'] });
+      return;
+    }
+    const [grouped, outside] = first.group !== undefined ? [first, later] : [later, first];
+    this.report.error('suggestion-group-change-shared', later.pointer,
+      `${what} is proposed both by ${named(grouped)} and by ${codeSpan(outside.pointer)}, which is not in the group; `
+      + 'one change cannot be accepted both as part of the group and on its own.',
+      { path });
   }
 }
 
@@ -3251,7 +3327,7 @@ async function assembleWithSuggestions(items: readonly IPreparedItem[], state: I
       if (group !== undefined) for (const change of changes) declared.get(group)?.add(changeKey(change));
       const key = unitKeyOf(item, changes);
       const owner = unitByKey.get(key) ?? units.length;
-      const admitted = changes.map((change) => registry.admit(change, owner, item.pointer));
+      const admitted = changes.map((change) => registry.admit(change, owner, item.pointer, item.group));
       if (admitted.includes(false)) continue;
       let index = unitByKey.get(key);
       if (index === undefined) {
