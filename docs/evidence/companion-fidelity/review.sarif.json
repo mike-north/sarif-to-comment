@@ -1,0 +1,17 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": { "driver": { "name": "Fidelity probe", "version": "1.0.0" } },
+      "columnKind": "utf16CodeUnits",
+      "versionControlProvenance": [{ "repositoryUri": "https://github.com/mike-north/doc-linter", "revisionId": "07791aafa89b9ae60a1ffdd4cdf887e7167c0d89" }],
+      "results": [
+        {
+          "message": { "text": "Line 10 could say what it is for." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "docs/experiments/fidelity/sample.md" }, "region": { "startLine": 10 } } }],
+          "fixes": [{ "artifactChanges": [{ "artifactLocation": { "uri": "docs/experiments/fidelity/sample.md" }, "replacements": [{ "deletedRegion": { "startLine": 10 }, "insertedContent": { "text": "Line 10, suggested." } }] }] }]
+        }
+      ]
+    }
+  ]
+}
