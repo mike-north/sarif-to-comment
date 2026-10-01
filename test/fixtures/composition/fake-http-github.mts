@@ -25,14 +25,19 @@
  *                                                  SHA-1 over "blob <n>\0")
  *   POST /repos/{o}/{r}/pulls/{n}/reviews          stores a pending review, or a
  *                                                  COMMENTED one for event COMMENT.
- *                                                  Like GitHub (GH-16), it resolves
+ *                                                  Modelling GH-16, it resolves
  *                                                  each comment's line and side on
  *                                                  the diff of its commit_id: the
  *                                                  pull request's files at the head,
  *                                                  otherwise the two-dot diff from
  *                                                  the pull request's base commit
  *                                                  (base.sha, `commits.base`) to
- *                                                  that commit;
+ *                                                  that commit. GH-16 cannot tell
+ *                                                  base.sha from merge-base(base,
+ *                                                  head), which were equal there;
+ *                                                  the host models base.sha, the
+ *                                                  hypothesis the tool must
+ *                                                  survive when they differ;
  *                                                  a line outside it is 422 "Line
  *                                                  could not be resolved", and
  *                                                  nothing is created. A commit the
@@ -717,10 +722,12 @@ export class FakeHttpGitHub {
   }
 
   /**
-   * The patch GitHub resolves a review comment's line against (GH-16): the
-   * pull request's own patch of the file at the head, otherwise the two-dot
-   * diff from the pull request's base commit (`base.sha`, which may have
-   * moved past its merge base with the head) to `commit`. Undefined when the host has no
+   * The patch the host resolves a review comment's line against, modelling
+   * GH-16: the pull request's own patch of the file at the head, otherwise
+   * the two-dot diff from the pull request's base commit (`base.sha`, which
+   * may have moved past its merge base with the head) to `commit`. GH-16
+   * cannot tell base.sha from merge-base(base, head); this is the
+   * hypothesis under which the tool's placement is hardest to keep valid. Undefined when the host has no
    * snapshot of `commit`, and null when the file has no patch there.
    */
   reviewPatch(commit: string, filePath: string): readonly string[] | null | undefined {

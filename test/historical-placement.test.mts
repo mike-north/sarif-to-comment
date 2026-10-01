@@ -204,12 +204,14 @@ describe('findings are placed on the reviewed diff, at the reviewed commit (R13.
 });
 
 describe('a base branch that moved on without the pull request: base.sha is not the diff base (R13.1)', () => {
-  // GitHub resolves a line at R against base.sha..R (GH-16). Where the base's
-  // tip changed a file since the diff base, that diff can differ from the one
-  // the tool can read; findings on such a file keep R7's fallback, with a
-  // warning, and every other file is placed inline as usual.
+  // GH-16 cannot tell whether GitHub resolves a line at R against
+  // base.sha..R or merge-base(base, head)..R; the host models base.sha, the
+  // hypothesis the tool must survive. Where the base's tip changed a file
+  // since the diff base, the two diffs can differ; findings on such a file
+  // keep R7's fallback, with a warning, and every other file is placed
+  // inline as usual.
 
-  test('the harness: GitHub would refuse RIGHT 5 at R, because the tip cherry-picked those lines', async () => {
+  test('the harness, under the tip hypothesis: RIGHT 5 at R is refused, because the tip cherry-picked those lines', async () => {
     const world = makeWorld('moved-picked');
     const create = createGitHubClient({ token: TOKEN, fetch: world.host.fetch }).createReview({
       owner: OWNER, repo: REPO, pullNumber: PULL, commitId: MOVED_R, body: 'Fixture.', event: 'COMMENT', comments: [{ path: SAMPLE, body: 'x', line: 5, side: 'RIGHT' }],
