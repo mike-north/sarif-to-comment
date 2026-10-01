@@ -1,0 +1,69 @@
+{
+  "format": "sarif-to-comment.publication-state",
+  "version": 3,
+  "phase": "completed",
+  "marker": "<!-- sarif-to-comment:review:05bd78b4-438d-4332-9ac8-e6887c4f15c9 -->",
+  "destination": {
+    "owner": "mike-north",
+    "repo": "doc-linter",
+    "pullNumber": 99
+  },
+  "reviewedCommit": "84c53bd94db0ea6eba5c6d16b590d5d3811a3de3",
+  "inputFingerprint": "sha256:776912e0cdab64777a5a9112b5957d4c3215eb20e2f81a6d725be303ac0bae7c",
+  "authorId": 558005,
+  "request": {
+    "owner": "mike-north",
+    "repo": "doc-linter",
+    "pullNumber": 99,
+    "commitId": "84c53bd94db0ea6eba5c6d16b590d5d3811a3de3",
+    "body": "**Suggestion group `guide-move`:** apply these 4 changes together, by hand, in one commit: make every change below in a local copy of the pull request's branch, then commit them together. They are not offered as suggestions, and nothing checks that they are applied together.\n\n- `docs/experiments/original-pr-groups/guide.md`: new file\n- `docs/experiments/original-pr-groups/sample.md` line 5\n- `docs/experiments/original-pr-groups/sample.md` line 7\n- `docs/experiments/original-pr-groups/obsolete.md`: file deletion\n\n---\n\n**Suggestion group `guide-move` — change 1 of 4**\n\n**Proposed new file:** `docs/experiments/original-pr-groups/guide.md`\n\n**File details:** 45 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644\n\n````\n# Guide\n\nRun the checks:\n\n```sh\nnpm test\n```\n````\n\n**Location:** line 1 of the proposed file\n\nAdd the guide the page promises.\n\n<sub>— Docs reviewer 1.0.0 · rule `guide-move`</sub>\n\n---\n\n**Suggestion group `guide-move` — change 2 of 4**\n\n**Proposed edit, to make by hand:** replace [docs/experiments/original-pr-groups/sample.md line 5 at 84c53bd](https://github.com/mike-north/doc-linter/blob/84c53bd94db0ea6eba5c6d16b590d5d3811a3de3/docs/experiments/original-pr-groups/sample.md#L5) with:\n\n```\nSteps live in [the guide](guide.md).\n```\n\n**Source:** [docs/experiments/original-pr-groups/sample.md line 5 at 84c53bd](https://github.com/mike-north/doc-linter/blob/84c53bd94db0ea6eba5c6d16b590d5d3811a3de3/docs/experiments/original-pr-groups/sample.md#L5)\n\n```\nSteps live in the guide that does not exist yet.\n```\n\nLink the new guide.\n\n<sub>— Docs reviewer 1.0.0 · rule `guide-move`</sub>\n\n---\n\n**Suggestion group `guide-move` — change 3 of 4**\n\n**Proposed edit, to make by hand:** replace [docs/experiments/original-pr-groups/sample.md line 7 at 84c53bd](https://github.com/mike-north/doc-linter/blob/84c53bd94db0ea6eba5c6d16b590d5d3811a3de3/docs/experiments/original-pr-groups/sample.md#L7) with:\n\n```\nThe guide replaces the obsolete notes.\n```\n\n**Source:** [docs/experiments/original-pr-groups/sample.md line 7 at 84c53bd](https://github.com/mike-north/doc-linter/blob/84c53bd94db0ea6eba5c6d16b590d5d3811a3de3/docs/experiments/original-pr-groups/sample.md#L7)\n\n```\nThe obsolete notes are still linked here.\n```\n\nPoint to the guide instead of the obsolete notes.\n\n<sub>— Docs reviewer 1.0.0 · rule `guide-move`</sub>\n\n---\n\n**Suggestion group `guide-move` — change 4 of 4**\n\n**Proposed file deletion:** [docs/experiments/original-pr-groups/obsolete.md at 84c53bd](https://github.com/mike-north/doc-linter/blob/84c53bd94db0ea6eba5c6d16b590d5d3811a3de3/docs/experiments/original-pr-groups/obsolete.md)\n\nThe whole file is removed; this is not a proposal to empty it.\n\n**Source:** [docs/experiments/original-pr-groups/obsolete.md line 1 at 84c53bd](https://github.com/mike-north/doc-linter/blob/84c53bd94db0ea6eba5c6d16b590d5d3811a3de3/docs/experiments/original-pr-groups/obsolete.md#L1)\n\n```\n# Obsolete notes\n```\n\nRemove the notes the guide replaces.\n\n<sub>— Docs reviewer 1.0.0 · rule `guide-move`</sub>\n\n---\n\n**Proposed edit, to make by hand:** replace [README.md line 5 at 84c53bd](https://github.com/mike-north/doc-linter/blob/84c53bd94db0ea6eba5c6d16b590d5d3811a3de3/README.md#L5) with:\n\n````\nWhat it does today. Try it with:\n\n```sh\nnpx doc-linter assess --help\n```\n````\n\n**Source:** [README.md line 5 at 84c53bd](https://github.com/mike-north/doc-linter/blob/84c53bd94db0ea6eba5c6d16b590d5d3811a3de3/README.md#L5)\n\n```\nWhat it does today:\n```\n\nShow how to try it.\n\n<sub>— Docs reviewer 1.0.0 · rule `readme-usage`</sub>\n\n<!-- sarif-to-comment:review:05bd78b4-438d-4332-9ac8-e6887c4f15c9 -->",
+    "comments": []
+  },
+  "requestFingerprint": "sha256:d9a5812afbddd25ac6c78781d7e260cf395c5a7a434179f211c552b05c47820a",
+  "warnings": [
+    {
+      "severity": "warning",
+      "code": "delivery-fallback",
+      "title": "A proposal is delivered by a later mechanism of its delivery list",
+      "message": "The edit of `README.md` line 5 is delivered as `review-body`. `edits` is `[native, review-body]`, set by the caller (`--edits`, `delivery.edits`), and the mechanisms listed before it are unavailable:\n\n- `native`: GitHub applied a nested ``` suggestion as a deletion; this replacement cannot be a native suggestion.",
+      "location": {
+        "pointer": "/runs/0/results/4"
+      },
+      "remedies": [
+        "Change the replacement.",
+        "To use an earlier mechanism, remove the obstacle the message names, then publish again.",
+        "To refuse rather than fall back, list only the mechanism you require."
+      ]
+    }
+  ],
+  "delivery": {
+    "edits": {
+      "value": [
+        "native",
+        "review-body"
+      ],
+      "source": "caller"
+    },
+    "groupedEdits": {
+      "value": [
+        "native-batch"
+      ],
+      "source": "default"
+    },
+    "fileOperations": {
+      "value": [
+        "manual"
+      ],
+      "source": "default"
+    },
+    "companionBundle": {
+      "value": "per-unit",
+      "source": "default"
+    }
+  },
+  "receipt": {
+    "reviewId": 5375833995,
+    "htmlUrl": "https://github.com/mike-north/doc-linter/pull/99#pullrequestreview-5375833995",
+    "via": "created"
+  }
+}

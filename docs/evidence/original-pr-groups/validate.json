@@ -1,0 +1,21 @@
+{
+  "command": "validate",
+  "status": "ready",
+  "message": "## Ready to publish\n\n**Ready to publish with 1 warning:** A proposal is delivered by a later mechanism of its delivery list.\n\nThe complete document can be published faithfully to mike-north/doc-linter#99 at commit `84c53bd94db0ea6eba5c6d16b590d5d3811a3de3`.\n\n**Review prepared:** 0 inline comment(s) and 2 general section(s) for commit `84c53bd94db0ea6eba5c6d16b590d5d3811a3de3`.\n\n**Warnings:**\n\n- `delivery-fallback` at `/runs/0/results/4`: The edit of `README.md` line 5 is delivered as `review-body`. `edits` is `[native, review-body]`, set by the caller (`--edits`, `delivery.edits`), and the mechanisms listed before it are unavailable:\n\n- `native`: GitHub applied a nested ``` suggestion as a deletion; this replacement cannot be a native suggestion.\n\nNothing was published and no publication state was written.\n\nNo pending review of this account was found on the pull request. This is not an approval: publication repeats every check against the pull request as it is then. GitHub can still refuse the review, for example if this account starts a pending review on the pull request before publication.",
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "code": "delivery-fallback",
+      "title": "A proposal is delivered by a later mechanism of its delivery list",
+      "message": "The edit of `README.md` line 5 is delivered as `review-body`. `edits` is `[native, review-body]`, set by the caller (`--edits`, `delivery.edits`), and the mechanisms listed before it are unavailable:\n\n- `native`: GitHub applied a nested ``` suggestion as a deletion; this replacement cannot be a native suggestion.",
+      "location": {
+        "pointer": "/runs/0/results/4"
+      },
+      "remedies": [
+        "Change the replacement.",
+        "To use an earlier mechanism, remove the obstacle the message names, then publish again.",
+        "To refuse rather than fall back, list only the mechanism you require."
+      ]
+    }
+  ]
+}

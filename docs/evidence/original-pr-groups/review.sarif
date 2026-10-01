@@ -1,0 +1,231 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Docs reviewer",
+          "version": "1.0.0",
+          "rules": [
+            {
+              "id": "guide-move"
+            },
+            {
+              "id": "readme-usage"
+            }
+          ]
+        }
+      },
+      "columnKind": "utf16CodeUnits",
+      "versionControlProvenance": [
+        {
+          "repositoryUri": "https://github.com/mike-north/doc-linter",
+          "revisionId": "84c53bd94db0ea6eba5c6d16b590d5d3811a3de3"
+        }
+      ],
+      "artifacts": [
+        {
+          "location": {
+            "uri": "docs/experiments/original-pr-groups/guide.md"
+          },
+          "contents": {
+            "text": "# Guide\n\nRun the checks:\n\n```sh\nnpm test\n```\n"
+          },
+          "encoding": "utf-8"
+        },
+        {
+          "location": {
+            "uri": "docs/experiments/original-pr-groups/obsolete.md"
+          }
+        }
+      ],
+      "results": [
+        {
+          "ruleId": "guide-move",
+          "message": {
+            "text": "Add the guide the page promises."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "docs/experiments/original-pr-groups/guide.md"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "properties": {
+            "sarifToComment": {
+              "suggestionGroup": "guide-move",
+              "proposedFileChanges": [
+                {
+                  "operation": "create",
+                  "artifactIndex": 0
+                }
+              ]
+            }
+          }
+        },
+        {
+          "ruleId": "guide-move",
+          "message": {
+            "text": "Link the new guide."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "docs/experiments/original-pr-groups/sample.md"
+                },
+                "region": {
+                  "startLine": 5
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "docs/experiments/original-pr-groups/sample.md"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 5
+                      },
+                      "insertedContent": {
+                        "text": "Steps live in [the guide](guide.md)."
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "sarifToComment": {
+              "suggestionGroup": "guide-move"
+            }
+          }
+        },
+        {
+          "ruleId": "guide-move",
+          "message": {
+            "text": "Point to the guide instead of the obsolete notes."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "docs/experiments/original-pr-groups/sample.md"
+                },
+                "region": {
+                  "startLine": 7
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "docs/experiments/original-pr-groups/sample.md"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 7
+                      },
+                      "insertedContent": {
+                        "text": "The guide replaces the obsolete notes."
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "sarifToComment": {
+              "suggestionGroup": "guide-move"
+            }
+          }
+        },
+        {
+          "ruleId": "guide-move",
+          "message": {
+            "text": "Remove the notes the guide replaces."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "docs/experiments/original-pr-groups/obsolete.md"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "properties": {
+            "sarifToComment": {
+              "suggestionGroup": "guide-move",
+              "proposedFileChanges": [
+                {
+                  "operation": "delete",
+                  "artifactIndex": 1
+                }
+              ]
+            }
+          }
+        },
+        {
+          "ruleId": "readme-usage",
+          "message": {
+            "text": "Show how to try it."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "README.md"
+                },
+                "region": {
+                  "startLine": 5
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "README.md"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 5
+                      },
+                      "insertedContent": {
+                        "text": "What it does today. Try it with:\n\n```sh\nnpx doc-linter assess --help\n```"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

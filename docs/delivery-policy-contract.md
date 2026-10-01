@@ -313,6 +313,8 @@ where `UNIT` is the unit's description (§10.1) starting with a lowercase letter
 
 **The composed text.** Each of these sections is composed into the review body, which the composed-text checkpoint reads like every body ([review presentation contract](review-presentation-contract.md) §7). The checkpoint finds no `suggestion` code block in it, since none is built.
 
+**Live evidence.** On October 1, 2026, one pending review on a fixture pull request held a mixed manual group (a creation, two edits and a deletion) and an edit made by hand. GitHub stored the body exactly as sent, created no inline comment, and rendered every content block with the proposed bytes ([evidence](evidence/original-pr-groups/README.md)).
+
 ## 9. Companion bundles
 
 The units delivered by `companion` are packaged by `companionBundle` (D52):

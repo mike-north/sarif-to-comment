@@ -1,0 +1,26 @@
+{
+  "command": "publish",
+  "status": "published",
+  "review": {
+    "id": 5375833995,
+    "url": "https://github.com/mike-north/doc-linter/pull/99#pullrequestreview-5375833995"
+  },
+  "statePath": "<state-path>/state.json",
+  "message": "## Draft review published\n\n**Published with 1 warning:** A proposal is delivered by a later mechanism of its delivery list.\n\nCreated the draft [review 5375833995](https://github.com/mike-north/doc-linter/pull/99#pullrequestreview-5375833995) on mike-north/doc-linter#99 at commit `84c53bd94db0ea6eba5c6d16b590d5d3811a3de3`. It stays a draft until someone submits it on GitHub.\n\n**Warnings:**\n\n- `delivery-fallback` at `/runs/0/results/4`: The edit of `README.md` line 5 is delivered as `review-body`. `edits` is `[native, review-body]`, set by the caller (`--edits`, `delivery.edits`), and the mechanisms listed before it are unavailable:\n\n- `native`: GitHub applied a nested ``` suggestion as a deletion; this replacement cannot be a native suggestion.",
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "code": "delivery-fallback",
+      "title": "A proposal is delivered by a later mechanism of its delivery list",
+      "message": "The edit of `README.md` line 5 is delivered as `review-body`. `edits` is `[native, review-body]`, set by the caller (`--edits`, `delivery.edits`), and the mechanisms listed before it are unavailable:\n\n- `native`: GitHub applied a nested ``` suggestion as a deletion; this replacement cannot be a native suggestion.",
+      "location": {
+        "pointer": "/runs/0/results/4"
+      },
+      "remedies": [
+        "Change the replacement.",
+        "To use an earlier mechanism, remove the obstacle the message names, then publish again.",
+        "To refuse rather than fall back, list only the mechanism you require."
+      ]
+    }
+  ]
+}
