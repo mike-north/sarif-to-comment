@@ -52,34 +52,57 @@ It does not establish:
 
 ## The remaining obstacle: a live workflow run
 
-Running the example workflow on GitHub (the realignment plan's E7) needs **the owner's authority to install a GitHub Actions workflow in a fixture repository's branch, and to let it run**. Running the example as shipped also needs a repository secret, `SARIF_TO_COMMENT_TOKEN`, holding the account's personal access token in the fixture repository. That authority has not been given. The workflow has therefore never been installed or run, here or in `mike-north/doc-linter`. Everything else this work needed was within the existing authority.
+Running the example workflow on GitHub (the realignment plan's E7) needs **the owner's authority to install a GitHub Actions workflow in a fixture repository's branch, and to let it run**. That authority has not been given, so the workflow has never been installed or run, here or in `mike-north/doc-linter`. Everything else this work needed was within the existing authority.
 
-**The proposed bounded experiment.** It runs in `mike-north/doc-linter`, never on `main`, never merging anything, with one account. Each step below is named by what it needs.
+**Credentials.** The experiment keeps credential exposure as small as it can:
 
-1. **Build (needs the authority above).** Add the `SARIF_TO_COMMENT_TOKEN` secret to the fixture repository. Push two fixture branches from `main`: `sarif-e7-a-<date>` and `sarif-e7-b-<date>`. Each adds a one-line documentation change and `.github/workflows/abandonment-cleanup.yml`, the example with one difference: `--dry-run` appended to the command. Open each as a draft pull request into `main`: O-A and O-B.
+- **Phase 1** stores no secret. It runs with the workflow's own token (`github.token`), which GitHub issues per job, scopes to the fixture repository and the job's `permissions:`, and revokes when the job ends. Its permissions are read-only, and every run is a dry run.
+- **The account's existing login token is never stored as a repository secret.** It is broadly scoped across the account's repositories, so storing it is not part of any phase.
+- **The example's own credential is a personal token in `SARIF_TO_COMMENT_TOKEN`.** The experiment does not need to exercise it, because how a secret reaches a step is GitHub's documented mechanism, not this tool's behavior. Exercising it would need a further, separate authority. The token would be a new fine-grained one that the owner creates and stores personally, limited to `mike-north/doc-linter`, with *Pull requests: Read and write* and *Contents: Read*, and a short expiry.
+
+**The proposed bounded experiment.** It runs in `mike-north/doc-linter` with one account. It never touches `main` and never merges anything. Each step below is named by what it needs.
+
+1. **Build (needs the authority above).** Push two fixture branches from `main`, `sarif-e7-a-<date>` and `sarif-e7-b-<date>`, and open each as a draft pull request into `main`: O-A and O-B. Each branch adds:
+   - a one-line documentation change;
+   - `.github/workflows/abandonment-cleanup.yml`.
+
+   The workflow file is the example with three differences, each recorded:
+   - `GH_TOKEN: ${{ github.token }}` in place of the secret;
+   - `permissions:` reduced to `pull-requests: read`, `contents: read` and `issues: read`;
+   - `--dry-run` appended to the command.
+
    - With `pull_request`, GitHub reads the workflow from each pull request's own merge commit, so `main` is never changed.
-   - Until 0.3.0 is published, the pinned `npx sarif-to-comment@0.3.0` cannot resolve. Run the experiment after publication, unchanged. Or run it before, with the command pointed at the candidate's packed tarball, and record that difference.
+   - Until 0.3.0 is published, the pinned `npx sarif-to-comment@0.3.0` cannot resolve. There are two options:
+     - **Run after publication (preferred).** The pinned release runs, and there are only the three differences above.
+     - **Run before publication.** This adds a fourth difference: the candidate's packed tarball is committed to the fixture branch only. An `actions/checkout` step, pinned by commit and with `persist-credentials: false`, makes the tarball present on the runner. The command becomes `npx --yes --package ./sarif-to-comment-0.2.1.tgz sarif-to-comment …`. The tarball's SHA-256 is recorded against the [acceptance record](../../release-candidate-0.3.0-verification.md). This gives up the example's property that nothing from the pull request's branch is run. That is acceptable only on this single-account fixture, and the record states it.
 2. **Companions (existing authority).** Publish one review with one companion on each (`publish --delivery companion`), giving C-A and C-B.
 3. **Case A: closed and left closed.** Close O-A without merging, and leave it closed. Expected:
    - one workflow run for the `closed` event, whose job runs (`merged == false`);
    - a step of about 120 seconds;
-   - then a guarded dry run that reports `complete`, with O-A `closed without merging` and C-A `would-close`, exit 0.
+   - then a guarded dry run that reports `complete`, with O-A `closed without merging` and C-A `would-close`, exit 0. With `--owner all`, the account is never read, so `github.token` needs no user identity.
 4. **Case B: a quick close and reopen.** Close O-B, and reopen it within about 30 seconds. Expected:
    - a run that waits, then reports `original-not-abandoned` with O-B `open`, exit 0;
-   - no reopen-triggered run, because the workflow does not listen to `reopened`;
+   - no run triggered by the reopen, because the workflow does not listen to `reopened`;
    - C-B untouched.
 5. **Case C (optional): repeat runs.** Close O-B, reopen it, and close it again within the wait. Expected: `concurrency` cancels the first waiting run, and the second reports `complete` with C-B `would-close`.
 6. **Record:**
    - each run's id, event and timestamps (`gh run view`), and its job log;
    - the pull requests' states and timelines before and after;
-   - the time of the guard's read, against the time of the close and the reopen.
+   - the time of the guard's read, against the times of the close and the reopen.
 7. **Afterwards.** Leave the fixture pull requests closed. Delete nothing; branch removal is the owner's call.
 
-**Phase 2 (separate, optional authority).** Switch the step to the documented alternative, `GH_TOKEN: ${{ github.token }}`, and remove `--dry-run` for one case-A rerun, so that the workflow's own token closes C-A. That would establish:
+**Exact authority Phase 1 needs.** One grant: to push the two branches above, carrying the workflow file and, for a run before publication, the tarball and the checkout step; and to close and reopen O-A and O-B, which triggers the workflow. No repository secret, setting or permission rule changes, and no write can reach `main`.
 
-- the one thing dry runs and the personal token cannot: that the automatic Actions token can run guarded cleanup end to end, which would let the example offer it as more than an alternative;
-- whether `issues: read` is needed;
-- whether `--owner all` is enough.
+Phase 1 would establish:
+- the trigger, the condition, the wait and the concurrency;
+- the guard's fresh read after the wait;
+- that `github.token`, with those read permissions, can read everything discovery needs.
+
+**Phase 2 (separate, optional authority).** For one rerun of case A, change two things:
+- raise the workflow's permissions to `pull-requests: write`;
+- remove `--dry-run`.
+
+The workflow's own token then closes C-A. This would establish the one thing dry runs cannot: that `github.token` can run guarded cleanup end to end, closing included. That would let the example offer it as more than an alternative.
 
 The README's support profile does not yet claim installation tokens.
 
