@@ -368,6 +368,40 @@ describe('the projection section of a companion\'s description (companion contra
     assert.ok(text.endsWith('\n\n`````diff\n--- a/f\n+++ b/f\n@@ -0,0 +1 @@\n+````\n`````'), text);
   });
 
+  // §2.11: the diff does not show a carriage return that ends a line, so a hunk whose lines change their line
+  // endings states it in its header, in the words of delivery policy §8.10's details: the old side's style, then the new.
+  const oneHunk = (lines: readonly { text: string; noNewline: boolean }[], oldLines = 1, newLines = 1): ICompanionProjectionView =>
+    ({ head: 'H', verdict: 'faithful', conflicts: [], files: [{ path: 'f', hunks: [{ oldStart: 4, oldLines, newStart: 4, newLines, lines }] }] });
+  const diffOf = (text: string): string => text.slice(text.indexOf('```diff\n') + '```diff\n'.length, text.lastIndexOf('\n```'));
+
+  test('regression: a change of line endings only (CRLF to LF) is stated on its hunk, not shown as two identical lines', () => {
+    const text = renderCompanionProjection(oneHunk([{ text: '-x\r', noNewline: false }, { text: '+x', noNewline: false }]), target);
+    assert.equal(diffOf(text), '--- a/f\n+++ b/f\n@@ -4 +4 @@ CRLF line endings become LF line endings\n-x\n+x');
+  });
+
+  test('LF to CRLF is stated the other way round', () => {
+    const text = renderCompanionProjection(oneHunk([{ text: '-x', noNewline: false }, { text: '+x\r', noNewline: false }]), target);
+    assert.equal(diffOf(text), '--- a/f\n+++ b/f\n@@ -4 +4 @@ LF line endings become CRLF line endings\n-x\n+x');
+  });
+
+  test('context lines count for both sides: LF lines added among CRLF lines make the new side mixed', () => {
+    const lines = [{ text: ' a\r', noNewline: false }, { text: '+b', noNewline: false }, { text: ' c\r', noNewline: false }];
+    const text = renderCompanionProjection(oneHunk(lines, 2, 3), target);
+    assert.equal(diffOf(text), '--- a/f\n+++ b/f\n@@ -4,2 +4,3 @@ CRLF line endings become mixed CRLF and LF line endings\n a\n+b\n c');
+  });
+
+  test('a hunk whose line endings do not change has no note, CRLF or LF', () => {
+    const crlf = renderCompanionProjection(oneHunk([{ text: '-x\r', noNewline: false }, { text: '+y\r', noNewline: false }]), target);
+    assert.equal(diffOf(crlf), '--- a/f\n+++ b/f\n@@ -4 +4 @@\n-x\n+y');
+    const lf = renderCompanionProjection(oneHunk([{ text: '-x', noNewline: false }, { text: '+y', noNewline: false }]), target);
+    assert.equal(diffOf(lf), '--- a/f\n+++ b/f\n@@ -4 +4 @@\n-x\n+y');
+  });
+
+  test('a last line without a newline has no line ending: it does not count, and a carriage return there is content, shown visibly', () => {
+    const text = renderCompanionProjection(oneHunk([{ text: '-x\r', noNewline: true }, { text: '+x', noNewline: true }]), target);
+    assert.equal(diffOf(text), '--- a/f\n+++ b/f\n@@ -4 +4 @@\n-x{U+000D}\n\\ No newline at end of file\n+x\n\\ No newline at end of file');
+  });
+
   // §2.11 and delivery policy §8.10: a code block does not show these characters as themselves, so the diff writes each as a visible escape.
   const NOTE = 'In this diff, each `{U+XXXX}` stands for the character with that code point, written visibly; this pull request\'s commit has the exact bytes.';
 
@@ -382,7 +416,8 @@ describe('the projection section of a companion\'s description (companion contra
     ];
     const text = renderCompanionProjection({ head: 'H', verdict: 'faithful', conflicts: [], files: [{ path: 'f', hunks: [{ oldStart: 1, oldLines: 2, newStart: 1, newLines: 5, lines }] }] }, target);
     assert.equal(text, `${LEAD}applies only its own changes, which are these:\n\n${[
-      '```diff', '--- a/f', '+++ b/f', '@@ -1,2 +1,5 @@',
+      // The last added line ends with CRLF among LF lines, so the hunk states its line endings.
+      '```diff', '--- a/f', '+++ b/f', '@@ -1,2 +1,5 @@ LF line endings become mixed CRLF and LF line endings',
       ' a{U+00A0}b',
       '-c{U+200B}d',
       '+c{U+200D}d{U+202E}',
