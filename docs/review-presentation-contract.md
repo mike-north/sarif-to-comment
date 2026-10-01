@@ -87,4 +87,29 @@ A library caller may replace the Markdown of the finding, attribution, alternati
 - the review's publication marker and each suggestion pull request's structured marker;
 - the size limits.
 
-Each callback's context lists `required` fragments that its result must show as itself. These are the exact proposed content and file details, a deletion's permalink, a finding's attribution and alternatives, the producers' names, and the findings a proposal carries. Showing a fragment as itself means not inside a comment, a code span or block it does not open itself, a tag, a link destination or title, an image description, or an element GitHub does not display. A result that breaks this, or that adds a comment, CDATA section, processing instruction, declaration or link reference definition of its own, is refused before anything is written. The companion reference is not customizable yet.
+Each callback's context lists `required` fragments that its result must show as itself. These are the exact proposed content and file details, a deletion's permalink, a finding's attribution and alternatives, the producers' names, and the findings a proposal carries. The checks below refuse a result before anything is written. The companion reference is not customizable yet.
+
+**Parser basis.** Producer Markdown and callback results are read with a conformant CommonMark 0.31 + GFM parser: micromark with its GFM extension, through `mdast-util-from-markdown` and `mdast-util-gfm`. The parser decides what is code, text, raw HTML, a link, an image or a definition. Two checks remain hand-written, because a Markdown parser does not answer them:
+
+- the balance of the elements that raw HTML opens and closes;
+- a deliberately broad refusal of any line that could open a `suggestion` fence.
+
+**What follows must stay outside.** The tool always puts a blank line and further content after producer or caller Markdown. The Markdown is refused when that content would come out inside it, in either of these cases:
+
+- a fenced code block, or an HTML block such as a comment, `<pre>` or `<script>`, runs to the end of the input;
+- the raw HTML the parser finds leaves a tag unterminated or an element unclosed.
+
+Text and code never count as raw HTML. An unterminated `<!--` inside a paragraph, for example, is text, which GitHub escapes.
+
+**Pass-through by node.** A callback may add no raw HTML (`html` nodes) and no link reference definitions (`definition` nodes) of its own. Such a node is accepted only when its exact source text is also such a node in that component's built-in Markdown. This lets content the producer wrote pass through unchanged, but never extended. A definition or comment that the callback lengthens, or that it re-labels across lines, counts as added.
+
+**Shown as itself.** Both the result and the fragment are parsed, and they must agree at some occurrence of the fragment:
+
+- every node of the result that lies within the occurrence is one of the fragment's own nodes, of the same type and at the same place;
+- every node that contains the occurrence shows its content. That means a paragraph, heading, block quote, list, table, emphasis or the like. It may also be a text node, when the fragment alone is plain text, or a link whose text holds the occurrence;
+- code, inline code, raw HTML, an image, a definition or any other node conceals the occurrence when it contains it;
+- no element that hides its content reaches into the occurrence. Such an element is one GitHub does not display (`<template>`, `<script>`, `<textarea>` and the like), or one with a `hidden` or `style` attribute.
+
+**Permalinks.** A fragment that is a URL, such as a deletion's permalink, may also be exactly the destination of an inline link. It may not be an image's source, since an image does not link to the file. It also may not be the text of a link whose destination is somewhere else, since that text would spoof the association.
+
+**Known limit.** GitHub renders with cmark-gfm. For some raw-HTML edge cases, cmark-gfm follows the HTML comment rules of CommonMark 0.29 rather than 0.31. Under 0.29, `<!-->`, `<!--->` and a comment containing `--` or ending in `-` are not comments. Where these differ, the checks follow micromark, except that such a comment is refused under either reading. The remaining divergence is recorded for a live check against GitHub; it has not been checked yet.

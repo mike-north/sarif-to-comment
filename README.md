@@ -301,14 +301,14 @@ A callback changes how an element reads, never what is published, where, or how 
 - the review's hidden publication marker and each suggestion pull request's structured marker are added last;
 - the size limits count your Markdown, and nothing is truncated.
 
-A result is refused with a `TypeError`, before anything is written, when it:
+Results are read with a conformant CommonMark + GFM parser (`micromark`, as remark uses), so what counts as code, text, raw HTML or a link is what CommonMark says it is. A result is refused with a `TypeError`, before anything is written, when it:
 
 - is not a non-blank string;
 - omits one of its `required` fragments: the exact proposed content and file details, a deletion's permalink, a finding's attribution and alternatives, the producers' names, and the findings a proposal carries;
 - could open a `suggestion` block, or leaves a code fence or raw HTML (such as `<!--` or `<details>`) open, which would swallow or hide what follows;
 - contains text that reads as a publication or suggestion marker;
-- adds an HTML comment, CDATA section, processing instruction, declaration or link reference definition of its own (one that the presented content carries may pass through);
-- hides a `required` fragment: each must be shown as itself, not inside a comment, a code span or block it does not open itself, a tag, a link destination or title, an image description, or an element GitHub does not display (such as `<template>`, or one with a `hidden` or `style` attribute). A collapsed `<details>` is allowed, since a reader can expand it;
+- adds raw HTML (any tag or comment) or a link reference definition of its own; one whose exact text the built-in Markdown already contains, such as the `<sub>` around an attribution or a producer's own comment, may pass through;
+- hides a `required` fragment: each must be shown as itself, not inside raw HTML, a code span or block it does not open itself, an image, a definition, or an element GitHub does not display. A permalink may be a link's destination, but not an image's source or the text of a link to somewhere else;
 - spans several lines, for `attribution`.
 
 The context your callback receives is a deeply frozen copy. An exception your callback throws propagates unchanged. Callbacks are not part of the publication identity: a retry with the same state path never re-renders what an earlier call already planned or sent. The review body's section linking each suggestion pull request is not customizable yet, and there is no command-line equivalent; repository-level templates are not supported.
