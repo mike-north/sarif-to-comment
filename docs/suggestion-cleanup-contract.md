@@ -25,7 +25,7 @@ Owner-accepted · September 30, 2026. On-demand cleanup closes open suggestion p
 | --- | --- |
 | `closeSuggestionPullRequests(input)` | `sarif-to-comment close-suggestion-prs` |
 
-The names use the vocabulary users already have: `allowSuggestionPullRequests` / `--allow-suggestion-prs` enable the pull requests, and the specification and the [convention](suggestion-pr-convention.md) call them "suggestion PRs". "Suggestions" alone would collide with native inline suggestions, which cleanup never touches. The verb says what the command does to GitHub (it closes pull requests), and it is not a mode of `publish`, because cleanup is not publication (D29).
+The names use the vocabulary users already have: a [delivery list](delivery-policy-contract.md) that names `companion` requests the pull requests, and the specification and the [convention](suggestion-pr-convention.md) call them "suggestion PRs". "Suggestions" alone would collide with native inline suggestions, which cleanup never touches. The verb says what the command does to GitHub (it closes pull requests), and it is not a mode of `publish`, because cleanup is not publication (D29).
 
 ### 2.2 Input
 

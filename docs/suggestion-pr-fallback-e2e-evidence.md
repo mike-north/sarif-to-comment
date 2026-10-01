@@ -2,6 +2,8 @@
 
 Recorded September 30, 2026 in the private fixture repository `mike-north/doc-linter`, against the implementation of [issue #37](https://github.com/mike-north/sarif-to-comment/issues/37) ([companion contract §2.5.1](companion-suggestion-pr-contract.md#251-re-application-after-a-rewritten-history), [diagnostics](diagnostics.md)). The built package ran from the working tree (`node dist/sarif-to-comment.cjs`) with the maintainer's personal token. Nothing was published to npm, nothing was merged, and `main` stayed at `0a7b03f`. Sanitized outputs are in [`evidence/suggestion-pr-fallback/`](evidence/suggestion-pr-fallback/), with local paths replaced by `<evidence>`. The exit statuses are in [`exit-statuses.txt`](evidence/suggestion-pr-fallback/exit-statuses.txt), and every JSON run wrote nothing to stderr ([`52`](evidence/suggestion-pr-fallback/52-json-stderr-sizes.txt)).
 
+> Note (September 30, 2026, later): these runs predate the [delivery policy](delivery-policy-contract.md), and the codes, option and wording they record are no longer current. `--allow-suggestion-prs` is replaced by delivery lists that name `companion`; a proposal a companion cannot deliver goes to the next mechanism of its list, announced with `delivery-fallback` (for a whole-file creation or deletion, under `fileOperations: [companion, manual]`), or is blocked with `delivery-unavailable` when its list names nothing else available, as a group or a fix with several changes under `groupedEdits: [companion]` is. `suggestion-pr-fallback` and `suggestion-group-pr-unavailable` are retired ([Diagnostics](diagnostics.md#retired-codes)). The files are kept as recorded.
+
 ## Fixtures
 
 Each original is a draft pull request into `main` from a branch holding C0 (adds `docs/experiments/fallback/sample-<v>.md`, 20 lines, and `obsolete-<v>.txt`) and C1 (changes lines 5 and 6). C1 is the reviewed commit. After the pull requests were opened ([`01`](evidence/suggestion-pr-fallback/01-originals.txt)), each C1 was amended and force-pushed, so it is no longer part of its branch ([`00`](evidence/suggestion-pr-fallback/00-reviewed-commits.txt), [`02`](evidence/suggestion-pr-fallback/02-heads-after-rewrite.txt), [`03`](evidence/suggestion-pr-fallback/03-originals-after-rewrite.tsv)):
@@ -37,7 +39,7 @@ All paths are under `docs/experiments/fallback/`.
 | A group or a fix with several changes refuses the whole review, naming the reason and the ways forward; nothing written; `validate` blocked | Runs 3, 4, 6 | the same file, including heads that are not UTF-8 or over the source-read limit |
 | Mixed: a re-appliable suggestion with a group is refused; with a file operation it publishes | Runs 2 and 3 | the same file |
 | Headline, structured warnings and stderr blocks for `publish` and `validate`, in library, human, JSON and TOON | Runs 1, 2, 7 | the same file; `test/cli-human-reports.test.mts` (a warning of another code) |
-| Installed-package CLI and library | — | `test/installed-suggestion-pr-fallback.test.mts` |
+| Installed-package CLI and library | — | `test/installed-delivery.test.mts` |
 | Wherever a suggestion pull request cannot be made: a fork, a deleted head repository, another base, a created file over 1,000,000 bytes, a description over 60,000 characters (creation, deletion and group) | Run 8 (another base) | `test/suggestion-pr-fallback.test.mts`, `test/suggestion-pr-convention.test.mts`, `test/companion-composition.test.mts` |
 
 ## Live artifacts
@@ -52,6 +54,6 @@ All left in place:
 
 ## What this does not show
 
-- The installed package against live GitHub: covered against the fake host by `test/installed-suggestion-pr-fallback.test.mts`.
+- The installed package against live GitHub: covered against the fake host by `test/installed-delivery.test.mts`.
 - A fork, a deleted head repository, and the file and description limits, live: covered by the fake host only (the fixture repository has no fork).
 - A creation over the suggestion file limit that falls back: covered by the fake host only.

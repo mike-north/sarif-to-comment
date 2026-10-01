@@ -324,6 +324,17 @@ Options for [createSarifDocument()](./sarif-to-comment.createsarifdocument.md)<!
 </td></tr>
 <tr><td>
 
+[IDeliveryOptions](./sarif-to-comment.ideliveryoptions.md)
+
+
+</td><td>
+
+The caller's delivery settings, the same members as the `delivery` object of `.github/sarif-to-comment.json`<!-- -->. Every member is optional; a specific list wins over the preset. A list names at least one mechanism, each at most once, in the order to try them; anything else is a `TypeError`<!-- -->.
+
+
+</td></tr>
+<tr><td>
+
 [IDiagnostic](./sarif-to-comment.idiagnostic.md)
 
 
@@ -1001,12 +1012,67 @@ Whether cleanup established everything it set out to:
 </td></tr>
 <tr><td>
 
+[CompanionBundle](./sarif-to-comment.companionbundle.md)
+
+
+</td><td>
+
+How companion-delivered proposals are packaged: one companion pull request per proposal (`'per-unit'`<!-- -->), or one holding them all, one section each (`'single'`<!-- -->). One review creates at most 10 companion pull requests.
+
+
+</td></tr>
+<tr><td>
+
+[DeliveryPreset](./sarif-to-comment.deliverypreset.md)
+
+
+</td><td>
+
+A named set of delivery lists: `'original-pr'` keeps every proposal on the pull request (edits `['native', 'review-body']`<!-- -->, grouped edits`['native-batch', 'manual-group']`<!-- -->, file operations `['manual']`<!-- -->);`'companion'` sends every proposal to companion pull requests, strictly.
+
+
+</td></tr>
+<tr><td>
+
 [DiagnosticSeverity](./sarif-to-comment.diagnosticseverity.md)
 
 
 </td><td>
 
 How serious a diagnostic is: `error` (the operation did not do what was asked), `warning` (it did, or may have, and something needs attention) or`note` (information only).
+
+
+</td></tr>
+<tr><td>
+
+[EditDeliveryMechanism](./sarif-to-comment.editdeliverymechanism.md)
+
+
+</td><td>
+
+A mechanism that can deliver an ungrouped edit: a `'native'` suggestion, its replacement in the `'review-body'` (not yet supported by this version), or a `'companion'` pull request holding it.
+
+
+</td></tr>
+<tr><td>
+
+[FileOperationDeliveryMechanism](./sarif-to-comment.fileoperationdeliverymechanism.md)
+
+
+</td><td>
+
+A mechanism that can deliver a whole-file creation or deletion, and any group containing one, whole: its section of the review body, applied by hand (`'manual'`<!-- -->; for a group, not yet supported by this version), or a`'companion'` pull request.
+
+
+</td></tr>
+<tr><td>
+
+[GroupedEditDeliveryMechanism](./sarif-to-comment.groupededitdeliverymechanism.md)
+
+
+</td><td>
+
+A mechanism that can deliver a group of edits (an explicit`suggestionGroup`<!-- -->, or a SARIF fix with several changes), always whole: every member as a native suggestion to add to one batch (`'native-batch'`<!-- -->), one`'companion'` pull request, or one review-body section to apply by hand (`'manual-group'`<!-- -->, not yet supported by this version).
 
 
 </td></tr>

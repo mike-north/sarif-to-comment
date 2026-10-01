@@ -39,11 +39,21 @@ describe('the code catalog (docs/diagnostics.md "Code catalog")', () => {
 
   test('the codes the issue names are catalog entries, and the renamed codes are gone', () => {
     // Issue #38 names these internal codes as becoming catalog entries.
-    for (const code of ['suggestion-group-requires-suggestion-prs', 'pending-review-exists']) {
+    for (const code of ['pending-review-exists']) {
       assert.ok(CATALOG.has(code), code);
     }
-    // Issue #37 names the fallback warning, and refuses a group that cannot be re-applied.
-    for (const code of ['suggestion-pr-fallback', 'suggestion-group-pr-unavailable']) assert.ok(CATALOG.has(code), code);
+    // The delivery policy retired the allow/disallow setting's codes and the native-suggestion
+    // eligibility codes in favour of its own (docs/delivery-policy-contract.md §10.3).
+    for (const code of ['delivery-unavailable', 'delivery-fallback', 'delivery-configuration-invalid', 'companion-options-unused']) assert.ok(CATALOG.has(code), code);
+    const retired = [
+      'suggestion-pr-fallback', 'suggestion-group-pr-unavailable', 'suggestion-group-requires-suggestion-prs', 'fix-changes-require-suggestion-prs',
+      'suggestion-reviewed-commit-not-head', 'suggestion-not-inline', 'suggestion-fence-unverified', 'suggestion-blank-only-unverified',
+      'suggestion-crlf-unverified', 'suggestion-final-newline-unverified',
+    ];
+    for (const code of retired) {
+      assert.equal(CATALOG.has(code), false, `${code} is retired`);
+      assert.ok(DIAGNOSTICS_DOC.includes(`| \`${code}\` | `), `the retired ${code} is listed under "Retired codes"`);
+    }
     // docs/diagnostics.md "Renamed codes".
     const renames: readonly (readonly [string, string])[] = [
       ['inline-unavailable', 'inline-placement-unavailable'],
@@ -57,14 +67,15 @@ describe('the code catalog (docs/diagnostics.md "Code catalog")', () => {
     ];
     for (const [before, after] of renames) {
       assert.equal(CATALOG.has(before), false, `${before} was renamed`);
-      assert.ok(CATALOG.has(after), after);
+      assert.ok(CATALOG.has(after) || retired.includes(after), after);
       assert.ok(DIAGNOSTICS_DOC.includes(`| \`${before}\` | \`${after}\` |`), `the rename ${before} -> ${after} is listed`);
     }
   });
 
   test('each severity is used, and warnings and notes the model calls out have that severity', () => {
-    assert.equal(CATALOG.get('suggestion-pr-fallback')?.severity, 'warning');
-    assert.equal(CATALOG.get('suggestion-group-pr-unavailable')?.severity, 'error');
+    assert.equal(CATALOG.get('delivery-fallback')?.severity, 'warning');
+    assert.equal(CATALOG.get('delivery-unavailable')?.severity, 'error');
+    assert.equal(CATALOG.get('companion-options-unused')?.severity, 'note');
     assert.equal(CATALOG.get('finding-partially-overlaps-change')?.severity, 'warning');
     assert.equal(CATALOG.get('suggestion-branch-moved')?.severity, 'note');
     assert.equal(CATALOG.get('usage-error')?.severity, 'error');

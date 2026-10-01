@@ -25,6 +25,7 @@
 import * as assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
+import { resolveDeliveryPolicy } from '../dist/delivery-policy.cjs';
 import { present } from '../dist/presentation/customization.cjs';
 import { loadMarkdownParser } from '../dist/presentation/markdown-tree.cjs';
 import type {
@@ -33,6 +34,7 @@ import type {
   IFileDeletionPresentationContext,
   IFindingPresentationContext,
 } from '../dist/public-api.cjs';
+import type { IReadyOutcome } from '../dist/prepare-review.cjs';
 import { at, carrying, lineFix, log, prepare, prepareOutcome, run } from './support/presentation-fixtures.mts';
 
 /** Matches the refusal of a callback result for `component`, whose message matches `rule`. */
@@ -213,8 +215,56 @@ describe('the composed-text checkpoint blames a callback when the built-in layou
         { artifactLocation: { uri: 'docs/notes.md' }, replacements: [{ deletedRegion: { startLine: 1 }, insertedContent: { text: 'F' } }] },
       ] }],
     }]));
-    await assert.rejects(prepareOutcome(sarif, { suggestionPullRequests: { headRef: 'feature/x', ready: false }, presentation: trailingBackslash }),
+    // A fix with several changes is a grouped edit, delivered here by a companion pull request (delivery policy §12).
+    const delivery = {
+      policy: resolveDeliveryPolicy({ caller: { groupedEdits: ['companion'] } }),
+      companionTarget: () => Promise.resolve({ headRef: 'feature/x', ready: false }),
+    };
+    await assert.rejects(prepareOutcome(sarif, { delivery, presentation: trailingBackslash }),
       composedRefusal(/composed into the description of the suggestion pull request for unit 1, leaves a <sub> element open/));
   });
+
+  /** A finding whose one fix makes two changes: a grouped edit. */
+  const jointFix = (message: string, appLine: number, notesLine: number): Record<string, unknown> => ({
+    message: { text: message }, locations: [at('src/app.js', { startLine: appLine })],
+    fixes: [{ description: { text: 'Both.' }, artifactChanges: [
+      { artifactLocation: { uri: 'src/app.js' }, replacements: [{ deletedRegion: { startLine: appLine }, insertedContent: { text: 'X' } }] },
+      { artifactLocation: { uri: 'docs/notes.md' }, replacements: [{ deletedRegion: { startLine: notesLine }, insertedContent: { text: 'Y' } }] },
+    ] }],
+  });
+
+  test('in the description of a suggestion pull request bundling several proposals', async () => {
+    // Delivery policy §9: under a `single` bundle, one companion holds every
+    // unit it delivers, and its one description is read composed.
+    const delivery = {
+      policy: resolveDeliveryPolicy({ caller: { groupedEdits: ['companion'], companionBundle: 'single' } }),
+      companionTarget: () => Promise.resolve({ headRef: 'feature/x', ready: false }),
+    };
+    const sarif = log(run(ESLINT, [jointFix('First.', 1, 1), jointFix('Second.', 3, 3)]));
+    await assert.rejects(prepareOutcome(sarif, { delivery, presentation: trailingBackslash }),
+      composedRefusal(/composed into the description of the suggestion pull request for units 1, 2, leaves a <sub> element open/));
+  });
+
+  test('in a native batch member\'s inline comment, whose group note precedes its suggestion block', async () => {
+    // Delivery policy §8.8: each member of a native batch carries the group's
+    // note between its findings and its suggestion block.
+    const member = (text: string, line: number, replacement: string): Record<string, unknown> => ({
+      message: { text }, locations: [at('src/app.js', { startLine: line })],
+      fixes: [lineFix('src/app.js', line, replacement, text)],
+      properties: { sarifToComment: { suggestionGroup: 'g' } },
+    });
+    const sarif = log(run(ESLINT, [member('First.', 1, 'A'), member('Third.', 3, 'D')]));
+    const builtIn = await prepare(sarif);
+    assert.match(itemAtComment(builtIn, 0), /\*\*Suggestion group `g`:\*\* apply this suggestion together/);
+    await assert.rejects(prepareOutcome(sarif, { presentation: trailingBackslash }),
+      composedRefusal(/composed into inline comment 1, leaves a <sub> element open/));
+  });
 });
+
+/** The body of inline comment `index` of a ready outcome. */
+function itemAtComment(outcome: IReadyOutcome, index: number): string {
+  const comment = outcome.review.comments[index];
+  assert.ok(comment !== undefined, `inline comment ${String(index + 1)}`);
+  return comment.body;
+}
 

@@ -4,7 +4,7 @@
 
 ## IPublishedOutcome.diagnostics property
 
-Warnings and notes about this publication: preparation's warnings (for example a finding published in the review body, or a whole-file proposal presented in the body because no suggestion pull request could be made for it), a completion that could not be recorded, and a branch that moved while suggestions were created. Preparation's warnings are recorded with the publication, so every call with the same `statePath` reports the same ones. The `markdown` states every warning in a headline under its heading.
+Warnings and notes about this publication: preparation's warnings and notes (for example a finding published in the review body, a proposal delivered by a later mechanism of its delivery list, or companion options that had no effect), a completion that could not be recorded, and a branch that moved while suggestions were created. Preparation's warnings are recorded with the publication, so every call with the same `statePath` reports the same ones. The `markdown` states every warning in a headline under its heading.
 
 **Signature:**
 

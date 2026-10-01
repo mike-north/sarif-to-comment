@@ -67,12 +67,27 @@ Add `options: { submit: true }` (library) or `--submit` (CLI, for `publish` and 
 - Every check, approval hold and the reviewed-commit pinning apply exactly as for a draft.
 - The state file records the mode. Retry with the same state path **and** the same mode; the other mode is refused before any request.
 
+### Choosing where each proposed change goes
+
+Each proposed change is delivered by the first available mechanism of an ordered list for its kind (the full rules are in the source repository, `docs/delivery-policy-contract.md`):
+
+| Kind | Library (`options.delivery`) | CLI | Default |
+| --- | --- | --- | --- |
+| An edit in no group | `edits` | `--edits` | `['native']`: a native suggestion |
+| A group of edits, or a fix with several changes | `groupedEdits` | `--grouped-edits` | `['native-batch']`: every member a native suggestion, to apply together |
+| A whole-file creation or deletion, and any group with one | `fileOperations` | `--file-operations` | `['manual']`: its section of the review body |
+
+- The defaults never create a pull request. A later mechanism of a list is a fallback, announced by a `delivery-fallback` warning. When no listed mechanism can deliver a proposal, nothing is published: the review is blocked with a `delivery-unavailable` error naming why (exit status 2), and nothing else is substituted.
+- `--delivery companion` (`delivery: { preset: 'companion' }`) sends every proposal to companion pull requests; `--delivery original-pr` keeps every proposal on the pull request. On the command line a list is comma-separated, for example `--file-operations companion,manual`.
+- A repository can set the same members in `.github/sarif-to-comment.json` on its default branch (`{ "delivery": { "fileOperations": ["companion", "manual"] } }`); your settings win over it, setting by setting.
+- `review-body` and `manual-group`, and `manual` for a group that creates or deletes a file, are not yet supported by this version: they are reported unavailable with that reason.
+
 ### Proposing new files and grouped changes as pull requests
 
-Add `options: { allowSuggestionPullRequests: true }` (library) or `--allow-suggestion-prs` (CLI, for `publish` and `validate`) to offer whole-file creations and deletions, SARIF fixes with several changes, and changes you grouped with `group-fixes` (`groupSarifFixes`), as **suggestion pull requests** into the pull request's head branch: drafts, unless you add `markSuggestionPullRequestsReady: true` (`--mark-suggestion-prs-ready`). The review links each one, and the outcome lists them in `suggestions`.
+List `companion` to offer whole-file creations and deletions, SARIF fixes with several changes, and changes you grouped with `group-fixes` (`groupSarifFixes`) as **suggestion pull requests** into the pull request's head branch: for example `--grouped-edits companion --file-operations companion,manual` (library: `options: { delivery: { groupedEdits: ['companion'], fileOperations: ['companion', 'manual'] } }`). They are drafts, unless you add `markSuggestionPullRequestsReady: true` (`--mark-suggestion-prs-ready`). The review links each one, and the outcome lists them in `suggestions`. With `--companion-bundle single`, every one goes into one pull request, a section each.
 
 - It is off by default: every created pull request is visible to the repository and can trigger its CI and notifications.
-- Each carries the repository's suggestion label: `suggestion-pr`, or the `label` of `.github/suggestion-prs.json` on the default branch. Add team or campaign labels with `pullRequestLabels: ['team-a']` (`--pr-labels team-a`). Every label must already exist (the tool never creates labels), your token needs *Contents: Read and write*, the original pull request must come from the same repository and target its default branch, and the reviewed commit must be the pull request's head.
+- Each carries the repository's suggestion label: `suggestion-pr`, or the `label` of `.github/suggestion-prs.json` on the default branch. Add team or campaign labels with `pullRequestLabels: ['team-a']` (`--pr-labels team-a`). Every label must already exist (the tool never creates labels), your token needs *Contents: Read and write*, and the original pull request must come from the same repository and target its default branch; otherwise the proposal goes to the next mechanism of its list, or the review is blocked.
 - A draft can't be merged: someone with write access marks it ready for review, then the author merges it or not.
 - Keep the state file **and** the files created beside it (`<state>.suggestion-1-branch`, …, `<state>.review`); a retry uses them to continue without sending anything twice.
 - After the original pull request merges or closes, `sarif-to-comment close-suggestion-prs --repo OWNER/REPO` (library: [`closeSuggestionPullRequests`](./api/sarif-to-comment.closesuggestionpullrequests.md)) closes its suggestion pull requests that are still open. Try it with `--dry-run` first. By default it closes only the suggestion pull requests your token's account opened; `--owner all` closes anyone's. It finds them by their `suggestion-pr/` branches and stops before checking anything if there are more than 500 (`--max-candidates N` changes the limit). It only closes pull requests: branches are never deleted, and an original it can't read is never treated as ended.

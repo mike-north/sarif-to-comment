@@ -38,6 +38,7 @@ import {
   at, carrying, hostDocument, hostWorld, lineFix, log, permalink, prepare, prepareOutcome, publish, reviewBodyWithoutMarker, run,
 } from './support/presentation-fixtures.mts';
 import { asRecord, asString, parseJson } from './support/runtime-types.mts';
+import { resolveDeliveryPolicy } from '../dist/delivery-policy.cjs';
 
 const LINT = { driver: { name: 'Lint', version: '1.2.3' }, extensions: [{ name: 'style-pack', version: '0.4' }] };
 
@@ -302,8 +303,8 @@ describe('golden presentation: the published review and its companions', () => {
   });
 
   for (const [mode, options, note, draft] of [
-    ['draft', { allowSuggestionPullRequests: true }, DRAFT_NOTE, true],
-    ['ready', { allowSuggestionPullRequests: true, markSuggestionPullRequestsReady: true }, READY_NOTE, false],
+    ['draft', { delivery: { groupedEdits: ['companion'], fileOperations: ['companion', 'manual'] } }, DRAFT_NOTE, true],
+    ['ready', { delivery: { groupedEdits: ['companion'], fileOperations: ['companion', 'manual'] }, markSuggestionPullRequestsReady: true }, READY_NOTE, false],
   ] as const) {
     test(`a ${mode} companion: its body (reference, change list, lifecycle note, findings, marker) and the review's companion reference`, async () => {
       const world = hostWorld();
@@ -437,7 +438,13 @@ describe('golden presentation: warnings and refusals in the reports', () => {
       ...(secondGroup === undefined ? [] : [member('Capitalize more.', 'docs/notes.md', 3, 'Third', secondGroup)]),
     ]));
   };
-  const SUGGESTION_PRS = { suggestionPullRequests: { headRef: 'feature', ready: false } };
+  /** Groups delivered by companion pull requests into `feature` (delivery policy §12), so only the shared change blocks. */
+  const SUGGESTION_PRS = {
+    delivery: {
+      policy: resolveDeliveryPolicy({ caller: { groupedEdits: ['companion'] } }),
+      companionTarget: () => Promise.resolve({ headRef: 'feature', ready: false }),
+    },
+  };
 
   test('a group\'s change also carried outside the group blocks the review, naming the group, both findings and the change', async () => {
     const outcome = await prepareOutcome(shared(undefined), SUGGESTION_PRS);

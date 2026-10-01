@@ -36,6 +36,7 @@
 import * as assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
+import { resolveDeliveryPolicy } from '../dist/delivery-policy.cjs';
 import { prepareReview } from '../dist/prepare-review.cjs';
 import type { IBlockedOutcome, IReadyOutcome, PrepareReviewOutcome } from '../dist/prepare-review.cjs';
 import { inspectSarif, renderInspectionText } from '../dist/sarif-inspection.cjs';
@@ -45,6 +46,14 @@ const R = '2222222222222222222222222222222222222222';
 const SEP = '\n\n---\n\n';
 const ATTRIBUTION = '<sub>— T</sub>';
 const POINTER = '/runs/0/results/0';
+
+/** Preparation's delivery option for groups delivered by a companion pull request into `feature` (delivery policy §12). */
+const COMPANION_GROUPS = {
+  delivery: {
+    policy: resolveDeliveryPolicy({ caller: { groupedEdits: ['companion'] } }),
+    companionTarget: () => Promise.resolve({ headRef: 'feature', ready: false }),
+  },
+};
 
 /** The reviewed snapshot: the pull request changed line 2 of src/app.js; src/other.js is outside the diff. */
 const SNAPSHOT: Readonly<Record<string, string>> = {
@@ -339,23 +348,28 @@ describe('the first fix is the suggested change; every further fix is listed as 
 
 describe('no semantic judgment: the first fix is presented as a single fix would be', () => {
   test('an ineligible first fix blocks as it would alone; an eligible later fix is never promoted', async () => {
-    // src/other.js is outside the diff, so its first fix cannot be a native suggestion.
+    // src/other.js is outside the diff, so its first fix cannot be a native suggestion (delivery policy §8.9).
     const outcome = await prepare(log([finding([OTHER_FILE, PRIMARY], 'Parse elsewhere.', 'src/other.js', 1)]));
-    assertBlocked(outcome, [['suggestion-not-inline', POINTER]]);
+    assertBlocked(outcome, [['delivery-unavailable', POINTER]]);
+    assert.ok(outcome.diagnostics[0]?.message.includes('The edit of `src/other.js` line 1 cannot be delivered.'), outcome.markdown);
   });
 
   test('regression: a failed first fix adds no spurious path refusal for an alternative on the same file', async () => {
-    // ' odd.js' is outside the diff, so the first fix fails; its alternative on the same file names no path.
+    // ' odd.js' is outside the diff, so the first fix cannot be native; its alternative on the same file names no path.
     const outcome = await prepare(log([finding([lineFix('%20odd.js', 1, 'even'), lineFix('%20odd.js', 1, 'odder')], 'Odd.', '%20odd.js', 1)]));
-    assertBlocked(outcome, [['suggestion-not-inline', POINTER]]);
+    assertBlocked(outcome, [['delivery-unavailable', POINTER]]);
+    assert.equal(outcome.diagnostics.length, 1);
   });
 
-  test('the first fix\'s own problems and every alternative\'s problems are all reported at once', async () => {
+  test('every alternative\'s problems are reported at once; the first fix\'s delivery is judged once the document is valid', async () => {
     const outcome = await prepare(log([finding([
       lineFix('src/app.js', 2, 'const b = "```";'),
       lineFix('src/app.js', 40, 'x'),
     ])]));
-    assertBlocked(outcome, [['suggestion-fence-unverified', POINTER], ['replacement-invalid', `${POINTER}/fixes/1`]]);
+    assertBlocked(outcome, [['replacement-invalid', `${POINTER}/fixes/1`]]);
+    const valid = await prepare(log([finding([lineFix('src/app.js', 2, 'const b = "```";'), CACHED])]));
+    assertBlocked(valid, [['delivery-unavailable', POINTER]]);
+    assert.ok(valid.diagnostics[0]?.message.endsWith('- `native`: GitHub applied a nested ``` suggestion as a deletion; this replacement cannot be a native suggestion.'), valid.markdown);
   });
 });
 
@@ -524,19 +538,19 @@ describe('a first fix with several changes (issue #29) keeps its alternatives', 
     ] }],
   };
 
-  test('without suggestion pull requests the first fix is refused as a single fix would be; its alternatives do not change that', async () => {
+  test('under the default policy the first fix is refused as a single fix would be; its alternatives do not change that', async () => {
     const outcome = await prepare(log([finding([joint, CACHED])]));
-    assertBlocked(outcome, [['fix-changes-require-suggestion-prs', POINTER]]);
+    assertBlocked(outcome, [['delivery-unavailable', POINTER]]);
   });
 
-  test('with suggestion pull requests only the first fix is committed, and the alternatives are listed with the finding', async () => {
-    const outcome = await prepare(log([finding([joint, CACHED])]), { suggestionPullRequests: { headRef: 'feature', ready: false } });
+  test('delivered by a companion, only the first fix is committed, and the alternatives are listed with the finding', async () => {
+    const outcome = await prepare(log([finding([joint, CACHED])]), COMPANION_GROUPS);
     assertReady(outcome);
     assert.deepEqual(outcome.review.comments, []);
     const [companion] = outcome.suggestions?.companions ?? [];
     assert.ok(companion);
     assert.deepEqual(companion.changes, [{ operation: 'edit', path: 'src/app.js', text: 'const a = 1;\nconst b = parseB(input);\nconst c = 4;\n' }]);
-    assert.equal(companion.items, [
+    assert.equal(companion.sections[0]?.items, [
       `**Source:** [src/app.js line 2 at 2222222](https://github.com/acme/widgets/blob/${R}/src/app.js#L2)`,
       '',
       '```',
@@ -555,9 +569,9 @@ describe('a first fix with several changes (issue #29) keeps its alternatives', 
         { artifactLocation: { uri: 'src/other.js' }, replacements: [{ deletedRegion: { startLine: 1 }, insertedContent: { text: 'export const parse = parseB;' } }] },
       ],
     };
-    const outcome = await prepare(log([finding([twoFiles, CACHED])]), { suggestionPullRequests: { headRef: 'feature', ready: false } });
+    const outcome = await prepare(log([finding([twoFiles, CACHED])]), COMPANION_GROUPS);
     assertReady(outcome);
-    const items = present(outcome.suggestions?.companions[0]?.items);
+    const items = present(outcome.suggestions?.companions[0]?.sections[0]?.items);
     assert.ok(items.includes(['(1) Cache the parse.', '', 'Replace line 2 of `src/app.js` with:'].join('\n')), items);
   });
 });

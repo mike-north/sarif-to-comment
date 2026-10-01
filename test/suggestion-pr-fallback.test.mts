@@ -1,38 +1,35 @@
 /**
- * Falling back as if suggestion pull requests were not allowed wherever one
- * cannot be made (issue #37): after a rewritten history, for a pull request
- * from a fork or into a base that is not the default branch, and for a
- * change too large for one. Through the
- * production composition: the real public library and CLI with the real
- * GitHub client (src/github.cts), talking HTTP to the fake GitHub host of
- * test/fixtures/rewritten-history. Only `fetch` is replaced.
+ * What happens when a companion suggestion pull request cannot be made:
+ * after a rewritten history, for a pull request from a fork or into a base
+ * that is not the default branch, and for a change too large for one.
+ * Through the production composition: the real public library and CLI with
+ * the real GitHub client (src/github.cts), talking HTTP to the fake GitHub
+ * host of test/fixtures/rewritten-history. Only `fetch` is replaced.
  *
- * The decision read literally: `allowSuggestionPullRequests` means "use a
- * suggestion pull request where one is needed and can be made; otherwise
- * behave, for that change, exactly as if suggestion pull requests were not
- * allowed". So, when a suggestion cannot be re-applied onto the rewritten head:
+ * Under the delivery policy (docs/delivery-policy-contract.md), each such
+ * case is an obstacle of `companion` for that unit (companion contract
+ * §2.5.1), and the unit is delivered by the next mechanism its list names,
+ * or the review is blocked. These tests use the lists that do what the
+ * removed `allowSuggestionPullRequests: true` did (issue #37):
  *
- * | Change                             | Behaviour                                                        |
- * | ---------------------------------- | ---------------------------------------------------------------- |
- * | whole-file creation or deletion    | the review-body proposal; published with a fallback warning      |
- * | explicit group, or a multi-change fix | the whole review is refused before any write                  |
+ * | Change                                | List                         | Behaviour                                                  |
+ * | ------------------------------------- | ---------------------------- | ---------------------------------------------------------- |
+ * | whole-file creation or deletion       | `fileOperations: [companion, manual]` | the review-body proposal; published with a `delivery-fallback` warning |
+ * | explicit group, or a multi-change fix | `groupedEdits: [companion]`  | blocked with `delivery-unavailable` before any write       |
  *
- * Every fallback is a `suggestion-pr-fallback` warning naming the change,
- * the reason and the disallowed-mode handling; the refusal is a
- * `suggestion-group-pr-unavailable` error stating that suggestion pull
- * requests are allowed, why this change cannot become one, that a group
- * cannot be published without one, and the two ways forward. A published or
- * ready outcome with warnings states their count and nature directly under
- * its heading, and carries them in `diagnostics` (library, JSON, TOON) and as
- * blocks on stderr (human CLI). `validate` reports exactly what `publish`
+ * Each message names the unit, its list, where the list was set, and every
+ * obstacle (§10.1, §10.2). A published or ready outcome with warnings states
+ * them directly under its heading, and carries them in `diagnostics`
+ * (library, JSON, TOON) and as blocks on stderr (human CLI); a blocked one
+ * carries no fallback warning. `validate` reports exactly what `publish`
  * would do, before anything is written.
  *
- * Expected texts are written by hand from the decision and from the
- * presentation contracts; the review body of a fallback is additionally
- * compared with the body the same document gets with suggestion pull requests
- * disallowed, which is what the decision defines it to be.
+ * Expected texts are written by hand from the contracts; the review body of
+ * a fallback is additionally compared with the body the same document gets
+ * under the default policy, which is what `manual` is.
  *
  * @see https://github.com/mike-north/sarif-to-comment/issues/37
+ * @see docs/delivery-policy-contract.md §10
  * @see docs/companion-suggestion-pr-contract.md §2.5.1
  * @see docs/file-operation-publication-contract.md
  * @see docs/diagnostics.md
@@ -55,86 +52,91 @@ import { assertDiagnostics } from './support/diagnostics.mts';
 import { asArray, asRecord, asString, parseJson } from './support/runtime-types.mts';
 
 // ---------------------------------------------------------------------------
-// Expected texts, written from the decision (issue #37)
+// Expected texts, written from docs/delivery-policy-contract.md §10 and the
+// companion contract's obstacles (§2.5.1)
 
-const FALLBACK_TITLE = 'A change is handled as if suggestion pull requests were not allowed';
-const FALLBACK_REMEDY = "To propose the change as a suggestion pull request, review the pull request's current head again and publish that review.";
-const REFUSAL_TITLE = "A group's suggestion pull request cannot be made";
+const FALLBACK_TITLE = 'A proposal is delivered by a later mechanism of its delivery list';
+const FALLBACK_REMEDIES = [
+  'To use an earlier mechanism, remove the obstacle the message names, then publish again.',
+  'To refuse rather than fall back, list only the mechanism you require.',
+];
+const REFUSAL_TITLE = 'No delivery mechanism the policy lists is available for a proposal';
+const REFUSAL_REMEDIES = [
+  'Remove the obstacle the message names, then publish again.',
+  'Or list a mechanism that is available for this kind of proposal (`--edits`, `--grouped-edits`, `--file-operations`, the `delivery` option, or `.github/sarif-to-comment.json`).',
+];
+/** The remedies the companion obstacles carry (delivery policy §8.9), first among a diagnostic's remedies. */
 const REVIEW_AGAIN = "Review the pull request's current head again, and publish that review.";
-const GROUP_REMEDIES = [REVIEW_AGAIN, 'Or remove the group (`ungroup-fixes`), so that its changes are published on their own.'];
-const FIX_REMEDIES = [REVIEW_AGAIN, 'Or split the fix into separate findings, one change each, so that its changes are published on their own.'];
+const REDUCE_FILE = 'Reduce the proposed file to at most 1,000,000 bytes.';
+const FILE_OPERATIONS = '`fileOperations` is `[companion, manual]`, set by the caller (`--file-operations`, `delivery.fileOperations`)';
+const GROUPED_EDITS = '`groupedEdits` is `[companion]`, set by the caller (`--grouped-edits`, `delivery.groupedEdits`)';
 
-/** How the decision names a whole-file change. */
-const CREATION = 'creation of `docs/new.md`';
-const DELETION = 'deletion of `obsolete.txt`';
+/** How the policy names a whole-file change. */
+const CREATION = 'The creation of `docs/new.md`';
+const DELETION = 'The deletion of `obsolete.txt`';
 
-/** The fallback warning's message: the change, the reason, and the disallowed-mode handling. */
-function fallbackMessage(change: string, head: string, reasons: readonly string[]): string {
-  return `Suggestion pull requests are allowed, but the ${change} is not proposed as one: the history of #7 was rewritten after the reviewed commit, `
-    + `and it cannot be re-applied onto commit \`${head}\` because ${reasons.join('; ')}. `
-    + 'It is handled as if suggestion pull requests were not allowed: the review body proposes it, with its findings.';
+/** The obstacle sentence after a rewritten history, `subject` naming what cannot be re-applied ("it", "its 2 changes"). */
+function rewritten(head: string, reasons: readonly string[], subject = 'it'): string {
+  return `The history of #7 was rewritten after the reviewed commit, and ${subject} cannot be re-applied onto commit \`${head}\` because ${reasons.join('; ')}.`;
+}
+
+/** The fallback warning's message: the unit, the mechanism used, its list and the companion's obstacles. */
+function fallbackFor(change: string, ...obstacles: readonly string[]): string {
+  return `${change} is delivered as \`manual\`. ${FILE_OPERATIONS}, and the mechanisms listed before it are unavailable:\n\n- \`companion\`: ${obstacles.join(' ')}`;
 }
 
 /** The fallback warning as a diagnostic, after a rewritten history. */
-function fallback(pointer: string, filePath: string, change: string, head: string, reasons: readonly string[]): Json {
-  return fallbackDiagnostic(pointer, filePath, fallbackMessage(change, head, reasons), [FALLBACK_REMEDY]);
+function fallback(pointer: string, change: string, head: string, reasons: readonly string[]): Json {
+  return fallbackDiagnostic(pointer, fallbackFor(change, rewritten(head, reasons)), [REVIEW_AGAIN]);
 }
 
-/** A fallback warning with its message and remedies (none when there is nothing to do). */
-function fallbackDiagnostic(pointer: string, filePath: string, message: string, remedies: readonly string[]): Json {
-  return {
-    severity: 'warning',
-    code: 'suggestion-pr-fallback',
-    title: FALLBACK_TITLE,
-    message,
-    location: { pointer, path: filePath },
-    ...(remedies.length === 0 ? {} : { remedies }),
-  };
+/** A fallback warning with its message. */
+function fallbackDiagnostic(pointer: string, message: string, specific: readonly string[] = []): Json {
+  return { severity: 'warning', code: 'delivery-fallback', title: FALLBACK_TITLE, message, location: { pointer }, remedies: [...specific, ...FALLBACK_REMEDIES] };
 }
 
-/** The fallback message for any reason a suggestion pull request cannot be made (the owner's decision on #37 of September 30, 2026). */
-function fallbackFor(change: string, reason: string): string {
-  return `Suggestion pull requests are allowed, but the ${change} is not proposed as one: ${reason}. `
-    + 'It is handled as if suggestion pull requests were not allowed: the review body proposes it, with its findings.';
+/** The block of the group `reword` for any obstacle of its companion. */
+function groupRefusalFor(...obstacles: readonly string[]): string {
+  return `The group \`reword\` cannot be delivered. ${GROUPED_EDITS}, and no mechanism it lists is available:\n\n- \`companion\`: ${obstacles.join(' ')}`;
 }
 
-/** The refusal message of the group `reword` for any reason its suggestion pull request cannot be made. */
-function groupRefusalFor(reason: string): string {
-  return `Suggestion pull requests are allowed, but suggestion group "reword" cannot become one: ${reason}. `
-    + 'Without a suggestion pull request, a group cannot be published: its changes are accepted together or not at all, and are never split or published in part.';
-}
-
-/** The refusal of the group `reword`: suggestion pull requests are allowed, why it cannot be one, and that a group then cannot be published. */
+/** The block of the group `reword` after a rewritten history. */
 function groupRefusalMessage(head: string, reasons: readonly string[]): string {
-  return 'Suggestion pull requests are allowed, but suggestion group "reword" cannot become one: the history of #7 was rewritten after the reviewed commit, '
-    + `and its 2 changes cannot be re-applied onto commit \`${head}\` because ${reasons.join('; ')}. `
-    + 'Without a suggestion pull request, a group cannot be published: its changes are accepted together or not at all, and are never split or published in part.';
+  return groupRefusalFor(rewritten(head, reasons, 'its 2 changes'));
 }
 
-/** The refusal of a fix with two changes, in the same terms. */
+/** The block of a fix with two changes, in the same terms. */
 function fixRefusalMessage(head: string, reasons: readonly string[]): string {
-  return 'Suggestion pull requests are allowed, but the fix with 2 changes cannot become one: the history of #7 was rewritten after the reviewed commit, '
-    + `and its 2 changes cannot be re-applied onto commit \`${head}\` because ${reasons.join('; ')}. `
-    + 'Without a suggestion pull request, a fix with several changes cannot be published: its changes are accepted together or not at all, and are never split or published in part.';
+  return `The fix with 2 changes at \`/runs/0/results/0\` cannot be delivered. ${GROUPED_EDITS}, and no mechanism it lists is available:\n\n`
+    + `- \`companion\`: ${rewritten(head, reasons, 'its 2 changes')}`;
 }
 
-function refusal(message: string, remedies: readonly string[], pointer = '/runs/0/results/0'): Json {
-  if (remedies.length === 0) return { severity: 'error', code: 'suggestion-group-pr-unavailable', title: REFUSAL_TITLE, message, location: { pointer } };
-  return { severity: 'error', code: 'suggestion-group-pr-unavailable', title: REFUSAL_TITLE, message, location: { pointer }, remedies };
+function refusal(message: string, specific: readonly string[] = [], pointer = '/runs/0/results/0'): Json {
+  return { severity: 'error', code: 'delivery-unavailable', title: REFUSAL_TITLE, message, location: { pointer }, remedies: [...specific, ...REFUSAL_REMEDIES] };
 }
+
+/** The paragraph a block after the plan ends with when a fallback put `change` in the review body (§10.1). */
+const bodyFallbackCause = (change: string): string => `\n\nThis includes a proposal delivered by a fallback: ${change.charAt(0).toLowerCase()}${change.slice(1)} is delivered as \`manual\`, `
+  + 'because `fileOperations` is `[companion, manual]` and the mechanisms listed before it (`companion`) are unavailable.';
+
+/** The diagnostics of a block under the default policy, with the fallback's paragraph added to each error (§10.1). */
+const withFallbackCause = (outcome: Json, change: string): unknown[] => diagnosticsOf(outcome).map((d) => {
+  const diagnostic = asRecord(d);
+  return diagnostic['severity'] === 'error' ? { ...diagnostic, message: `${asString(diagnostic['message'])}${bodyFallbackCause(change)}` } : diagnostic;
+});
 
 /** The headline under a published outcome's heading for `count` fallbacks and nothing else. */
 function publishedHeadline(count: number): string {
   return count === 1
-    ? '**Published with 1 warning:** 1 suggestion pull request was not created; its change is shown in the review.'
-    : `**Published with ${String(count)} warnings:** ${String(count)} suggestion pull requests were not created; their changes are shown in the review.`;
+    ? `**Published with 1 warning:** ${FALLBACK_TITLE}.`
+    : `**Published with ${String(count)} warnings:** ${FALLBACK_TITLE} (${String(count)} times).`;
 }
 
 /** The same headline under `validate`'s "Ready to publish". */
 function readyHeadline(count: number): string {
   return count === 1
-    ? '**Ready to publish with 1 warning:** 1 suggestion pull request would not be created; its change would be shown in the review.'
-    : `**Ready to publish with ${String(count)} warnings:** ${String(count)} suggestion pull requests would not be created; their changes would be shown in the review.`;
+    ? `**Ready to publish with 1 warning:** ${FALLBACK_TITLE}.`
+    : `**Ready to publish with ${String(count)} warnings:** ${FALLBACK_TITLE} (${String(count)} times).`;
 }
 
 /** The problem line blocked Markdown lists for a diagnostic (its code, pointer and message). */
@@ -242,7 +244,7 @@ describe('a whole-file creation that cannot be re-applied falls back to the revi
       assert.deepEqual(writes(world), [`/pulls/${String(PULL)}/reviews`], 'only the review is written: no branch, pull request or label');
       assert.equal(reviewBodyOf(world), [CREATION_PROPOSAL, REMARK_SECTION].join(SEPARATOR));
       assert.equal(reviewBodyOf(world), await disallowedBody(head, documentWith(parts)));
-      assertExactDiagnostics(outcome, [fallback('/runs/0/results/0', 'docs/new.md', CREATION, head, [reason])]);
+      assertExactDiagnostics(outcome, [fallback('/runs/0/results/0', CREATION, head, [reason])]);
       assertPublishedHeadline(outcome, publishedHeadline(1));
     });
 
@@ -250,7 +252,7 @@ describe('a whole-file creation that cannot be re-applied falls back to the revi
       const world = makeWorld(head);
       const assessed = await validateDoc(world, documentWith(parts));
       assert.equal(status(assessed), 'ready', markdown(assessed));
-      assertExactDiagnostics(assessed, [fallback('/runs/0/results/0', 'docs/new.md', CREATION, head, [reason])]);
+      assertExactDiagnostics(assessed, [fallback('/runs/0/results/0', CREATION, head, [reason])]);
       assertReadyHeadline(assessed, readyHeadline(1));
       assert.doesNotMatch(markdown(assessed), /Publication would also create/);
       assertNothingWritten(world);
@@ -275,7 +277,7 @@ describe('a whole-file deletion that cannot be re-applied falls back to the revi
       assert.deepEqual(world.host.pulls(), []);
       assert.equal(reviewBodyOf(world), [DELETION_PROPOSAL, REMARK_SECTION].join(SEPARATOR));
       assert.equal(reviewBodyOf(world), await disallowedBody(head, documentWith(parts)));
-      const expected = [fallback('/runs/0/results/0', 'obsolete.txt', DELETION, head, [reason])];
+      const expected = [fallback('/runs/0/results/0', DELETION, head, [reason])];
       assertExactDiagnostics(outcome, expected);
       assertExactDiagnostics(assessed, expected);
       assertPublishedHeadline(outcome, publishedHeadline(1));
@@ -288,8 +290,8 @@ describe('a whole-file deletion that cannot be re-applied falls back to the revi
     const outcome = await publishDoc(world, documentWith(['create', 'delete']));
     assert.equal(status(outcome), 'published', markdown(outcome));
     assertExactDiagnostics(outcome, [
-      fallback('/runs/0/results/0', 'docs/new.md', CREATION, DROPPED, ['`docs/new.md` already exists']),
-      fallback('/runs/0/results/1', 'obsolete.txt', DELETION, DROPPED, ['`obsolete.txt` no longer exists']),
+      fallback('/runs/0/results/0', CREATION, DROPPED, ['`docs/new.md` already exists']),
+      fallback('/runs/0/results/1', DELETION, DROPPED, ['`obsolete.txt` no longer exists']),
     ]);
     assertPublishedHeadline(outcome, publishedHeadline(2));
     assert.equal(reviewBodyOf(world), [CREATION_PROPOSAL, DELETION_PROPOSAL].join(SEPARATOR));
@@ -308,7 +310,7 @@ describe('an explicit group that cannot be re-applied refuses the whole review b
     [OVERSIZE, ['`docs/sample.md` exceeds the source-read limit']],
   ] as const) {
     test(`publish is blocked and validate reports blocked, naming the reason and both ways forward (${reasons.join('; ')})`, async () => {
-      const expected = refusal(groupRefusalMessage(head, reasons), GROUP_REMEDIES);
+      const expected = refusal(groupRefusalMessage(head, reasons), [REVIEW_AGAIN]);
       const world = makeWorld(head);
       const outcome = await publishDoc(world, documentWith(['reword', 'remark']));
       assert.equal(status(outcome), 'blocked', markdown(outcome));
@@ -335,7 +337,7 @@ describe('an explicit group that cannot be re-applied refuses the whole review b
 
 describe('a fix with several changes that cannot be re-applied refuses the whole review before any write (#37, table row 2)', () => {
   test('publish is blocked, validate reports blocked, and the problem names the fix, the reason and the ways forward', async () => {
-    const expected = refusal(fixRefusalMessage(REWRITTEN, ['`docs/sample.md` line 6 differs from the reviewed text']), FIX_REMEDIES);
+    const expected = refusal(fixRefusalMessage(REWRITTEN, ['`docs/sample.md` line 6 differs from the reviewed text']), [REVIEW_AGAIN]);
     const world = makeWorld(REWRITTEN);
     const outcome = await publishDoc(world, jointFixDocument());
     assert.equal(status(outcome), 'blocked', markdown(outcome));
@@ -356,10 +358,8 @@ describe('mixed documents (#37)', () => {
     const world = makeWorld(REWRITTEN);
     const outcome = await publishDoc(world, reviewDocument());
     assert.equal(status(outcome), 'blocked', markdown(outcome));
-    assertExactDiagnostics(outcome, [
-      refusal(groupRefusalMessage(REWRITTEN, ['`docs/sample.md` line 6 differs from the reviewed text']), GROUP_REMEDIES),
-      fallback('/runs/0/results/3', 'obsolete.txt', DELETION, REWRITTEN, ['`obsolete.txt` differs from the reviewed file']),
-    ]);
+    // Blocked: nothing is delivered, so the deletion's fallback is not announced (delivery policy §10.1).
+    assertExactDiagnostics(outcome, [refusal(groupRefusalMessage(REWRITTEN, ['`docs/sample.md` line 6 differs from the reviewed text']), [REVIEW_AGAIN])]);
     assertNothingWritten(world);
     const assessedWorld = makeWorld(REWRITTEN);
     const assessed = await validateDoc(assessedWorld, reviewDocument());
@@ -387,7 +387,7 @@ describe('mixed documents (#37)', () => {
       DELETION_PROPOSAL,
       REMARK_SECTION,
     ].join(SEPARATOR));
-    const expected = [fallback('/runs/0/results/1', 'obsolete.txt', DELETION, REWRITTEN, ['`obsolete.txt` differs from the reviewed file'])];
+    const expected = [fallback('/runs/0/results/1', DELETION, REWRITTEN, ['`obsolete.txt` differs from the reviewed file'])];
     assertExactDiagnostics(outcome, expected);
     assertPublishedHeadline(outcome, publishedHeadline(1));
 
@@ -433,12 +433,10 @@ describe('the headline states every warning, not only fallbacks (#37, "Warnings 
     const outcome = await publishDoc(world, documentWith(['delete', 'remark'], { keepUnreferencedContents: true }));
     assert.equal(status(outcome), 'published', markdown(outcome));
     const codes = diagnosticsOf(outcome).map((d) => asRecord(d)['code']);
-    assert.deepEqual(codes, ['context-artifact-uninterpreted', 'suggestion-pr-fallback']);
-    assertPublishedHeadline(outcome,
-      '**Published with 2 warnings:** Artifact contents are treated as context only. 1 suggestion pull request was not created; its change is shown in the review.');
+    assert.deepEqual(codes, ['context-artifact-uninterpreted', 'delivery-fallback']);
+    assertPublishedHeadline(outcome, `**Published with 2 warnings:** Artifact contents are treated as context only. ${FALLBACK_TITLE}.`);
     const assessed = await validateDoc(makeWorld(DROPPED), documentWith(['delete', 'remark'], { keepUnreferencedContents: true }));
-    assertReadyHeadline(assessed,
-      '**Ready to publish with 2 warnings:** Artifact contents are treated as context only. 1 suggestion pull request would not be created; its change would be shown in the review.');
+    assertReadyHeadline(assessed, `**Ready to publish with 2 warnings:** Artifact contents are treated as context only. ${FALLBACK_TITLE}.`);
   });
 });
 
@@ -459,7 +457,7 @@ function cli(world: IWorld, args: readonly string[]): IRun {
 function target(world: IWorld, sarif: Json): string[] {
   const file = path.join(world.root, 'review.sarif');
   fs.writeFileSync(file, JSON.stringify(sarif));
-  return ['--sarif', file, '--repo', `${OWNER}/${REPO}`, '--pull', String(PULL), '--commit', REVIEWED, '--allow-suggestion-prs'];
+  return ['--sarif', file, '--repo', `${OWNER}/${REPO}`, '--pull', String(PULL), '--commit', REVIEWED, '--grouped-edits', 'companion', '--file-operations', 'companion,manual'];
 }
 
 /** A diagnostic's human block (docs/diagnostics.md, "--format human"), uncolored and unwrapped. */
@@ -470,7 +468,7 @@ function humanBlock(d: Json): string {
   return [
     `${badge}  ${asString(d['title'])}  [${asString(d['code'])}]`,
     `  ${where}`,
-    `  ${asString(d['message'])}`,
+    ...asString(d['message']).split('\n').map((line) => (line === '' ? '' : `  ${line}`)),
     ...(d['remedies'] === undefined ? [] : asArray(d['remedies'])).map((r) => `  → ${asString(r)}`),
   ].join('\n');
 }
@@ -478,7 +476,7 @@ function humanBlock(d: Json): string {
 describe('CLI (#37): the same outcome and warnings in every format', () => {
   const head = DROPPED;
   const parts: readonly DocumentPart[] = ['delete', 'remark'];
-  const warning = fallback('/runs/0/results/0', 'obsolete.txt', DELETION, head, ['`obsolete.txt` no longer exists']);
+  const warning = fallback('/runs/0/results/0', DELETION, head, ['`obsolete.txt` no longer exists']);
 
   test('human: the headline under the heading on stdout, the warning once as a block on stderr, exit 0', () => {
     const world = makeWorld(head);
@@ -519,7 +517,7 @@ describe('CLI (#37): the same outcome and warnings in every format', () => {
   test('a refused group: blocked (exit 2), the problem once as a block on stderr with both remedies, and nothing written', () => {
     const world = makeWorld(REWRITTEN);
     const flags = target(world, documentWith(['reword', 'remark']));
-    const expected = refusal(groupRefusalMessage(REWRITTEN, ['`docs/sample.md` line 6 differs from the reviewed text']), GROUP_REMEDIES);
+    const expected = refusal(groupRefusalMessage(REWRITTEN, ['`docs/sample.md` line 6 differs from the reviewed text']), [REVIEW_AGAIN]);
     const checked = cli(world, ['validate', ...flags]);
     const published = cli(world, ['publish', ...flags, '--state', world.statePath]);
     for (const run of [checked, published]) {
@@ -533,19 +531,17 @@ describe('CLI (#37): the same outcome and warnings in every format', () => {
   });
 });
 
-describe('a fallback is held to the limits of publication without suggestion pull requests, not to those of a suggestion pull request (#37)', () => {
-  test('a creation over the suggestion file limit that cannot be re-applied is judged exactly as without suggestion pull requests', async () => {
+describe('a fallback is held to the limits of the mechanism that delivers it, not to those of a suggestion pull request', () => {
+  test('a creation over the suggestion file limit that cannot be re-applied is judged exactly as under the default policy', async () => {
     const big = documentWith(['create']);
     const run = asRecord(asArray(big['runs'])[0]);
     const [page] = asArray(run['artifacts']);
     asRecord(asRecord(page)['contents'])['text'] = `${'x'.repeat(1_000_001)}\n`;
     const allowed = await publishDoc(makeWorld(DROPPED), big);
     const disallowed = await call('publishSarifReview', makeWorld(DROPPED), big, false);
-    const codes = (outcome: Json): unknown[] => diagnosticsOf(outcome).map((d) => asRecord(d)['code']);
-    assert.equal(status(allowed), status(disallowed), markdown(allowed));
-    assert.deepEqual(codes(allowed).filter((c) => c !== 'suggestion-pr-fallback'), codes(disallowed));
-    assert.equal(codes(allowed).includes('suggestion-file-too-large'), false, 'no suggestion pull request carries the file');
-    assert.ok(codes(allowed).includes('suggestion-pr-fallback'));
+    assert.equal(status(allowed), 'blocked', markdown(allowed));
+    // Blocked by the review body's limit: the same problems, naming the fallback, and no fallback warning (delivery policy §10.1).
+    assert.deepEqual(diagnosticsOf(allowed), withFallbackCause(disallowed, CREATION));
   });
 });
 
@@ -556,12 +552,11 @@ describe('a fallback is held to the limits of publication without suggestion pul
 // whose base is not the default branch (neither yet supported), and a created
 // file over the suggestion pull request size limit.
 
-const REMOVE_GROUP = 'Remove the group (`ungroup-fixes`), so that its changes are published on their own.';
-const FORK_REASON = "the pull request's head branch `feature/retry` is in the fork fork-owner/widgets, and suggestion pull requests are not yet supported for a pull request from a fork";
-const DELETED_REASON = "the pull request's head repository was deleted, so there is no branch to propose it into";
-const BASE_REASON = 'the pull request merges into `release`, which is not the default branch `main` of octo/widgets, and suggestion pull requests are not yet supported for such a pull request';
+const FORK_REASON = "The pull request's head branch `feature/retry` is in the fork fork-owner/widgets, and suggestion pull requests are not yet supported for a pull request from a fork.";
+const DELETED_REASON = "The pull request's head repository was deleted, so there is no branch to propose it into.";
+const BASE_REASON = 'The pull request merges into `release`, which is not the default branch `main` of octo/widgets, and suggestion pull requests are not yet supported for such a pull request.';
 
-describe('a pull request suggestion pull requests do not support yet: every change is handled as if they were not allowed (#37)', () => {
+describe('a pull request suggestion pull requests do not support yet: `companion` is unavailable for every unit (#37)', () => {
   const targets = [
     ['a fork', { pull: { headRef: 'feature/retry', baseRef: 'main', headRepo: 'fork-owner/widgets' } }, FORK_REASON],
     ['a deleted head repository', { pull: { headRef: 'feature/retry', baseRef: 'main', headRepo: null } }, DELETED_REASON],
@@ -569,12 +564,12 @@ describe('a pull request suggestion pull requests do not support yet: every chan
   ] as const;
 
   for (const [what, repository, reason] of targets) {
-    for (const [parts, change, filePath] of [
-      [['create', 'remark'], CREATION, 'docs/new.md'],
-      [['delete', 'remark'], DELETION, 'obsolete.txt'],
+    for (const [parts, change] of [
+      [['create', 'remark'], CREATION],
+      [['delete', 'remark'], DELETION],
     ] as const) {
-      test(`${what}: the ${change.split(' ')[0] ?? ''} is proposed in the review body with a fallback warning; validate agrees`, async () => {
-        const expected = [fallbackDiagnostic('/runs/0/results/0', filePath, fallbackFor(change, reason), [])];
+      test(`${what}: ${change} is proposed in the review body with a fallback warning; validate agrees`, async () => {
+        const expected = [fallbackDiagnostic('/runs/0/results/0', fallbackFor(change, reason))];
         const assessedWorld = makeWorld(REVIEWED, {}, repository);
         const assessed = await validateDoc(assessedWorld, documentWith(parts));
         assert.equal(status(assessed), 'ready', markdown(assessed));
@@ -593,12 +588,12 @@ describe('a pull request suggestion pull requests do not support yet: every chan
     }
 
     test(`${what}: a group refuses the whole review, naming the reason; nothing is written`, async () => {
-      const expected = refusal(groupRefusalFor(reason), [REMOVE_GROUP]);
+      const expected = refusal(groupRefusalFor(reason));
       for (const operation of [validateDoc, publishDoc]) {
         const world = makeWorld(REVIEWED, {}, repository);
         const outcome = await operation(world, documentWith(['reword', 'create', 'remark']));
         assert.equal(status(outcome), 'blocked', markdown(outcome));
-        assertExactDiagnostics(outcome, [expected, fallbackDiagnostic('/runs/0/results/2', 'docs/new.md', fallbackFor(CREATION, reason), [])]);
+        assertExactDiagnostics(outcome, [expected]);
         assertNothingWritten(world);
       }
     });
@@ -608,13 +603,11 @@ describe('a pull request suggestion pull requests do not support yet: every chan
     const world = makeWorld(REVIEWED, {}, { pull: { headRef: 'feature/retry', baseRef: 'release', headRepo: 'fork-owner/widgets' }, labels: [], push: false });
     const outcome = await publishDoc(world, documentWith(['create']));
     assert.equal(status(outcome), 'published', markdown(outcome));
-    assertExactDiagnostics(outcome, [fallbackDiagnostic('/runs/0/results/0', 'docs/new.md', fallbackFor(CREATION, `${FORK_REASON}; ${BASE_REASON}`), [])]);
+    assertExactDiagnostics(outcome, [fallbackDiagnostic('/runs/0/results/0', fallbackFor(CREATION, FORK_REASON, BASE_REASON))]);
   });
 });
 
-describe('a change too large for a suggestion pull request is handled as if they were not allowed (#37)', () => {
-  const SIZE_REMEDY = 'To propose the change as a suggestion pull request, reduce the proposed file to at most 1,000,000 bytes.';
-
+describe('a change too large for a suggestion pull request: `companion` is unavailable, naming the limit (#37)', () => {
   /** `parts` with the new page's content replaced by `text`. */
   function withPage(parts: readonly DocumentPart[], text: string): Json {
     const document = documentWith(parts);
@@ -622,34 +615,30 @@ describe('a change too large for a suggestion pull request is handled as if they
     asRecord(asRecord(page)['contents'])['text'] = text;
     return document;
   }
+  const SIZE = '`docs/new.md` is 1000001 bytes, and a suggestion pull request carries at most 1000000 bytes per file.';
 
-  test('a creation over 1,000,000 bytes falls back, and is then judged exactly as without suggestion pull requests (here, too large for the review body)', async () => {
+  test('a creation over 1,000,000 bytes falls back, and is then judged exactly as under the default policy (here, too large for the review body)', async () => {
     const big = withPage(['create'], `${'x'.repeat(1_000_000)}\n`);
     const allowed = await publishDoc(makeWorld(REVIEWED), big);
     const disallowed = await call('publishSarifReview', makeWorld(REVIEWED), big, false);
     assert.equal(status(disallowed), 'blocked', markdown(disallowed));
     assert.equal(status(allowed), 'blocked', markdown(allowed));
-    const fallbackWarning = fallbackDiagnostic('/runs/0/results/0', 'docs/new.md',
-      fallbackFor(CREATION, '`docs/new.md` is 1000001 bytes, and a suggestion pull request carries at most 1000000 bytes per file'), [SIZE_REMEDY]);
-    assert.deepEqual(diagnosticsOf(allowed), [...diagnosticsOf(disallowed), fallbackWarning], 'the refusal without suggestion pull requests, and the fallback');
+    assert.deepEqual(diagnosticsOf(allowed), withFallbackCause(disallowed, CREATION), 'the refusal under the default policy, naming the fallback, and no fallback warning');
     const assessed = await validateDoc(makeWorld(REVIEWED), big);
     assert.deepEqual(diagnosticsOf(assessed), diagnosticsOf(allowed));
   });
 
-  test('a creation whose suggestion pull request description would be too long falls back, and is judged as without suggestion pull requests', async () => {
+  test('a creation whose suggestion pull request description would be too long falls back, and is judged as under the default policy', async () => {
     const document = documentWith(['create']);
     const [result] = asArray(asRecord(asArray(document['runs'])[0])['results']);
     asRecord(asRecord(result)['message'])['text'] = 'Long. '.repeat(10_500);
     const allowed = await publishDoc(makeWorld(REVIEWED), document);
     const disallowed = await call('publishSarifReview', makeWorld(REVIEWED), document, false);
     assert.equal(status(allowed), status(disallowed), markdown(allowed));
-    const codes = (outcome: Json): unknown[] => diagnosticsOf(outcome).map((d) => asRecord(d)['code']);
-    assert.deepEqual(codes(allowed), [...codes(disallowed), 'suggestion-pr-fallback']);
-    const [warning] = diagnosticsOf(allowed).map((d) => asRecord(d)).filter((d) => d['code'] === 'suggestion-pr-fallback');
-    assert.match(asString(warning?.['message']), /is not proposed as one: its suggestion pull request's description would be \d+ characters, and the limit is 60000\./);
+    assert.deepEqual(diagnosticsOf(allowed), withFallbackCause(disallowed, CREATION));
   });
 
-  test('a group holding a creation over 1,000,000 bytes refuses the whole review, naming the file', async () => {
+  test('a group holding a creation over 1,000,000 bytes follows fileOperations as a whole, and no listed mechanism can deliver it', async () => {
     const document = withPage(['reword', 'create'], `${'x'.repeat(1_000_000)}\n`);
     const results = asArray(asRecord(asArray(document['runs'])[0])['results']);
     asRecord(asRecord(results[2])['properties'])['sarifToComment'] = { proposedFileChanges: [{ operation: 'create', artifactIndex: 0 }], suggestionGroup: 'reword' };
@@ -658,8 +647,9 @@ describe('a change too large for a suggestion pull request is handled as if they
       const outcome = await operation(world, document);
       assert.equal(status(outcome), 'blocked', markdown(outcome));
       assertExactDiagnostics(outcome, [refusal(
-        groupRefusalFor('`docs/new.md` is 1000001 bytes, and a suggestion pull request carries at most 1000000 bytes per file'),
-        ['Reduce the proposed file to at most 1,000,000 bytes.', 'Or remove the group (`ungroup-fixes`), so that its changes are published on their own.'],
+        `The group \`reword\` cannot be delivered. ${FILE_OPERATIONS}, and no mechanism it lists is available:\n\n- \`companion\`: ${SIZE}\n`
+          + '- `manual`: Delivering a group with a whole-file creation or deletion on the original pull request is not yet supported by this version.',
+        [REDUCE_FILE],
       )]);
       assertNothingWritten(world);
     }
@@ -668,7 +658,7 @@ describe('a change too large for a suggestion pull request is handled as if they
 
 describe('CLI (#37): a base that is not the default branch, in every format', () => {
   const repository = { pull: { headRef: 'feature/retry', baseRef: 'release' } };
-  const warning = fallbackDiagnostic('/runs/0/results/0', 'obsolete.txt', fallbackFor(DELETION, BASE_REASON), []);
+  const warning = fallbackDiagnostic('/runs/0/results/0', fallbackFor(DELETION, BASE_REASON));
 
   test('human, json and toon, for validate and publish (exit 0)', () => {
     for (const command of ['validate', 'publish'] as const) {
@@ -723,7 +713,7 @@ function sentences(outcome: Json, statePath: string): { readonly created: string
 
 describe('every later call for a publication reports the warnings the first call reported (#42)', () => {
   const repository = { pull: { headRef: 'feature/retry', baseRef: 'release' } };
-  const warning = fallbackDiagnostic('/runs/0/results/0', 'obsolete.txt', fallbackFor(DELETION, BASE_REASON), []);
+  const warning = fallbackDiagnostic('/runs/0/results/0', fallbackFor(DELETION, BASE_REASON));
 
   test('regression (#42): a retry that finds the completion recorded keeps the warning, the headline and the warnings section', async () => {
     const world = makeWorld(REVIEWED, {}, repository);
@@ -754,7 +744,7 @@ describe('every later call for a publication reports the warnings the first call
     const uncertain = await publishDoc(world, document);
     assert.equal(status(uncertain), 'uncertain', markdown(uncertain));
     const diagnostics = diagnosticsOf(uncertain).map((d) => asRecord(d));
-    assert.deepEqual(diagnostics.map((d) => d['code']), ['suggestion-pr-fallback', 'delivery-unconfirmed'], 'the warning first, as it was found first');
+    assert.deepEqual(diagnostics.map((d) => d['code']), ['delivery-fallback', 'delivery-unconfirmed'], 'the warning first, as it was found first');
     assert.deepEqual(diagnostics[0], warning);
     assert.ok(markdown(uncertain).endsWith(`\n\n${warningsSection([warning])}`), markdown(uncertain));
 
@@ -772,7 +762,7 @@ describe('every later call for a publication reports the warnings the first call
 
   test('regression (#42): with suggestion pull requests, a retry reports the planned fallback warning again', async () => {
     const world = makeWorld(REWRITTEN);
-    const expected = [fallback('/runs/0/results/1', 'obsolete.txt', DELETION, REWRITTEN, ['`obsolete.txt` differs from the reviewed file'])];
+    const expected = [fallback('/runs/0/results/1', DELETION, REWRITTEN, ['`obsolete.txt` differs from the reviewed file'])];
     const first = await publishDoc(world, documentWith(['create', 'delete', 'remark']));
     assert.equal(status(first), 'published', markdown(first));
     assertExactDiagnostics(first, expected);

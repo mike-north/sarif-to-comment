@@ -18,11 +18,16 @@
  * destination, reviewed commit, input fingerprint, author id, mode, head
  * branch, labels (the canonical label first, as GitHub names them), whether
  * the pull requests are created ready for review, the publication id (the
- * markers' `batch`), every suggestion (id, branch, title, body, commit
- * message, exact changes, rendered section parts), the review's body
- * sections and inline comments, and preparation's warnings when there are
- * any (`warnings`, a non-empty list of diagnostics that are not errors, in
- * either version; issue #42), bound by a fingerprint over all of it.
+ * markers' `batch`), the resolved delivery policy with each value's
+ * source (`delivery`, docs/delivery-policy-contract.md §13), every
+ * suggestion (id, branch, title, body, commit message, exact changes, and
+ * the rendered sections of the proposals it holds — one, or several for a
+ * `single` bundle), the review's body sections (text, or a reference to one
+ * proposal of one suggestion) and inline comments, and preparation's
+ * warnings and notes when there are any (`warnings`, a non-empty list of
+ * diagnostics that are not errors, in either version; issue #42), bound by a
+ * fingerprint over all of it. `delivery` is required in every plan version:
+ * no plan without it was ever released, so there is none to continue.
  * Version 2 adds `reappliedOnto`: the commit every proposal is based on
  * instead of the reviewed commit, because the pull request's history was
  * rewritten (docs/companion-suggestion-pr-contract.md §2.5.1); its markers
@@ -85,8 +90,10 @@ import * as crypto from 'node:crypto';
 import * as nodeFs from 'node:fs';
 
 import type { IBranchPullRequest, ProposalChange } from './github.cjs';
+import { deliveryRecordProblem } from './delivery-policy.cjs';
+import type { IResolvedDeliveryPolicy } from './delivery-policy.cjs';
 import type { IDiagnostic } from './public-types.cjs';
-import type { IPreparedCompanion, IPreparedSuggestions, ISuggestionContext, PreparedComment } from './prepare-review.cjs';
+import type { ICompanionSectionReference, IPreparedCompanion, IPreparedSuggestions, ISuggestionContext, PreparedComment } from './prepare-review.cjs';
 import { renderReviewBody, renderSuggestionPullBody } from './prepare-review.cjs';
 import {
   PublicationStateError,
@@ -183,8 +190,10 @@ export interface IStartCompanionInput extends ICompanionIdentity {
   readonly ready: boolean;
   /** The commit the suggestions are re-applied onto after a rewritten history; absent when they are based on the reviewed commit. */
   readonly reappliedOnto?: string;
-  /** Preparation's warnings, recorded with the plan and reported by every call for this state path. */
+  /** Preparation's warnings and notes, recorded with the plan and reported by every call for this state path. */
   readonly warnings: readonly IDiagnostic[];
+  /** The resolved delivery policy the publication was planned under, recorded with the plan (docs/delivery-policy-contract.md §13). */
+  readonly delivery: IResolvedDeliveryPolicy;
 }
 
 /** One planned suggestion: its prepared texts plus the identity chosen for it. */
@@ -210,8 +219,10 @@ interface IPlanRecord {
   readonly ready: boolean;
   /** The commit every proposal is based on after a rewritten history (version 2 only). */
   readonly reappliedOnto?: string;
+  /** The resolved delivery policy, with each value's source (docs/delivery-policy-contract.md §13). */
+  readonly delivery: IResolvedDeliveryPolicy;
   readonly suggestions: readonly IPlanSuggestion[];
-  readonly review: { readonly sections: readonly (string | number)[]; readonly comments: readonly PreparedComment[] };
+  readonly review: { readonly sections: readonly (string | ICompanionSectionReference)[]; readonly comments: readonly PreparedComment[] };
   /** Preparation's warnings; present exactly when there are any. */
   readonly warnings?: readonly IDiagnostic[];
   readonly planFingerprint: string;
@@ -338,10 +349,11 @@ const FINGERPRINT = /^sha256:[0-9a-f]{64}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 const PLAN_KEYS: readonly string[] = [
-  'authorId', 'destination', 'format', 'headRef', 'inputFingerprint', 'labels', 'planFingerprint', 'publication',
+  'authorId', 'delivery', 'destination', 'format', 'headRef', 'inputFingerprint', 'labels', 'planFingerprint', 'publication',
   'ready', 'review', 'reviewedCommit', 'submit', 'suggestions', 'version',
 ];
-const SUGGESTION_KEYS: readonly string[] = ['body', 'branch', 'changeCount', 'changeLines', 'changes', 'commitMessage', 'id', 'items', 'title'];
+const SUGGESTION_KEYS: readonly string[] = ['body', 'branch', 'changes', 'commitMessage', 'id', 'sections', 'title'];
+const SECTION_KEYS: readonly string[] = ['changeCount', 'changeLines', 'items'];
 const COMMENT_KEYS: ReadonlySet<string> = new Set(['path', 'side', 'line', 'startSide', 'startLine', 'body']);
 
 // ---------------------------------------------------------------------------
@@ -425,19 +437,36 @@ function planProblem(record: unknown): string | null {
     const id = s['id'];
     if (typeof id !== 'string' || !UUID.test(id)) return `suggestion ${String(i + 1)} has a malformed id`;
     if (s['branch'] !== suggestionPrBranch(destination['pullNumber'], id)) return `suggestion ${String(i + 1)} has another branch`;
-    for (const key of ['title', 'body', 'commitMessage', 'changeLines', 'items']) {
+    for (const key of ['title', 'body', 'commitMessage']) {
       if (!isNonEmptyString(s[key])) return `suggestion ${String(i + 1)} has a malformed ${key}`;
     }
-    if (!isPositiveInteger(s['changeCount'])) return `suggestion ${String(i + 1)} has a malformed change count`;
+    const proposals = s['sections'];
+    if (!isList(proposals) || proposals.length === 0) return `suggestion ${String(i + 1)} has no sections`;
+    for (const proposal of proposals) {
+      if (!isPlainObject(proposal) || !hasExactKeys(proposal, SECTION_KEYS) || !isPositiveInteger(proposal['changeCount'])
+        || !isNonEmptyString(proposal['changeLines']) || !isNonEmptyString(proposal['items'])) {
+        return `suggestion ${String(i + 1)} has a malformed section`;
+      }
+    }
     const changes = s['changes'];
     if (!isList(changes) || changes.length === 0 || !changes.every(isProposalChange)) return `suggestion ${String(i + 1)} has malformed changes`;
   }
   const review = record['review'];
   if (!isPlainObject(review) || !hasExactKeys(review, ['comments', 'sections'])) return 'malformed review';
   const sections = review['sections'];
-  if (!isList(sections) || !sections.every((p) => typeof p === 'string' || (typeof p === 'number' && Number.isInteger(p) && p >= 0 && p < suggestions.length))) {
+  const proposalOf = (part: unknown): boolean => {
+    if (!isPlainObject(part) || !hasExactKeys(part, ['companion', 'section'])) return false;
+    const { companion, section } = part;
+    if (typeof companion !== 'number' || !Number.isInteger(companion) || companion < 0 || typeof section !== 'number' || !Number.isInteger(section) || section < 0) return false;
+    const suggestion = suggestions[companion];
+    const proposals = isPlainObject(suggestion) ? suggestion['sections'] : undefined;
+    return isList(proposals) && section < proposals.length;
+  };
+  if (!isList(sections) || !sections.every((p) => typeof p === 'string' || proposalOf(p))) {
     return 'malformed review sections';
   }
+  const delivery = deliveryRecordProblem(record['delivery']);
+  if (delivery !== null) return `malformed delivery policy (${delivery})`;
   if (!isList(review['comments']) || !review['comments'].every(isPreparedComment)) return 'malformed review comments';
   if (Object.hasOwn(record, 'warnings')) {
     const warnings = record['warnings'];
@@ -562,9 +591,7 @@ export async function startCompanionPublication(input: IStartCompanionInput, int
       title: companion.title,
       commitMessage: companion.commitMessage,
       changes: companion.changes,
-      changeCount: companion.changeCount,
-      changeLines: companion.changeLines,
-      items: companion.items,
+      sections: companion.sections,
       id,
       branch: suggestionPrBranch(pullNumber, id),
       body: renderSuggestionPullBody(companion, marker, target, input.suggestions.lifecycleNote),
@@ -583,6 +610,7 @@ export async function startCompanionPublication(input: IStartCompanionInput, int
     labels: [...input.labels],
     ready: input.ready,
     ...reapplied,
+    delivery: input.delivery,
     suggestions,
     review: { sections: input.suggestions.sections, comments: input.comments },
     ...(input.warnings.length === 0 ? {} : { warnings: structuredClone(input.warnings) }),

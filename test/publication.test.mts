@@ -2456,10 +2456,10 @@ describe('PublicationStateError runtime shape', () => {
 describe('preparation warnings are recorded with the publication and reported by every later call (#42)', () => {
   const WARNING = {
     severity: 'warning',
-    code: 'suggestion-pr-fallback',
-    title: 'A change is handled as if suggestion pull requests were not allowed',
-    message: 'Suggestion pull requests are allowed, but the deletion of `obsolete.txt` is not proposed as one: its base is not the default branch.',
-    location: { pointer: '/runs/0/results/0', path: 'obsolete.txt' },
+    code: 'delivery-fallback',
+    title: 'A proposal is delivered by a later mechanism of its delivery list',
+    message: 'The deletion of `obsolete.txt` is delivered as `manual`. `fileOperations` is `[companion, manual]`, the default, and the mechanisms listed before it are unavailable:\n\n- `companion`: Its base is not the default branch.',
+    location: { pointer: '/runs/0/results/0' },
   };
   const NOTE = { severity: 'note', code: 'suggestion-branch-moved', title: 'The branch changed', message: 'm', subject: 'octo-org/widgets#42', remedies: ['r'] };
 
@@ -2561,4 +2561,91 @@ describe('preparation warnings are recorded with the publication and reported by
       assert.equal(fs.readFileSync(world.statePath, 'utf8'), contents);
     });
   }
+});
+
+/**
+ * The resolved delivery policy is recorded with the publication before its
+ * first write (docs/delivery-policy-contract.md §13): a record that holds it
+ * is version 3, with `warnings` only when there are any; records of versions
+ * 1 (0.2.x) and 2 are still read and continued (L8).
+ *
+ * @see docs/delivery-policy-contract.md §13
+ * @see docs/companion-suggestion-pr-contract.md §2.9
+ */
+describe('the resolved delivery policy is recorded with the publication (version 3)', () => {
+  const DELIVERY = {
+    edits: { value: ['native'], source: 'default' },
+    groupedEdits: { value: ['native-batch', 'companion'], source: 'configuration' },
+    fileOperations: { value: ['companion'], source: 'caller-preset', preset: 'companion' },
+    companionBundle: { value: 'per-unit', source: 'default' },
+  };
+  const NOTE = {
+    severity: 'note', code: 'companion-options-unused', title: 'Companion pull request options have no effect',
+    message: 'No companion pull request is planned, so these options have no effect: `--pr-labels` (`pullRequestLabels`).',
+  };
+  const publishDelivered = (world: IWorld, delivery: unknown, warnings?: unknown): Promise<PublishOutcome> =>
+    publishPreparedReview({ ...makeInput(world), delivery, ...(warnings === undefined ? {} : { warnings }) });
+
+  test('with a policy and no warnings: version 3 holding the policy, and every later call reads it back', async () => {
+    const world = makeWorld();
+    const outcome = published(await publishDelivered(world, DELIVERY));
+    assert.deepEqual(outcome.warnings, []);
+    const record = asRecord(readJson(world.statePath));
+    assert.equal(record['version'], 3);
+    assert.deepEqual(record['delivery'], DELIVERY);
+    assert.equal(Object.hasOwn(record, 'warnings'), false);
+    assert.equal(published(await recover(world)).via, 'receipt');
+    assertExactlyOneCreateAttempt(world.remote);
+  });
+
+  test('with a policy and a note: version 3 holding both; the note is reported by every call', async () => {
+    const world = makeWorld();
+    const outcome = published(await publishDelivered(world, DELIVERY, [NOTE]));
+    assert.deepEqual(outcome.warnings, [NOTE]);
+    const record = asRecord(readJson(world.statePath));
+    assert.equal(record['version'], 3);
+    assert.deepEqual(record['warnings'], [NOTE]);
+    assert.deepEqual(published(await recover(world)).warnings, [NOTE]);
+  });
+
+  test('a version-1 record written by 0.2.x is still continued (L8)', async () => {
+    const world = makeWorld();
+    fs.writeFileSync(world.statePath, JSON.stringify(handBuiltIntent()), { mode: 0o600 });
+    const outcome = await publishDelivered(world, DELIVERY);
+    assert.notEqual(outcome.status, 'missing');
+    assert.equal(asRecord(readJson(world.statePath))['version'], 1, 'the record is continued as it is, never rewritten');
+  });
+
+  test('a policy not in its recorded form is caller misuse, refused before any I/O', async () => {
+    const world = makeWorld();
+    await assert.rejects(publishDelivered(world, { ...DELIVERY, edits: { value: [], source: 'caller' } }), TypeError);
+    assert.equal(fs.existsSync(world.statePath), false);
+    assert.deepEqual(world.remote.calls(), []);
+  });
+
+  const valid = { ...handBuiltIntent(), version: 3, delivery: DELIVERY };
+  const corrupt = {
+    'version 3 without a policy': { ...handBuiltIntent(), version: 3 },
+    'version 3 with an empty warnings list': { ...valid, warnings: [] },
+    'version 3 with a malformed policy': { ...valid, delivery: { ...DELIVERY, companionBundle: { value: 'all', source: 'default' } } },
+    'version 1 with a policy': { ...handBuiltIntent(), delivery: DELIVERY },
+    'version 2 with a policy': { ...handBuiltIntent(), version: 2, warnings: [NOTE], delivery: DELIVERY },
+  };
+  for (const [label, record] of Object.entries(corrupt)) {
+    test(`${label} is corrupt state, never absence`, async () => {
+      const world = makeWorld();
+      const contents = JSON.stringify(record);
+      fs.writeFileSync(world.statePath, contents, { mode: 0o600 });
+      await assert.rejects(recover(world), isStateError('state-corrupt'));
+      assert.deepEqual(world.remote.calls(), []);
+      assert.equal(fs.readFileSync(world.statePath, 'utf8'), contents);
+    });
+  }
+
+  test('a hand-built version-3 record is read: its intent is investigated like any other', async () => {
+    const world = makeWorld();
+    fs.writeFileSync(world.statePath, JSON.stringify(valid), { mode: 0o600 });
+    const outcome = await recover(world);
+    assert.equal(outcome.status, 'uncertain');
+  });
 });

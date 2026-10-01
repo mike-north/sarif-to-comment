@@ -207,6 +207,8 @@
  *            defaultBranch, canPush }
  *     GET pull, GET repository. headRepository is null when the head
  *     repository was deleted; canPush is the account role's permissions.push.
+ *     The repository's answer is read at most once per client, shared with
+ *     readDefaultBranchFile; a failed read is not remembered.
  *   readDefaultBranchFile({ owner, repo, path, branch? })
  *       -> { branch, commit, content }
  *     The file at `path` on the current commit of the repository's default
@@ -2223,6 +2225,23 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
     return jsonBody(response, what);
   }
 
+  /**
+   * The repository's answer (GET repos/{owner}/{repo}), read at most once
+   * per client: readDefaultBranchFile and readSuggestionTarget share it, so
+   * a publication that reads the delivery configuration and then plans
+   * companions reads the repository once. Only a successful answer is
+   * remembered; a failed read is asked again. A client serves one call
+   * (publish, validate or cleanup), so the answer is that call's.
+   */
+  const repositories = new Map<string, unknown>();
+  async function repositoryAnswer(owner: string, repo: string): Promise<unknown> {
+    const key = `${owner}/${repo}`.toLowerCase();
+    if (repositories.has(key)) return repositories.get(key);
+    const { body } = await restGet(`${API_ORIGIN}${repoPath(owner, repo)}`, 'repository');
+    repositories.set(key, body);
+    return body;
+  }
+
   async function readSuggestionTarget({
     owner: ownerInput,
     repo: repoInput,
@@ -2234,7 +2253,7 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
     const { body: pull } = await restGet(`${API_ORIGIN}${repoPath(owner, repo)}/pulls/${String(pullNumber)}`, 'pull request');
     const headRepo = optionalMember(pull, 'head', 'repo');
     const headRepository = headRepo === null ? null : optionalMember(headRepo, 'full_name');
-    const { body: repository } = await restGet(`${API_ORIGIN}${repoPath(owner, repo)}`, 'repository');
+    const repository = await repositoryAnswer(owner, repo);
     const push = optionalMember(repository, 'permissions', 'push');
     return {
       headSha: hostSha(optionalMember(pull, 'head', 'sha'), 'pull request head'),
@@ -2299,7 +2318,7 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
     requireInput(known === undefined || (typeof known === 'string' && known !== ''), 'branch must be a non-empty string when given');
     const branch = typeof known === 'string'
       ? known
-      : hostString(optionalMember((await restGet(`${API_ORIGIN}${repoPath(owner, repo)}`, 'repository')).body, 'default_branch'), 'repository default branch');
+      : hostString(optionalMember(await repositoryAnswer(owner, repo), 'default_branch'), 'repository default branch');
     const commit = await getBranch({ owner, repo, branch });
     if (commit === null) throw new GitHubError('malformed-response', redact(`The default branch ${branch} has no commit.`));
     const walked = await walkTo(owner, repo, commit, filePath);

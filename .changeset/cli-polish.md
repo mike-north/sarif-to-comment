@@ -111,38 +111,7 @@ Exit status 3 → 1.
 
 ### `sarif-to-comment --help`: usage and commands
 
-```diff
- Usage:
-   sarif-to-comment init --output FILE [options]
--  sarif-to-comment add-comment --sarif FILE --file PATH --line N (--message TEXT | --message-file FILE|-) [options]
-+  sarif-to-comment add-comment --sarif FILE --file PATH --line N
-+                   (--message TEXT | --message-file FILE|-) [options]
-   sarif-to-comment remove-comment --sarif FILE --finding SELECTOR [options]
--  sarif-to-comment group-fixes --sarif FILE --finding SELECTOR [...] --group NAME [options]
-+  sarif-to-comment group-fixes --sarif FILE --finding SELECTOR [...]
-+                   --group NAME [options]
-   sarif-to-comment ungroup-fixes --sarif FILE --finding SELECTOR [...] [options]
-   sarif-to-comment inspect --sarif FILE [options]
--  sarif-to-comment add-staged-changes --sarif IN --output OUT --worktree DIR --repo OWNER/REPO --commit FULLSHA [options]
--  sarif-to-comment validate --sarif FILE --repo OWNER/REPO --pull N --commit FULLSHA [options]
--  sarif-to-comment publish --sarif FILE --repo OWNER/REPO --pull N --commit FULLSHA --state ABSOLUTE_FILE [options]
-+  sarif-to-comment add-staged-changes --sarif IN --output OUT --worktree DIR
-+                   --repo OWNER/REPO --commit FULLSHA [options]
-+  sarif-to-comment validate --sarif FILE --repo OWNER/REPO --pull N
-+                   --commit FULLSHA [options]
-+  sarif-to-comment publish --sarif FILE --repo OWNER/REPO --pull N
-+                   --commit FULLSHA --state ABSOLUTE_FILE [options]
-   sarif-to-comment close-suggestion-prs --repo OWNER/REPO [options]
-   sarif-to-comment --sarif FILE --repo OWNER/REPO --pull N --commit FULLSHA
-                    --state ABSOLUTE_FILE [--source-root ABSOLUTE_FILE_URI]
--                   [--old-source-commit FULLSHA] [--ignore-approval-hold] [--submit]
--                   [--allow-suggestion-prs [--pr-labels A,B,C] [--mark-suggestion-prs-ready]]
-+                   [--old-source-commit FULLSHA] [--ignore-approval-hold]
-+                   [--submit] [--allow-suggestion-prs [--pr-labels A,B,C]
-+                   [--mark-suggestion-prs-ready]]
-   sarif-to-comment [COMMAND] --help
-+  sarif-to-comment --version
-```
+The usage synopses wrap to 80 columns the same way, and gain a `sarif-to-comment --version` line. The commands are listed as follows:
 
 ```diff
  Commands:

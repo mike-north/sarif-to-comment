@@ -194,7 +194,9 @@ function internalsFor(world: IWorld): { readonly createGitHubClient: (options: I
   return { createGitHubClient: (options) => createGitHubClient({ ...options, fetch: world.host.fetch }) };
 }
 
-const ENABLED: Json = { allowSuggestionPullRequests: true };
+/** The delivery lists that do what the removed `allowSuggestionPullRequests: true` did (companion contract §2.4). */
+const COMPANIONS: Json = { groupedEdits: ['companion'], fileOperations: ['companion', 'manual'] };
+const ENABLED: Json = { delivery: COMPANIONS };
 
 /** Library input; `options` null omits the field (the default: suggestion pull requests disabled). */
 function input(sarif: Json, options: Json | null, reviewedCommit = HEAD): Json {
@@ -394,9 +396,14 @@ async function assertBlockedEverywhere(world: IWorld, sarif: Json, lines: readon
   assert.equal(fs.existsSync(world.statePath), false);
 }
 
+/**
+ * Delivery policy §5, §8.5, §8.8: under the defaults a group with a whole-file
+ * operation follows `fileOperations: [manual]`, whose mixed manual group this
+ * version does not yet support, so it is blocked as it was before the policy.
+ */
 const GROUP_REQUIRES = (group: string, pointer: string): string =>
-  `- \`suggestion-group-requires-suggestion-prs\` at \`${pointer}\`: Suggestion group "${group}" must be accepted as one unit, which needs a suggestion pull request. `
-  + 'Enable suggestion pull requests (options.allowSuggestionPullRequests or --allow-suggestion-prs); a group is never split into separate suggestions or published in part.';
+  `- \`delivery-unavailable\` at \`${pointer}\`: The group \`${group}\` cannot be delivered. \`fileOperations\` is \`[manual]\`, the default, and no mechanism it lists is available:\n\n`
+  + '- `manual`: Delivering a group with a whole-file creation or deletion on the original pull request is not yet supported by this version.';
 
 // ---------------------------------------------------------------------------
 
@@ -436,10 +443,9 @@ describe('grouped code and test changes (A29)', () => {
     ].sort());
   });
 
-  test('disabled (the default): blocked, naming the setting, with nothing split or written (A30)', async () => {
+  test('the defaults: blocked, naming the list, with nothing split or written (A30)', async () => {
     const world = makeWorld();
     await assertBlockedEverywhere(world, groupedCodeAndTest(), [GROUP_REQUIRES('retry-with-test', '/runs/0/results/0')], null);
-    await assertBlockedEverywhere(makeWorld(), groupedCodeAndTest(), [GROUP_REQUIRES('retry-with-test', '/runs/0/results/0')], { allowSuggestionPullRequests: false });
   });
 
   test('a group edit keeps an executable file\'s mode, and two edits of one file combine in line order', async () => {
@@ -496,7 +502,7 @@ describe('grouped additions (A32)', () => {
     ].join('\n'));
   });
 
-  test('disabled: blocked, with no separate creation sections substituted', async () => {
+  test('the defaults: blocked, with no separate creation sections substituted', async () => {
     await assertBlockedEverywhere(makeWorld(), groupedAdditions(), [GROUP_REQUIRES('docs-pair', '/runs/0/results/0')], null);
   });
 });
@@ -581,15 +587,17 @@ describe('default-off behavior is unchanged', () => {
     } }),
   ]);
 
-  test('omitted and false settings send the identical review request and read no repository or label', async () => {
+  test('the defaults and a list without companion send the identical review request and read no pull request target or label', async () => {
     const bodies: string[] = [];
-    for (const options of [null, { allowSuggestionPullRequests: false }]) {
+    for (const options of [null, { delivery: { fileOperations: ['manual'] } }]) {
       const world = makeWorld();
       assert.equal(status(await publish(world, standaloneOperations(), options)), 'published');
       const [review] = world.host.reviews();
       assert.ok(review);
       bodies.push(JSON.stringify({ ...review.request, body: review.request.body.replace(REVIEW_MARKER, '') }));
-      assert.equal(world.host.log().some((r) => r.path === `/repos/${OWNER}/${REPO}` || r.path.includes('/labels')), false);
+      // The repository is read once, for its delivery configuration (delivery policy §11); never the labels.
+      assert.equal(world.host.log().filter((r) => r.path === `/repos/${OWNER}/${REPO}`).length, 1);
+      assert.equal(world.host.log().some((r) => r.path.includes('/labels')), false);
       assert.deepEqual(fs.readdirSync(path.dirname(world.statePath)), ['review.json'], 'no companion state files');
     }
     assert.equal(bodies[0], bodies[1]);
@@ -612,7 +620,7 @@ describe('default-off behavior is unchanged', () => {
   test('the old option names are unknown options, refused before any request', async () => {
     const world = makeWorld();
     await assert.rejects(publish(world, plain(), { suggestionPullRequests: true }), /unknown option suggestionPullRequests/);
-    await assert.rejects(validate(world, plain(), { allowSuggestionPullRequests: true, suggestionLabel: 'suggestion-pr' }), /unknown option suggestionLabel/);
+    await assert.rejects(validate(world, plain(), { delivery: { groupedEdits: ['companion'], fileOperations: ['companion', 'manual'] }, suggestionLabel: 'suggestion-pr' }), /unknown option suggestionLabel/);
     assert.deepEqual(world.host.log(), []);
   });
 });
@@ -767,22 +775,38 @@ describe('group rules (§2.3–§2.4), identical in validate and publish', () =>
   });
 
   /**
-   * Issue #37: a creation whose suggestion pull request cannot be made falls
-   * back to the review body, and is then judged exactly as without suggestion
-   * pull requests: here too large for the review body. validate and publish
-   * both block with that refusal and the fallback warning, and write nothing.
+   * A creation whose suggestion pull request cannot be made: `companion` is
+   * unavailable, with the obstacle `reason` (companion contract §2.5.1). With
+   * `[companion, manual]` it falls back to the review body and is then judged
+   * exactly as without suggestion pull requests: here too large for the
+   * review body, so validate and publish both block with that refusal and,
+   * delivering nothing, carry no fallback warning; the refusal names the
+   * fallback that put the file in the body instead (delivery policy §10.1).
+   * With a strict `[companion]` they block naming the obstacle. Nothing is
+   * written either way.
    */
-  async function assertFallsBackThenBlocked(sarif: Json, reason: RegExp): Promise<void> {
+  async function assertFallsBackThenBlocked(sarif: Json, reason: RegExp, filePath: string): Promise<void> {
     const disallowed = await publish(makeWorld(), sarif, null);
     assert.equal(status(disallowed), 'blocked', markdown(disallowed));
+    const cause = `\n\nThis includes a proposal delivered by a fallback: the creation of \`${filePath}\` is delivered as \`manual\`, `
+      + 'because `fileOperations` is `[companion, manual]` and the mechanisms listed before it (`companion`) are unavailable.';
+    const expected = asArray(disallowed['diagnostics']).map((d) => {
+      const diagnostic = asRecord(d);
+      return { ...diagnostic, message: `${asString(diagnostic['message'])}${cause}` };
+    });
     const world = makeWorld();
     for (const outcome of [await validate(world, sarif), await publish(world, sarif)]) {
       assert.equal(status(outcome), 'blocked', markdown(outcome));
-      const diagnostics = asArray(outcome['diagnostics']).map((d) => asRecord(d));
-      assert.deepEqual(diagnostics.filter((d) => d['severity'] === 'error'), disallowed['diagnostics'], 'the refusal without suggestion pull requests');
-      const warnings = diagnostics.filter((d) => d['severity'] === 'warning');
-      assert.deepEqual(warnings.map((d) => d['code']), ['suggestion-pr-fallback']);
-      assert.match(asString(warnings[0]?.['message']), reason);
+      assert.deepEqual(outcome['diagnostics'], expected, 'the refusal without suggestion pull requests, naming the fallback, and no warning');
+    }
+    const strict = { delivery: { fileOperations: ['companion'] } };
+    for (const outcome of [await validate(world, sarif, strict), await publish(world, sarif, strict)]) {
+      assert.equal(status(outcome), 'blocked', markdown(outcome));
+      const [unavailable, ...others] = asArray(outcome['diagnostics']).map((d) => asRecord(d));
+      assert.equal(others.length, 0);
+      assert.ok(unavailable);
+      assert.equal(unavailable['code'], 'delivery-unavailable');
+      assert.match(asString(unavailable['message']), reason);
     }
     assert.deepEqual(writes(world), [], 'no write of any kind');
     assert.equal(fs.existsSync(world.statePath), false);
@@ -791,7 +815,7 @@ describe('group rules (§2.3–§2.4), identical in validate and publish', () =>
   test('a suggestion pull request body over 60,000 characters falls back to the review body, which is then too large (issue #37); nothing is truncated', async () => {
     const message = 'x'.repeat(60_000);
     const sarif = document([result({ text: message, operation: createOp(0) })], [created('docs/guide.md', GUIDE)]);
-    await assertFallsBackThenBlocked(sarif, /its suggestion pull request's description would be \d+ characters, and the limit is 60000/);
+    await assertFallsBackThenBlocked(sarif, /- `companion`: Its suggestion pull request's description would be \d+ characters, and the limit is 60000\.$/, 'docs/guide.md');
   });
 
   test('more than ten suggestion pull requests', async () => {
@@ -805,7 +829,7 @@ describe('group rules (§2.3–§2.4), identical in validate and publish', () =>
   test('a created file over 1,000,000 bytes falls back to the review body, which is then too large (issue #37)', async () => {
     const big = `${'x'.repeat(1_000_000)}\n`;
     const sarif = document([result({ text: 'Big.', operation: createOp(0) })], [created('docs/big.md', big)]);
-    await assertFallsBackThenBlocked(sarif, /`docs\/big\.md` is 1000001 bytes, and a suggestion pull request carries at most 1000000 bytes per file/);
+    await assertFallsBackThenBlocked(sarif, /- `companion`: `docs\/big\.md` is 1000001 bytes, and a suggestion pull request carries at most 1000000 bytes per file\.$/, 'docs/big.md');
   });
 });
 
@@ -828,7 +852,7 @@ describe('repository readiness (§2.5, §2.7, §2.8), identical in validate and 
 
   test('an extra label is matched as GitHub names it, and applied under that name', async () => {
     const world = makeWorld({}, repository({ labels: ['suggestion-pr', 'Proposed Change'] }));
-    const outcome = await publish(world, groupedAdditions(), { allowSuggestionPullRequests: true, pullRequestLabels: ['proposed change'] });
+    const outcome = await publish(world, groupedAdditions(), { delivery: { groupedEdits: ['companion'], fileOperations: ['companion', 'manual'] }, pullRequestLabels: ['proposed change'] });
     assert.equal(status(outcome), 'published', markdown(outcome));
     assert.deepEqual(onlyPull(world).pull.labels, ['suggestion-pr', 'Proposed Change']);
   });
@@ -1015,8 +1039,8 @@ describe('durable identity and recovery (§2.9–§2.10)', () => {
     assert.equal(status(await publish(world, groupedCodeAndTest())), 'uncertain');
     const before = world.host.log().length;
     await assert.rejects(publish(world, groupedCodeAndTest(), null), /state-mismatch|different original input/);
-    await assert.rejects(publish(world, groupedCodeAndTest(), { allowSuggestionPullRequests: true, pullRequestLabels: ['bug'] }), /different original input/);
-    await assert.rejects(publish(world, groupedCodeAndTest(), { allowSuggestionPullRequests: true, submit: true }), /records a draft review/);
+    await assert.rejects(publish(world, groupedCodeAndTest(), { delivery: { groupedEdits: ['companion'], fileOperations: ['companion', 'manual'] }, pullRequestLabels: ['bug'] }), /different original input/);
+    await assert.rejects(publish(world, groupedCodeAndTest(), { delivery: { groupedEdits: ['companion'], fileOperations: ['companion', 'manual'] }, submit: true }), /records a draft review/);
     assert.equal(world.host.log().length, before);
   });
 
@@ -1207,13 +1231,13 @@ describe('CLI + real GitHub client over HTTP', () => {
   }
   const target = ['--repo', `${OWNER}/${REPO}`, '--pull', String(PULL), '--commit', HEAD];
 
-  test('publish --allow-suggestion-prs --format json reports the suggestion pull requests', () => {
+  test('publish with lists naming companion --format json reports the suggestion pull requests', () => {
     const world = makeWorld();
     const file = sarifFile(world, groupedCodeAndTest());
-    const checked = cli(world, ['validate', '--sarif', file, ...target, '--allow-suggestion-prs']);
+    const checked = cli(world, ['validate', '--sarif', file, ...target, '--grouped-edits', 'companion', '--file-operations', 'companion,manual']);
     assert.equal(checked.status, 0, checked.stdout + checked.stderr);
     assert.ok(checked.stdout.includes('Publication would also create 1 draft suggestion pull request into `feature/retry`, labeled `suggestion-pr`.'), checked.stdout);
-    const published = cli(world, ['publish', '--sarif', file, ...target, '--state', world.statePath, '--allow-suggestion-prs', '--format', 'json']);
+    const published = cli(world, ['publish', '--sarif', file, ...target, '--state', world.statePath, '--grouped-edits', 'companion', '--file-operations', 'companion,manual', '--format', 'json']);
     assert.equal(published.status, 0, published.stdout + published.stderr);
     const doc = asRecord(parseJson(published.stdout));
     assert.equal(doc['command'], 'publish');
@@ -1226,17 +1250,17 @@ describe('CLI + real GitHub client over HTTP', () => {
   test('the legacy flag-only form accepts the same flags, and --pr-labels adds labels', () => {
     const world = makeWorld({}, repository({ labels: ['suggestion-pr', 'proposal'] }));
     const file = sarifFile(world, groupedAdditions());
-    const result = cli(world, ['--sarif', file, ...target, '--state', world.statePath, '--allow-suggestion-prs', '--pr-labels', 'proposal']);
+    const result = cli(world, ['--sarif', file, ...target, '--state', world.statePath, '--grouped-edits', 'companion', '--file-operations', 'companion,manual', '--pr-labels', 'proposal']);
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.deepEqual(onlyPull(world).pull.labels, ['suggestion-pr', 'proposal']);
   });
 
-  test('without the flag a group is blocked (exit 2), naming the flag', () => {
+  test('under the defaults a group with whole-file operations is blocked (exit 2), naming the list and the flag to change it', () => {
     const world = makeWorld();
     const result = cli(world, ['publish', '--sarif', sarifFile(world, groupedAdditions()), ...target, '--state', world.statePath]);
     assert.equal(result.status, 2, result.stdout + result.stderr);
     assert.match(result.stdout, /^## Review blocked\n/);
-    assert.match(result.stderr, /\[suggestion-group-requires-suggestion-prs\][\s\S]*--allow-suggestion-prs/, 'the problem, naming the flag, is on stderr');
+    assert.match(result.stderr, /\[delivery-unavailable\][\s\S]*`fileOperations` is `\[manual\]`, the default[\s\S]*`--file-operations`/, 'the problem, naming the flag, is on stderr');
     assert.deepEqual(writes(world), []);
   });
 
@@ -1244,7 +1268,7 @@ describe('CLI + real GitHub client over HTTP', () => {
     const world = makeWorld({ companion: { loseResponse: ['pull'] } });
     world.host.hide({ pulls: 1 });
     const file = sarifFile(world, groupedCodeAndTest());
-    const args = ['publish', '--sarif', file, ...target, '--state', world.statePath, '--allow-suggestion-prs'];
+    const args = ['publish', '--sarif', file, ...target, '--state', world.statePath, '--grouped-edits', 'companion', '--file-operations', 'companion,manual'];
     const first = cli(world, args);
     assert.equal(first.status, 3, first.stdout + first.stderr);
     world.host.setConfig({ companion: {} });
@@ -1407,11 +1431,12 @@ describe('a native multi-change fix (one SARIF fix with several changes)', () =>
     assert.deepEqual(world.host.fileOnBranch(branch, 'docs/a.md'), Buffer.from(PAGE_A));
   });
 
-  test('disabled (the default): refused naming the setting; nothing is split or written (A30)', async () => {
-    const line = '- `fix-changes-require-suggestion-prs` at `/runs/0/results/0`: The fix makes 2 changes that apply together (a SARIF fix is accepted whole), which needs a suggestion pull request. '
-      + 'Enable suggestion pull requests (options.allowSuggestionPullRequests or --allow-suggestion-prs); a fix is never split into separate suggestions or published in part.';
+  test('the defaults: refused naming the list; nothing is split or written (A30)', async () => {
+    // Delivery policy §5, §8.8: a fix with several changes follows groupedEdits, whose
+    // default native batch this version does not yet offer for such a fix.
+    const line = '- `delivery-unavailable` at `/runs/0/results/0`: The fix with 2 changes at `/runs/0/results/0` cannot be delivered. `groupedEdits` is `[native-batch]`, the default, and no mechanism it lists is available:\n\n'
+      + '- `native-batch`: Offering a fix with several changes as a native batch is not yet supported by this version.';
     await assertBlockedEverywhere(makeWorld(), document([multiFile()]), [line], null);
-    await assertBlockedEverywhere(makeWorld(), document([multiFile()]), [line], { allowSuggestionPullRequests: false });
   });
 
   test('replacements of one fix that overlap, or start at the same position, are refused (their combined effect is undefined)', async () => {

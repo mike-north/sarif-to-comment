@@ -201,7 +201,8 @@ async function call(name: 'publishSarifReview' | 'validateSarifReview' | 'closeS
   return asRecord(outcome, `the ${name} outcome`);
 }
 
-const ALLOW: Json = { allowSuggestionPullRequests: true };
+/** The delivery lists that do what the removed `allowSuggestionPullRequests: true` did (companion contract §2.4). */
+const ALLOW: Json = { delivery: { groupedEdits: ['companion'], fileOperations: ['companion', 'manual'] } };
 
 function reviewInput(options: Json | null, reviewed = HEAD): Json {
   return {
@@ -436,14 +437,21 @@ describe('label resolution (convention §4): publish, validate and cleanup resol
     const link: IHttpRawFile = { base64: Buffer.from('elsewhere').toString('base64'), mode: '120000' };
     const repo = repository();
     const world = makeWorld({ ...repo, defaultBranchCommit: CONFIGURED, snapshots: { ...repo.snapshots, [CONFIGURED]: { 'README.md': ['# Widgets\n'] } }, rawFiles: { [CONFIGURED]: { '.github': link } } });
-    await assertBlockedEverywhere(world, [configurationInvalid('`.github` is a symbolic link, which is never followed')]);
+    // The caller decides every delivery setting, so the delivery configuration (also under `.github`) is not read
+    // (delivery policy §11.1); the label configuration is, for the suggestion pull request.
+    const decided = { delivery: { preset: 'companion', companionBundle: 'per-unit' } };
+    await assertBlockedEverywhere(world, [configurationInvalid('`.github` is a symbolic link, which is never followed')], decided);
     await assert.rejects(cleanup(world), (err: unknown) => err instanceof Error && err.message === cleanupRefusal('`.github` is a symbolic link, which is never followed'));
   });
 
-  test('the repository is read once per assessment: the default branch is not read twice', async () => {
+  test('the repository is read once per call: the delivery configuration\'s read is reused for the suggestion pull requests\' target', async () => {
     const world = makeWorld();
     assert.equal(status(await validate(world)), 'ready');
     assert.equal(world.host.log().filter((r) => r.method === 'GET' && r.path === `/repos/${OWNER}/${REPO}`).length, 1);
+    // With every delivery setting decided by the caller, the delivery configuration is not read (delivery policy §11.1).
+    const decided = makeWorld();
+    assert.equal(status(await validate(decided, { delivery: { preset: 'companion', companionBundle: 'per-unit' } })), 'ready');
+    assert.equal(decided.host.log().filter((r) => r.method === 'GET' && r.path === `/repos/${OWNER}/${REPO}`).length, 1);
   });
 
   for (const [what, config, detail] of invalid) {
@@ -477,10 +485,12 @@ describe('label resolution (convention §4): publish, validate and cleanup resol
     });
   }
 
-  test('the configuration is read only when the review needs a suggestion pull request', async () => {
+  test('the label configuration is read only when the review needs a suggestion pull request', async () => {
     const world = makeWorld(repository(), { companion: { defaultBranchRead: 'server-error' } });
     const plain = { ...guideDocument(), runs: [{ ...asRecord(asArray(guideDocument()['runs'])[0]), artifacts: [], results: [{ message: { text: 'Fine.' } }] }] };
-    const outcome = await call('publishSarifReview', { ...reviewInput(ALLOW), sarif: plain, statePath: world.statePath }, world);
+    // Every delivery setting decided by the caller: the delivery configuration is not read either (delivery policy §11.1).
+    const decided = { delivery: { preset: 'companion', companionBundle: 'per-unit' } };
+    const outcome = await call('publishSarifReview', { ...reviewInput(decided), sarif: plain, statePath: world.statePath }, world);
     assert.equal(status(outcome), 'published', markdown(outcome));
   });
 });
@@ -523,21 +533,17 @@ describe('extra labels (§2.2)', () => {
     assert.deepEqual(world.host.log(), []);
   });
 
-  test('without the opt-in, extra labels and the ready setting are refused rather than ignored', async () => {
+  test('valid with any delivery policy (delivery policy §12); malformed values are still refused before any request', async () => {
     const world = makeWorld();
-    for (const [options, name] of [
-      [{ pullRequestLabels: ['team-a'] }, 'pullRequestLabels'],
-      [{ allowSuggestionPullRequests: false, pullRequestLabels: [] }, 'pullRequestLabels'],
-      [{ markSuggestionPullRequestsReady: true }, 'markSuggestionPullRequestsReady'],
-      [{ markSuggestionPullRequestsReady: false }, 'markSuggestionPullRequestsReady'],
-    ] as const) {
-      await assert.rejects(publish(world, options), (err: unknown) =>
-        err instanceof TypeError && err.message === `Invalid publishSarifReview input: options.${name} applies only with options.allowSuggestionPullRequests: true`);
-      await assert.rejects(validate(world, options), /applies only with options\.allowSuggestionPullRequests: true/);
-    }
+    await assert.rejects(publish(world, { markSuggestionPullRequestsReady: 'yes' }), /options\.markSuggestionPullRequestsReady must be a boolean/);
     await assert.rejects(publish(world, { ...ALLOW, markSuggestionPullRequestsReady: 'yes' }), /options\.markSuggestionPullRequestsReady must be a boolean/);
-    await assert.rejects(publish(world, { allowSuggestionPullRequests: 'yes' }), /options\.allowSuggestionPullRequests must be a boolean/);
+    await assert.rejects(publish(world, { allowSuggestionPullRequests: true }), /unknown option allowSuggestionPullRequests/);
     assert.deepEqual(world.host.log(), []);
+    for (const options of [{ pullRequestLabels: ['team-a'] }, { markSuggestionPullRequestsReady: true }]) {
+      const assessed = await validate(makeWorld(), { ...options, delivery: { fileOperations: ['manual'] } });
+      assert.equal(status(assessed), 'ready', markdown(assessed));
+      assert.deepEqual(asArray(assessed['diagnostics']).map((d) => asRecord(d)['code']), ['companion-options-unused']);
+    }
   });
 });
 
@@ -581,19 +587,23 @@ describe('publication identity (§2.2): every setting is bound to the state path
   });
 });
 
-describe('not yet supported: forks and non-default bases fall back as if suggestion pull requests were not allowed (§2.5, issue #37)', () => {
-  /** The owner's decision on #37: the creation is proposed in the review body, with a warning naming why no suggestion pull request is made. */
-  const fallbackMessage = (reason: string): string =>
-    `Suggestion pull requests are allowed, but the creation of \`docs/guide.md\` is not proposed as one: ${reason}. `
-    + 'It is handled as if suggestion pull requests were not allowed: the review body proposes it, with its findings.';
-  const FORK = "the pull request's head branch `feature/retry` is in the fork fork-owner/widgets, and suggestion pull requests are not yet supported for a pull request from a fork";
-  const BASE_BRANCH = 'the pull request merges into `release`, which is not the default branch `main` of octo/widgets, and suggestion pull requests are not yet supported for such a pull request';
+describe('not yet supported: forks and non-default bases are obstacles of `companion`; [companion, manual] falls back to the review body (§2.5, §2.5.1)', () => {
+  /** Delivery policy §10.2: the creation is delivered as `manual`, naming the list and why no suggestion pull request is made. */
+  const fallbackMessage = (...obstacles: readonly string[]): string =>
+    'The creation of `docs/guide.md` is delivered as `manual`. `fileOperations` is `[companion, manual]`, set by the caller (`--file-operations`, `delivery.fileOperations`), '
+    + `and the mechanisms listed before it are unavailable:\n\n- \`companion\`: ${obstacles.join(' ')}`;
+  const FORK = "The pull request's head branch `feature/retry` is in the fork fork-owner/widgets, and suggestion pull requests are not yet supported for a pull request from a fork.";
+  const BASE_BRANCH = 'The pull request merges into `release`, which is not the default branch `main` of octo/widgets, and suggestion pull requests are not yet supported for such a pull request.';
 
   /** validate is ready and publish publishes the review alone, both with exactly this fallback warning. */
-  async function assertFallsBackEverywhere(world: IWorld, reason: string): Promise<void> {
+  async function assertFallsBackEverywhere(world: IWorld, ...obstacles: readonly string[]): Promise<void> {
     const expected = [{
-      severity: 'warning', code: 'suggestion-pr-fallback', title: 'A change is handled as if suggestion pull requests were not allowed',
-      message: fallbackMessage(reason), location: { pointer: '/runs/0/results/0', path: 'docs/guide.md' },
+      severity: 'warning', code: 'delivery-fallback', title: 'A proposal is delivered by a later mechanism of its delivery list',
+      message: fallbackMessage(...obstacles), location: { pointer: '/runs/0/results/0' },
+      remedies: [
+        'To use an earlier mechanism, remove the obstacle the message names, then publish again.',
+        'To refuse rather than fall back, list only the mechanism you require.',
+      ],
     }];
     const assessed = await validate(world);
     assert.equal(status(assessed), 'ready', markdown(assessed));
@@ -611,7 +621,7 @@ describe('not yet supported: forks and non-default bases fall back as if suggest
 
   test('a deleted head repository', async () => {
     await assertFallsBackEverywhere(makeWorld(repository({ pull: { headRef: HEAD_REF, baseRef: 'main', headRepo: null } })),
-      "the pull request's head repository was deleted, so there is no branch to propose it into");
+      "The pull request's head repository was deleted, so there is no branch to propose it into.");
   });
 
   test('a base that is not the default branch', async () => {
@@ -640,7 +650,7 @@ describe('not yet supported: forks and non-default bases fall back as if suggest
 
   test('a fork into another base: both reasons, in a fixed order; with nothing to create, permission and labels are not needed', async () => {
     const world = makeWorld(repository({ labels: [], push: false, pull: { headRef: HEAD_REF, baseRef: 'release', headRepo: 'fork-owner/widgets' } }));
-    await assertFallsBackEverywhere(world, `${FORK}; ${BASE_BRANCH}`);
+    await assertFallsBackEverywhere(world, FORK, BASE_BRANCH);
   });
 });
 
@@ -651,7 +661,7 @@ describe('renamed options and flags; the old names are unknown', () => {
       err instanceof TypeError && err.message === 'Invalid publishSarifReview input: unknown option suggestionPullRequests');
     await assert.rejects(validate(world, { suggestionPullRequests: true }), (err: unknown) =>
       err instanceof TypeError && err.message === 'Invalid validateSarifReview input: unknown option suggestionPullRequests');
-    await assert.rejects(publish(world, { allowSuggestionPullRequests: true, suggestionLabel: 'suggestion-pr' }), (err: unknown) =>
+    await assert.rejects(publish(world, { delivery: { groupedEdits: ['companion'], fileOperations: ['companion', 'manual'] }, suggestionLabel: 'suggestion-pr' }), (err: unknown) =>
       err instanceof TypeError && err.message === 'Invalid publishSarifReview input: unknown option suggestionLabel');
     assert.deepEqual(world.host.log(), []);
   });
@@ -667,17 +677,17 @@ describe('renamed options and flags; the old names are unknown', () => {
       const old = cli(world, [...command, '--sarif', sarif, ...TARGET, ...tail, '--suggestion-prs']);
       assert.equal(old.status, 1, old.stdout + old.stderr);
       assert.match(old.stderr, /unknown option --suggestion-prs/);
-      const label = cli(world, [...command, '--sarif', sarif, ...TARGET, ...tail, '--allow-suggestion-prs', '--suggestion-label', 'x']);
+      const label = cli(world, [...command, '--sarif', sarif, ...TARGET, ...tail, '--grouped-edits', 'companion', '--file-operations', 'companion,manual', '--suggestion-label', 'x']);
       assert.equal(label.status, 1, label.stdout + label.stderr);
       assert.match(label.stderr, /unknown option --suggestion-label/);
     }
     assert.deepEqual(world.host.log(), []);
   });
 
-  test('CLI: --allow-suggestion-prs --pr-labels --mark-suggestion-prs-ready publish a ready, labeled suggestion (JSON outcome)', () => {
+  test('CLI: delivery lists naming companion, --pr-labels and --mark-suggestion-prs-ready publish a ready, labeled suggestion (JSON outcome)', () => {
     const world = makeWorld();
     const result = cli(world, ['publish', '--sarif', sarifFile(world), ...TARGET, '--state', world.statePath,
-      '--allow-suggestion-prs', '--pr-labels', 'team-a, Campaign', '--mark-suggestion-prs-ready', '--format', 'json']);
+      '--grouped-edits', 'companion', '--file-operations', 'companion,manual', '--pr-labels', 'team-a, Campaign', '--mark-suggestion-prs-ready', '--format', 'json']);
     assert.equal(result.status, 0, result.stdout + result.stderr);
     const doc = asRecord(parseJson(result.stdout));
     assert.equal(doc['status'], 'published');
@@ -690,24 +700,22 @@ describe('renamed options and flags; the old names are unknown', () => {
   test('CLI: the flag-only form and validate accept the new flags', () => {
     const world = makeWorld();
     const sarif = sarifFile(world);
-    const checked = cli(world, ['validate', '--sarif', sarif, ...TARGET, '--allow-suggestion-prs', '--pr-labels', 'team-a']);
+    const checked = cli(world, ['validate', '--sarif', sarif, ...TARGET, '--grouped-edits', 'companion', '--file-operations', 'companion,manual', '--pr-labels', 'team-a']);
     assert.equal(checked.status, 0, checked.stdout + checked.stderr);
     assert.ok(checked.stdout.includes('Publication would also create 1 draft suggestion pull request into `feature/retry`, labeled `suggestion-pr` and `team-a`.'), checked.stdout);
-    const published = cli(world, ['--sarif', sarif, ...TARGET, '--state', world.statePath, '--allow-suggestion-prs']);
+    const published = cli(world, ['--sarif', sarif, ...TARGET, '--state', world.statePath, '--grouped-edits', 'companion', '--file-operations', 'companion,manual']);
     assert.equal(published.status, 0, published.stdout + published.stderr);
     assert.deepEqual(onlyPull(world).labels, ['suggestion-pr']);
   });
 
-  test('CLI: --pr-labels and --mark-suggestion-prs-ready need --allow-suggestion-prs; empty names are usage errors', () => {
+  test('CLI: empty or invalid label names are usage errors; --pr-labels needs no other flag', () => {
     const world = makeWorld();
     const sarif = sarifFile(world);
     const cases: readonly (readonly [readonly string[], RegExp])[] = [
-      [['--pr-labels', 'team-a'], /--pr-labels requires --allow-suggestion-prs/],
-      [['--mark-suggestion-prs-ready'], /--mark-suggestion-prs-ready requires --allow-suggestion-prs/],
-      [['--allow-suggestion-prs', '--pr-labels', 'a,,b'], new RegExp(`--pr-labels must be a comma-separated list of label names, each ${LABEL_RULE}`)],
-      [['--allow-suggestion-prs', '--pr-labels', 'a,'], /--pr-labels must be a comma-separated list of label names/],
-      [['--allow-suggestion-prs', '--pr-labels', ' , '], /--pr-labels must be a comma-separated list of label names/],
-      [['--allow-suggestion-prs', '--pr-labels='], /--pr-labels requires a non-empty value/],
+      [['--grouped-edits', 'companion', '--file-operations', 'companion,manual', '--pr-labels', 'a,,b'], new RegExp(`--pr-labels must be a comma-separated list of label names, each ${LABEL_RULE}`)],
+      [['--grouped-edits', 'companion', '--file-operations', 'companion,manual', '--pr-labels', 'a,'], /--pr-labels must be a comma-separated list of label names/],
+      [['--grouped-edits', 'companion', '--file-operations', 'companion,manual', '--pr-labels', ' , '], /--pr-labels must be a comma-separated list of label names/],
+      [['--grouped-edits', 'companion', '--file-operations', 'companion,manual', '--pr-labels='], /--pr-labels requires a non-empty value/],
     ];
     for (const [flags, message] of cases) {
       for (const command of [['validate'], ['publish', '--state', world.statePath]]) {
@@ -725,8 +733,8 @@ describe('renamed options and flags; the old names are unknown', () => {
     for (const command of [['validate', '--help'], ['publish', '--help'], ['--help']]) {
       const help = cli(world, command);
       assert.equal(help.status, 0);
-      for (const flag of ['--allow-suggestion-prs', '--pr-labels', '--mark-suggestion-prs-ready']) assert.ok(help.stdout.includes(flag), `${command.join(' ')} omits ${flag}`);
-      assert.doesNotMatch(help.stdout, /--suggestion-prs\b|--suggestion-label/);
+      for (const flag of ['--delivery', '--grouped-edits', '--file-operations', '--pr-labels', '--mark-suggestion-prs-ready']) assert.ok(help.stdout.includes(flag), `${command.join(' ')} omits ${flag}`);
+      assert.doesNotMatch(help.stdout, /--suggestion-prs\b|--suggestion-label|--allow-suggestion-prs/);
     }
   });
 });

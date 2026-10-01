@@ -6,6 +6,8 @@ Recorded September 29, 2026 in the private fixture repository `mike-north/doc-li
 
 > Note (September 30, 2026): run 3 below records the behavior of #28, since replaced by [#37](https://github.com/mike-north/sarif-to-comment/issues/37) ([D46](design-decisions.md#d46-fall-back-as-if-suggestion-pull-requests-were-not-allowed--owner-decision)). Today the same document is refused as a whole, because its group cannot be re-applied (`suggestion-group-pr-unavailable`), and a deletion that cannot be re-applied is proposed in the review body with a `suggestion-pr-fallback` warning; the `suggestion-pr-not-reapplied` warning and the "not created" section no longer exist. See [the fallback evidence](suggestion-pr-fallback-e2e-evidence.md).
 
+> Note (September 30, 2026, later): the [delivery policy](delivery-policy-contract.md) has since replaced those codes. A group that cannot be re-applied is reported as `delivery-unavailable`, and under `fileOperations: [companion, manual]` a deletion that cannot be re-applied falls back to the review body with a `delivery-fallback` warning; under the default `fileOperations: [manual]` no suggestion pull request is asked for at all.
+
 ## Fixtures
 
 Each original is a draft pull request into `main` from a branch holding C0 (adds `docs/experiments/reapply/sample-<v>.md`, 20 lines, and `obsolete-<v>.txt`) and C1 (changes lines 5 and 6). C1 is the reviewed commit. After the pull requests were opened ([`01`](evidence/force-push-reapply/01-originals-before-the-branches-moved.jsonl)), each branch moved ([`02`](evidence/force-push-reapply/02-heads-after-the-branches-moved.txt), [`02-pushes`](evidence/force-push-reapply/02-pushes.txt)):

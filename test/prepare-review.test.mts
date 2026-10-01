@@ -835,12 +835,13 @@ describe('source revision binding', () => {
   });
 
   test('an explicit earlier reviewed commit cannot carry a native suggestion', async () => {
-    const replacements = replacementBoundary();
     const { outcome } = await prepare(sarifLog([result('x', at('src/app.js', { startLine: 3 }), {
       fixes: [fix({ startLine: 3, startColumn: 23, endColumn: 25 }, '20')],
-    })]), { context: earlierReview(), replacements });
-    assertBlocked(outcome, [['suggestion-reviewed-commit-not-head', '/runs/0/results/0']]);
-    assert.deepStrictEqual(replacements.calls, []);
+    })]), { context: earlierReview(), realReplacement: true });
+    // Delivery policy §8.9: the condition is the obstacle of `native`, the default `edits` list's only mechanism.
+    assertBlocked(outcome, [['delivery-unavailable', '/runs/0/results/0']]);
+    assert.ok(outcome.diagnostics[0]?.message.endsWith(
+      '- `native`: The reviewed commit is not the pull request head, so a native suggestion could not be applied to the reviewed text.'));
   });
 
   test('an abbreviated reviewed commit is a caller error', async () => {
@@ -1035,26 +1036,39 @@ describe('native suggestions from standard fixes', () => {
     assertBlocked(outcome, [['overlapping-replacements', '/runs/0/results/1']]);
   });
 
-  const blockedFix = (name: string, fixes: readonly unknown[], code: string, run?: Readonly<Record<string, unknown>>) => {
+  /**
+   * A finding with `fixes` is blocked with `code`. `location` is the
+   * finding's (within its fix's lines; line 3 of src/app.js by default),
+   * `obstacle` a sentence its message must contain (a `delivery-unavailable`
+   * obstacle, delivery policy §8.8, §8.9), and `real` selects the production
+   * replacement module.
+   */
+  const blockedFix = (name: string, fixes: readonly unknown[], code: string, run?: Readonly<Record<string, unknown>>,
+    { location = at('src/app.js', { startLine: 3 }), obstacle, real = false }: { location?: ReturnType<typeof at>; obstacle?: string; real?: boolean } = {}) => {
     test(name, async () => {
-      const { outcome } = await prepare(sarifLog([result('x', at('src/app.js', { startLine: 3 }), { fixes })], run));
+      const { outcome } = await prepare(sarifLog([result('x', location, { fixes })], run), { realReplacement: real });
       assertBlocked(outcome, [[code, '/runs/0/results/0']]);
+      if (obstacle !== undefined) assert.ok(outcome.diagnostics[0]?.message.includes(obstacle), JSON.stringify(outcome.diagnostics));
     });
   };
+  const NATIVE = (sentence: string): string => `- \`native\`: ${sentence}`;
 
   const limitFix = fix({ startLine: 3, startColumn: 23, endColumn: 25 }, '20');
 
   // Several fixes on one result are published: the first is the suggestion and
   // the others are listed as alternatives (test/alternative-fixes.test.mts).
-  // A fix with several changes is accepted whole, which needs a suggestion pull request (issue #29, A30).
-  blockedFix('a fix changing several files needs suggestion pull requests', [{ artifactChanges: [
+  // A fix with several changes is accepted whole, as an edit group: under the default
+  // `groupedEdits: [native-batch]`, which this version does not offer for such a fix, it is
+  // blocked (issue #29, A30; delivery policy §5, §8.8).
+  const JOINT = '- `native-batch`: Offering a fix with several changes as a native batch is not yet supported by this version.';
+  blockedFix('a fix changing several files is blocked under the default policy', [{ artifactChanges: [
     limitFix.artifactChanges[0], { ...present(limitFix.artifactChanges[0], 'the change'), artifactLocation: { uri: 'src/util.js' } },
-  ] }], 'fix-changes-require-suggestion-prs');
-  blockedFix('a fix with several replacements needs suggestion pull requests', [{ artifactChanges: [{
+  ] }], 'delivery-unavailable', undefined, { obstacle: JOINT, real: true });
+  blockedFix('a fix with several replacements is blocked under the default policy', [{ artifactChanges: [{
     artifactLocation: { uri: 'src/app.js' },
     replacements: [limitFix.artifactChanges[0]?.replacements[0], {
       deletedRegion: { startLine: 17, startColumn: 3, endColumn: 9 }, insertedContent: { text: 'return (' } }],
-  }] }], 'fix-changes-require-suggestion-prs');
+  }] }], 'delivery-unavailable', undefined, { obstacle: JOINT, real: true });
   blockedFix('a binary replacement is unsupported', [{ artifactChanges: [{
     artifactLocation: { uri: 'src/app.js' },
     replacements: [{ deletedRegion: { startLine: 3 }, insertedContent: { binary: 'AAAA' } }],
@@ -1063,16 +1077,22 @@ describe('native suggestions from standard fixes', () => {
     [fix({ startLine: 3, startColumn: 23, endColumn: 40 }, '20')], 'replacement-invalid');
   blockedFix('a replacement outside the replacement module\'s profile blocks',
     [fix({ byteOffset: 60, byteLength: 2 }, '20')], 'replacement-unsupported');
+  // Native-suggestion fidelity: each condition is an obstacle of `native`, the default
+  // `edits` list's only mechanism (delivery policy §8.9).
   blockedFix('an edit changing whether the file ends with a newline is unsupported pending host verification',
-    [fix({ startLine: 20, startColumn: 47, endLine: 21, endColumn: 1 }, '')], 'suggestion-final-newline-unverified');
+    [fix({ startLine: 20, startColumn: 47, endLine: 21, endColumn: 1 }, '')], 'delivery-unavailable', undefined,
+    { location: at('src/app.js', { startLine: 20 }), obstacle: NATIVE('GitHub\'s observed application would not reproduce the intended end of the file.') });
   blockedFix('suggestion text containing a fence is unsupported pending host verification',
     [fix({ startLine: 17, startColumn: 1, endLine: 17, endColumn: 40 }, '  // ```\n  return total(values) / values.length;')],
-    'suggestion-fence-unverified');
+    'delivery-unavailable', undefined,
+    { location: at('src/app.js', { startLine: 17 }), obstacle: NATIVE('GitHub applied a nested ``` suggestion as a deletion; this replacement cannot be a native suggestion.') });
   blockedFix('suggestion text containing CR is unsupported pending host verification',
     [fix({ startLine: 7, startColumn: 1, endLine: 7, endColumn: 55 },
-      '  // capped\r\n  return items.slice(0, limit).map((item) => item.id);')], 'suggestion-crlf-unverified');
+      '  // capped\r\n  return items.slice(0, limit).map((item) => item.id);')], 'delivery-unavailable', undefined,
+    { location: at('src/app.js', { startLine: 7 }), obstacle: NATIVE('GitHub\'s observed application would not reproduce the intended line endings.') });
   blockedFix('a suggestion outside the inline diff surface blocks rather than becoming non-applicable text',
-    [fix({ startLine: 4, startColumn: 10, endColumn: 18 }, 'Math.max', 'src/util.js')], 'suggestion-not-inline');
+    [fix({ startLine: 4, startColumn: 10, endColumn: 18 }, 'Math.max', 'src/util.js')], 'delivery-unavailable', undefined,
+    { location: at('src/util.js', { startLine: 4 }), obstacle: NATIVE('Lines 4-4 of src/util.js cannot carry a native suggestion (') });
 
   test('the replacement module\'s reason is reported', async () => {
     const { outcome } = await prepare(sarifLog([result('x', at('src/app.js', { startLine: 3 }), {
@@ -1487,13 +1507,13 @@ describe('regression: native suggestions are emitted only where the observed hos
     ['no-final-newline.txt', { startLine: 2 }, 'new', 'ready'],
     ['delete-last-line.txt', { startLine: 2, startColumn: 1, endLine: 3, endColumn: 1 }, '', 'ready'],
     ['multiline.txt', { startLine: 2, endLine: 3 }, 'new one\nnew two', 'ready'],
-    ['blank-last-line.txt', { startLine: 2 }, '', 'suggestion-blank-only-unverified'],
-    ['fences.md', { startLine: 2 }, '```js\ncode\n```\ntrailing', 'suggestion-fence-unverified'],
-    ['delete-no-final-newline.txt', { startLine: 2, startColumn: 1, endColumn: 4 }, '', 'suggestion-final-newline-unverified'],
+    ['blank-last-line.txt', { startLine: 2 }, '', 'GitHub applied a blank-only suggestion as zero lines; this replacement cannot be a native suggestion.'],
+    ['fences.md', { startLine: 2 }, '```js\ncode\n```\ntrailing', 'GitHub applied a nested ``` suggestion as a deletion; this replacement cannot be a native suggestion.'],
+    ['delete-no-final-newline.txt', { startLine: 2, startColumn: 1, endColumn: 4 }, '', 'GitHub\'s observed application would not reproduce the intended end of the file.'],
   ];
 
   for (const [name, region, inserted, expected] of cases) {
-    test(`${name}: ${expected}`, async () => {
+    test(`${name}: ${expected === 'ready' ? 'ready' : 'blocked'}`, async () => {
       const p = `${probeDirName}/${name}`;
       const probe = present(probeApplied.find((r) => r.path === p), `probe result for ${p}`);
       const intended = applyReplacement({ sourceText: heads[name], deletedRegion: region, insertedText: inserted, columnKind: 'utf16CodeUnits' });
@@ -1503,7 +1523,9 @@ describe('regression: native suggestions are emitted only where the observed hos
       const sarif = sarifLog([result('probe', at(p, lines), { fixes: [fix(region, inserted, p)] })]);
       const { outcome } = await prepare(sarif, { context: probeContext(), reader: probeReader(), realReplacement: true });
       if (expected !== 'ready') {
-        assertBlocked(outcome, [[expected, '/runs/0/results/0']]);
+        // The host's observed misapplication is the obstacle of `native` (delivery policy §8.9).
+        assertBlocked(outcome, [['delivery-unavailable', '/runs/0/results/0']]);
+        assert.ok(outcome.diagnostics[0]?.message.endsWith(`- \`native\`: ${expected}`), JSON.stringify(outcome.diagnostics));
         assert.equal(probe.matches, false, 'blocked only where the host was observed to misapply');
         return;
       }
@@ -1526,7 +1548,8 @@ describe('regression: native suggestions are emitted only where the observed hos
     const p = `${probeDirName}/crlf-mixed.txt`;
     const sarif = sarifLog([result('probe', at(p, { startLine: 2 }), { fixes: [fix({ startLine: 2 }, 'new\nextra', p)] })]);
     const { outcome } = await prepare(sarif, { context: probeContext(), reader: probeReader(), realReplacement: true });
-    assertBlocked(outcome, [['suggestion-crlf-unverified', '/runs/0/results/0']]);
+    assertBlocked(outcome, [['delivery-unavailable', '/runs/0/results/0']]);
+    assert.ok(outcome.diagnostics[0]?.message.endsWith('- `native`: GitHub\'s observed application would not reproduce the intended line endings.'));
   });
 });
 

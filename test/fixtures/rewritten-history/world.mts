@@ -214,15 +214,23 @@ export function internalsFor(world: IWorld): { readonly createGitHubClient: (opt
 }
 
 /**
+ * The delivery lists that do what the removed `allowSuggestionPullRequests:
+ * true` did (docs/companion-suggestion-pr-contract.md §2.4): groups and
+ * fixes with several changes in companions, strictly, and whole-file
+ * operations in companions with the review body as the announced fallback.
+ */
+export const COMPANIONS: Json = { groupedEdits: ['companion'], fileOperations: ['companion', 'manual'] };
+
+/**
  * Calls the public `publishSarifReview` or `validateSarifReview` for `world`,
- * with suggestion pull requests allowed unless `allowSuggestionPullRequests`
- * says otherwise.
+ * delivering by companions as {@link COMPANIONS} lists them unless
+ * `companions` is false, which keeps the default delivery policy.
  */
 export async function call(
   name: 'publishSarifReview' | 'validateSarifReview',
   world: IWorld,
   sarif: Json = reviewDocument(),
-  allowSuggestionPullRequests = true,
+  companions = true,
 ): Promise<Json> {
   const operation: unknown = Reflect.get(library, name);
   if (typeof operation !== 'function') throw new assert.AssertionError({ message: `the package exports ${name}` });
@@ -231,7 +239,7 @@ export async function call(
     destination: { owner: OWNER, repo: REPO, pullNumber: PULL },
     reviewedCommit: REVIEWED,
     token: TOKEN,
-    options: { allowSuggestionPullRequests },
+    ...(companions ? { options: { delivery: COMPANIONS } } : {}),
     ...(name === 'publishSarifReview' ? { statePath: world.statePath } : {}),
   };
   const outcome: unknown = await Reflect.apply(operation, undefined, [input, internalsFor(world)]);

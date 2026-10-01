@@ -171,7 +171,7 @@ describe('group-fixes edits the SARIF file in place', () => {
       `Grouped 2 findings in ${file} as suggestion group "retry-with-test": 2 distinct changes to accept together.`,
       `  /runs/0/results/0 (tool "${TOOL}"): 1 change`,
       `  /runs/0/results/1 (tool "${TOOL}"): 1 change`,
-      'Publishing with --allow-suggestion-prs proposes the group as one suggestion pull request; without it, publication refuses the group.',
+      'Publication delivers the group whole, by its delivery list (--grouped-edits, or --file-operations when it creates or deletes a whole file), or refuses it.',
       'Selectors from earlier inspections no longer apply; inspect the file again before another edit.',
       '',
     ].join('\n'));

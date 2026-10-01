@@ -405,7 +405,7 @@ const writes = (world: IHostWorld): string[] => world.host.log().filter((r) => r
 describe('publication with presentation callbacks (fake GitHub host)', () => {
   test('a companion suggestion pull request carries the customized lifecycle note and findings, and keeps its marker', async () => {
     const world = hostWorld();
-    const outcome = await publish(world, GUIDE_DOCUMENT, { allowSuggestionPullRequests: true, presentation: COMPANION_PRESENTATION });
+    const outcome = await publish(world, GUIDE_DOCUMENT, { delivery: { groupedEdits: ['companion'], fileOperations: ['companion', 'manual'] }, presentation: COMPANION_PRESENTATION });
     assert.equal(outcome.status, 'published', outcome.markdown);
     const [pull] = world.host.pulls();
     assert.ok(pull);
@@ -456,9 +456,9 @@ describe('publication with presentation callbacks (fake GitHub host)', () => {
 
   test('validate assesses the review with the same callbacks', async () => {
     const world = hostWorld();
-    const ready = await validate(world, GUIDE_DOCUMENT, { allowSuggestionPullRequests: true, presentation: COMPANION_PRESENTATION });
+    const ready = await validate(world, GUIDE_DOCUMENT, { delivery: { groupedEdits: ['companion'], fileOperations: ['companion', 'manual'] }, presentation: COMPANION_PRESENTATION });
     assert.equal(ready.status, 'ready', ready.markdown);
-    await assert.rejects(validate(world, GUIDE_DOCUMENT, { allowSuggestionPullRequests: true, presentation: { lifecycleNote: () => '' } }),
+    await assert.rejects(validate(world, GUIDE_DOCUMENT, { delivery: { groupedEdits: ['companion'], fileOperations: ['companion', 'manual'] }, presentation: { lifecycleNote: () => '' } }),
       refusedBy('lifecycleNote', /is blank/));
     assert.deepEqual(writes(world), [], 'validation never writes');
   });
@@ -472,7 +472,7 @@ describe('publication with presentation callbacks (fake GitHub host)', () => {
   for (const [label, presentation, component, rule] of hostile) {
     test(`refuses ${label}: the call rejects and nothing is written to GitHub or to the state path`, async () => {
       const world = hostWorld();
-      await assert.rejects(publish(world, GUIDE_DOCUMENT, { allowSuggestionPullRequests: true, presentation }), refusedBy(component, rule));
+      await assert.rejects(publish(world, GUIDE_DOCUMENT, { delivery: { groupedEdits: ['companion'], fileOperations: ['companion', 'manual'] }, presentation }), refusedBy(component, rule));
       assert.deepEqual(writes(world), []);
       assert.equal(world.host.pulls().length, 0);
       assert.equal(world.host.reviews().length, 0);

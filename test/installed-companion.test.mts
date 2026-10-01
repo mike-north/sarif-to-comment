@@ -178,10 +178,12 @@ describe('the installed package publishes grouped changes as a companion suggest
     assert.deepEqual(asArray(view['findings']).map((f) => asRecord(f)['suggestionGroup']), ['retry-with-test', 'retry-with-test']);
 
     const flags = ['--sarif', enriched, '--repo', repoFlag, '--pull', String(DESTINATION.pullNumber), '--commit', w.head];
+    // Under the default delivery policy the group (a code edit and a new test file) follows `fileOperations: [manual]`,
+    // whose mixed manual group this version does not yet support (docs/delivery-policy-contract.md §8.8).
     const refused = cli(['validate', ...flags], 2);
-    assert.match(asString(refused['message']), /suggestion-group-requires-suggestion-prs/);
-    assert.match(asString(refused['message']), /--allow-suggestion-prs/);
-    const suggestionFlags = ['--allow-suggestion-prs', '--pr-labels', 'team-a', '--mark-suggestion-prs-ready'];
+    assert.match(asString(refused['message']), /delivery-unavailable/);
+    assert.match(asString(refused['message']), /`fileOperations` is `\[manual\]`, the default/);
+    const suggestionFlags = ['--grouped-edits', 'companion', '--file-operations', 'companion,manual', '--pr-labels', 'team-a', '--mark-suggestion-prs-ready'];
     const ready = cli(['validate', ...flags, ...suggestionFlags]);
     assert.equal(ready['status'], 'ready');
     assert.ok(asString(ready['message']).includes('Publication would also create 1 suggestion pull request, ready for review, into `feature/retry`, labeled `uat-suggestion` and `team-a`.'), asString(ready['message']));
@@ -215,7 +217,7 @@ describe('the installed package publishes grouped changes as a companion suggest
       const input = { sarif: grouped.sarif, destination: { owner, repo, pullNumber: 45 }, reviewedCommit, token: process.env.GH_TOKEN };
       const refused = await validateSarifReview(input);
       assert.equal(refused.status, 'blocked', refused.markdown);
-      const options = { allowSuggestionPullRequests: true, pullRequestLabels: ['team-a'] };
+      const options = { delivery: { groupedEdits: ['companion'], fileOperations: ['companion', 'manual'] }, pullRequestLabels: ['team-a'] };
       const assessed = await validateSarifReview({ ...input, options });
       assert.equal(assessed.status, 'ready', assessed.markdown);
       const outcome = await publishSarifReview({ ...input, options, statePath: process.env.REVIEW_STATE });
@@ -240,7 +242,7 @@ describe('the installed package publishes grouped changes as a companion suggest
 describe('the installed package publishes a native multi-change fix as one suggestion pull request', () => {
   const skip = packProject().error || false;
 
-  test('CLI: an upstream fix editing two files is refused without the setting, and is one pull request with it', { skip, timeout: 300_000 }, () => {
+  test('CLI: an upstream fix editing two files is refused under the default policy, and is one pull request with a companion list', { skip, timeout: 300_000 }, () => {
     const { consumer, bin } = installIntoConsumer();
     const w = world('installed-native-group');
     const repoFlag = `${DESTINATION.owner}/${DESTINATION.repo}`;
@@ -274,10 +276,12 @@ describe('the installed package publishes a native multi-change fix as one sugge
     assert.equal(asArray(asRecord(asArray(asRecord(inspected[0])['fixes'])[0])['changes']).length, 2, 'inspection shows the one fix with both file changes');
 
     const flags = ['--sarif', upstream, '--repo', repoFlag, '--pull', String(DESTINATION.pullNumber), '--commit', w.head];
+    // A fix with several changes follows `groupedEdits`, whose default native batch this version
+    // does not yet offer for such a fix (docs/delivery-policy-contract.md §8.8).
     const refused = cli(['validate', ...flags], 2);
-    assert.match(asString(refused['message']), /fix-changes-require-suggestion-prs/);
-    assert.match(asString(refused['message']), /--allow-suggestion-prs/);
-    const published = cli(['publish', ...flags, '--state', path.join(w.root, 'native-state.json'), '--allow-suggestion-prs']);
+    assert.match(asString(refused['message']), /delivery-unavailable/);
+    assert.match(asString(refused['message']), /`groupedEdits` is `\[native-batch\]`, the default/);
+    const published = cli(['publish', ...flags, '--state', path.join(w.root, 'native-state.json'), '--grouped-edits', 'companion', '--file-operations', 'companion,manual']);
     assert.equal(published['status'], 'published');
     const pulls = w.host.pulls();
     assert.equal(pulls.length, 1);
@@ -297,7 +301,8 @@ describe('the installed package publishes a native multi-change fix as one sugge
  * Issue #42 through the installed executable: a staged change that two
  * findings explain gets the identical fix on both, so grouping only one of
  * them with another change is refused (exit 2, naming the other), and
- * grouping both is a document `validate --allow-suggestion-prs` accepts.
+ * grouping both is a document `validate --grouped-edits companion
+ * --file-operations companion,manual` accepts.
  *
  * @see https://github.com/mike-north/sarif-to-comment/issues/42
  */
@@ -339,7 +344,7 @@ describe('the installed package never groups a change that publication would ref
     const grouped = cli(['group-fixes', '--sarif', enriched, ...[first, second, cover].flatMap((f) => ['--finding', selector(f)]), '--group', 'retry-with-test']);
     assert.equal(grouped['status'], 'grouped');
     assert.equal(grouped['changes'], 2, 'the identical change counts once');
-    const flags = ['--sarif', enriched, '--repo', repoFlag, '--pull', String(DESTINATION.pullNumber), '--commit', w.head, '--allow-suggestion-prs'];
+    const flags = ['--sarif', enriched, '--repo', repoFlag, '--pull', String(DESTINATION.pullNumber), '--commit', w.head, '--grouped-edits', 'companion', '--file-operations', 'companion,manual'];
     const ready = cli(['validate', ...flags]);
     assert.equal(ready['status'], 'ready', asString(ready['message']));
     assert.deepEqual(ready['diagnostics'], []);
