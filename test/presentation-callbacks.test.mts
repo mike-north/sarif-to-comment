@@ -368,6 +368,31 @@ describe('preparation with presentation callbacks', () => {
     }), refusedBy('fileDeletion', /links the text "obsolete\.txt at 2222222" to "https:\/\/evil\.example\/" rather than its permalink/));
   });
 
+  test('regression: a file deletion that spoofs its link text with a zero-width space is refused', async () => {
+    const unlocated = log(run(T, [carrying('Remove it.', [{ operation: 'delete', artifactIndex: 0 }])], [{ location: { uri: 'obsolete.txt' } }]));
+    await assert.rejects(prepareOutcome(unlocated, {
+      presentation: { fileDeletion: (c: IFileDeletionPresentationContext) => `### Delete [obsolete.txt at 222​2222](https://evil.example/)\n\n<${c.url}>\n\n${c.findings}` },
+    }), refusedBy('fileDeletion', /contains U\+200B, an invisible character, outside the content it presents/));
+  });
+
+  test('regression: a file deletion that points the text of a finding\'s source link elsewhere is refused', async () => {
+    await assert.rejects(prepareOutcome(PROPOSALS, {
+      presentation: { fileDeletion: (c: IFileDeletionPresentationContext) => `${c.markdown}\n\nSee [obsolete.txt line 2 at ${SHORT}](https://evil.example/).` },
+    }), refusedBy('fileDeletion', /links the text "obsolete\.txt line 2 at 2222222" to "https:\/\/evil\.example\/" rather than its permalink/));
+  });
+
+  test('regression: a finding that points the text of the source link before it elsewhere is refused', async () => {
+    await assert.rejects(prepareOutcome(FINDINGS, {
+      presentation: { finding: (c: IFindingPresentationContext) => `${c.markdown}\n\nSee [docs/notes.md lines 2-3 at ${SHORT}](https://evil.example/)` },
+    }), refusedBy('finding', /links the text "docs\/notes\.md lines 2-3 at 2222222" to "https:\/\/evil\.example\/" rather than its permalink/));
+  });
+
+  test('no false refusal: a finding may present a producer message holding a no-break space, and add a link of its own', async () => {
+    const sarif = log(run(T, [{ message: { text: 'Use this.' }, locations: [at('docs/notes.md', { startLine: 2 })] }]));
+    const ready = await prepare(sarif, { presentation: { finding: (c: IFindingPresentationContext) => `> ${c.message}\n\n[More](https://example.com/more)\n\n${c.attribution}` } });
+    assert.ok(ready.review.body.includes('> Use this.'), ready.review.body);
+  });
+
   test('an attribution that drops the producer is refused', async () => {
     await assert.rejects(prepareOutcome(FINDINGS, { presentation: { attribution: () => 'a helpful bot' } }),
       refusedBy('attribution', /omits a required fragment, which must appear verbatim: "Lint"/));

@@ -514,6 +514,58 @@ describe('groups stay whole (D49, D51; §8.3–§8.5, §8.8)', () => {
   });
 });
 
+describe('presentation callbacks cannot disguise a link of a proposal made by hand (review presentation contract §7)', () => {
+  const EVIL = 'https://evil.example/';
+  /** Publication with `presentation` is refused with the presentation TypeError naming `component` and `rule`; nothing is written. */
+  async function assertRefused(sarif: Json, options: Record<string, unknown>, component: string, rule: RegExp): Promise<void> {
+    const world = makeWorld();
+    await assert.rejects(publish(world, sarif, options), (error) => {
+      assert.ok(error instanceof TypeError);
+      assert.match(error.message, new RegExp(`^Invalid presentation: options\\.presentation\\.${component} returned Markdown that `));
+      assert.match(error.message, rule);
+      return true;
+    });
+    assert.deepEqual(writes(world), [], 'no write of any kind');
+  }
+  const variants: readonly (readonly [label: string, text: string, rule: RegExp])[] = [
+    ['a zero-width space', 'src/client.ts line 2 at feed​fee', /contains U\+200B, an invisible character, outside the content it presents/],
+    ['a no-break space', 'src/client.ts line 2 at feedfee', /contains U\+00A0, an invisible character, outside the content it presents/],
+    ['a trailing space', 'src/client.ts line 2 at feedfee ', /links the text "src\/client\.ts line 2 at feedfee ?" to "https:\/\/evil\.example\/"/],
+    ['a doubled space', 'src/client.ts line 2  at feedfee', /links the text "src\/client\.ts line 2  at feedfee" to "https:\/\/evil\.example\/"/],
+  ];
+  for (const [label, text, rule] of variants) {
+    test(`a manual edit link whose text reads as its location's, with ${label}, to another destination: refused before any write`, async () => {
+      await assertRefused(document([RETRY()]), {
+        delivery: { edits: ['review-body'] },
+        presentation: { manualEdit: (c: { location: string; replacement?: string; findings: string }) => `${c.location} (see [${text}](${EVIL}))\n\n${c.replacement ?? ''}\n\n${c.findings}` },
+      }, 'manualEdit', rule);
+    });
+  }
+
+  test('a deletion link with a zero-width space in its text, to another destination: refused before any write', async () => {
+    await assertRefused(document([OBSOLETE_RESULT()], [deleted('obsolete.txt')]), {
+      presentation: { fileDeletion: (c: { url: string; findings: string }) => `[obsolete.txt at feed​fee](${EVIL})\n\n<${c.url}>\n\n${c.findings}` },
+    }, 'fileDeletion', /contains U\+200B/);
+  });
+
+  test('a finding that points the text of its source link elsewhere: refused before any write', async () => {
+    const remark = result({ text: 'Revise this note.', location: at('notes.txt', 2) });
+    await assertRefused(document([remark]), {
+      presentation: { finding: (c: { markdown: string }) => `${c.markdown}\n\nSee [notes.txt line 2 at feedfee](${EVIL})` },
+    }, 'finding', /links the text "notes\.txt line 2 at feedfee" to "https:\/\/evil\.example\/"/);
+  });
+
+  test('no false refusal: the built-in presentation, and a callback adding a link of its own, publish', async () => {
+    const world = makeWorld();
+    const outcome = await publish(world, document([RETRY()]), {
+      delivery: { edits: ['review-body'] },
+      presentation: { manualEdit: (c: { markdown: string }) => `${c.markdown}\n\nSee [the retry guide](https://example.com/retry).` },
+    });
+    assert.equal(status(outcome), 'published', markdown(outcome));
+    assertNoSuggestionInBody(world);
+  });
+});
+
 describe('strict lists and announced fallback (D55; §10)', () => {
   test('D-A9: a strict companion list on a pull request from a fork blocks before any write', async () => {
     const world = makeWorld(repository({ fork: true }));

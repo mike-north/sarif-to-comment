@@ -586,8 +586,27 @@ describe('the manual edit component is customizable; the group\'s guidance and l
     ['drops the location while the finding on the edited line shows the same link', USE_B, (c) => `Replace line 9 with:\n\n${c.replacement ?? ''}\n\n${c.findings}`,
       /shows a required fragment only inside another required fragment, but each must be shown on its own: "\[src\/app\.ts line 2/],
     ['adds a second link with the location\'s text to another destination', UNLOCATED, (c) => `${c.location} (or ${EVIL})\n\n${c.replacement ?? ''}\n\n${c.findings}`, SPOOF],
+    // Text that reads as the location's (regression, re-check of the identity-link rule): an invisible character, a
+    // no-break space, a trailing or doubled space.
+    ['spoofs the location text with a zero-width space', UNLOCATED, (c) => `${c.location} (or [src/app.ts line 2 at 222​2222](https://evil.example/))\n\n${c.replacement ?? ''}\n\n${c.findings}`,
+      /contains U\+200B, an invisible character, outside the content it presents/],
+    ['spoofs the location text with a no-break space', UNLOCATED, (c) => `${c.location} (or [src/app.ts line 2 at 2222222](https://evil.example/))\n\n${c.replacement ?? ''}\n\n${c.findings}`,
+      /contains U\+00A0, an invisible character, outside the content it presents/],
+    ['spoofs the location text with a trailing space', UNLOCATED, (c) => `${c.location} (or [src/app.ts line 2 at 2222222 ](https://evil.example/))\n\n${c.replacement ?? ''}\n\n${c.findings}`,
+      /links the text "src\/app\.ts line 2 at 2222222 ?" to "https:\/\/evil\.example\/" rather than its permalink/],
+    ['spoofs the location text with a doubled space', UNLOCATED, (c) => `${c.location} (or [src/app.ts line 2  at 2222222](https://evil.example/))\n\n${c.replacement ?? ''}\n\n${c.findings}`,
+      /links the text "src\/app\.ts line 2  at 2222222" to "https:\/\/evil\.example\/" rather than its permalink/],
+    ['points the text of its finding\'s source link elsewhere', USE_B, (c) => `${c.location}\n\n${c.replacement ?? ''}\n\n${c.findings}\n\nSee also [src/app.ts line 2 at 2222222](https://evil.example/).`, SPOOF],
     ['shows the permalink only as the text of a link elsewhere', UNLOCATED, (c) => `[${c.url}](https://evil.example/)\n\n${c.replacement ?? ''}\n\n${c.findings}`, /omits a required fragment|hides a required fragment/],
   ];
+  test('no false refusal: a callback may present a producer message that holds a no-break space, and may link elsewhere with text of its own', async () => {
+    const message = result('Use B, as the style guide says.', { fix: linesFix('src/app.ts', { 2: 'B' }) });
+    const outcome = await ready(document([message]), { edits: ['review-body'] }, {
+      presentation: { manualEdit: (c: IManualEditPresentationContext) => `${c.markdown}\n\nSee [the style guide](https://example.com/style).` },
+    });
+    assert.ok(outcome.review.body.endsWith('See [the style guide](https://example.com/style).'));
+  });
+
   for (const [label, finding, callback, rule] of refusals) {
     test(`a callback that ${label} is refused before anything is written`, async () => {
       await assert.rejects(prepareOutcome(document([finding]), { edits: ['review-body'] }, { presentation: { manualEdit: callback } }), (error) => {
