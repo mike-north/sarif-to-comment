@@ -411,6 +411,15 @@ describe('an alternative that cannot be listed faithfully refuses the whole revi
   blocked('an alternative whose content hides a bidirectional override', lineFix('src/app.js', 2, 'const b = parseB(input); // ‮'), 'alternative-content-unrepresentable');
   blocked('an alternative on another file whose path Markdown cannot show exactly', lineFix('%20odd.js', 1, 'even'), 'alternative-path-unrepresentable');
   blocked('an alternative whose content has a carriage return that does not end a line', lineFix('src/app.js', 2, 'const b = 1;\rconst d = 2;'), 'alternative-content-unrepresentable');
+  // Format characters (Unicode category Cf) and U+00A0 cannot be shown exactly either (review presentation contract §4).
+  blocked('an alternative whose content holds a zero-width space', lineFix('src/app.js', 2, 'const b\u200B = 1;'), 'alternative-content-unrepresentable');
+  blocked('an alternative whose content holds a soft hyphen', lineFix('src/app.js', 2, 'const b\u00AD = 1;'), 'alternative-content-unrepresentable');
+  blocked('an alternative whose content holds a no-break space', lineFix('src/app.js', 2, 'const b\u00A0= 1;'), 'alternative-content-unrepresentable');
+  test('a tag character is named by its full code point', async () => {
+    const outcome = await prepare(log([finding([PRIMARY, lineFix('src/app.js', 2, 'const b = 1; // \u{E0041}')])]));
+    assertBlocked(outcome, [['alternative-content-unrepresentable', `${POINTER}/fixes/1`]]);
+    assert.equal(outcome.diagnostics[0]?.message, 'Alternative fix (1) cannot be shown exactly: replacement line 1 contains U+E0041, which a code block does not show.');
+  });
 
   test('the refusal names the alternative and what it would need', async () => {
     const outcome = await prepare(log([finding([PRIMARY, lineFix('src/app.js', 2, 'const b = parseB(input); // ‮')])]));
@@ -538,9 +547,18 @@ describe('a first fix with several changes (issue #29) keeps its alternatives', 
     ] }],
   };
 
-  test('under the default policy the first fix is refused as a single fix would be; its alternatives do not change that', async () => {
+  test('under the default policy the first fix is a native batch, each change a suggestion; its alternatives are listed with the finding, never applied', async () => {
+    // Delivery policy §8.8: lines 2 and 3 are in the reviewed diff's hunk, so each change can be a
+    // native suggestion; each change's comment holds the finding, alternatives included.
     const outcome = await prepare(log([finding([joint, CACHED])]));
-    assertBlocked(outcome, [['delivery-unavailable', POINTER]]);
+    assertReady(outcome);
+    const listed = item([CACHED_ALTERNATIVE(1)], 'Parsing with parseA is slow.', 'Use parseB and its limit.');
+    const note = '**Fix with 2 changes:** apply this suggestion together with the fix\'s other suggestions, listed in the review body.';
+    assert.deepEqual(outcome.review.comments.map((c) => [c.line, c.body]), [
+      [2, `${listed}\n\n${note}\n\n\`\`\`suggestion\nconst b = parseB(input);\n\`\`\``],
+      [3, `${listed}\n\n${note}\n\n\`\`\`suggestion\nconst c = 4;\n\`\`\``],
+    ]);
+    assert.equal(outcome.review.body, '**Fix with 2 changes:** apply these 2 suggestions together, in one commit: add each of them to one batch of suggestions on the pull request, then commit the batch. Nothing checks that they are applied together.\n\n- `src/app.js` line 2\n- `src/app.js` line 3');
   });
 
   test('delivered by a companion, only the first fix is committed, and the alternatives are listed with the finding', async () => {
@@ -551,7 +569,7 @@ describe('a first fix with several changes (issue #29) keeps its alternatives', 
     assert.ok(companion);
     assert.deepEqual(companion.changes, [{ operation: 'edit', path: 'src/app.js', text: 'const a = 1;\nconst b = parseB(input);\nconst c = 4;\n' }]);
     assert.equal(companion.sections[0]?.items, [
-      `**Source:** [src/app.js line 2 at 2222222](https://github.com/acme/widgets/blob/${R}/src/app.js#L2)`,
+      `**Source:** [src/app.js line 2 at 2222222](https://github.com/acme/widgets/blob/${R}/src/app.js?plain=1#L2)`,
       '',
       '```',
       'const b = parseA(input);',

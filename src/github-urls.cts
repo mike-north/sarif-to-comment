@@ -19,7 +19,7 @@
  *       pull request      …/pull/N
  *       review            …/pull/N#pullrequestreview-ID
  *       review comment    …/pull/N#discussion_rID
- *       blob permalink    …/blob/COMMIT/PATH[#LA[-LB]]
+ *       blob permalink    …/blob/COMMIT/PATH[?plain=1#LA[-LB]]
  *       commit            …/commit/COMMIT
  *       compare           …/compare/BASE...HEAD
  *   - Encoding: every path segment (owner, repository, each segment of a
@@ -103,14 +103,18 @@ export function reviewCommentUrl(repository: IGitHubRepositoryRef, pullNumber: n
 
 /**
  * A permalink to a repository file at an exact commit, optionally
- * highlighting whole lines: `…/blob/COMMIT/PATH`, then `#LA` for one line or
- * `#LA-LB` for several.
+ * highlighting whole lines: `…/blob/COMMIT/PATH`, then `?plain=1#LA` for one
+ * line or `?plain=1#LA-LB` for several. `?plain=1` opens the source view: a
+ * file GitHub renders (Markdown, notebooks, …) otherwise opens as a preview
+ * with no line anchors, so the link would not reach its line. For other
+ * files it changes nothing. A link to the whole file has no query, so a
+ * rendered file opens as GitHub presents it.
  */
 export function blobUrl(repository: IGitHubRepositoryRef, commit: string, repositoryPath: string, lines?: ILineRange): string {
   const base = `${repositoryUrl(repository)}/blob/${fullCommit(commit)}/${encodePath(repositoryPath, 'repository path')}`;
   if (lines === undefined) return base;
   const start = positive(lines.startLine, 'start line');
-  return lines.endLine === lines.startLine ? `${base}#L${start}` : `${base}#L${start}-L${positive(lines.endLine, 'end line')}`;
+  return lines.endLine === lines.startLine ? `${base}?plain=1#L${start}` : `${base}?plain=1#L${start}-L${positive(lines.endLine, 'end line')}`;
 }
 
 /**

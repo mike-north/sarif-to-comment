@@ -4,7 +4,7 @@
 
 ## FileOperationDeliveryMechanism type
 
-A mechanism that can deliver a whole-file creation or deletion, and any group containing one, whole: its section of the review body, applied by hand (`'manual'`<!-- -->; for a group, not yet supported by this version), or a`'companion'` pull request.
+A mechanism that can deliver a whole-file creation or deletion, and any group containing one, whole: its section of the review body, applied by hand (`'manual'`<!-- -->; for a group, one section holding every member, to assemble by hand and commit once), or a `'companion'` pull request.
 
 **Signature:**
 

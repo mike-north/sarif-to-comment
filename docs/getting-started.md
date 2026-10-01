@@ -74,13 +74,13 @@ Each proposed change is delivered by the first available mechanism of an ordered
 | Kind | Library (`options.delivery`) | CLI | Default |
 | --- | --- | --- | --- |
 | An edit in no group | `edits` | `--edits` | `['native']`: a native suggestion |
-| A group of edits, or a fix with several changes | `groupedEdits` | `--grouped-edits` | `['native-batch']`: every member a native suggestion, to apply together |
-| A whole-file creation or deletion, and any group with one | `fileOperations` | `--file-operations` | `['manual']`: its section of the review body |
+| A group of edits, or a fix with several changes | `groupedEdits` | `--grouped-edits` | `['native-batch']`: every change a native suggestion, to apply together |
+| A whole-file creation or deletion, and any group with one | `fileOperations` | `--file-operations` | `['manual']`: its section of the review body; for a group, one section holding every member |
 
 - The defaults never create a pull request. A later mechanism of a list is a fallback, announced by a `delivery-fallback` warning. When no listed mechanism can deliver a proposal, nothing is published: the review is blocked with a `delivery-unavailable` error naming why (exit status 2), and nothing else is substituted.
 - `--delivery companion` (`delivery: { preset: 'companion' }`) sends every proposal to companion pull requests; `--delivery original-pr` keeps every proposal on the pull request. On the command line a list is comma-separated, for example `--file-operations companion,manual`.
 - A repository can set the same members in `.github/sarif-to-comment.json` on its default branch (`{ "delivery": { "fileOperations": ["companion", "manual"] } }`); your settings win over it, setting by setting.
-- `review-body` and `manual-group`, and `manual` for a group that creates or deletes a file, are not yet supported by this version: they are reported unavailable with that reason.
+- `review-body` (`--edits native,review-body`) and `manual-group` (`--grouped-edits native-batch,manual-group`) put a proposal in the review body for the author to make by hand: each edit as its exact replacement in a code block, never as a suggestion, and a group as one section listing every change, to commit at once. They are used only when listed. `manual`, the default for a group that creates or deletes a file, presents that group the same way.
 
 ### Proposing new files and grouped changes as pull requests
 

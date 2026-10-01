@@ -75,7 +75,6 @@ const REFUSAL_REMEDIES = [
 ];
 /** The remedies the companion obstacles carry (delivery policy §8.9), first among a diagnostic's remedies. */
 const REVIEW_AGAIN = "Review the pull request's current head again, and publish that review.";
-const REDUCE_FILE = 'Reduce the proposed file to at most 1,000,000 bytes.';
 const FILE_OPERATIONS = '`fileOperations` is `[companion, manual]`, set by the caller (`--file-operations`, `delivery.fileOperations`)';
 const GROUPED_EDITS = '`groupedEdits` is `[companion]`, set by the caller (`--grouped-edits`, `delivery.groupedEdits`)';
 
@@ -672,7 +671,6 @@ describe('a change too large for a suggestion pull request: `companion` is unava
     asRecord(asRecord(page)['contents'])['text'] = text;
     return document;
   }
-  const SIZE = '`docs/new.md` is 1000001 bytes, and a suggestion pull request carries at most 1000000 bytes per file.';
 
   test('a creation over 1,000,000 bytes falls back, and is then judged exactly as under the default policy (here, too large for the review body)', async () => {
     const big = withPage(['create'], `${'x'.repeat(1_000_000)}\n`);
@@ -695,19 +693,22 @@ describe('a change too large for a suggestion pull request: `companion` is unava
     assert.deepEqual(diagnosticsOf(allowed), withFallbackCause(disallowed, CREATION));
   });
 
-  test('a group holding a creation over 1,000,000 bytes follows fileOperations as a whole, and no listed mechanism can deliver it', async () => {
+  test('a group holding a creation over 1,000,000 bytes falls back as a whole to the mixed manual group, and is then judged as under the default policy', async () => {
     const document = withPage(['reword', 'create'], `${'x'.repeat(1_000_000)}\n`);
     const results = asArray(asRecord(asArray(document['runs'])[0])['results']);
     asRecord(asRecord(results[2])['properties'])['sarifToComment'] = { proposedFileChanges: [{ operation: 'create', artifactIndex: 0 }], suggestionGroup: 'reword' };
+    // Delivery policy §8.5, §8.10, §10.1: `companion` is unavailable for the whole group (the
+    // size), so `manual` delivers it whole in the review body, which is then too large; the
+    // block names that fallback, with no fallback warning, and nothing is written.
+    const allowed = await publishDoc(makeWorld(REVIEWED), document);
+    const disallowed = await call('publishSarifReview', makeWorld(REVIEWED), document, false);
+    assert.equal(status(disallowed), 'blocked', markdown(disallowed));
+    assert.equal(status(allowed), 'blocked', markdown(allowed));
+    assert.ok(diagnosticsOf(disallowed).some((d) => asString(asRecord(d)['message']).includes('Proposals to make by hand in the body: the group `reword` (')), markdown(disallowed));
+    assert.deepEqual(diagnosticsOf(allowed), withFallbackCause(disallowed, 'The group `reword`'));
     for (const operation of [validateDoc, publishDoc]) {
       const world = makeWorld(REVIEWED);
-      const outcome = await operation(world, document);
-      assert.equal(status(outcome), 'blocked', markdown(outcome));
-      assertExactDiagnostics(outcome, [refusal(
-        `The group \`reword\` cannot be delivered. ${FILE_OPERATIONS}, and no mechanism it lists is available:\n\n- \`companion\`: ${SIZE}\n`
-          + '- `manual`: Delivering a group with a whole-file creation or deletion on the original pull request is not yet supported by this version.',
-        [REDUCE_FILE],
-      )]);
+      assert.deepEqual(diagnosticsOf(await operation(world, document)), diagnosticsOf(allowed));
       assertNothingWritten(world);
     }
   });

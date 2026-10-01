@@ -109,6 +109,7 @@ export type {
   IAlternativePresentation,
   IFileAdditionPresentationContext,
   IFileDeletionPresentationContext,
+  IManualEditPresentationContext,
   ILifecycleNotePresentationContext,
 } from './presentation/customization.cjs';
 

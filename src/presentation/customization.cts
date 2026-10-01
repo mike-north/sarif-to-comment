@@ -21,13 +21,23 @@
  *     companion's structured marker, which the core appends after all
  *     presentation;
  *   - the exact bytes of proposed content (a new file's block and details,
- *     an alternative's replacement blocks), required provenance (the
- *     producer's names in an attribution, a finding's attribution), the
- *     source association of a deletion (its permalink), and the findings a
- *     proposal carries — each listed in the context's `required` fragments,
+ *     an alternative's replacement blocks, an edit made by hand's block and
+ *     details), required provenance (the producer's names in an
+ *     attribution, a finding's attribution), the source association of a
+ *     deletion (its permalink) and of an edit made by hand (its location
+ *     link), and the findings a proposal carries — each listed in the
+ *     context's `required` fragments, each shown at its own occurrence (a
+ *     fragment that appears only inside another required one does not
+ *     count),
  *     which the result must show as itself: verbatim, and not concealed or
  *     turned into other code (src/presentation/markdown-tree.cts,
  *     showsAsItself);
+ *   - a group's identity and membership when it is made by hand: its
+ *     guidance, member lines and change labels, around each change's
+ *     component (docs/delivery-policy-contract.md §8.10);
+ *   - the destination of an identity link — a manual edit's location, a
+ *     deletion's link — which no link of the result may carry to anywhere
+ *     else, unless the built-in Markdown has that exact link;
  *   - every size limit, which counts the customized Markdown.
  * A result is refused, before anything is written, when it is not a string,
  * is blank, omits a required fragment, could open a native suggestion block,
@@ -55,7 +65,8 @@
  * @see https://github.github.com/gfm/#raw-html
  */
 
-import { addedConstruct, fenceProblem, showsAsItself, unbalancedHtml } from './markdown-tree.cjs';
+import { addedConstruct, fenceProblem, linksIn, shownOccurrences, unbalancedHtml } from './markdown-tree.cjs';
+import type { IOccurrence } from './markdown-tree.cjs';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -227,6 +238,46 @@ export interface IFileDeletionPresentationContext extends IPresentationContext {
 }
 
 /**
+ * One edit of a reviewed file for the author to make by hand, shown in the
+ * review body: its exact whole-line replacement and the findings that carry
+ * it. It is never a suggestion. It is presented alone (an edit delivered in
+ * the review body) or as one change of a group made by hand, whose guidance
+ * and labels the core keeps around it.
+ *
+ * @remarks
+ * `required` holds the location link, the replacement block (when the lines
+ * are replaced rather than removed), the details (when there are any) and
+ * the findings: together they state the file, the lines, the reviewed
+ * commit and the replacement's exact bytes.
+ *
+ * @public
+ */
+export interface IManualEditPresentationContext extends IPresentationContext {
+  /** The edited file's repository path. */
+  readonly path: string;
+  /** The first replaced line of the reviewed file. */
+  readonly startLine: number;
+  /** The last replaced line of the reviewed file. */
+  readonly endLine: number;
+  /** The reviewed commit the lines are read at. */
+  readonly commit: string;
+  /** The permalink to the replaced lines at that commit. */
+  readonly url: string;
+  /** The Markdown link naming the file, the lines and the commit, to {@link IManualEditPresentationContext.url}. */
+  readonly location: string;
+  /**
+   * The fenced code block of the new lines: LF line breaks, without the last
+   * line's terminator or the file's own byte-order mark. Absent when the
+   * lines are removed.
+   */
+  readonly replacement?: string;
+  /** What the block cannot show (`CRLF line endings`, `no newline at end of file`), when anything. */
+  readonly details?: string;
+  /** The findings that carry the edit, as presented and joined. */
+  readonly findings: string;
+}
+
+/**
  * The note in every suggestion pull request's description that explains how
  * it is accepted and when it can be closed.
  *
@@ -299,6 +350,8 @@ export interface IReviewPresentation {
   readonly fileAddition?: ((context: IFileAdditionPresentationContext) => string) | undefined;
   /** A proposed file deletion (see {@link IFileDeletionPresentationContext}). */
   readonly fileDeletion?: ((context: IFileDeletionPresentationContext) => string) | undefined;
+  /** An edit made by hand in the review body (see {@link IManualEditPresentationContext}). */
+  readonly manualEdit?: ((context: IManualEditPresentationContext) => string) | undefined;
   /** A suggestion pull request's lifecycle note (see {@link ILifecycleNotePresentationContext}). */
   readonly lifecycleNote?: ((context: ILifecycleNotePresentationContext) => string) | undefined;
 }
@@ -311,7 +364,7 @@ export type PresentationComponent = keyof IReviewPresentation;
 
 /** Every customizable component, in documentation order. */
 export const PRESENTATION_COMPONENTS: readonly PresentationComponent[] = [
-  'finding', 'attribution', 'alternatives', 'fileAddition', 'fileDeletion', 'lifecycleNote',
+  'finding', 'attribution', 'alternatives', 'fileAddition', 'fileDeletion', 'manualEdit', 'lifecycleNote',
 ];
 
 /** Components whose Markdown is embedded within a line, so a result must be one line. */
@@ -386,26 +439,38 @@ export function capturePresentation(value: unknown, refuse: (message: string) =>
     alternatives: callbackAt(value, 'alternatives'),
     fileAddition: callbackAt(value, 'fileAddition'),
     fileDeletion: callbackAt(value, 'fileDeletion'),
+    manualEdit: callbackAt(value, 'manualEdit'),
     lifecycleNote: callbackAt(value, 'lifecycleNote'),
   });
 }
 
 /**
+ * A link that identifies what an element proposes: its text (as a reader
+ * reads it) may lead only to its destination.
+ */
+export interface IIdentityLink {
+  readonly text: string;
+  readonly url: string;
+}
+
+/**
  * The Markdown of one element: the callback's result when the caller
  * supplied one and it keeps every core guarantee (see the module
- * documentation), otherwise the built-in `context.markdown`.
+ * documentation), otherwise the built-in `context.markdown`. `identity`
+ * names the element's identity links.
  */
 export function present<Context extends IPresentationContext>(
   name: PresentationComponent,
   callback: PresentationCallback<Context> | undefined,
   context: Context,
+  identity: readonly IIdentityLink[] = [],
 ): string {
   if (callback === undefined) return context.markdown;
   const result = callback(deepFrozenCopy(context));
   const refuse = (problem: string): TypeError => new TypeError(`Invalid presentation: options.presentation.${name} returned Markdown that ${problem}. `
     + 'A presentation callback may change how an element reads, never what is published or how it is identified.');
   if (typeof result !== 'string') throw refuse(`is not a string (it returned ${result === null ? 'null' : typeof result})`);
-  const problem = markdownProblem(name, result, context);
+  const problem = markdownProblem(name, result, context, identity);
   if (problem !== null) throw refuse(problem);
   return result;
 }
@@ -424,7 +489,7 @@ function deepFreeze<T>(value: T): T {
 }
 
 /** Why a callback's Markdown breaks a core guarantee, worded to follow "returned Markdown that", or null. */
-function markdownProblem(name: PresentationComponent, result: string, context: IPresentationContext): string | null {
+function markdownProblem(name: PresentationComponent, result: string, context: IPresentationContext, identity: readonly IIdentityLink[]): string | null {
   const { required } = context;
   if (result.trim() === '') return 'is blank, which would drop the element';
   const missing = required.find((fragment) => !result.includes(fragment));
@@ -440,17 +505,122 @@ function markdownProblem(name: PresentationComponent, result: string, context: I
   const html = unbalancedHtml(result);
   if (html !== null) return `leaves ${html} open, which could hide what follows, including a suggestion block or marker`;
   if (MARKER_TEXT.test(result)) return 'contains text that reads as a publication or suggestion marker, which only the core writes';
+  const invisible = addedInvisible(result, context);
+  if (invisible !== undefined) {
+    return `contains ${invisible}, an invisible character, outside the content it presents, where it could make a link or text read as something it is not`;
+  }
   const added = addedConstruct(result, context.markdown);
   if (added !== undefined) {
     return `adds ${added.kind === 'html' ? 'raw HTML' : 'a link reference definition'} of its own (${JSON.stringify(added.text)}), which could hide text; `
       + 'only raw HTML and definitions that the presented content carries may pass through';
   }
-  const concealed = required.find((fragment) => !showsAsItself(result, fragment));
+  const occurrences = required.map((fragment) => shownOccurrences(result, fragment));
+  const concealed = required.find((_, i) => occurrences[i]?.length === 0);
   if (concealed !== undefined) {
     return `hides a required fragment, which must be shown as itself: ${JSON.stringify(concealed)} `
       + '(not inside raw HTML, a code span or block it does not open itself, an image, a definition or an element GitHub does not display, '
       + 'and, for a permalink, not as an image source or the text of a link to somewhere else)';
   }
+  const shared = sharedFragment(required, occurrences);
+  if (shared !== undefined) {
+    return `shows a required fragment only inside another required fragment, but each must be shown on its own: ${JSON.stringify(shared)}`;
+  }
+  const spoofed = spoofedLink(result, context.markdown, identity);
+  if (spoofed !== undefined) return `links the text ${JSON.stringify(spoofed.text)} to ${JSON.stringify(spoofed.url)} rather than its permalink`;
   if (INLINE_COMPONENTS.has(name) && /[\r\n]/.test(result)) return 'spans more than one line, but this component is inline';
   return null;
+}
+
+/**
+ * Whether occurrence `a` of fragment `fa` and occurrence `b` of fragment `fb`
+ * may both count: they are disjoint, or one is a URL inside the other, a link
+ * to that very URL (a location link holds its own permalink).
+ */
+function compatible(fa: string, a: IOccurrence, fb: string, b: IOccurrence): boolean {
+  if (a.end <= b.start || b.end <= a.start) return true;
+  const within = (inner: IOccurrence, outer: IOccurrence): boolean => outer.start <= inner.start && inner.end <= outer.end;
+  const linksTo = (link: string, url: string): boolean => /^https?:\/\/\S+$/.test(url) && link.includes(`](${url})`);
+  return (within(b, a) && linksTo(fa, fb)) || (within(a, b) && linksTo(fb, fa));
+}
+
+/**
+ * The required fragment that cannot be shown on its own, or undefined: the
+ * fragments must be shown at occurrences that are pairwise compatible (see
+ * compatible), so that a fragment appearing only inside another one — a
+ * location link inside a finding's identical source link — never stands in
+ * for itself. Every assignment is searched; when none exists, the fragment
+ * named is one whose every occurrence lies inside another fragment's.
+ */
+function sharedFragment(required: readonly string[], occurrences: readonly (readonly IOccurrence[])[]): string | undefined {
+  const chosen: IOccurrence[] = [];
+  const assign = (i: number): boolean => {
+    if (i === required.length) return true;
+    const fragment = required[i] ?? '';
+    for (const occurrence of occurrences[i] ?? []) {
+      if (!chosen.every((other, j) => compatible(fragment, occurrence, required[j] ?? '', other))) continue;
+      chosen.push(occurrence);
+      if (assign(i + 1)) return true;
+      chosen.pop();
+    }
+    return false;
+  };
+  if (assign(0)) return undefined;
+  const inside = required.find((fragment, i) => (occurrences[i] ?? []).every((occurrence) => required.some((other, j) => j !== i && other !== fragment
+    && (occurrences[j] ?? []).some((outer) => outer.start <= occurrence.start && occurrence.end <= outer.end && !compatible(fragment, occurrence, other, outer)))));
+  return inside ?? required[required.length - 1];
+}
+
+/**
+ * Link text as a reader reads it: Unicode-normalized (NFC), every run of
+ * whitespace (a no-break space included) one space, the ends trimmed.
+ */
+function readText(text: string): string {
+  return text.normalize('NFC').replace(/\s+/gu, ' ').trim();
+}
+
+/**
+ * A link of `result` whose text reads as an identity link's but leads
+ * elsewhere, or undefined. The identity links are every link of the
+ * component's built-in Markdown (its own, and those of the findings and
+ * content it presents) and those the core places around it (`identity`, such
+ * as a finding section's source link). When several share a text, the link
+ * must lead to one of their destinations.
+ */
+function spoofedLink(result: string, builtIn: string, identity: readonly IIdentityLink[]): { readonly text: string; readonly url: string } | undefined {
+  const identities = [...linksIn(builtIn), ...identity].map((link) => ({ text: readText(link.text), url: link.url }));
+  return linksIn(result).find((link) => {
+    const text = readText(link.text);
+    const same = identities.filter((id) => id.text === text);
+    return same.length > 0 && !same.some((id) => id.url === link.url);
+  });
+}
+
+/** Format characters (Unicode category Cf) and U+00A0, which a reader cannot see as themselves. */
+const INVISIBLE = /[\p{Cf}\u00A0]/gu;
+
+/** Every string a context holds, at any depth. */
+function contextStrings(value: unknown): string[] {
+  if (typeof value === 'string') return [value];
+  if (typeof value !== 'object' || value === null) return [];
+  return Object.values(value).flatMap(contextStrings);
+}
+
+/**
+ * The first invisible character of `result` (as `U+XXXX`) that is not part of
+ * the content it presents, or undefined. Presented content is a string the
+ * context gives the callback that the built-in Markdown carries verbatim (a
+ * producer's message, the findings, the built-in Markdown itself): an
+ * invisible character inside an occurrence of such a string passes through.
+ */
+function addedInvisible(result: string, context: IPresentationContext): string | undefined {
+  const found = [...result.matchAll(INVISIBLE)];
+  if (found.length === 0) return undefined;
+  const presented = contextStrings(context).filter((text) => /[\p{Cf}\u00A0]/u.test(text) && context.markdown.includes(text));
+  const covered: IOccurrence[] = [];
+  for (const text of presented) {
+    for (let at = result.indexOf(text); at !== -1; at = result.indexOf(text, at + 1)) covered.push({ start: at, end: at + text.length });
+  }
+  const added = found.find((match) => !covered.some((span) => span.start <= match.index && match.index < span.end));
+  if (added === undefined) return undefined;
+  return `U+${(added[0].codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(4, '0')}`;
 }

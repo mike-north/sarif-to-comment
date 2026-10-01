@@ -420,7 +420,24 @@ function linkTextSpan(placed: IPlacedNode, all: readonly IPlacedNode[]): { reado
  *     can hide text (`\phantom{}`); `$` in code does not count.
  */
 export function showsAsItself(markdown: string, fragment: string): boolean {
-  if (fragment === '') return true;
+  return fragment === '' || shownOccurrences(markdown, fragment).length > 0;
+}
+
+/** An occurrence of a fragment in Markdown: its source span, `end` exclusive. */
+export interface IOccurrence {
+  readonly start: number;
+  readonly end: number;
+}
+
+/**
+ * Every occurrence of `fragment` in `markdown` that shows it as itself, by
+ * the rules of {@link showsAsItself}, in source order. Callers that need
+ * several fragments shown on their own choose disjoint occurrences among
+ * these (src/presentation/customization.cts).
+ */
+export function shownOccurrences(markdown: string, fragment: string): IOccurrence[] {
+  const found: IOccurrence[] = [];
+  if (fragment === '') return found;
   const whole = parse(markdown);
   const wholeNodes = placedNodes(whole);
   const { hidden: hiddenSpans, anchors } = elementWalk(whole);
@@ -450,9 +467,32 @@ export function showsAsItself(markdown: string, fragment: string): boolean {
     });
     const unhidden = hiddenSpans.every((span) => span.end <= at || span.start >= end || (at <= span.start && span.end <= end));
     const notElsewhere = !url || anchors.every((anchor) => anchor.end <= at || anchor.start >= end || anchor.href === fragment);
-    if (shown && unhidden && notElsewhere && !mayBeMath(markdown, wholeNodes, at, end)) return true;
+    if (shown && unhidden && notElsewhere && !mayBeMath(markdown, wholeNodes, at, end)) found.push({ start: at, end });
   }
-  return false;
+  return found;
+}
+
+/** A Markdown link as a reader meets it: its text (literal, without markup), its destination, and its source. */
+export interface IMarkdownLink {
+  readonly text: string;
+  readonly url: string;
+  readonly source: string;
+}
+
+/**
+ * Every inline link of `markdown` (GFM autolinks included), with its text as
+ * literal characters — the values of the text and code it holds, without
+ * escapes or emphasis — so that two links reading the same compare equal
+ * whatever Markdown spells them with.
+ */
+export function linksIn(markdown: string): IMarkdownLink[] {
+  const textOf = (node: Nodes): string => {
+    if (node.type === 'text' || node.type === 'inlineCode') return node.value;
+    return 'children' in node ? node.children.map(textOf).join('') : '';
+  };
+  return placedNodes(parse(markdown)).flatMap((placed) => (placed.node.type === 'link'
+    ? [{ text: textOf(placed.node), url: placed.node.url, source: markdown.slice(placed.start, placed.end) }]
+    : []));
 }
 
 /** Blocks whose inline content GitHub may read as `$…$` math. */

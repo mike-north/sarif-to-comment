@@ -331,7 +331,7 @@ function deepFreeze<T>(value: T): T {
 }
 
 const permalink = (commit: string, filePath: string, start?: number, end?: number) => `https://github.com/acme/widgets/blob/${commit}/${
-  filePath.split('/').map(encodeURIComponent).join('/')}${start === undefined ? '' : `#L${String(start)}${end && end !== start ? `-L${String(end)}` : ''}`}`;
+  filePath.split('/').map(encodeURIComponent).join('/')}${start === undefined ? '' : `?plain=1#L${String(start)}${end && end !== start ? `-L${String(end)}` : ''}`}`;
 
 // ---------------------------------------------------------------------------
 
@@ -1036,17 +1036,23 @@ describe('native suggestions from standard fixes', () => {
   // Several fixes on one result are published: the first is the suggestion and
   // the others are listed as alternatives (test/alternative-fixes.test.mts).
   // A fix with several changes is accepted whole, as an edit group: under the default
-  // `groupedEdits: [native-batch]`, which this version does not offer for such a fix, it is
-  // blocked (issue #29, A30; delivery policy §5, §8.8).
-  const JOINT = '- `native-batch`: Offering a fix with several changes as a native batch is not yet supported by this version.';
-  blockedFix('a fix changing several files is blocked under the default policy', [{ artifactChanges: [
+  // `groupedEdits: [native-batch]` it is a native batch when each of its changes can be
+  // a native suggestion, and blocked naming each change that cannot (issue #29, A30;
+  // delivery policy §5, §8.3, §8.8).
+  blockedFix('a fix changing several files is blocked under the default policy when one change cannot be a native suggestion', [{ artifactChanges: [
     limitFix.artifactChanges[0], { ...present(limitFix.artifactChanges[0], 'the change'), artifactLocation: { uri: 'src/util.js' } },
-  ] }], 'delivery-unavailable', undefined, { obstacle: JOINT, real: true });
-  blockedFix('a fix with several replacements is blocked under the default policy', [{ artifactChanges: [{
-    artifactLocation: { uri: 'src/app.js' },
-    replacements: [limitFix.artifactChanges[0]?.replacements[0], {
-      deletedRegion: { startLine: 17, startColumn: 3, endColumn: 9 }, insertedContent: { text: 'return (' } }],
-  }] }], 'delivery-unavailable', undefined, { obstacle: JOINT, real: true });
+  ] }], 'delivery-unavailable', undefined, { obstacle: '- `native-batch`: The edit of `src/util.js` line 3: Lines 3-3 of src/util.js cannot carry a native suggestion (', real: true });
+  test('a fix with several replacements, each on an added line, is a native batch under the default policy', async () => {
+    const { outcome } = await prepare(sarifLog([result('x', at('src/app.js', { startLine: 3 }), { fixes: [{ artifactChanges: [{
+      artifactLocation: { uri: 'src/app.js' },
+      replacements: [limitFix.artifactChanges[0]?.replacements[0], {
+        deletedRegion: { startLine: 17, startColumn: 3, endColumn: 9 }, insertedContent: { text: 'return (' } }],
+    }] }] })]), { realReplacement: true });
+    assertReady(outcome);
+    assert.deepEqual(outcome.review.comments.map((c) => [c.path, c.line]), [['src/app.js', 3], ['src/app.js', 17]], 'one suggestion per change');
+    assert.equal(outcome.review.body, '**Fix with 2 changes:** apply these 2 suggestions together, in one commit: add each of them to one batch of suggestions on the pull request, then commit the batch. Nothing checks that they are applied together.\n\n'
+      + '- `src/app.js` line 3\n- `src/app.js` line 17');
+  });
   blockedFix('a binary replacement is unsupported', [{ artifactChanges: [{
     artifactLocation: { uri: 'src/app.js' },
     replacements: [{ deletedRegion: { startLine: 3 }, insertedContent: { binary: 'AAAA' } }],

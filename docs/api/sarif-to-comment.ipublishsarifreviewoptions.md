@@ -115,7 +115,7 @@ _(Optional)_ Create companion pull requests ready for review instead of as draft
 
 </td><td>
 
-_(Optional)_ Your own Markdown for named review elements: a finding, its attribution and alternatives, a proposed new file or file deletion, and a suggestion pull request's lifecycle note. Each callback receives the element's data, its built-in Markdown and the fragments your result must keep; omitted elements keep the built-in presentation. See [IReviewPresentation](./sarif-to-comment.ireviewpresentation.md) for what the tool keeps regardless (markers, suggestion blocks, exact proposed content, provenance, size limits) and when a result is refused. Not part of the publication identity, and not available on the command line.
+_(Optional)_ Your own Markdown for named review elements: a finding, its attribution and alternatives, a proposed new file or file deletion, an edit made by hand in the review body, and a suggestion pull request's lifecycle note. Each callback receives the element's data, its built-in Markdown and the fragments your result must keep; omitted elements keep the built-in presentation. See [IReviewPresentation](./sarif-to-comment.ireviewpresentation.md) for what the tool keeps regardless (markers, suggestion blocks, exact proposed content, provenance, size limits) and when a result is refused. Not part of the publication identity, and not available on the command line.
 
 
 </td></tr>

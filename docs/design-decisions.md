@@ -612,7 +612,7 @@ D48–D60 record the owner's later decisions of September 30, 2026 on caller-con
 
 **Supersession and delivery:** This settles the reopened group-containment direction after D48, without reinstating the earlier rule that groups require companion PRs or a promise of enforced all-or-none acceptance. It is accepted intent for design discussion, not evidence of implementation, authorization to begin execution, or a release decision.
 
-**Partly implemented September 30, 2026 (unreleased):** a group is delivered whole by one mechanism and never split, as a native batch for an explicit group whose members each make one change or as one companion pull request; the manual group is specified but reported unavailable in this version ([delivery policy contract](delivery-policy-contract.md) §8.3, §8.4, §8.8, §15).
+**Implemented September 30, 2026 (unreleased):** a group is delivered whole by one mechanism and never split: as a native batch (an explicit group or a fix with several changes, every change a native suggestion, with guidance listing every change by path and line), as one companion pull request, or, on the original pull request, as one review-body section holding every member's exact replacement or file proposal, with guidance to make them by hand and commit them once, which claims no enforcement ([delivery policy contract](delivery-policy-contract.md) §8.3, §8.4, §8.8, §8.10, §15). The manual group of edits is used only when listed (§8.4).
 
 ### D50. Use one delivery setting for whole-file additions and deletions — owner-selected direction
 
@@ -640,7 +640,7 @@ D48–D60 record the owner's later decisions of September 30, 2026 on caller-con
 
 **Resolved definition:** The user accepted manual/local assembly of the complete mixed group into one commit. A host-native collective application action is therefore not required for every permitted representation. This acceptance does not verify pending-comment mechanics or authorize a host experiment, implementation, default or release change.
 
-**Partly implemented September 30, 2026 (unreleased):** a group containing a whole-file operation follows `fileOperations` as a whole, so `companion` carries every member into one companion pull request; keeping such a group on the original pull request (`manual`) is specified but reported unavailable in this version ([delivery policy contract](delivery-policy-contract.md) §8.5, §8.8, §15).
+**Implemented September 30, 2026 (unreleased):** a group containing a whole-file operation follows `fileOperations` as a whole, so `companion` carries every member into one companion pull request, and `manual`, the default, keeps every member on the original pull request as the mixed manual group: one review-body section with the edits' exact replacements, the creations and deletions as their file-operation sections, and guidance to assemble the whole group locally and commit it once ([delivery policy contract](delivery-policy-contract.md) §8.5, §8.8, §8.10, §15).
 
 ### D52. Organize companion PRs around caller-selected acceptance choices — owner scenarios; representation design open
 

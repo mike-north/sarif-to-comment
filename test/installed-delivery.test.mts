@@ -21,7 +21,12 @@
  * (docs/companion-suggestion-pr-contract.md §2.5.1, §2.11). Help documents
  * the delivery flags.
  *
- * @see docs/delivery-policy-contract.md §10
+ * On the original pull request (the composition fake GitHub,
+ * test/support/delivery-world.mts), the defaults deliver a group with a new
+ * file whole, made by hand in the review body (the mixed manual group), and a
+ * fix with several changes as a native batch; both were refused before.
+ *
+ * @see docs/delivery-policy-contract.md §8.8, §8.10, §10
  * @see docs/companion-suggestion-pr-contract.md §2.5.1
  * @see docs/diagnostics.md
  */
@@ -36,6 +41,7 @@ import { describe, test } from 'node:test';
 import { ROOT, installIntoConsumer, packProject } from './fixtures/package/installed-package.mts';
 import { AMENDED, DROPPED, OWNER, PULL, REPO, REVIEWED, TOKEN, documentWith, makeWorld, proposalCommit, writes } from './fixtures/rewritten-history/world.mts';
 import type { IWorld } from './fixtures/rewritten-history/world.mts';
+import * as delivery from './support/delivery-world.mts';
 import { asArray, asRecord, asString, parseJson } from './support/runtime-types.mts';
 
 const PRELOAD = path.join(ROOT, 'test', 'fixtures', 'docs', 'fake-fetch-preload.mts');
@@ -207,5 +213,52 @@ describe('the installed package follows the delivery policy', () => {
     assert.deepEqual(proposalCommit(world, pull.head).parents, [REVIEWED]);
     assert.ok(pull.body.includes('**The reviewed commit is not part of the branch of #7:**'), pull.body);
     assert.ok(pull.body.includes('```diff\n--- a/docs/sample.md\n+++ b/docs/sample.md\n@@ -3,11 +3,11 @@\n'), pull.body);
+  });
+});
+
+describe('the installed package delivers groups on the original pull request', () => {
+  const skip = packProject().error || false;
+
+  test('CLI and library: under the defaults, a group with a new file is made by hand in the body, and a fix with several changes is a native batch', { skip, timeout: 300_000 }, () => {
+    const { consumer, bin } = installIntoConsumer();
+    const env = (world: delivery.IWorld): NodeJS.ProcessEnv => ({ PATH: process.env['PATH'], GH_TOKEN: delivery.TOKEN, FAKE_HTTP_GITHUB_DIR: world.host.dir, NODE_OPTIONS: `--require=${PRELOAD}` });
+    const helperGroup = delivery.document([
+      delivery.result({ text: 'Add the helper.', group: 'helper', location: delivery.at('src/helper.ts', 1), operation: delivery.create(0) }),
+      delivery.TYPO('helper'),
+      delivery.SPELLING('helper'),
+    ], [delivery.created('src/helper.ts', delivery.HELPER)]);
+
+    const world = delivery.makeWorld();
+    const file = path.join(world.root, 'review.sarif');
+    fs.writeFileSync(file, JSON.stringify(helperGroup));
+    const published = spawnSync(bin, ['publish', '--sarif', file, '--repo', `${delivery.OWNER}/${delivery.REPO}`, '--pull', String(delivery.PULL), '--commit', delivery.HEAD, '--state', world.statePath, '--format', 'json'],
+      { cwd: consumer, env: env(world), encoding: 'utf8', timeout: 120_000 });
+    assert.equal(published.status, 0, published.stdout + published.stderr);
+    assert.equal(asRecord(parseJson(published.stdout))['status'], 'published');
+    assert.deepEqual(world.host.pulls(), []);
+    const review = delivery.onlyReview(world);
+    assert.ok(review.body.startsWith('**Suggestion group `helper`:** apply these 3 changes together, by hand, in one commit: '), review.body);
+    assert.ok(review.body.includes('\n\n- `src/helper.ts`: new file\n- `README.md` line 2\n- `README.md` line 3\n\n---\n\n'), review.body);
+    assert.doesNotMatch(review.body, /```suggestion/);
+    assert.deepEqual(review.comments, []);
+
+    const jointWorld = delivery.makeWorld();
+    const joint = delivery.document([delivery.result({ text: 'Fix both lines.', location: delivery.at('README.md', 2), fixes: [delivery.linesFix('README.md', { 2: 'The widget client.', 3: 'Receive updates.' })] })]);
+    const script = path.join(consumer, 'publish-joint.cjs');
+    fs.writeFileSync(script, [
+      `const library = require('sarif-to-comment');`,
+      `library.publishSarifReview({ ...${JSON.stringify(delivery.input(joint))}, statePath: ${JSON.stringify(jointWorld.statePath)}, token: process.env.GH_TOKEN })`,
+      '  .then((outcome) => process.stdout.write(JSON.stringify(outcome)), (err) => process.stdout.write(JSON.stringify({ thrown: String(err) })));',
+      '',
+    ].join('\n'));
+    const ran = spawnSync(process.execPath, [script], { cwd: consumer, env: env(jointWorld), encoding: 'utf8', timeout: 120_000 });
+    assert.equal(ran.status, 0, ran.stderr);
+    const outcome = asRecord(parseJson(ran.stdout));
+    assert.equal(outcome['status'], 'published', JSON.stringify(outcome));
+    assert.deepEqual(asArray(outcome['diagnostics']), []);
+    const batch = delivery.onlyReview(jointWorld);
+    assert.deepEqual(batch.comments.map((c) => c.line), [2, 3]);
+    assert.ok(batch.comments.every((c) => c.body.includes("**Fix with 2 changes:** apply this suggestion together with the fix's other suggestions, listed in the review body.")));
+    assert.equal(batch.body, '**Fix with 2 changes:** apply these 2 suggestions together, in one commit: add each of them to one batch of suggestions on the pull request, then commit the batch. Nothing checks that they are applied together.\n\n- `README.md` line 2\n- `README.md` line 3');
   });
 });

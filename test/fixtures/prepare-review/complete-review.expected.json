@@ -50,8 +50,8 @@
   ],
   "bodySections": [
     "General note: consider a changelog entry\n\n<sub>— LintBot 2.3.1</sub>",
-    "**Source:** [src/util.js line 4 at c0dec0d](https://github.com/acme/widgets/blob/c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de/src/util.js#L4)\n\n```\n  return Math.min(Math.max(n, lo), hi);\n```\n\nclamp() ignores NaN inputs.\n\n<sub>— LintBot 2.3.1 · rule `LB005`</sub>",
-    "**Source:** [docs/README.md lines 3-5 at c0dec0d](https://github.com/acme/widgets/blob/c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de/docs/README.md#L3-L5)\n\n````\n```js\nrun();\n```\n````\n\nExample should show output.\n\n<sub>— LintBot 2.3.1 · rule `DOC2`</sub>"
+    "**Source:** [src/util.js line 4 at c0dec0d](https://github.com/acme/widgets/blob/c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de/src/util.js?plain=1#L4)\n\n```\n  return Math.min(Math.max(n, lo), hi);\n```\n\nclamp() ignores NaN inputs.\n\n<sub>— LintBot 2.3.1 · rule `LB005`</sub>",
+    "**Source:** [docs/README.md lines 3-5 at c0dec0d](https://github.com/acme/widgets/blob/c0dec0dec0dec0dec0dec0dec0dec0dec0dec0de/docs/README.md?plain=1#L3-L5)\n\n````\n```js\nrun();\n```\n````\n\nExample should show output.\n\n<sub>— LintBot 2.3.1 · rule `DOC2`</sub>"
   ],
   "evidence": [
     { "pointer": "/runs/0/results/0", "treatment": "suggestion", "commentIndex": 0,

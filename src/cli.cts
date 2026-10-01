@@ -215,9 +215,10 @@ const DELIVERY_NOTE = md`Delivery: each proposed change is delivered by the firs
 names that can deliver it. Flags override the repository's
 .github/sarif-to-comment.json on the default branch, which overrides the
 defaults; the defaults never create a companion pull request. When no listed
-mechanism can deliver a proposal, nothing is published. review-body and
-manual-group, and manual for a group with a whole-file operation, are not yet
-supported by this version.
+mechanism can deliver a proposal, nothing is published. review-body,
+manual-group and manual show proposals in the review body for the author to make
+by hand, never as suggestions; review-body and manual-group are used only when
+listed.
 `;
 
 const CREDENTIALS = md`Credentials (validate, publish and close-suggestion-prs only):

@@ -76,7 +76,7 @@
  *     maxPayloadBytes?: number,       // default 1,000,000 bytes of UTF-8 JSON
  *                                     // of { body, comments }
  *     presentation?: { finding?, attribution?, alternatives?, fileAddition?,
- *       fileDeletion?, lifecycleNote? } // caller callbacks returning the
+ *       fileDeletion?, manualEdit?, lifecycleNote? } // callbacks returning the
  *                                     // Markdown of named components; each
  *                                     // result is checked by the core
  *                                     // (src/presentation/customization.cts),
@@ -242,11 +242,14 @@
  *   to a path another unit creates or deletes, block. Each unit is delivered
  *   whole by the first available mechanism of its list (announced by a
  *   `delivery-fallback` warning when it is not the first), or the review is
- *   blocked (`delivery-unavailable`); availability is asked lazily. In this
- *   version a native batch (every member a native suggestion, with the
- *   group's note and the body's guidance) is offered for an explicit group
- *   of one-change members; `review-body`, `manual-group` and the mixed
- *   manual group are always unavailable (§8.8). A companion cannot be made
+ *   blocked (`delivery-unavailable`); availability is asked lazily. A native
+ *   batch (every change of an explicit group or of a fix with several
+ *   changes a native suggestion, with the group's note and the body's
+ *   guidance) needs every change to be eligible. `review-body`,
+ *   `manual-group` and `manual` for a group with a whole-file proposal show
+ *   proposals in the review body to make by hand, never as suggestions;
+ *   they need every edit's replacement to be showable exactly (§8.10). A
+ *   companion cannot be made
  *   for an unsupported pull request, after a rewritten history one whose
  *   projection is unfaithful (under `single`, the bundle's as planned so
  *   far), a created file over 1,000,000 bytes, or a description over the
@@ -259,13 +262,14 @@
  *
  * Rendering. Each element is a presentation component in src/presentation/
  * (finding and finding section, attribution, alternatives, file addition,
- * file deletion, companion reference, companion description, lifecycle
- * note, native batch), with links from src/github-urls.cts; this module
+ * file deletion, manual edit, manual group, companion reference, companion
+ * description, lifecycle note, native batch, group label), with links from
+ * src/github-urls.cts; this module
  * decides what is published and where, and composes them. The contract for
  * the built-in presentation is docs/review-presentation-contract.md (with
  * docs/file-operation-publication-contract.md §2,
  * docs/companion-suggestion-pr-contract.md §2.11 and
- * docs/delivery-policy-contract.md §8.8); the summary below is a
+ * docs/delivery-policy-contract.md §8.8 and §8.10); the summary below is a
  * reading aid, and the contract governs where they differ. (The reports about
  * a review — its outcome Markdown — list diagnostics through
  * src/presentation/warnings-list.cts.) Producer Markdown is checked with the
@@ -297,8 +301,13 @@
  *               then "\n\n" and its items joined by "\n\n---\n\n", each preceded by
  *               "**Location:** line(s) N[-M] of the proposed file\n\n" (creation) or
  *               rendered as a section with its quoted source (deletion)
- *   body      = sections, proposals, companion references and native batch
- *               guidance joined by "\n\n---\n\n" ('' when there are none)
+ *   manual    = "**Proposed edit, to make by hand:** " ( "replace " link " with" details ":\n\n" block
+ *               | "delete " link "." ) "\n\n" items as sections
+ *               (src/presentation/manual-edit.cts; details state CRLF and a missing final newline)
+ *   group     = guidance listing every change, then each change under its label, presented as
+ *               a manual edit or a proposal (src/presentation/manual-group.cts)
+ *   body      = sections, proposals, edits and groups made by hand, companion references and
+ *               native batch guidance joined by "\n\n---\n\n" ('' when there are none)
  *   Source and alternative fences are longer than any backtick run they
  *   enclose, and never shorter than three backticks.
  */
@@ -328,13 +337,18 @@ import type { ICompanionProjectionView } from './presentation/companion-projecti
 import { renderBundledCompanionReference } from './presentation/companion-reference.cjs';
 import type { ICompanionContent } from './presentation/companion-changes.cjs';
 import { present, presentationOptionProblem } from './presentation/customization.cjs';
-import type { CapturedPresentation } from './presentation/customization.cjs';
+import type { CapturedPresentation, IIdentityLink } from './presentation/customization.cjs';
 import { fileDetails, proposedContentBlock, renderFileAddition, renderProposedFileFinding } from './presentation/file-addition.cjs';
 import type { ProposedFileMode } from './presentation/file-addition.cjs';
 import { renderFileDeletion } from './presentation/file-deletion.cjs';
 import { renderFinding, renderFindingSection } from './presentation/finding.cjs';
 import type { QuotedSource } from './presentation/finding.cjs';
+import type { GroupLabel } from './presentation/group-label.cjs';
 import { renderLifecycleNote } from './presentation/lifecycle-note.cjs';
+import { manualEditBlock, manualEditDetails, manualEditLocation, renderManualEdit } from './presentation/manual-edit.cjs';
+import type { IManualEdit, IManualReplacement } from './presentation/manual-edit.cjs';
+import { renderManualGroup } from './presentation/manual-group.cjs';
+import type { IManualGroupPart } from './presentation/manual-group.cjs';
 import { renderNativeBatchGuidance, renderNativeBatchMemberNote } from './presentation/native-batch.cjs';
 import { SEPARATOR, codeSpan, escapePlain, escapePlainInline, lineSpan } from './presentation/markdown.cjs';
 import { composedProblem, fenceProblem, loadMarkdownParser, unbalancedHtml } from './presentation/markdown-tree.cjs';
@@ -867,14 +881,23 @@ interface IEvidenceRecord {
   readonly alternatives?: readonly IAlternativeEvidence[];
 }
 
-/** A result presented in (or merged into) a native suggestion comment. */
-interface ISuggestionEvidence extends IEvidenceRecord {
-  readonly treatment: 'suggestion';
+/** One native suggestion a result's fix is offered as: its comment, the replaced lines and the payload. */
+interface ISuggestionChangeEvidence {
   readonly commentIndex: number;
-  readonly source?: EvidenceSource;
   readonly fixSource: IPlacementSourceRange;
   readonly replacement: IReplacementEvidence;
   readonly suggestionPayload: string;
+}
+
+/**
+ * A result presented in (or merged into) a native suggestion comment: its
+ * fix's first change at the top level, and, for a fix with several changes
+ * offered in a native batch, every change in `changes`, in its fix's order.
+ */
+interface ISuggestionEvidence extends IEvidenceRecord, ISuggestionChangeEvidence {
+  readonly treatment: 'suggestion';
+  readonly source?: EvidenceSource;
+  readonly changes?: readonly ISuggestionChangeEvidence[];
 }
 
 /** A result presented as its own inline comment. */
@@ -1041,11 +1064,15 @@ interface IFileOperationPlacement {
   readonly proposedLines: IProposedLines | null;
 }
 
-/** A rendered whole-file proposal section's path and size, named when the body is too large. */
-interface IRenderedProposal {
-  readonly path: string;
-  readonly characters: number;
-}
+/**
+ * A proposal's section of the review body and its size, named when the body
+ * is too large: a standalone whole-file proposal by its path, or a proposal
+ * made by hand (an edit, or a group) by its unit's description
+ * (docs/delivery-policy-contract.md §8.10).
+ */
+type RenderedProposal =
+  | { readonly kind: 'file'; readonly path: string; readonly characters: number }
+  | { readonly kind: 'manual'; readonly unit: string; readonly characters: number };
 
 /** A body section: a single finding, or the section of a delivery unit (its proposal, companion reference or batch guidance). */
 type UnitSection = { readonly kind: 'item'; readonly item: IPreparedItem } | { readonly kind: 'unit'; readonly unit: number };
@@ -1105,8 +1132,8 @@ interface IUnitAssembly {
   readonly review: IPreparedReview;
   readonly evidence: Evidence[];
   readonly sectionCount: number;
-  /** The whole-file proposals presented in the body, named when the body is too large. */
-  readonly proposals: readonly IRenderedProposal[];
+  /** The proposals presented in the body, named when the body is too large. */
+  readonly proposals: readonly RenderedProposal[];
   readonly suggestions?: IPreparedSuggestions;
   /** The composed texts the checkpoint reads once the limits pass; none for a blocked assembly. */
   readonly composed: readonly IComposedUnit[];
@@ -1231,12 +1258,16 @@ const BOM = '\uFEFF';
 
 /**
  * Characters a rendered code block cannot show exactly: C0 controls other
- * than tab, LF and CR; DEL and C1 controls; a byte-order mark; the Arabic
- * letter mark and the bidirectional marks, embeddings, overrides and
- * isolates, which reorder text invisibly; and the line and paragraph
- * separators.
+ * than tab, LF and CR; DEL and C1 controls; every format character (Unicode
+ * category Cf: a byte-order mark, the bidirectional marks, embeddings,
+ * overrides and isolates, which reorder text invisibly, zero-width spaces and
+ * joiners, the word joiner, the soft hyphen, tag characters, …); U+00A0,
+ * which renders as an ordinary space; and the line and paragraph separators.
+ * Callers remove a file's own leading byte-order mark first. One rule for
+ * every content block: a proposed file, an alternative and an edit made by
+ * hand.
  */
-const INVISIBLE_IN_CONTENT = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\uFEFF\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069\u2028\u2029]/;
+const INVISIBLE_IN_CONTENT = /[\p{Cf}\u00A0\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u2028\u2029]/u;
 
 /** The same, plus tab, LF and CR: a path is shown on one line, in a code span or link text. */
 const INVISIBLE_IN_PATH = /[\u0000-\u001F\u007F-\u009F\uFEFF\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069\u2028\u2029]/;
@@ -3245,13 +3276,57 @@ async function assembleDelivery(items: readonly IPreparedItem[], state: IPrepara
   return renderDelivery(items, units, unitOf, plan, availability, companions, state);
 }
 
-/** The sentences of the mechanisms this version does not support yet (docs/delivery-policy-contract.md §8.8). */
-const NOT_YET_SUPPORTED = Object.freeze({
-  reviewBody: 'Delivering an edit in the review body is not yet supported by this version.',
-  manualGroup: 'Delivering a group in the review body for manual application is not yet supported by this version.',
-  mixedManualGroup: 'Delivering a group with a whole-file creation or deletion on the original pull request is not yet supported by this version.',
-  jointFixBatch: 'Offering a fix with several changes as a native batch is not yet supported by this version.',
-});
+/**
+ * The new lines of an edit made by hand, as its block and details show them
+ * (docs/delivery-policy-contract.md §8.10): `undefined` when the lines are
+ * removed, or why they cannot be shown exactly.
+ */
+type ShownReplacement = { readonly replacement: IManualReplacement | undefined; readonly problem?: undefined } | { readonly problem: string };
+
+/**
+ * How an edit made by hand shows its replacement: the lines with LF breaks,
+ * without the last line's terminator and without the file's own byte-order
+ * mark (which coordinates never delete, so a replacement of line 1 keeps
+ * it), with CRLF and a missing final newline stated beside the block. The
+ * rules an alternative's lines are shown by decide what cannot be shown
+ * exactly, the path first; a line that could open a suggestion block is one,
+ * since a proposal made by hand never contains one.
+ */
+function shownReplacement(edit: IPreparedEdit): ShownReplacement {
+  const pathProblem = pathRepresentationProblem(edit.path);
+  if (pathProblem !== null) return { problem: `the file path ${pathProblem}` };
+  const bom = edit.startLine === 1 && edit.sourceText.startsWith(BOM) && edit.replacementText.startsWith(BOM) ? BOM.length : 0;
+  const text = edit.replacementText.slice(bom);
+  const problem = shownTextProblem(text);
+  if (problem !== null) {
+    return { problem: problem[0] === 'alternative-suggestion-fence' ? 'a line of it could open a suggestion block, which a proposal made by hand never shows' : problem[1] };
+  }
+  if (text === '') return { replacement: undefined };
+  return { replacement: { shownText: text.replace(/\r?\n$/, '').replace(/\r\n/g, '\n'), crlf: text.includes('\r\n'), finalNewline: text.endsWith('\n') } };
+}
+
+/** The remedy of a replacement that cannot be shown exactly (docs/delivery-policy-contract.md §8.10). */
+const CHANGE_THE_REPLACEMENT = 'Change the replacement.';
+
+/**
+ * Whether a proposal made by hand (`review-body`, `manual-group`, or `manual`
+ * for a file-operation group) can show every one of `edits` exactly: one
+ * obstacle per edit that cannot, in order (docs/delivery-policy-contract.md
+ * §8.10). Whole-file proposals were checked when they were prepared.
+ */
+function manualAvailability(edits: readonly IPreparedEdit[]): MechanismAvailability {
+  const obstacles = edits.flatMap((edit) => {
+    const shown = shownReplacement(edit);
+    return shown.problem === undefined ? []
+      : [`The replacement of ${codeSpan(edit.path)} ${lineSpan(edit.startLine, edit.endLine)} cannot be shown exactly in the review body: ${shown.problem}.`];
+  });
+  return obstacles.length === 0 ? AVAILABLE : unavailableFor(obstacles, [CHANGE_THE_REPLACEMENT]);
+}
+
+/** The label a group of edits is presented under: its explicit name, or the size of the one fix it is (§8.8). */
+function groupLabel(unit: ISuggestionUnit): GroupLabel {
+  return unit.group !== undefined ? { kind: 'group', name: unit.group } : { kind: 'fix', changeCount: unit.changes.size };
+}
 
 /** An unavailable mechanism with its obstacles (at least one) and their remedies, in obstacle order. */
 function unavailableFor(obstacles: readonly string[], remedies: readonly string[] = []): MechanismAvailability {
@@ -3295,7 +3370,7 @@ class DeliveryAvailability {
   readonly #state: IPreparationState;
   readonly #units: readonly ISuggestionUnit[];
   readonly #companions: CompanionPlanner;
-  /** Each unit's answers, by mechanism; a native batch's answer is the group's own obstacles only. */
+  /** Each unit's answers, by mechanism; a native batch's answer is the group's own obstacles only (it has none). */
   readonly #answers: Map<string, MechanismAvailability>[];
   /** Each edit's native eligibility, by change identity, for the units whose `native` or `native-batch` was asked. */
   readonly #natives = new Map<string, NativeEligibility>();
@@ -3351,7 +3426,9 @@ class DeliveryAvailability {
     const answer = this.#localAnswer(unit, mechanism);
     answers.set(mechanism, answer);
     if (mechanism !== 'native-batch') return answer.available;
-    const members = unit.jointFix ? [] : unitEdits(unit).map((edit) => this.#native(edit));
+    // Every change of the group must be a native suggestion (§8.3): each
+    // member's, and each of a fix with several changes.
+    const members = unitEdits(unit).map((edit) => this.#native(edit));
     return answer.available && members.every((m) => m.available);
   }
 
@@ -3362,25 +3439,14 @@ class DeliveryAvailability {
         const native = this.#native(itemAt(unitEdits(unit), 0));
         return native.available ? AVAILABLE : unavailableFor(native.obstacles, native.remedies);
       }
-      case 'edit:review-body': return unavailableFor([NOT_YET_SUPPORTED.reviewBody]);
-      case 'edit-group:native-batch': return this.#batchObstacles(unit);
-      case 'edit-group:manual-group': return unavailableFor([NOT_YET_SUPPORTED.manualGroup]);
+      case 'edit:review-body':
+      case 'edit-group:manual-group':
+      case 'file-operation-group:manual': return manualAvailability(unitEdits(unit));
+      // A native batch has no obstacle of the group as a whole; its changes' own are asked separately (§8.3).
+      case 'edit-group:native-batch':
       case 'file-operation:manual': return AVAILABLE;
-      case 'file-operation-group:manual': return unavailableFor([NOT_YET_SUPPORTED.mixedManualGroup]);
       default: throw new Error(`Internal error: ${mechanism} is not a mechanism of a ${unit.kind} unit.`);
     }
-  }
-
-  /**
-   * A native batch's obstacles of the group as a whole (§8.3, §8.8): this
-   * version offers one only for an explicit group whose every member's fix
-   * makes one change. The members' own eligibility is asked separately.
-   */
-  #batchObstacles(unit: ISuggestionUnit): MechanismAvailability {
-    if (unit.jointFix) return unavailableFor([NOT_YET_SUPPORTED.jointFixBatch]);
-    const several = unit.items.filter((item) => item.edits.length > 1).map((item) =>
-      `The finding at ${codeSpan(item.pointer)} makes ${String(item.edits.length)} changes with one fix; a fix with several changes is not yet offered in a native batch by this version.`);
-    return several.length === 0 ? AVAILABLE : unavailableFor(several);
   }
 
   /** One edit's native eligibility, worked out once. */
@@ -3406,7 +3472,7 @@ class DeliveryAvailability {
     switch (unit.kind) {
       case 'edit': return { ...base, kind: 'edit', availability: asked };
       case 'edit-group': {
-        const members = unit.jointFix ? [] : unitEdits(unit).map((edit): IEditGroupMember => ({
+        const members = unitEdits(unit).map((edit): IEditGroupMember => ({
           description: editDescription(edit),
           native: () => {
             const native = this.#natives.get(changeKey({ kind: 'edit', edit }));
@@ -3761,16 +3827,17 @@ function preparedProjection(
 
 /** Where each item of a delivered unit goes, once the plan is known. */
 type Destination =
-  | { readonly mechanism: 'native' | 'native-batch' | 'manual' | 'companion'; readonly unit: number }
+  | { readonly mechanism: 'native' | 'native-batch' | 'manual' | 'review-body' | 'manual-group' | 'companion'; readonly unit: number }
   | { readonly mechanism: 'none' };
 
 /**
  * Renders the planned review: inline comments in SARIF order of first
- * appearance (native suggestions merged when identical, a native batch's
- * members each with the group's note), body sections in SARIF order (a
- * finding, a whole-file proposal with its findings, a companion's reference,
- * or a native batch's guidance, each unit at its first finding's position),
- * one evidence record per result, and the companion pull requests.
+ * appearance (native suggestions merged when identical; each change of a
+ * native batch with the group's note, holding every finding that carries
+ * it), body sections in SARIF order (a finding, a whole-file proposal with
+ * its findings, an edit or a group made by hand, a companion's reference, or
+ * a native batch's guidance, each unit at its first finding's position), one
+ * evidence record per result, and the companion pull requests.
  */
 function renderDelivery(
   items: readonly IPreparedItem[],
@@ -3792,9 +3859,17 @@ function renderDelivery(
     const unit = unitOf.get(item);
     if (unit === undefined) return { mechanism: 'none' };
     const mechanism = mechanismOf.get(unit);
-    // `review-body` and `manual-group` are always unavailable in this version (§8.8), so the planner never routes to them.
-    if (mechanism === 'native' || mechanism === 'native-batch' || mechanism === 'manual' || mechanism === 'companion') return { mechanism, unit };
-    throw new Error(`Internal error: a unit is delivered by ${String(mechanism)}, which this version renders nowhere.`);
+    switch (mechanism) {
+      case 'native':
+      case 'native-batch':
+      case 'manual':
+      case 'review-body':
+      case 'manual-group':
+      case 'companion':
+        return { mechanism, unit };
+      case undefined:
+        throw new Error('Internal error: a delivery unit has no planned mechanism.');
+    }
   };
 
   const commentItems: ICommentEntry[] = [];
@@ -3845,18 +3920,28 @@ function renderDelivery(
       case 'native-batch': {
         const unit = itemAt(units, where.unit);
         if (where.mechanism === 'native-batch') sectionOf(where.unit);
-        const s = availability.suggestion(itemAt(item.edits, 0));
-        const note = where.mechanism === 'native-batch' && unit.group !== undefined ? renderNativeBatchMemberNote(unit.group) : undefined;
-        const index = suggestionComment(s, note);
-        itemAt(commentItems, index).items.push(item);
-        evidence.push({ ...record, treatment: 'suggestion', commentIndex: index,
+        const note = where.mechanism === 'native-batch' ? renderNativeBatchMemberNote(groupLabel(unit)) : undefined;
+        // Each change of the item's fix is its own native suggestion, and its
+        // comment holds every finding that carries that change (§8.8).
+        const changes = item.edits.map((edit): ISuggestionChangeEvidence => {
+          const s = availability.suggestion(edit);
+          const index = suggestionComment(s, note);
+          itemAt(commentItems, index).items.push(item);
+          return {
+            commentIndex: index,
+            fixSource: s.source,
+            replacement: { startLine: s.startLine, endLine: s.endLine, originalText: s.originalText, replacementText: s.replacementText },
+            suggestionPayload: s.payload,
+          };
+        });
+        evidence.push({ ...record, treatment: 'suggestion', ...itemAt(changes, 0),
           ...(item.placement ? { source: item.placement.source } : {}),
-          fixSource: s.source,
-          replacement: { startLine: s.startLine, endLine: s.endLine, originalText: s.originalText, replacementText: s.replacementText },
-          suggestionPayload: s.payload });
+          ...(changes.length > 1 ? { changes } : {}) });
         break;
       }
       case 'manual':
+      case 'review-body':
+      case 'manual-group':
       case 'companion': {
         const reference = where.mechanism === 'companion' ? referenceOf.get(where.unit) : undefined;
         evidence.push({ ...record, treatment: 'general', bodySectionIndex: sectionOf(where.unit),
@@ -3878,15 +3963,34 @@ function renderDelivery(
       if (reference === undefined) throw new Error('Internal error: a unit is delivered by companion without a companion.');
       return reference;
     }
-    if (mechanism === 'native-batch' && unit.group !== undefined) return renderNativeBatchGuidance(unit.group, unitEdits(unit));
-    if (mechanism !== 'manual') throw new Error(`Internal error: a unit delivered by ${String(mechanism)} has a body section.`);
-    return r.proposal(standaloneOperation(unit), unit.items);
+    switch (mechanism) {
+      case 'native-batch': return renderNativeBatchGuidance(groupLabel(unit), unitEdits(unit));
+      case 'review-body': return r.manualEdit(itemAt(unitEdits(unit), 0), unit.items);
+      case 'manual-group': return manualGroupSection(unit, r);
+      case 'manual': return unit.kind === 'file-operation-group' ? manualGroupSection(unit, r) : r.proposal(standaloneOperation(unit), unit.items);
+      case 'native':
+      case undefined:
+        throw new Error(`Internal error: a unit delivered by ${String(mechanism)} has a body section.`);
+    }
   };
   const parts = sections.map((section) => sectionPart(section, renderer));
-  const proposals: IRenderedProposal[] = sections.flatMap((section, i) => {
+  const proposals: RenderedProposal[] = sections.flatMap((section, i): RenderedProposal[] => {
     const part = itemAt(parts, i);
-    return section.kind === 'unit' && mechanismOf.get(section.unit) === 'manual' && typeof part === 'string'
-      ? [{ path: standaloneOperation(itemAt(units, section.unit)).path, characters: part.length }] : [];
+    if (section.kind !== 'unit' || typeof part !== 'string') return [];
+    const unit = itemAt(units, section.unit);
+    switch (mechanismOf.get(section.unit)) {
+      case 'manual':
+        if (unit.kind === 'file-operation') return [{ kind: 'file', path: standaloneOperation(unit).path, characters: part.length }];
+        return [{ kind: 'manual', unit: lowercaseFirst(unitDescription(unit)), characters: part.length }];
+      case 'review-body':
+      case 'manual-group':
+        return [{ kind: 'manual', unit: lowercaseFirst(unitDescription(unit)), characters: part.length }];
+      case 'native':
+      case 'native-batch':
+      case 'companion':
+      case undefined:
+        return [];
+    }
   });
   // Body sections are rendered before inline comments, as they always were, so callbacks see elements in that order.
   const comments: PreparedComment[] = commentItems.map((entry) => ({ ...entry.coordinates, body: composeComment(entry, renderer) }));
@@ -3967,6 +4071,32 @@ function renderDelivery(
     deliveryDiagnostics: [...plan.diagnostics, ...companions.conflictWarnings(plan, prepared)],
     fallbacks: plan.fallbacks,
   };
+}
+
+/**
+ * A group made by hand (docs/delivery-policy-contract.md §8.10): its guidance
+ * naming every change, then each change, in the order the changes first
+ * appear, presented by its own component with the findings that carry it —
+ * an edit as a manual edit, a creation or deletion as the file-operation
+ * contract's section.
+ */
+function manualGroupSection(unit: ISuggestionUnit, r: ReviewRenderer): string {
+  const parts = [...unit.changes.values()].map((change): IManualGroupPart => {
+    const key = changeKey(change);
+    const carrying = unit.items.filter((item) => unitChangesOf(item).some((c) => changeKey(c) === key));
+    if (change.kind === 'edit') {
+      const { edit } = change;
+      return { member: { kind: 'edit', path: edit.path, startLine: edit.startLine, endLine: edit.endLine }, part: r.manualEdit(edit, carrying) };
+    }
+    const { operation } = change;
+    return { member: { kind: operation.operation === 'create' ? 'create' : 'delete', path: operation.path }, part: r.proposal(operation, carrying) };
+  });
+  return renderManualGroup(groupLabel(unit), parts);
+}
+
+/** `text` with its first character in lower case, as a description is named mid-sentence (§10.1). */
+function lowercaseFirst(text: string): string {
+  return `${text.charAt(0).toLowerCase()}${text.slice(1)}`;
 }
 
 /** The whole-file proposal a standalone proposal unit carries (its only change). */
@@ -4124,7 +4254,7 @@ function inlineCoordinates(path: string, anchor: IInlineAnchor): CommentCoordina
  * Enforces the product limits on the complete prepared review; never
  * truncates. A body over its limit names each whole-file proposal's share.
  */
-function enforceLimits(review: IPreparedReview, proposals: readonly IRenderedProposal[], state: IPreparationState): void {
+function enforceLimits(review: IPreparedReview, proposals: readonly RenderedProposal[], state: IPreparationState): void {
   const { options, report } = state;
   // A limit explicitly set to undefined compares false, exactly as it always did.
   const { maxComments, maxCommentBodyChars, maxPayloadBytes } = options;
@@ -4138,10 +4268,12 @@ function enforceLimits(review: IPreparedReview, proposals: readonly IRenderedPro
       `Inline comment ${String(long)} is ${String(itemAt(review.comments, long).body.length)} characters; the limit is ${String(maxCommentBodyChars)}.`);
   }
   if (maxCommentBodyChars !== undefined && review.body.length > maxCommentBodyChars) {
-    const shares = proposals.map((p) => `${p.path} (${String(p.characters)} characters)`);
+    const files = proposals.flatMap((p) => (p.kind === 'file' ? [`${p.path} (${String(p.characters)} characters)`] : []));
+    const manual = proposals.flatMap((p) => (p.kind === 'manual' ? [`${p.unit} (${String(p.characters)} characters)`] : []));
     report.error('body-too-large', undefined,
       `The review body is ${String(review.body.length)} characters; the limit is ${String(maxCommentBodyChars)}.`
-      + (shares.length === 0 ? '' : ` Whole-file proposals in the body: ${shares.join(', ')}.`)
+      + (files.length === 0 ? '' : ` Whole-file proposals in the body: ${files.join(', ')}.`)
+      + (manual.length === 0 ? '' : ` Proposals to make by hand in the body: ${manual.join(', ')}.`)
       + ' Nothing is truncated or split.');
   }
   const bytes = Buffer.byteLength(JSON.stringify({ body: review.body, comments: review.comments }), 'utf8');
@@ -4318,7 +4450,7 @@ class ReviewRenderer {
         attribution,
       }),
       required: alternatives === undefined ? [attribution] : [attribution, alternatives],
-    });
+    }, sourceLinkOf(this.#context, item));
   }
 
   /** A general body section: exact-revision link and literal source quote when the finding has a location. */
@@ -4344,7 +4476,7 @@ class ReviewRenderer {
       const deletion = { path: operation.path, commit: operation.commit, url };
       return present('fileDeletion', this.#presentation.fileDeletion, {
         ...deletion, findings, markdown: renderFileDeletion(deletion, findings), required: [url, findings],
-      });
+      }, [{ text: `${operation.path} at ${operation.commit.slice(0, 7)}`, url }]);
     }
     const findings = items.map((item) => renderProposedFileFinding(item.proposedLines, this.finding(item))).join(SEPARATOR);
     const details = fileDetails(operation.text, operation.fileMode);
@@ -4359,6 +4491,38 @@ class ReviewRenderer {
       markdown: renderFileAddition(operation, findings),
       required: [codeSpan(operation.path), details, ...(content === undefined ? [] : [content]), findings],
     });
+  }
+
+  /**
+   * An edit made by hand (docs/delivery-policy-contract.md §8.10): its exact
+   * replacement, linked to the replaced lines at the reviewed commit, then
+   * each finding carrying it as a section with its quoted source. Its
+   * replacement can be shown exactly: availability checked it.
+   */
+  manualEdit(edit: IPreparedEdit, items: readonly IPreparedItem[]): string {
+    const shown = shownReplacement(edit);
+    if (shown.problem !== undefined) throw new Error('Internal error: an edit made by hand cannot be shown exactly.');
+    const { path: filePath, startLine, endLine } = edit;
+    const commit = edit.source.commit;
+    const url = permalink(this.#context, edit.source);
+    const manual: IManualEdit = { path: filePath, startLine, endLine, commit, url, replacement: shown.replacement };
+    const findings = items.map((item) => this.section(item)).join(SEPARATOR);
+    const location = manualEditLocation(manual);
+    const block = manualEditBlock(manual);
+    const details = manualEditDetails(manual);
+    return present('manualEdit', this.#presentation.manualEdit, {
+      path: filePath,
+      startLine,
+      endLine,
+      commit,
+      url,
+      location,
+      ...(block === undefined ? {} : { replacement: block }),
+      ...(details === undefined ? {} : { details }),
+      findings,
+      markdown: renderManualEdit(manual, findings),
+      required: [location, url, ...(block === undefined ? [] : [block]), ...(details === undefined ? [] : [details]), findings],
+    }, [{ text: `${filePath} ${lineSpan(startLine, endLine)} at ${commit.slice(0, 7)}`, url }]);
   }
 
   /** One line of a suggestion pull request's change list (contract §2.11). */
@@ -4408,6 +4572,20 @@ class ReviewRenderer {
     }));
     return present('alternatives', this.#presentation.alternatives, { alternatives: listed, markdown, required: listed.map((a) => a.changes) });
   }
+}
+
+/**
+ * The source link the core places before a finding in a body section (its
+ * text as a reader reads it, and its permalink), an identity link the finding
+ * callback may not point elsewhere (docs/review-presentation-contract.md §7).
+ * None for a finding without a location.
+ */
+function sourceLinkOf(context: IPreparationContext, item: IPreparedItem): IIdentityLink[] {
+  const source = item.placement && item.placement.source;
+  if (!source) return [];
+  const short = source.commit.slice(0, 7);
+  const text = source.startLine === undefined ? `${source.path} at ${short}` : `${source.path} ${lineSpan(source.startLine, source.endLine)} at ${short}`;
+  return [{ text, url: permalink(context, source) }];
 }
 
 /** A prepared alternative as the alternatives component lists it. */

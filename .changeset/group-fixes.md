@@ -82,11 +82,6 @@ The JSON view's findings gain `suggestionGroup` when they have one. The help tex
 
 ### `sarif-to-comment validate` / `publish`: a fix with several changes under the default delivery policy
 
-```diff
--- `fix-multiple-files-unsupported` at `/runs/0/results/0`: A fix changing several files is not supported yet.
-+- `delivery-unavailable` at `/runs/0/results/0`: The fix with 3 changes at `/runs/0/results/0` cannot be delivered. `groupedEdits` is `[native-batch]`, the default, and no mechanism it lists is available:
-+
-+- `native-batch`: Offering a fix with several changes as a native batch is not yet supported by this version.
-```
+A fix changing several files, or making several replacements, was refused in 0.2.1 (`fix-multiple-files-unsupported`, `fix-multiple-replacements-unsupported`). It is now delivered whole by its `groupedEdits` list. Under the default, it is a native batch when every change can be a native suggestion. Otherwise the review is blocked with one `delivery-unavailable` error, whose `native-batch` bullet names each change that can't be one and why (see the entries on the delivery policy and on proposals made by hand).
 
 The explicit-group problems are renamed with the property: `acceptance-group-*` becomes `suggestion-group-*`, and their messages say "Suggestion group".

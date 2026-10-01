@@ -14,6 +14,7 @@ import type {
   IAttributionPresentationContext,
   IFileAdditionPresentationContext,
   IFindingPresentationContext,
+  IManualEditPresentationContext,
   IPresentationContext,
   IPublishSarifReviewOptions,
   IReviewPresentation,
@@ -31,6 +32,9 @@ export const shapes: readonly true[] = [
   true satisfies IsMutuallyAssignable<IFileAdditionPresentationContext['content'], string | undefined>,
   true satisfies IsMutuallyAssignable<IPresentationContext['required'], readonly string[]>,
   true satisfies IsMutuallyAssignable<IAttributionPresentationContext['component'], IAttributionComponent | undefined>,
+  true satisfies IsMutuallyAssignable<Parameters<NonNullable<IReviewPresentation['manualEdit']>>[0], IManualEditPresentationContext>,
+  true satisfies IsMutuallyAssignable<IManualEditPresentationContext['replacement'], string | undefined>,
+  true satisfies IsMutuallyAssignable<IManualEditPresentationContext['details'], string | undefined>,
 ];
 
 export const none: IReviewPresentation = {};
@@ -42,6 +46,7 @@ export const some: IPublishSarifReviewOptions = {
     alternatives: (c: IAlternativesPresentationContext) => c.alternatives.map((a) => a.changes).join('\n\n'),
     fileAddition: (c) => c.markdown,
     fileDeletion: (c) => `${c.url}\n\n${c.findings}`,
+    manualEdit: (c) => `${c.location}\n\n${c.replacement ?? ''}\n\n${c.findings}`,
     lifecycleNote: (c) => (c.ready ? 'ready' : 'draft'),
   },
 };
@@ -56,3 +61,5 @@ export const notMarkdown: IReviewPresentation = { finding: () => 42 };
 export const wrongContext: IReviewPresentation = { lifecycleNote: (c: IFindingPresentationContext) => c.message };
 // @ts-expect-error -- contexts are read-only
 export const mutate: IReviewPresentation = { finding: (c) => { c.message = 'x'; return c.markdown; } };
+// @ts-expect-error -- a manual edit receives its own context, not a new file's
+export const manualEditContext: IReviewPresentation = { manualEdit: (c: IFileAdditionPresentationContext) => c.details };

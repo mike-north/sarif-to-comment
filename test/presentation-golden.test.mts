@@ -86,7 +86,7 @@ describe('golden presentation: findings, attribution, suggestions and alternativ
     // location:**", and the attribution "tool version · extension version ·
     // rule `id`" (SARIF 3.19, 3.27.5).
     assert.equal(ready.review.body, [
-      `**Source:** [docs/notes.md lines 2-3 at ${SHORT}](${permalink('docs/notes.md', '#L2-L3')})`,
+      `**Source:** [docs/notes.md lines 2-3 at ${SHORT}](${permalink('docs/notes.md', '?plain=1#L2-L3')})`,
       '',
       '```',
       'second',
@@ -247,7 +247,7 @@ describe('golden presentation: whole-file proposals', () => {
       '',
       'The whole file is removed; this is not a proposal to empty it.',
       '',
-      `**Source:** [obsolete.txt line 2 at ${SHORT}](${permalink('obsolete.txt', '#L2')})`,
+      `**Source:** [obsolete.txt line 2 at ${SHORT}](${permalink('obsolete.txt', '?plain=1#L2')})`,
       '',
       '```',
       'second line',
@@ -290,7 +290,7 @@ describe('golden presentation: the published review and its companions', () => {
     const body = world.host.reviews()[0]?.request.body ?? '';
     assert.equal(body.split('<!-- sarif-to-comment:review:').length, 2, 'exactly one marker');
     assert.equal(reviewBodyWithoutMarker(world), [
-      `**Source:** [docs/index.md line 1 at feedfee](https://github.com/octo/widgets/blob/${HEAD}/docs/index.md#L1)`,
+      `**Source:** [docs/index.md line 1 at feedfee](https://github.com/octo/widgets/blob/${HEAD}/docs/index.md?plain=1#L1)`,
       '',
       '```',
       '# Docs',

@@ -426,6 +426,19 @@ export interface ILifecycleNotePresentationContext extends IPresentationContext 
 }
 
 // @public
+export interface IManualEditPresentationContext extends IPresentationContext {
+    readonly commit: string;
+    readonly details?: string;
+    readonly endLine: number;
+    readonly findings: string;
+    readonly location: string;
+    readonly path: string;
+    readonly replacement?: string;
+    readonly startLine: number;
+    readonly url: string;
+}
+
+// @public
 export interface INewSarifRun {
     readonly source?: ISarifSourceBinding | undefined;
     readonly toolName: string;
@@ -560,6 +573,7 @@ export interface IReviewPresentation {
     readonly fileDeletion?: ((context: IFileDeletionPresentationContext) => string) | undefined;
     readonly finding?: ((context: IFindingPresentationContext) => string) | undefined;
     readonly lifecycleNote?: ((context: ILifecycleNotePresentationContext) => string) | undefined;
+    readonly manualEdit?: ((context: IManualEditPresentationContext) => string) | undefined;
 }
 
 // @public
