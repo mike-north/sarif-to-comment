@@ -1,0 +1,63 @@
+{
+  "additions": 2,
+  "baseRefName": "exp-forcepush-20260929-rebase",
+  "baseRefOid": "f4ba85967197ae0ec1a2ebd18bebe2a2fb98c5c6",
+  "body": "Suggestion-PR fixture (rebase variant, line6) for an experiment on force-push behaviour. Do not merge.",
+  "changedFiles": 1,
+  "closed": false,
+  "commits": [
+    {
+      "authoredDate": "2026-09-29T17:13:48Z",
+      "authors": [
+        {
+          "email": "<redacted-email>",
+          "id": "MDQ6VXNlcjU1ODAwNQ==",
+          "login": "mike-north",
+          "name": "Mike North"
+        }
+      ],
+      "committedDate": "2026-09-29T17:13:48Z",
+      "messageBody": "",
+      "messageHeadline": "Experiment (rebase): C1 reviewed change",
+      "oid": "7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc"
+    },
+    {
+      "authoredDate": "2026-09-29T18:06:30Z",
+      "authors": [
+        {
+          "email": "<redacted-email>",
+          "id": "MDQ6VXNlcjU1ODAwNQ==",
+          "login": "mike-north",
+          "name": "Mike North"
+        }
+      ],
+      "committedDate": "2026-09-29T18:06:30Z",
+      "messageBody": "",
+      "messageHeadline": "Experiment (rebase): suggestion line6 on top of 7eb3dc6",
+      "oid": "2296faa43a9b1c49a93959d25d1c2003b3113ef1"
+    }
+  ],
+  "createdAt": "2026-09-29T18:06:50Z",
+  "deletions": 2,
+  "files": [
+    {
+      "path": "docs/experiments/forcepush/sample-rebase.md",
+      "additions": 2,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    }
+  ],
+  "headRefName": "exp-forcepush-20260929-rebase-sugg-line6",
+  "headRefOid": "2296faa43a9b1c49a93959d25d1c2003b3113ef1",
+  "isDraft": true,
+  "latestReviews": [],
+  "mergeStateStatus": "DIRTY",
+  "mergeable": "CONFLICTING",
+  "mergedAt": null,
+  "number": 47,
+  "reviews": [],
+  "state": "OPEN",
+  "title": "Experiment: force-push behaviour (do not merge)",
+  "updatedAt": "2026-09-29T18:17:59Z",
+  "url": "https://github.com/mike-north/doc-linter/pull/47"
+}

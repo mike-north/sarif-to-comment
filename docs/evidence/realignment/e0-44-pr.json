@@ -1,0 +1,79 @@
+{
+  "additions": 3,
+  "baseRefName": "exp-forcepush-20260929-control-base",
+  "baseRefOid": "d138c0edc8b21b42acd023f17e947f5c4c742572",
+  "body": "Fixture PR (control variant) for an experiment on how GitHub treats reviews and suggestion pull requests after a force-push. Do not merge.",
+  "changedFiles": 1,
+  "closed": false,
+  "commits": [
+    {
+      "authoredDate": "2026-09-29T17:13:48Z",
+      "authors": [
+        {
+          "email": "<redacted-email>",
+          "id": "MDQ6VXNlcjU1ODAwNQ==",
+          "login": "mike-north",
+          "name": "Mike North"
+        }
+      ],
+      "committedDate": "2026-09-29T17:13:48Z",
+      "messageBody": "",
+      "messageHeadline": "Experiment (control): C1 reviewed change",
+      "oid": "91f433c55edcf930e7d89899109ad9881222f362"
+    },
+    {
+      "authoredDate": "2026-09-29T18:04:25Z",
+      "authors": [
+        {
+          "email": "<redacted-email>",
+          "id": "MDQ6VXNlcjU1ODAwNQ==",
+          "login": "mike-north",
+          "name": "Mike North"
+        }
+      ],
+      "committedDate": "2026-09-29T18:04:25Z",
+      "messageBody": "",
+      "messageHeadline": "Experiment (control): C2 unrelated follow-up",
+      "oid": "4b82f10cb97c1ffef397981f2aa91651d0bf1853"
+    }
+  ],
+  "createdAt": "2026-09-29T17:14:21Z",
+  "deletions": 3,
+  "files": [
+    {
+      "path": "docs/experiments/forcepush/sample-control.md",
+      "additions": 3,
+      "deletions": 3,
+      "changeType": "MODIFIED"
+    }
+  ],
+  "headRefName": "exp-forcepush-20260929-control",
+  "headRefOid": "4b82f10cb97c1ffef397981f2aa91651d0bf1853",
+  "isDraft": true,
+  "latestReviews": [],
+  "mergeStateStatus": "CLEAN",
+  "mergeable": "MERGEABLE",
+  "mergedAt": null,
+  "number": 44,
+  "reviews": [
+    {
+      "id": "PRR_kwDOUuyy7s8AAAABP0Vwbg",
+      "author": {
+        "login": "mike-north"
+      },
+      "authorAssociation": "OWNER",
+      "body": "\n\n<!-- sarif-to-comment:review:d5de6176-1ab4-485f-a01b-991c77c90041 -->",
+      "submittedAt": null,
+      "includesCreatedEdit": false,
+      "reactionGroups": [],
+      "state": "PENDING",
+      "commit": {
+        "oid": "91f433c55edcf930e7d89899109ad9881222f362"
+      }
+    }
+  ],
+  "state": "OPEN",
+  "title": "Experiment: force-push behaviour (do not merge)",
+  "updatedAt": "2026-09-29T18:04:36Z",
+  "url": "https://github.com/mike-north/doc-linter/pull/44"
+}

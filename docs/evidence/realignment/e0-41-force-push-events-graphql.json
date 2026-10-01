@@ -1,0 +1,60 @@
+{
+  "data": {
+    "repository": {
+      "pullRequest": {
+        "number": 41,
+        "headRefName": "exp-forcepush-20260929-amend",
+        "headRefOid": "b3e3ed734b03fc8e4dae2b7cb85f6d8bb1b98801",
+        "baseRefName": "exp-forcepush-20260929-amend-base",
+        "baseRefOid": "c29a1b22f7d7b91f12f41893ad25f555b3f9101f",
+        "timelineItems": {
+          "totalCount": 4,
+          "nodes": [
+            {
+              "__typename": "HeadRefForcePushedEvent",
+              "id": "HRFPE_lADOUuyy7s8AAAABT9ROLs8AAAAHeXhnqA",
+              "createdAt": "2026-09-29T18:04:37Z",
+              "actor": {
+                "login": "mike-north"
+              },
+              "ref": {
+                "name": "exp-forcepush-20260929-amend"
+              },
+              "beforeCommit": {
+                "oid": "e69981ed42926b07d0ff3f25d98558229afd348e",
+                "committedDate": "2026-09-29T17:13:47Z",
+                "messageHeadline": "Experiment (amend): C1 reviewed change"
+              },
+              "afterCommit": {
+                "oid": "30073435e95ecbe4849f2423371d3d5010251cfe",
+                "committedDate": "2026-09-29T18:04:25Z",
+                "messageHeadline": "Experiment (amend): C1 reviewed change"
+              }
+            },
+            {
+              "__typename": "HeadRefForcePushedEvent",
+              "id": "HRFPE_lADOUuyy7s8AAAABT9ROLs8AAAAHeYUwVA",
+              "createdAt": "2026-09-29T18:17:32Z",
+              "actor": {
+                "login": "mike-north"
+              },
+              "ref": {
+                "name": "exp-forcepush-20260929-amend"
+              },
+              "beforeCommit": {
+                "oid": "30073435e95ecbe4849f2423371d3d5010251cfe",
+                "committedDate": "2026-09-29T18:04:25Z",
+                "messageHeadline": "Experiment (amend): C1 reviewed change"
+              },
+              "afterCommit": {
+                "oid": "b3e3ed734b03fc8e4dae2b7cb85f6d8bb1b98801",
+                "committedDate": "2026-09-29T18:17:25Z",
+                "messageHeadline": "Experiment (amend): C1 reviewed change"
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

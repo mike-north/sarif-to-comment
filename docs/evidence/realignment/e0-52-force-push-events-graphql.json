@@ -1,0 +1,17 @@
+{
+  "data": {
+    "repository": {
+      "pullRequest": {
+        "number": 52,
+        "headRefName": "exp-forcepush-20260929-orphan-sugg-ctx",
+        "headRefOid": "d92f82cf2802494276dac4cfb90e951a1487671d",
+        "baseRefName": "exp-forcepush-20260929-orphan",
+        "baseRefOid": "d28aa24815178ce56025303fe98da1d1a0915a9f",
+        "timelineItems": {
+          "totalCount": 2,
+          "nodes": []
+        }
+      }
+    }
+  }
+}

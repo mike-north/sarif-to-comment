@@ -1,0 +1,39 @@
+{
+  "data": {
+    "repository": {
+      "pullRequest": {
+        "number": 47,
+        "headRefName": "exp-forcepush-20260929-rebase-sugg-line6",
+        "headRefOid": "2296faa43a9b1c49a93959d25d1c2003b3113ef1",
+        "baseRefName": "exp-forcepush-20260929-rebase",
+        "baseRefOid": "f4ba85967197ae0ec1a2ebd18bebe2a2fb98c5c6",
+        "timelineItems": {
+          "totalCount": 3,
+          "nodes": [
+            {
+              "__typename": "BaseRefForcePushedEvent",
+              "id": "BRFPE_lADOUuyy7s8AAAABT92WjM8AAAAHeYWbOg",
+              "createdAt": "2026-09-29T18:17:59Z",
+              "actor": {
+                "login": "mike-north"
+              },
+              "ref": {
+                "name": "exp-forcepush-20260929-rebase"
+              },
+              "beforeCommit": {
+                "oid": "62ed990cc54a2f8185410d3d6a6e84a82da1f0c3",
+                "committedDate": "2026-09-29T18:04:25Z",
+                "messageHeadline": "Experiment (rebase): C1 reviewed change"
+              },
+              "afterCommit": {
+                "oid": "f4ba85967197ae0ec1a2ebd18bebe2a2fb98c5c6",
+                "committedDate": "2026-09-29T18:17:56Z",
+                "messageHeadline": "Experiment (rebase): C1 reviewed change"
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

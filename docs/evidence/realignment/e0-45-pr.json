@@ -1,0 +1,63 @@
+{
+  "additions": 2,
+  "baseRefName": "exp-forcepush-20260929-amend",
+  "baseRefOid": "b3e3ed734b03fc8e4dae2b7cb85f6d8bb1b98801",
+  "body": "Suggestion-PR fixture (amend variant, line6) for an experiment on force-push behaviour. Do not merge.",
+  "changedFiles": 1,
+  "closed": false,
+  "commits": [
+    {
+      "authoredDate": "2026-09-29T17:13:47Z",
+      "authors": [
+        {
+          "email": "<redacted-email>",
+          "id": "MDQ6VXNlcjU1ODAwNQ==",
+          "login": "mike-north",
+          "name": "Mike North"
+        }
+      ],
+      "committedDate": "2026-09-29T17:13:47Z",
+      "messageBody": "",
+      "messageHeadline": "Experiment (amend): C1 reviewed change",
+      "oid": "e69981ed42926b07d0ff3f25d98558229afd348e"
+    },
+    {
+      "authoredDate": "2026-09-29T18:06:20Z",
+      "authors": [
+        {
+          "email": "<redacted-email>",
+          "id": "MDQ6VXNlcjU1ODAwNQ==",
+          "login": "mike-north",
+          "name": "Mike North"
+        }
+      ],
+      "committedDate": "2026-09-29T18:06:20Z",
+      "messageBody": "",
+      "messageHeadline": "Experiment (amend): suggestion line6 on top of e69981e",
+      "oid": "599270dc49f9eb5660a5c12ef671621c32e09023"
+    }
+  ],
+  "createdAt": "2026-09-29T18:06:45Z",
+  "deletions": 2,
+  "files": [
+    {
+      "path": "docs/experiments/forcepush/sample-amend.md",
+      "additions": 2,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    }
+  ],
+  "headRefName": "exp-forcepush-20260929-amend-sugg-line6",
+  "headRefOid": "599270dc49f9eb5660a5c12ef671621c32e09023",
+  "isDraft": true,
+  "latestReviews": [],
+  "mergeStateStatus": "DIRTY",
+  "mergeable": "CONFLICTING",
+  "mergedAt": null,
+  "number": 45,
+  "reviews": [],
+  "state": "OPEN",
+  "title": "Experiment: force-push behaviour (do not merge)",
+  "updatedAt": "2026-09-29T18:17:32Z",
+  "url": "https://github.com/mike-north/doc-linter/pull/45"
+}

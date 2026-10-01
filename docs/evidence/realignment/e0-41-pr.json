@@ -1,0 +1,64 @@
+{
+  "additions": 2,
+  "baseRefName": "exp-forcepush-20260929-amend-base",
+  "baseRefOid": "c29a1b22f7d7b91f12f41893ad25f555b3f9101f",
+  "body": "Fixture PR (amend variant) for an experiment on how GitHub treats reviews and suggestion pull requests after a force-push. Do not merge.",
+  "changedFiles": 1,
+  "closed": false,
+  "commits": [
+    {
+      "authoredDate": "2026-09-29T17:13:47Z",
+      "authors": [
+        {
+          "email": "<redacted-email>",
+          "id": "MDQ6VXNlcjU1ODAwNQ==",
+          "login": "mike-north",
+          "name": "Mike North"
+        }
+      ],
+      "committedDate": "2026-09-29T18:17:25Z",
+      "messageBody": "",
+      "messageHeadline": "Experiment (amend): C1 reviewed change",
+      "oid": "b3e3ed734b03fc8e4dae2b7cb85f6d8bb1b98801"
+    }
+  ],
+  "createdAt": "2026-09-29T17:14:12Z",
+  "deletions": 2,
+  "files": [
+    {
+      "path": "docs/experiments/forcepush/sample-amend.md",
+      "additions": 2,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    }
+  ],
+  "headRefName": "exp-forcepush-20260929-amend",
+  "headRefOid": "b3e3ed734b03fc8e4dae2b7cb85f6d8bb1b98801",
+  "isDraft": true,
+  "latestReviews": [],
+  "mergeStateStatus": "CLEAN",
+  "mergeable": "MERGEABLE",
+  "mergedAt": null,
+  "number": 41,
+  "reviews": [
+    {
+      "id": "PRR_kwDOUuyy7s8AAAABP0VoDg",
+      "author": {
+        "login": "mike-north"
+      },
+      "authorAssociation": "OWNER",
+      "body": "\n\n<!-- sarif-to-comment:review:e8983298-6033-4ecc-bc52-cd1230957fb4 -->",
+      "submittedAt": null,
+      "includesCreatedEdit": false,
+      "reactionGroups": [],
+      "state": "PENDING",
+      "commit": {
+        "oid": "e69981ed42926b07d0ff3f25d98558229afd348e"
+      }
+    }
+  ],
+  "state": "OPEN",
+  "title": "Experiment: force-push behaviour (do not merge)",
+  "updatedAt": "2026-09-29T18:17:32Z",
+  "url": "https://github.com/mike-north/doc-linter/pull/41"
+}
