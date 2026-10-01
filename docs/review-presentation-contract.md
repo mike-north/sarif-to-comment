@@ -94,12 +94,19 @@ Each callback's context lists `required` fragments that its result must show as 
 - the balance of the elements that raw HTML opens and closes;
 - a deliberately broad refusal of any line that could open a `suggestion` fence.
 
+**Composed-text checkpoint.** After every inline comment, body section, suggestion pull request description and the review body is fully composed, the core reads the whole text again, with or without callbacks. That text includes the publication marker for the body and the structured marker for a description. The text must leave no raw HTML open and swallow nothing after it. It must contain exactly the native suggestion block the core built: one `suggestion` code block, intact, as the comment's last block. A suggestion line inside code the core shows literally, such as a proposed file's content, is code and does not count. Its marker must be its own final node. This is the backstop for every seam between pieces of Markdown:
+
+- A problem that the same text, composed with the built-in presentation, does not have comes from a callback, and rejects with the presentation `TypeError`.
+- Any other problem comes from producer content. It is reported as `producer-html-unbalanced` or `producer-fence-unclosed`, at the finding whose own Markdown shows it.
+
+Producer Markdown that the finding places after a label on the same line (`**At this location:** `, `**Fix:** `, an alternative's `(1) `) is also checked after that label, at its own finding or fix. An indented or fenced line reads differently in the middle of a line than at its start.
+
 **What follows must stay outside.** The tool always puts a blank line and further content after producer or caller Markdown. The Markdown is refused when that content would come out inside it, in either of these cases:
 
 - a fenced code block, or an HTML block such as a comment, `<pre>` or `<script>`, runs to the end of the input;
 - the raw HTML the parser finds leaves a tag unterminated or an element unclosed.
 
-Text and code never count as raw HTML. An unterminated `<!--` inside a paragraph, for example, is text, which GitHub escapes.
+Text and code never count as raw HTML. An unterminated `<!--` inside a paragraph, for example, is text, which GitHub escapes. As in HTML, only void elements (`<br>`, `<img>`, `<hr>` and the like) close themselves. A trailing `/>` on any other start tag, as in `<details/>`, leaves the element open.
 
 **Pass-through by node.** A callback may add no raw HTML (`html` nodes) and no link reference definitions (`definition` nodes) of its own. Such a node is accepted only when its exact source text is also such a node in that component's built-in Markdown. This lets content the producer wrote pass through unchanged, but never extended. A definition or comment that the callback lengthens, or that it re-labels across lines, counts as added.
 
@@ -110,6 +117,8 @@ Text and code never count as raw HTML. An unterminated `<!--` inside a paragraph
 - code, inline code, raw HTML, an image, a definition or any other node conceals the occurrence when it contains it;
 - no element that hides its content reaches into the occurrence. Such an element is one GitHub does not display (`<template>`, `<script>`, `<textarea>` and the like), or one with a `hidden` or `style` attribute.
 
-**Permalinks.** A fragment that is a URL, such as a deletion's permalink, may also be exactly the destination of an inline link. It may not be an image's source, since an image does not link to the file. It also may not be the text of a link whose destination is somewhere else, since that text would spoof the association.
+**Permalinks.** A fragment that is a URL, such as a deletion's permalink, may also be exactly the destination of an inline link. It may not be an image's source, since an image does not link to the file. It also may not be the text of a link whose destination is somewhere else, or sit inside a raw-HTML `<a>` (passed through from the presented content) whose `href` is somewhere else. Either would spoof the association.
 
-**Known limit.** GitHub renders with cmark-gfm. For some raw-HTML edge cases, cmark-gfm follows the HTML comment rules of CommonMark 0.29 rather than 0.31. Under 0.29, `<!-->`, `<!--->` and a comment containing `--` or ending in `-` are not comments. Where these differ, the checks follow micromark, except that such a comment is refused under either reading. The remaining divergence is recorded for a live check against GitHub; it has not been checked yet.
+**Math.** GitHub renders `$…$` and `$$…$$` as TeX, where `\phantom{}` and similar commands hide text. The parser does not model math. A required fragment therefore does not count as shown when a paragraph, heading or table cell holding part of it has an unescaped `$` outside the fragment and outside code. This is deliberately broad. GitHub's math rendering has not been live-checked.
+
+**Known limit.** GitHub renders with cmark-gfm. For some raw-HTML edge cases, cmark-gfm follows the HTML comment rules of CommonMark 0.29 rather than 0.31. Under 0.29, `<!-->`, `<!--->` and a comment containing `--` or ending in `-` are not comments. Where these differ, the checks follow micromark, except that such a comment is read both ways: the tags it seems to enclose count as raw HTML, so `<!-- a -- <details> -->` is refused while `<!-- TODO -- fix -->` is not. The remaining divergence is recorded for a live check against GitHub; it has not been checked yet.

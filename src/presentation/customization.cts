@@ -251,12 +251,35 @@ export interface ILifecycleNotePresentationContext extends IPresentationContext 
  * it is identified. Whatever it returns, the review keeps its publication
  * marker, every suggestion pull request keeps its structured marker, native
  * suggestion blocks stay exactly as validated, and the size limits count the
- * customized text. A result is refused with a `TypeError`, before anything is
- * written, when it is not a non-blank string, omits one of its context's
- * `required` fragments, could open a suggestion block, leaves a code fence or
- * raw HTML open, contains text that reads as a publication or suggestion
- * marker, or (for `attribution`) spans more than one line. An exception a
- * callback throws propagates unchanged.
+ * customized text. Results are read with a conformant CommonMark + GFM
+ * parser. A result is refused with a `TypeError`, before anything is written,
+ * when it:
+ *
+ * - is not a non-blank string;
+ *
+ * - omits one of its context's `required` fragments;
+ *
+ * - could open a suggestion block, or leaves a code fence, an HTML block or
+ *   raw HTML open (a trailing `/>` closes only void elements);
+ *
+ * - contains text that reads as a publication or suggestion marker;
+ *
+ * - adds raw HTML or a link reference definition of its own (a node whose
+ *   exact text the built-in Markdown also has as a node may pass through);
+ *
+ * - hides a `required` fragment: inside raw HTML, code it does not open, an
+ *   image, a definition, an element GitHub does not display or that has a
+ *   `hidden` or `style` attribute, or GitHub math (`$…$`); or, for a
+ *   permalink, as an image source, as the text of a link elsewhere, or inside
+ *   an `<a>` whose `href` is elsewhere;
+ *
+ * - (for `attribution`) spans more than one line;
+ *
+ * - once composed into its comment, body or suggestion pull request
+ *   description, leaves something open there that the built-in presentation
+ *   does not, or disturbs a suggestion block or marker.
+ *
+ * An exception a callback throws propagates unchanged.
  *
  * Callbacks run while the review is prepared, once per element, and must be
  * deterministic. They are not part of the publication identity: a retry with

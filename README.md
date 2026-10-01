@@ -308,8 +308,9 @@ Results are read with a conformant CommonMark + GFM parser (`micromark`, as rema
 - could open a `suggestion` block, or leaves a code fence or raw HTML (such as `<!--` or `<details>`) open, which would swallow or hide what follows;
 - contains text that reads as a publication or suggestion marker;
 - adds raw HTML (any tag or comment) or a link reference definition of its own; one whose exact text the built-in Markdown already contains, such as the `<sub>` around an attribution or a producer's own comment, may pass through;
-- hides a `required` fragment: each must be shown as itself, not inside raw HTML, a code span or block it does not open itself, an image, a definition, or an element GitHub does not display. A permalink may be a link's destination, but not an image's source or the text of a link to somewhere else;
-- spans several lines, for `attribution`.
+- hides a `required` fragment: each must be shown as itself, not inside raw HTML, a code span or block it does not open itself, an image, a definition, an element GitHub does not display, or GitHub math (`$…$`). A permalink may be a link's destination, but not an image's source, the text of a link to somewhere else, or inside an `<a>` whose `href` is somewhere else;
+- spans several lines, for `attribution`;
+- once composed into its comment, body or suggestion pull request description, leaves something open there that the built-in presentation does not, or disturbs a suggestion block or marker. Every composed text is checked this way, with or without callbacks.
 
 The context your callback receives is a deeply frozen copy. An exception your callback throws propagates unchanged. Callbacks are not part of the publication identity: a retry with the same state path never re-renders what an earlier call already planned or sent. The review body's section linking each suggestion pull request is not customizable yet, and there is no command-line equivalent; repository-level templates are not supported.
 
