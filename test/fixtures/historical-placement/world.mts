@@ -7,8 +7,9 @@
  * Each world is a fake GitHub over HTTP (test/fixtures/composition) serving
  * one pull request, reached by the real public library or CLI through the
  * real GitHub client with only `fetch` replaced. The fixtures mirror the live
- * fixtures of GH-16 and GH-19 (docs/evidence/realignment/e1-e3-readme.md and
- * e2-readme.md): a 20-line file whose reviewed commit changes lines 5 and 6.
+ * fixtures of GH-16 (docs/evidence/realignment/e1-e3-readme.md) and GH-19
+ * (docs/evidence/realignment/e2-readme.md): a 20-line file whose reviewed
+ * commit changes lines 5 and 6.
  * Lines 2-20 are the recorded text; line 1, which no recorded hunk shows, is a
  * heading chosen here.
  *
@@ -24,6 +25,14 @@
  *   more afterwards, on a commit the pull request never contained.
  * - UNRELATED: a commit of another branch, which no head of the pull request
  *   ever contained (GH-16's negative controls).
+ * - MOVED (the base branch moved on without the pull request): R changes
+ *   lines 5 and 6 of the sample and line 2 of the notes, and an ordinary push
+ *   then changes line 15. The base branch's tip T, the pull request's
+ *   `base.sha`, is no longer the merge base B of the base and the head:
+ *   either T cherry-picked R's lines 5 and 6 ('moved-picked'), or T inserted
+ *   a line near the top of the sample ('moved-inserted'). GitHub resolves a
+ *   line at R against T..R (GH-16), which differs from B..R in the sample but
+ *   not in the notes, which T left alone.
  *
  * The host models documented and recorded GitHub behavior; it is not
  * evidence of live GitHub behavior.
@@ -65,6 +74,11 @@ export const REBASED_HEAD = 'c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2';
 export const LATER_BASE = 'c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3';
 /** A commit of another branch. */
 export const UNRELATED = 'e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1';
+/** MOVED: R, the head after an ordinary push, and two base tips that moved on from B (BASE) without the pull request. */
+export const MOVED_R = 'f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1';
+export const MOVED_HEAD = 'f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2';
+export const TIP_PICKED = 'f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3';
+export const TIP_INSERTED = 'f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4';
 
 /** A recorded line of the fixture file (docs/evidence/realignment/e0-41-compare-e69981e-b3e3ed7.json). */
 function line(n: number, text: string): string {
@@ -99,6 +113,10 @@ export const SNAPSHOTS: Readonly<Record<string, Readonly<Record<string, readonly
   [REBASED_HEAD]: { [SAMPLE]: sample({ 6: REVIEWED_6, 18: 'base advanced (N).' }), [NOTES]: NOTES_REVIEWED },
   [LATER_BASE]: { [SAMPLE]: sample({ 18: 'base advanced (N).', 20: 'base advanced again.' }), [NOTES]: NOTES_BASE },
   [UNRELATED]: { [SAMPLE]: sample(), [NOTES]: ['# Notes\n', 'First note, elsewhere.\n', 'Second note.\n'] },
+  [MOVED_R]: { [SAMPLE]: sample({ 5: REVIEWED_5, 6: REVIEWED_6 }), [NOTES]: NOTES_REVIEWED },
+  [MOVED_HEAD]: { [SAMPLE]: sample({ 5: REVIEWED_5, 6: REVIEWED_6, 15: 'follow-up commit C2.' }), [NOTES]: NOTES_REVIEWED },
+  [TIP_PICKED]: { [SAMPLE]: sample({ 5: REVIEWED_5, 6: REVIEWED_6 }), [NOTES]: NOTES_BASE },
+  [TIP_INSERTED]: { [SAMPLE]: [...sample().slice(0, 1), 'Inserted by the base.\n', ...sample().slice(1)], [NOTES]: NOTES_BASE },
 };
 
 export const PARENTS: Readonly<Record<string, readonly string[]>> = {
@@ -112,14 +130,30 @@ export const PARENTS: Readonly<Record<string, readonly string[]>> = {
   [REBASED_HEAD]: [ADVANCED_BASE],
   [LATER_BASE]: [ADVANCED_BASE],
   [UNRELATED]: [BASE],
+  [MOVED_R]: [BASE],
+  [MOVED_HEAD]: [MOVED_R],
+  [TIP_PICKED]: [BASE],
+  [TIP_INSERTED]: [BASE],
 };
 
-/** Each world's pull request: its base commit, its head, and the heads force-pushes replaced. */
-export type WorldName = 'ancestor' | 'discarded' | 'rebased';
-const PULLS: Readonly<Record<WorldName, { readonly base: string; readonly head: string; readonly forcePushes: readonly (string | null)[] }>> = {
+/**
+ * Each world's pull request: its base commit (`base.sha`), the merge base of
+ * that and the head when it differs (the base of the pull request's diff),
+ * its head, and the heads force-pushes replaced.
+ */
+export type WorldName = 'ancestor' | 'discarded' | 'rebased' | 'moved-picked' | 'moved-inserted';
+interface IWorldPull {
+  readonly base: string;
+  readonly mergeBase?: string;
+  readonly head: string;
+  readonly forcePushes: readonly (string | null)[];
+}
+const PULLS: Readonly<Record<WorldName, IWorldPull>> = {
   ancestor: { base: BASE, head: ANCESTOR_HEAD, forcePushes: [] },
   discarded: { base: BASE, head: DISCARDED_HEAD, forcePushes: [DISCARDED_R] },
   rebased: { base: ADVANCED_BASE, head: REBASED_HEAD, forcePushes: [REBASED_R] },
+  'moved-picked': { base: TIP_PICKED, mergeBase: BASE, head: MOVED_HEAD, forcePushes: [] },
+  'moved-inserted': { base: TIP_INSERTED, mergeBase: BASE, head: MOVED_HEAD, forcePushes: [] },
 };
 
 /** A snapshot's files as text. */
@@ -136,7 +170,8 @@ export function repositoryFor(name: WorldName, forcePushes?: readonly (string | 
     snapshots: SNAPSHOTS,
     parents: PARENTS,
     forcePushes: forcePushes ?? pull.forcePushes,
-    pullFiles: diffFiles(texts(pull.base), texts(pull.head)),
+    // The pull request's files run from the merge base, as GitHub shows them.
+    pullFiles: diffFiles(texts(pull.mergeBase ?? pull.base), texts(pull.head)),
     pull: { headRef: 'feature/placement', baseRef: 'main' },
     defaultBranch: 'main',
   };

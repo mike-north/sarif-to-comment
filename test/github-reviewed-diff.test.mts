@@ -41,6 +41,10 @@ import {
   REPO,
   SAMPLE,
   TOKEN,
+  MOVED_HEAD,
+  MOVED_R,
+  TIP_PICKED,
+  UNRELATED,
   makeWorld,
   reads,
   sample,
@@ -188,6 +192,59 @@ describe('fetchContext returns the reviewed diff (specification R13.1)', () => {
     });
     const { context } = await client.fetchContext({ destination: DESTINATION, reviewedCommit: REBASED_R });
     assert.deepEqual(context.diff.files, [{ path: SAMPLE }]);
+  });
+
+  test('a base tip that moved past the diff base: one more comparison, and files the tip changed are listed without a patch', async () => {
+    const { world, client } = clientFor('moved-picked');
+    const { context } = await client.fetchContext({ destination: DESTINATION, reviewedCommit: MOVED_R });
+    assert.deepEqual(reads(world), [
+      `/pulls/${String(PULL)}`,
+      `/compare/${TIP_PICKED}...${MOVED_HEAD}`,
+      `/compare/${BASE}...${MOVED_R}`,
+      `/compare/${BASE}...${TIP_PICKED}`,
+    ]);
+    assert.deepEqual(context.diff, {
+      baseCommit: BASE,
+      headCommit: MOVED_R,
+      files: [
+        { path: NOTES, patch: ['@@ -1,3 +1,3 @@', ' # Notes', '-First note.', '+First note, reviewed.', ' Second note.'].join('\n') },
+        { path: SAMPLE },
+      ],
+    });
+    assert.deepEqual(context.fileDiagnostics, [{ path: SAMPLE, reason: 'base-changed' }]);
+  });
+
+  test('a file only the moved tip changed is listed too, without a patch', async () => {
+    const { client } = clientFor('moved-picked', {
+      override: (url) => (url.pathname.endsWith(`/compare/${BASE}...${TIP_PICKED}`)
+        ? json({ status: 'ahead', merge_base_commit: { sha: BASE }, files: [{ filename: 'docs/tip-only.md', status: 'added', additions: 1, deletions: 0, patch: '@@ -0,0 +1 @@\n+x' }] })
+        : undefined),
+    });
+    const { context } = await client.fetchContext({ destination: DESTINATION, reviewedCommit: MOVED_R });
+    assert.deepEqual(context.diff.files.map((f) => [f.path, f.patch === undefined]), [[NOTES, false], [SAMPLE, false], ['docs/tip-only.md', true]]);
+  });
+
+  test('a moved tip\'s list of 300 files may be incomplete, so no file keeps a patch', async () => {
+    const { client } = clientFor('moved-picked', {
+      override: (url) => (url.pathname.endsWith(`/compare/${BASE}...${TIP_PICKED}`) ? json(manyFiles(300)) : undefined),
+    });
+    const { context } = await client.fetchContext({ destination: DESTINATION, reviewedCommit: MOVED_R });
+    assert.ok(context.diff.files.length >= 2);
+    assert.ok(context.diff.files.every((f) => f.patch === undefined));
+  });
+
+  test('an old-source commit that is not an ancestor of the tip: both sides of their comparison are withheld', async () => {
+    const { world, client } = clientFor('moved-picked', {
+      override: (url) => {
+        if (url.pathname.endsWith(`/compare/${UNRELATED}...${MOVED_R}`)) return json({ status: 'diverged', merge_base_commit: { sha: BASE }, files: [] });
+        if (url.pathname.endsWith(`/compare/${MOVED_R}...${UNRELATED}`)) return json({ status: 'diverged', merge_base_commit: { sha: BASE }, files: [] });
+        return undefined;
+      },
+    });
+    const { context } = await client.fetchContext({ destination: DESTINATION, reviewedCommit: MOVED_R, oldSourceCommit: UNRELATED });
+    assert.deepEqual(reads(world).slice(-2), [`/compare/${UNRELATED}...${TIP_PICKED}`, `/compare/${TIP_PICKED}...${UNRELATED}`]);
+    // UNRELATED changed the notes, the tip changed the sample: both differ between the old-source commit and the tip.
+    assert.deepEqual(context.fileDiagnostics.map((d) => d.path).sort(), [NOTES, SAMPLE]);
   });
 
   test('a reviewed diff of 300 files may be incomplete, so it is refused', async () => {

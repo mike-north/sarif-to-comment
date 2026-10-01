@@ -30,7 +30,9 @@
  *                                                  the diff of its commit_id: the
  *                                                  pull request's files at the head,
  *                                                  otherwise the two-dot diff from
- *                                                  the base commit to that commit;
+ *                                                  the pull request's base commit
+ *                                                  (base.sha, `commits.base`) to
+ *                                                  that commit;
  *                                                  a line outside it is 422 "Line
  *                                                  could not be resolved", and
  *                                                  nothing is created. A commit the
@@ -717,7 +719,8 @@ export class FakeHttpGitHub {
   /**
    * The patch GitHub resolves a review comment's line against (GH-16): the
    * pull request's own patch of the file at the head, otherwise the two-dot
-   * diff from the base commit to `commit`. Undefined when the host has no
+   * diff from the pull request's base commit (`base.sha`, which may have
+   * moved past its merge base with the head) to `commit`. Undefined when the host has no
    * snapshot of `commit`, and null when the file has no patch there.
    */
   reviewPatch(commit: string, filePath: string): readonly string[] | null | undefined {

@@ -47,12 +47,17 @@ import {
   DISCARDED_R,
   DISCARDED_R0,
   LATER_BASE,
+  MOVED_HEAD,
+  MOVED_R,
   NOTES,
   OWNER,
   PULL,
   REBASED_R,
   REPO,
   SAMPLE,
+  SNAPSHOTS,
+  TIP_INSERTED,
+  TIP_PICKED,
   TOKEN,
   UNRELATED,
   document,
@@ -194,6 +199,57 @@ describe('findings are placed on the reviewed diff, at the reviewed commit (R13.
     assert.ok(before.includes(`/pulls/${String(PULL)}/files`));
     assert.equal(before.filter((r) => r.startsWith(`/compare/${ANCESTOR_HEAD}...`)).length, 0);
     assert.equal(before.filter((r) => r === 'graphql').length, 0);
+  });
+});
+
+describe('a base branch that moved on without the pull request: base.sha is not the diff base (R13.1)', () => {
+  // GitHub resolves a line at R against base.sha..R (GH-16). Where the base's
+  // tip changed a file since the diff base, that diff can differ from the one
+  // the tool can read; findings on such a file keep R7's fallback, with a
+  // warning, and every other file is placed inline as usual.
+
+  test('the harness: GitHub would refuse RIGHT 5 at R, because the tip cherry-picked those lines', async () => {
+    const world = makeWorld('moved-picked');
+    const create = createGitHubClient({ token: TOKEN, fetch: world.host.fetch }).createReview({
+      owner: OWNER, repo: REPO, pullNumber: PULL, commitId: MOVED_R, body: 'Fixture.', event: 'COMMENT', comments: [{ path: SAMPLE, body: 'x', line: 5, side: 'RIGHT' }],
+    });
+    await assert.rejects(create, { status: 422 });
+  });
+
+  test('regression: lines the tip already has are not placed inline, so the review is not refused (RIGHT)', async () => {
+    const world = makeWorld('moved-picked');
+    const outcome = await publish(world, MOVED_R, document([finding('Line 5.', SAMPLE, 5), finding('The first note.', NOTES, 2)]));
+    assert.equal(status(outcome), 'published', markdown(outcome));
+    const review = theReview(world);
+    assert.equal(review.request.commit_id, MOVED_R);
+    assert.deepEqual(anchors(review), [[NOTES, 'RIGHT', 2]], 'the notes, which the tip left alone, stay inline');
+    assert.ok(review.body.includes(permalink(MOVED_R, SAMPLE, 5)), review.body);
+    assert.deepEqual(codes(outcome), [['warning', 'inline-placement-unavailable']]);
+  });
+
+  test('regression: a deleted line is not anchored LEFT on a tip whose line numbers moved, so it is never misplaced (LEFT)', async () => {
+    // The fixture's fact: the tip's line 5 is another line than the diff base's.
+    assert.notEqual(SNAPSHOTS[TIP_INSERTED]?.[SAMPLE]?.[4], SNAPSHOTS[BASE]?.[SAMPLE]?.[4]);
+    const world = makeWorld('moved-inserted');
+    const outcome = await publish(world, MOVED_R, document([finding('The original line 5.', SAMPLE, 5), finding('The original first note.', NOTES, 2)], BASE));
+    assert.equal(status(outcome), 'published', markdown(outcome));
+    const review = theReview(world);
+    assert.deepEqual(anchors(review), [[NOTES, 'LEFT', 2]]);
+    assert.ok(review.body.includes(permalink(BASE, SAMPLE, 5)), review.body);
+    assert.deepEqual(codes(outcome), [['warning', 'inline-placement-unavailable']]);
+  });
+
+  test('one more comparison, of the diff base with the tip, finds what the tip changed', async () => {
+    const world = makeWorld('moved-picked');
+    await validate(world, MOVED_R, document([finding('Line 5.', SAMPLE, 5)]));
+    assert.ok(reads(world).includes(`/compare/${BASE}...${TIP_PICKED}`), reads(world).join('\n'));
+  });
+
+  test('at the head, the pull request\'s own diff is used as before', async () => {
+    const world = makeWorld('moved-picked');
+    const outcome = await publish(world, MOVED_HEAD, document([finding('Line 15.', SAMPLE, 15)]));
+    assert.equal(status(outcome), 'published', markdown(outcome));
+    assert.deepEqual(anchors(theReview(world)), [[SAMPLE, 'RIGHT', 15]]);
   });
 });
 
