@@ -137,17 +137,20 @@
  *   oldSourceCommit is given; GET compare/{B}...{R}, whose files are the
  *   reviewed diff when its status is `ahead` or `identical`. Otherwise
  *   (`behind`, `diverged`) GitHub measured from the merge base of B and R,
- *   so GET compare/{R}...{B} lists the files the base side changed. And
- *   GitHub resolves a line at R against the two-dot diff from base.sha T
- *   (GH-16), so when T is not B, GET compare/{B}...{T} (and GET
- *   compare/{T}...{B} when B is not T's ancestor) lists the files T changed
- *   since B. Every file those lists name is listed without a patch for
+ *   so GET compare/{R}...{B} lists the files the base side changed. GitHub
+ *   resolves a line at R against a two-dot diff to R from base.sha T or from
+ *   merge-base(base, head); GH-16 cannot tell which, because its fixtures had
+ *   the two equal. So that both hypotheses hold, when T is not B, GET
+ *   compare/{B}...{T} (and GET compare/{T}...{B} when B is not T's
+ *   ancestor) lists the files T changed since B. Every file those lists name is listed without a patch for
  *   placement ('base-changed'); every other file keeps its patch, which is
  *   its two-dot patch from B and from T alike. A withholding list of 300
  *   files (GitHub's most per comparison) withholds every patch. A first
  *   comparison of 300 files is 'files-incomplete'. The pull files are not
  *   read. A withheld file's patch still verifies old-side reads when B is
- *   an ancestor of R (its old side is then B).
+ *   an ancestor of R (its old side is then B). A file only those lists name
+ *   (no change of R's) is read at B directly, as B's own file: nothing is
+ *   anchored on it.
  *
  *   context: {
  *     owner, repo, pullNumber, reviewedCommit,
@@ -1301,12 +1304,12 @@ function requireDestination(destination: UntrustedObject): asserts destination i
   requireInput(isPositiveInteger(pullNumber), 'pullNumber must be a positive integer');
 }
 
-/** Whether a host value is one of the four statuses GitHub's commit comparison documents. */
 /** Whether a comparison's base is its head or an ancestor of it, so the three-dot diff is the two-dot diff. */
 function containsBase(status: CommitComparison): boolean {
   return status === 'ahead' || status === 'identical';
 }
 
+/** Whether a host value is one of the four statuses GitHub's commit comparison documents. */
 function isCommitComparison(value: unknown): value is CommitComparison {
   return value === 'identical' || value === 'ahead' || value === 'behind' || value === 'diverged';
 }
@@ -2181,6 +2184,9 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
     // (its old side is the diff base), so it can verify old-side reads even
     // though no line is placed on it.
     let withheldVerifies = false;
+    // Files only another side changed: listed without a patch, never placed,
+    // and read at the diff base as its own file (see readVerifiedBase).
+    let onlyElsewhere: ReadonlySet<string> = new Set();
     if (head === reviewedCommit) {
       entries = await readPullFiles(owner, repo, pullNumber, first.changedFiles);
       const second = await readPull(owner, repo, pullNumber);
@@ -2190,7 +2196,7 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
       baseCommit ??= await mergeBaseOf(owner, repo, first.base, head);
     } else {
       baseCommit ??= await mergeBaseOf(owner, repo, first.base, head);
-      ({ entries, withheld, withheldVerifies } = await readReviewedComparison(owner, repo, baseCommit, reviewedCommit, first.base));
+      ({ entries, withheld, withheldVerifies, onlyElsewhere } = await readReviewedComparison(owner, repo, baseCommit, reviewedCommit, first.base));
     }
 
     const files: IPullFile[] = [];
@@ -2217,7 +2223,7 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
         }
       }
       files.push(file);
-      changes.set(entry.filename, { patch, renamedFrom: file.previousPath });
+      if (!onlyElsewhere.has(entry.filename)) changes.set(entry.filename, { patch, renamedFrom: file.previousPath });
     }
     const renamedPaths = new Set<string>();
     for (const [filePath, change] of changes) {
@@ -2236,6 +2242,10 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
       if (renamedPaths.has(filePath)) {
         throw new GitHubError('rename-unsupported', redact(`${filePath} is renamed by the pull request; its old side is not read.`));
       }
+      // A file only another side changed has no patch of the reviewed diff
+      // to verify against, and nothing is anchored on it: its old-side text
+      // is the diff base's own file, read exactly from that commit.
+      if (onlyElsewhere.has(filePath)) return readBlob(owner, repo, baseCommit, filePath);
       const change = changes.get(filePath);
       if (change === undefined) {
         const [newText, baseText] = [await readBlob(owner, repo, reviewedCommit, filePath), await readBlob(owner, repo, baseCommit, filePath)];
@@ -2334,10 +2344,11 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
   /**
    * The reviewed diff of a reviewed commit that is not the head
    * (docs/specification.md R13.1): GET compare/{base}...{reviewed}. GitHub
-   * resolves a line at the reviewed commit against the two-dot diff from the
-   * pull request's base commit (`tip`, base.sha) to it (GH-16); the tool can
-   * read only three-dot comparisons, so a file keeps the comparison's patch
-   * only when no side could make the two differ. Files are withheld (listed
+   * resolves a line at the reviewed commit against a two-dot diff to it from
+   * the pull request's base commit (`tip`, base.sha) or from `base`; GH-16
+   * cannot tell which. The tool can read only three-dot comparisons, so a
+   * file keeps the comparison's patch only when its diff is the same under
+   * both. Files are withheld (listed
    * without a patch) when the base side changed them since the merge base of
    * `base` and the reviewed commit (GET compare/{reviewed}...{base}, read when
    * `base` is not their ancestor), or when the tip changed them since `base`
@@ -2352,7 +2363,12 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
     base: unknown,
     reviewed: string,
     tip: unknown,
-  ): Promise<{ readonly entries: readonly IPullFileEntry[]; readonly withheld: ReadonlySet<string>; readonly withheldVerifies: boolean }> {
+  ): Promise<{
+    readonly entries: readonly IPullFileEntry[];
+    readonly withheld: ReadonlySet<string>;
+    readonly withheldVerifies: boolean;
+    readonly onlyElsewhere: ReadonlySet<string>;
+  }> {
     const what = 'reviewed-diff comparison';
     const reviewedSide = await comparison(owner, repo, base, reviewed, what);
     if (reviewedSide.mayBeIncomplete) {
@@ -2372,6 +2388,7 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
 
     const entries = [...reviewedSide.entries];
     const listed = new Set(entries.map((e) => e.filename));
+    const onlyElsewhere = new Set<string>();
     // A file only another side changed is in the two-dot diff too, listed here
     // without a patch under each name it has on either side (a rename on
     // another side runs the other way in the reviewed diff, so it is not
@@ -2381,6 +2398,7 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
         if (filename === undefined || listed.has(filename)) continue;
         entries.push({ filename, additions: 0, deletions: 0 });
         listed.add(filename);
+        onlyElsewhere.add(filename);
       }
     }
     const withheld = new Set<string>();
@@ -2390,7 +2408,7 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
       if (entry.previous_filename !== undefined) withheld.add(entry.previous_filename);
     }
     // With `base` an ancestor of the reviewed commit, every patch's old side is `base` itself.
-    return { entries, withheld, withheldVerifies: containsBase(reviewedSide.status) };
+    return { entries, withheld, withheldVerifies: containsBase(reviewedSide.status), onlyElsewhere };
   }
 
   /** One comparison's status and changed files: GET compare/{from}...{to}. */
