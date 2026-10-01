@@ -349,10 +349,11 @@
  *     targeted mode, the read that proves the repository exists before an
  *     original's 404 is taken to mean "no such pull request".
  *   getPullRequest({ owner, repo, pullNumber })
- *       -> { number, htmlUrl, state: 'open' | 'closed', merged, body, headRef,
- *            headRepository, baseRepository, labels }
- *     GET pull. The answer must name the requested pull request, with state
- *     open or closed and a boolean merged that is false while open;
+ *       -> { number, htmlUrl, title, state: 'open' | 'closed', merged, draft,
+ *            body, headRef, headRepository, baseRepository, labels }
+ *     GET pull. The answer must name the requested pull request, with a
+ *     title, state open or closed, a boolean merged that is false while
+ *     open, and a boolean draft;
  *     headRepository is null when the head repository was deleted. Anything
  *     else is 'malformed-response', never a guess.
  *   listHeadRefForcePushes({ owner, repo, pullNumber })
@@ -837,9 +838,13 @@ export interface ISweepPageRequest {
 export interface IPullRequestSnapshot {
   readonly number: number;
   readonly htmlUrl: string;
+  /** Its title, as GitHub reports it. */
+  readonly title: string;
   readonly state: 'open' | 'closed';
   /** Whether it was merged; always false while open. */
   readonly merged: boolean;
+  /** Whether it is a draft. */
+  readonly draft: boolean;
   /** The description ('' when it has none). */
   readonly body: string;
   readonly headRef: string;
@@ -3014,12 +3019,16 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
     if (typeof merged !== 'boolean' || (state === 'open' && merged)) {
       throw new GitHubError('malformed-response', `The ${what} has no valid merged flag.`);
     }
+    const draft = optionalMember(pull, 'draft');
+    if (typeof draft !== 'boolean') throw new GitHubError('malformed-response', `The ${what} has no valid draft flag.`);
     const headRepo = optionalMember(pull, 'head', 'repo');
     return {
       number: pullNumber,
       htmlUrl: hostString(optionalMember(pull, 'html_url'), `${what}'s URL`),
+      title: hostString(optionalMember(pull, 'title'), `${what}'s title`),
       state,
       merged,
+      draft,
       body: bodyText(optionalMember(pull, 'body'), what),
       headRef: hostString(optionalMember(pull, 'head', 'ref'), `${what}'s head branch`),
       headRepository: headRepo === null ? null : hostString(optionalMember(headRepo, 'full_name'), `${what}'s head repository`),

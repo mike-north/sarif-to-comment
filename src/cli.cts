@@ -22,7 +22,11 @@
  *                       --delivery, --edits, --grouped-edits,
  *                       --file-operations, --companion-bundle:
  *                       the delivery policy, docs/delivery-policy-
- *                       contract.md §12)
+ *                       contract.md §12; --existing-companion N,
+ *                       repeatable: an existing suggestion pull
+ *                       request the review's companion index
+ *                       lists, docs/companion-suggestion-pr-
+ *                       contract.md §2.13)
  *   close-suggestion-prs close suggestion pull requests  closeSuggestionPullRequests
  *                       whose original ended
  *                       (docs/suggestion-cleanup-contract.md)
@@ -199,6 +203,11 @@ const REVIEW_POLICY_OPTIONS = md`  --source-root ABSOLUTE_FILE_URI
                                  requests, comma-separated.
   --mark-suggestion-prs-ready    Create companion pull requests ready for review
                                  instead of as drafts.
+  --existing-companion N         An existing suggestion pull request of this
+                                 pull request to list in the review's companion
+                                 index, beside those the review creates. Repeat
+                                 it for several. It must name this pull request
+                                 in its marker; it is never changed.
 `;
 
 const PUBLISH_OPTIONS = md`  --sarif FILE                   SARIF 2.1.0 JSON file to publish.
@@ -263,7 +272,7 @@ Usage:
                    [--submit] [--delivery PRESET] [--edits LIST]
                    [--grouped-edits LIST] [--file-operations LIST]
                    [--companion-bundle BUNDLE] [--pr-labels A,B,C]
-                   [--mark-suggestion-prs-ready]
+                   [--mark-suggestion-prs-ready] [--existing-companion N]...
   sarif-to-comment [COMMAND] --help
   sarif-to-comment --version
 
@@ -544,6 +553,7 @@ Usage:
                             [--grouped-edits LIST] [--file-operations LIST]
                             [--companion-bundle BUNDLE] [--pr-labels A,B,C]
                             [--mark-suggestion-prs-ready]
+                            [--existing-companion N]...
                             [--format human|json|toon]
 
 Runs every check publish runs, reading the pull request and its source from
@@ -578,6 +588,7 @@ Usage:
                            [--grouped-edits LIST] [--file-operations LIST]
                            [--companion-bundle BUNDLE] [--pr-labels A,B,C]
                            [--mark-suggestion-prs-ready]
+                           [--existing-companion N]...
                            [--format human|json|toon]
 
 The same operation as the original form without a command. The review is a draft
@@ -1746,12 +1757,14 @@ const REVIEW_SPEC = {
     '--sarif', '--repo', '--pull', '--commit', '--source-root', '--old-source-commit', '--pr-labels',
     '--delivery', '--edits', '--grouped-edits', '--file-operations', '--companion-bundle',
   ],
+  repeatable: ['--existing-companion'],
   booleans: ['--ignore-approval-hold', '--submit', '--mark-suggestion-prs-ready'],
   required: ['--sarif', '--repo', '--pull', '--commit'],
 } as const satisfies IOptionSpec;
 
 const PUBLISH_SPEC: IOptionSpec = {
   values: [...REVIEW_SPEC.values.slice(0, 4), '--state', ...REVIEW_SPEC.values.slice(4)],
+  repeatable: REVIEW_SPEC.repeatable,
   booleans: REVIEW_SPEC.booleans,
   required: [...REVIEW_SPEC.required, '--state'],
 };
@@ -1768,6 +1781,7 @@ interface IReviewRequestInput {
     readonly delivery?: IDeliveryPolicyLayer;
     readonly pullRequestLabels?: readonly string[];
     readonly markSuggestionPullRequestsReady?: true;
+    readonly existingCompanions?: readonly number[];
   };
 }
 
@@ -1778,7 +1792,7 @@ interface IReviewRequest<Input extends IReviewRequestInput> {
 }
 
 /** The review target and policy from parsed options; throws UsageError. */
-function reviewRequestInput({ values, flags }: IParsedOptions): IReviewRequestInput {
+function reviewRequestInput({ values, lists, flags }: IParsedOptions): IReviewRequestInput {
   const repo = REPO_FLAG_PATTERN.exec(requiredValue(values, '--repo'));
   const owner = repo?.[1];
   const name = repo?.[2];
@@ -1794,12 +1808,14 @@ function reviewRequestInput({ values, flags }: IParsedOptions): IReviewRequestIn
   const labels = values.get('--pr-labels');
   const ready = flags.has('--mark-suggestion-prs-ready');
   const delivery = deliveryFlags(values);
+  const existing = existingCompanionFlags(lists.get('--existing-companion') ?? []);
   const options = {
     ...(flags.has('--ignore-approval-hold') ? { ignoreApprovalHold: true as const } : {}),
     ...(flags.has('--submit') ? { submit: true as const } : {}),
     ...(delivery === undefined ? {} : { delivery }),
     ...(labels === undefined ? {} : { pullRequestLabels: labelListFlag(labels) }),
     ...(ready ? { markSuggestionPullRequestsReady: true as const } : {}),
+    ...(existing.length === 0 ? {} : { existingCompanions: existing }),
   };
   return {
     destination,
@@ -1848,6 +1864,25 @@ function deliveryFlags(values: ReadonlyMap<string, string>): IDeliveryPolicyLaye
   const [, member = '', index] = problem.pointer.split('/');
   const flag = DELIVERY_FLAGS.find(([, name]) => name === member)?.[0] ?? '--delivery';
   throw new UsageError(index === undefined ? `${flag} ${problem.detail}` : `${flag} entry ${String(Number(index) + 1)} ${problem.detail}`);
+}
+
+/**
+ * The numbers of the repeated `--existing-companion N`, in the order given
+ * (docs/companion-suggestion-pr-contract.md §2.13.1): each a positive pull
+ * request number written in decimal without a leading zero, each at most
+ * once. Anything else is a usage error naming the flag.
+ */
+function existingCompanionFlags(given: readonly string[]): number[] {
+  const numbers: number[] = [];
+  for (const value of given) {
+    const number = Number(value);
+    if (!/^[1-9][0-9]*$/.test(value) || !Number.isSafeInteger(number)) {
+      throw new UsageError(`--existing-companion must be a pull request number, not ${JSON.stringify(value)}`);
+    }
+    if (numbers.includes(number)) throw new UsageError(`--existing-companion names #${value} more than once`);
+    numbers.push(number);
+  }
+  return numbers;
 }
 
 /**

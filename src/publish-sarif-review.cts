@@ -46,6 +46,11 @@
  *               markSuggestionPullRequestsReady?: boolean, // requests (docs/
  *                                              // companion-suggestion-pr-
  *                                              // contract.md §2.2)
+ *               existingCompanions?: number[], // existing suggestion pull
+ *                                              // requests the review's
+ *                                              // companion index lists
+ *                                              // (contract §2.13); part of
+ *                                              // the publication identity
  *               presentation?: { finding?, attribution?, alternatives?,
  *                 fileAddition?, fileDeletion?, lifecycleNote? } }
  *                                              // Markdown callbacks of named
@@ -94,8 +99,9 @@
  *      (docs/delivery-policy-contract.md §13); when either companion option
  *      is given with an effect (an extra label, or ready: true), it holds
  *      suggestionPullRequests: { markReady, pullRequestLabels } (the extra
- *      labels deduplicated, in the order given). Otherwise it is exactly as
- *      above. The repository's delivery configuration is never in it: the
+ *      labels deduplicated, in the order given); when the caller names
+ *      existing companions, it holds existingCompanions: [N, …], in the
+ *      order given (contract §2.13.1). Otherwise it is exactly as above. The repository's delivery configuration is never in it: the
  *      resolved policy is recorded with the publication instead.
  *   3. When the state path holds a companion publication plan
  *      (src/companion-publication.cts), continue it: identity checks, then
@@ -234,6 +240,21 @@ export interface IPublishSarifReviewOptions {
    * identity.
    */
   readonly markSuggestionPullRequestsReady?: boolean | undefined;
+  /**
+   * Existing suggestion pull requests of this pull request that the review
+   * lists in its companion index, by number, in the order to list them: for
+   * example proposals an earlier review created that this review continues.
+   * Each must already exist and follow the suggestion pull request
+   * convention with a marker naming this pull request as its original;
+   * otherwise nothing is published (`blocked`, with a
+   * `companion-not-reusable` error naming it). It is listed whether it is
+   * open, a draft, closed or merged, and a `companion-reused` note states
+   * which. Nothing is created, changed or inferred: only the pull requests
+   * named here are listed, besides the ones the review creates. Each number
+   * at most once; `[]` is the same as omitting it. Part of the publication
+   * identity.
+   */
+  readonly existingCompanions?: readonly number[] | undefined;
   /**
    * Your own Markdown for named review elements: a finding, its attribution
    * and alternatives, a proposed new file or file deletion, an edit made by
@@ -600,12 +621,13 @@ function jsonMember(object: IJsonObject, key: string): JsonValue {
 
 /**
  * Fingerprint of everything that determines the prepared content (see module
- * doc). The caller's delivery settings, and companion options given with an
- * effect, change what is published, so they are part of it; without them the
- * identity document is exactly what it always was.
+ * doc). The caller's delivery settings, companion options given with an
+ * effect, and the existing companions the review lists change what is
+ * published, so they are part of it; without them the identity document is
+ * exactly what it always was.
  */
 function inputFingerprintOf(captured: ICapturedInput): string {
-  const { companionOptions, delivery } = captured;
+  const { companionOptions, delivery, existingCompanions } = captured;
   const companions = companionOptions.markReady || companionOptions.pullRequestLabels.length > 0;
   const identity: IJsonObject = {
     format: INPUT_FORMAT,
@@ -617,6 +639,7 @@ function inputFingerprintOf(captured: ICapturedInput): string {
     ...(companions
       ? { suggestionPullRequests: { markReady: companionOptions.markReady, pullRequestLabels: [...companionOptions.pullRequestLabels] } }
       : {}),
+    ...(existingCompanions.length === 0 ? {} : { existingCompanions: [...existingCompanions] }),
   };
   return `sha256:${crypto.createHash('sha256').update(canonicalJson(identity), 'utf8').digest('hex')}`;
 }

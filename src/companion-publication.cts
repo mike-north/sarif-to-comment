@@ -7,8 +7,9 @@
  * requests and create, exactly once each, every remote object it implies —
  * per suggestion a proposal commit, its branch, its pull request (a draft
  * unless the plan says ready) and its labels, all under the tool-neutral
- * convention (docs/suggestion-pr-convention.md) — and then the review, which
- * links every suggestion by number. It
+ * convention (docs/suggestion-pr-convention.md) — and then the review, whose
+ * companion index lists every suggestion by number, with the existing ones
+ * the plan records, and whose sections link each one. It
  * never updates, force-pushes, closes, reopens, relabels or deletes anything,
  * and recovery never restores what a person changed (D29).
  *
@@ -22,8 +23,10 @@
  * source (`delivery`, docs/delivery-policy-contract.md §13), every
  * suggestion (id, branch, title, body, commit message, exact changes, and
  * the rendered sections of the proposals it holds — one, or several for a
- * `single` bundle), the review's body sections (text, or a reference to one
- * proposal of one suggestion) and inline comments, and preparation's
+ * `single` bundle), the review's body sections (text, a reference to one
+ * proposal of one suggestion, or, first, the companion index with the
+ * existing companions the caller selected, as read; contract §2.13.4) and
+ * inline comments, and preparation's
  * warnings and notes when there are any (`warnings`, a non-empty list of
  * diagnostics that are not errors, in either version; issue #42), bound by a
  * fingerprint over all of it. `delivery` is required in every plan version:
@@ -108,8 +111,8 @@ import type { IBranchPullRequest, ProposalChange } from './github.cjs';
 import { deliveryRecordProblem } from './delivery-policy.cjs';
 import type { IResolvedDeliveryPolicy } from './delivery-policy.cjs';
 import type { IDiagnostic } from './public-types.cjs';
-import type { ICompanionSectionReference, IPreparedCompanion, IPreparedSuggestions, ISuggestionContext, PreparedComment } from './prepare-review.cjs';
-import { renderReviewBody, renderSuggestionPullBody } from './prepare-review.cjs';
+import type { IPreparedCompanion, IPreparedSuggestions, ISuggestionContext, PreparedComment, ReviewBodySection } from './prepare-review.cjs';
+import { isExistingCompanion, renderReviewBody, renderSuggestionPullBody } from './prepare-review.cjs';
 import {
   PublicationStateError,
   boundedRejectionMessage,
@@ -254,7 +257,7 @@ interface IPlanRecord {
   /** The resolved delivery policy, with each value's source (docs/delivery-policy-contract.md §13). */
   readonly delivery: IResolvedDeliveryPolicy;
   readonly suggestions: readonly IPlanSuggestion[];
-  readonly review: { readonly sections: readonly (string | ICompanionSectionReference)[]; readonly comments: readonly PreparedComment[] };
+  readonly review: { readonly sections: readonly ReviewBodySection[]; readonly comments: readonly PreparedComment[] };
   /** Preparation's warnings; present exactly when there are any. */
   readonly warnings?: readonly IDiagnostic[];
   readonly planFingerprint: string;
@@ -519,7 +522,15 @@ function planProblem(record: unknown): string | null {
     const proposals = isPlainObject(suggestion) ? suggestion['sections'] : undefined;
     return isList(proposals) && section < proposals.length;
   };
-  if (!isList(sections) || !sections.every((p) => typeof p === 'string' || proposalOf(p))) {
+  // The companion index, when the plan has one, is the first section
+  // (docs/companion-suggestion-pr-contract.md §2.13.4); a plan written before
+  // the index existed has none.
+  const indexOf = (part: unknown): boolean => {
+    if (!isPlainObject(part) || !hasExactKeys(part, ['companionIndex'])) return false;
+    const index = part['companionIndex'];
+    return isPlainObject(index) && hasExactKeys(index, ['existing']) && isList(index['existing']) && index['existing'].every(isExistingCompanion);
+  };
+  if (!isList(sections) || !sections.every((p, i) => typeof p === 'string' || proposalOf(p) || (i === 0 && indexOf(p)))) {
     return 'malformed review sections';
   }
   const delivery = deliveryRecordProblem(record['delivery']);

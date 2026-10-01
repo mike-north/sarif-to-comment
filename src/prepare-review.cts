@@ -75,6 +75,14 @@
  *                                     // body and for the review body
  *     maxPayloadBytes?: number,       // default 1,000,000 bytes of UTF-8 JSON
  *                                     // of { body, comments }
+ *     existingCompanions?: [{ number, title, state }],
+ *                                     // existing suggestion pull requests the
+ *                                     // caller selected, as read (state
+ *                                     // 'open' | 'draft' | 'closed' |
+ *                                     // 'merged'), listed in the review's
+ *                                     // companion index after those it creates
+ *                                     // (docs/companion-suggestion-pr-contract.md
+ *                                     // §2.13)
  *     presentation?: { finding?, attribution?, alternatives?, fileAddition?,
  *       fileDeletion?, manualEdit?, lifecycleNote? } // callbacks returning the
  *                                     // Markdown of named components; each
@@ -103,10 +111,11 @@
  *       // has companion pull requests: each companion's exact changes on the
  *       // reviewed commit, its projection after a rewritten history, title,
  *       // commit message and the rendered sections of the proposals it holds
- *       // (several for a `single` bundle), and the body's sections (text, or
- *       // a reference to one proposal of one companion, rendered once its
- *       // number is known); review.body is then the body at its largest
- *       // possible size, for the limits
+ *       // (several for a `single` bundle), and the body's sections (text, a
+ *       // reference to one proposal of one companion, or, first, the
+ *       // companion index, each rendered once the numbers are known);
+ *       // review.body is then the body at its largest possible size, for
+ *       // the limits
  *   { status: 'blocked', diagnostics: Diagnostic[], warnings: Diagnostic[], markdown: string }
  *
  *   Diagnostic: the public IDiagnostic (docs/diagnostics.md, D45), with the
@@ -115,7 +124,8 @@
  *     "/runs/0/results/3"). `markdown` lists every diagnostic with its code and
  *     pointer.
  *   Evidence: { pointer, treatment: 'inline'|'suggestion'|'general',
- *     commentIndex? | bodySectionIndex?, source?: { commit, path, startLine?,
+ *     commentIndex? | bodySectionIndex? (among the body's sections after
+ *     the companion index, which is not counted), source?: { commit, path, startLine?,
  *     endLine?, text? } (always the result's own location), anchor?,
  *     fixSource?, replacement?: { startLine, endLine, originalText,
  *     replacementText } (exact replacement-module output), suggestionPayload?,
@@ -301,13 +311,24 @@
  *               then "\n\n" and its items joined by "\n\n---\n\n", each preceded by
  *               "**Location:** line(s) N[-M] of the proposed file\n\n" (creation) or
  *               rendered as a section with its quoted source (deletion)
- *   manual    = "**Proposed edit, to make by hand:** " ( "replace " link " with" details ":\n\n" block
- *               | "delete " link "." ) "\n\n" items as sections
+ *   manual    = "**Proposed edit, to make by hand:** " ( "replace " link " with" details ":
+
+" block
+ *               | "delete " link "." ) "
+
+" items as sections
  *               (src/presentation/manual-edit.cts; details state CRLF and a missing final newline)
  *   group     = guidance listing every change, then each change under its label, presented as
  *               a manual edit or a proposal (src/presentation/manual-group.cts)
- *   body      = sections, proposals, edits and groups made by hand, companion references and
- *               native batch guidance joined by "\n\n---\n\n" ('' when there are none)
+ *   index     = the companion index (src/presentation/companion-index.cts),
+ *               present when the review creates or lists any companion
+ *   body      = [ index ] then sections, proposals, edits and groups made by hand, companion
+ *               references and native batch guidance, joined by "
+
+---
+
+" ('' when there
+ *               are none)
  *   Source and alternative fences are longer than any backtick run they
  *   enclose, and never shorter than three backticks.
  */
@@ -317,6 +338,7 @@ import * as crypto from 'node:crypto';
 import type { SchemaObject, ValidateFunction } from 'ajv';
 import type AjvDraft04Module = require('ajv-draft-04');
 import type AjvFormatsModule = require('ajv-formats');
+import type { IExistingCompanion } from './existing-companions.cjs';
 import type { IReviewContext, ProposalChange } from './github.cjs';
 import { projectCompanion } from './companion-fidelity.cjs';
 import type { CompanionProjection, IProjectedEntry, IProjectionBasis, IProjectionTree, ProjectionLimit, UnfaithfulReason } from './companion-fidelity.cjs';
@@ -334,6 +356,8 @@ import type { IProducerAttribution, IProducerComponent } from './presentation/at
 import { renderCompanionChange } from './presentation/companion-changes.cjs';
 import { renderCompanionBundleDescription } from './presentation/companion-description.cjs';
 import type { ICompanionProjectionView } from './presentation/companion-projection.cjs';
+import { renderCompanionIndex } from './presentation/companion-index.cjs';
+import type { ICompanionIndexEntry } from './presentation/companion-index.cjs';
 import { renderBundledCompanionReference } from './presentation/companion-reference.cjs';
 import type { ICompanionContent } from './presentation/companion-changes.cjs';
 import { present, presentationOptionProblem } from './presentation/customization.cjs';
@@ -643,6 +667,13 @@ interface IPrepareReviewOptions {
    * or marker. Omitted components keep their built-in presentation.
    */
   readonly presentation?: CapturedPresentation | undefined;
+  /**
+   * The existing suggestion pull requests the caller selected, as read
+   * (src/existing-companions.cts): the review's companion index lists them
+   * after the ones it creates (docs/companion-suggestion-pr-contract.md
+   * §2.13.3).
+   */
+  readonly existingCompanions?: readonly IExistingCompanion[] | undefined;
 }
 
 /** The caller input once validateCallerInput accepted it (see the module documentation). */
@@ -682,6 +713,7 @@ interface IEffectiveOptions {
   readonly ignoreApprovalHold: boolean | undefined;
   readonly delivery: IDeliveryOption;
   readonly presentation?: CapturedPresentation | undefined;
+  readonly existingCompanions?: readonly IExistingCompanion[] | undefined;
 }
 
 /** A diagnostic before it is recorded: `[code, message]`. */
@@ -968,14 +1000,33 @@ export interface ICompanionSectionReference {
   readonly section: number;
 }
 
+/**
+ * The review body's companion index, rendered once the numbers of the
+ * companions the review creates are known: it lists them all, in order, then
+ * the existing ones recorded here, as they were read
+ * (docs/companion-suggestion-pr-contract.md §2.13.3, §2.13.4).
+ */
+export interface ICompanionIndexSection {
+  readonly companionIndex: { readonly existing: readonly IExistingCompanion[] };
+}
+
+/** One section of a review body that names companions: literal text, one proposal of one companion, or the companion index. */
+export type ReviewBodySection = string | ICompanionSectionReference | ICompanionIndexSection;
+
+/** Whether a body section is the companion index. */
+export function isCompanionIndexSection(section: ReviewBodySection): section is ICompanionIndexSection {
+  return typeof section === 'object' && 'companionIndex' in section;
+}
+
 /** The suggestion pull requests a ready review needs, and where each appears in its body. */
 export interface IPreparedSuggestions {
   readonly companions: readonly IPreparedCompanion[];
   /**
-   * The review body's sections in order: literal text, or the proposal of a
-   * companion whose section is rendered once its pull request exists.
+   * The review body's sections in order: the companion index first, then
+   * literal text, or the proposal of a companion whose section is rendered
+   * once its pull request exists.
    */
-  readonly sections: readonly (string | ICompanionSectionReference)[];
+  readonly sections: readonly ReviewBodySection[];
   /**
    * The lifecycle note every suggestion pull request's body carries, as
    * presented (built in, or the caller's lifecycleNote callback) during
@@ -1486,7 +1537,22 @@ function validateCallerInput(input: unknown): asserts input is IPrepareReviewInp
     const presentation = options['presentation'];
     const presentationProblem = presentation === undefined ? null : presentationOptionProblem(presentation);
     if (presentationProblem !== null) fail(`options.presentation${presentationProblem}.`);
+    const existing = options['existingCompanions'];
+    if (existing !== undefined && !(Array.isArray(existing) && existing.every(isExistingCompanion))) {
+      fail('`options.existingCompanions` must list { number, title, state } of existing suggestion pull requests.');
+    }
   }
+}
+
+/** The states an existing companion is recorded in (src/presentation/companion-index.cts). */
+const EXISTING_STATES: ReadonlySet<unknown> = new Set(['open', 'draft', 'closed', 'merged']);
+
+/** Whether a value is an existing companion as read (src/existing-companions.cts), and nothing more. */
+export function isExistingCompanion(value: unknown): value is IExistingCompanion {
+  if (!isPlainObject(value) || Object.keys(value).sort().join(',') !== 'number,state,title') return false;
+  const { number, title, state } = value;
+  return typeof number === 'number' && Number.isSafeInteger(number) && number > 0
+    && typeof title === 'string' && title !== '' && EXISTING_STATES.has(state);
 }
 
 /**
@@ -4014,15 +4080,29 @@ function renderDelivery(
     return referenceText(part, companionContent(unit, r));
   };
   const sectionWith = (section: UnitSection, r: ReviewRenderer): string => partText(sectionPart(section, r), r);
-  const sectionUnits = sections.map((section, i): IComposedUnit => ({
+
+  // The companion index (docs/companion-suggestion-pr-contract.md §2.13.3)
+  // comes first whenever the review creates or lists a companion. It is not
+  // customizable, so it reads the same with any renderer; with created
+  // companions it is read with the largest pull request number, like their
+  // references. It is not one of the body's general sections.
+  const existing = state.options.existingCompanions ?? [];
+  const indexSection: ICompanionIndexSection | undefined = prepared.length === 0 && existing.length === 0
+    ? undefined : { companionIndex: { existing } };
+  const indexText = indexSection === undefined ? undefined
+    : renderIndexSection(indexSection, prepared, prepared.map(() => LARGEST_PULL_NUMBER), context);
+  const indexUnits: IComposedUnit[] = indexText === undefined ? []
+    : [{ what: 'the companion index', text: indexText, expected: {}, items: [], compose: () => indexText }];
+  const sectionUnits = [...indexUnits, ...sections.map((section, i): IComposedUnit => ({
     what: `body section ${String(i + 1)}`,
     // Sections are read only to locate the culprit when the body fails.
     get text(): string { return partText(itemAt(parts, i)); },
     expected: {},
     items: section.kind === 'item' ? [section.item] : itemAt(units, section.unit).items,
     compose: (r) => sectionWith(section, r),
-  }));
-  const composedBody = (r: ReviewRenderer): string => sections.map((section) => sectionWith(section, r)).join(SEPARATOR);
+  }))];
+  const composedBody = (r: ReviewRenderer): string =>
+    [...(indexText === undefined ? [] : [indexText]), ...sections.map((section) => sectionWith(section, r))].join(SEPARATOR);
   const composedFor = (body: string, descriptions: readonly IComposedUnit[]): IComposedUnit[] => [
     ...commentItems.map((entry, i) => commentUnit(entry, itemAt(comments, i).body, i)),
     ...descriptions,
@@ -4030,10 +4110,10 @@ function renderDelivery(
   ];
 
   if (target === undefined) {
-    const body = parts.map((part) => {
+    const body = [...(indexText === undefined ? [] : [indexText]), ...parts.map((part) => {
       if (typeof part !== 'string') throw new Error('Internal error: a companion reference without a companion.');
       return part;
-    }).join(SEPARATOR);
+    })].join(SEPARATOR);
     return {
       review: { commitId: context.reviewedCommit, body, comments },
       evidence,
@@ -4059,7 +4139,9 @@ function renderDelivery(
       ),
     };
   });
-  const suggestions: IPreparedSuggestions = { companions: prepared, sections: parts, lifecycleNote };
+  const suggestions: IPreparedSuggestions = {
+    companions: prepared, sections: indexSection === undefined ? parts : [indexSection, ...parts], lifecycleNote,
+  };
   const body = renderReviewBody(suggestions, prepared.map(() => LARGEST_PULL_NUMBER), target);
   return {
     review: { commitId: context.reviewedCommit, body, comments },
@@ -4195,15 +4277,44 @@ function combineEdits(sourceText: string, fileEdits: readonly IPreparedEdit[]): 
 }
 
 /**
- * The review body: its sections in order, each proposal of a companion
- * rendered with its pull request number (`numbers[i]` for companion i) as
- * the companion-reference component (src/presentation/companion-reference.cts),
- * naming which proposal of a bundle it is.
+ * The companion index of a review that creates `companions` (numbered
+ * `numbers[i]`, titled as planned) and lists the existing ones the section
+ * records (docs/companion-suggestion-pr-contract.md §2.13.3): created ones
+ * first, in order, then existing ones, in the order the caller gave. Every
+ * link comes from the shared builder (src/github-urls.cts).
+ */
+function renderIndexSection(
+  section: ICompanionIndexSection,
+  companions: readonly Pick<IPreparedCompanion, 'title'>[],
+  numbers: readonly number[],
+  repository: { readonly owner: string; readonly repo: string },
+): string {
+  const entries: ICompanionIndexEntry[] = [
+    ...companions.map((companion, i): ICompanionIndexEntry => {
+      const number = itemAt(numbers, i);
+      return { number, url: pullRequestUrl(repository, number), title: companion.title, origin: 'created' };
+    }),
+    ...section.companionIndex.existing.map((e): ICompanionIndexEntry => ({
+      number: e.number, url: pullRequestUrl(repository, e.number), title: e.title, origin: 'existing', state: e.state,
+    })),
+  ];
+  return renderCompanionIndex(entries);
+}
+
+/**
+ * The review body: its sections in order, the companion index listing every
+ * companion (rendered once the numbers are known), and each proposal of a
+ * companion rendered with its pull request number (`numbers[i]` for
+ * companion i) as the companion-reference component
+ * (src/presentation/companion-reference.cts), naming which proposal of a
+ * bundle it is. Sections planned before the index existed have none, and
+ * are rendered as planned.
  */
 function renderReviewBody(suggestions: Pick<IPreparedSuggestions, 'companions' | 'sections'>, numbers: readonly number[], target: ISuggestionContext): string {
   return suggestions.sections
     .map((part) => {
       if (typeof part === 'string') return part;
+      if (isCompanionIndexSection(part)) return renderIndexSection(part, suggestions.companions, numbers, target);
       const number = itemAt(numbers, part.companion);
       const companion = itemAt(suggestions.companions, part.companion);
       const pull = { number, url: pullRequestUrl(target, number) };

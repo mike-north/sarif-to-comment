@@ -510,6 +510,7 @@ export interface IPublishSarifReviewInput {
 // @public
 export interface IPublishSarifReviewOptions {
     readonly delivery?: IDeliveryOptions;
+    readonly existingCompanions?: readonly number[] | undefined;
     readonly ignoreApprovalHold?: boolean | undefined;
     readonly markSuggestionPullRequestsReady?: boolean | undefined;
     readonly presentation?: IReviewPresentation | undefined;
