@@ -249,15 +249,17 @@ describe('a base branch that moved on without the pull request: base.sha is not 
   });
 
   test('regression: a base-side finding on a file only the moved tip changed goes to the body; the run is not rejected', async () => {
-    // B = BASE, T = TIP_NOTES (only notes line 3), R = ANCESTOR_R (only the sample). The finding reads the notes at B.
+    // B = BASE, T = TIP_NOTES (only notes line 3), R = ANCESTOR_R (only the sample). The finding reads line 3 of the
+    // notes at B, where it is "Second note."; at the tip it is "Second note, on the base.".
     const world = makeWorld('tip-notes');
-    const outcome = await publish(world, ANCESTOR_R, document([finding('The first note, as the base had it.', NOTES, 2)], BASE));
+    const outcome = await publish(world, ANCESTOR_R, document([finding('The second note, as the diff base had it.', NOTES, 3)], BASE));
     assert.equal(status(outcome), 'published', markdown(outcome));
     const review = theReview(world);
     assert.equal(review.request.commit_id, ANCESTOR_R);
     assert.deepEqual(anchors(review), []);
-    assert.ok(review.body.includes(permalink(BASE, NOTES, 2)), review.body);
-    assert.ok(review.body.includes('First note.'), 'the text quoted is the diff base\'s');
+    assert.ok(review.body.includes(permalink(BASE, NOTES, 3)), review.body);
+    assert.ok(review.body.includes('```\nSecond note.\n```'), 'the text quoted is the diff base\'s line 3');
+    assert.ok(!review.body.includes('on the base'), 'never the tip\'s');
     assert.deepEqual(codes(outcome), [['warning', 'inline-placement-unavailable']]);
   });
 
@@ -270,6 +272,20 @@ describe('a base branch that moved on without the pull request: base.sha is not 
     assert.deepEqual(anchors(review), []);
     assert.ok(review.body.includes(permalink(TIP_NOTES, NOTES, 3)), review.body);
     assert.ok(review.body.includes('Second note, on the base.'), 'the text quoted is the diff base\'s');
+    assert.deepEqual(codes(outcome), [['warning', 'inline-placement-unavailable']]);
+  });
+
+  test('regression: after a rebase, a base-side finding on a file R also changed goes to the body quoting the diff base; the run is not rejected', async () => {
+    // B = T = ADVANCED_BASE, which changed sample line 18; R = REBASED_R also changed the sample (lines 5 and 6).
+    // At B, line 18 is "base advanced (N)."; at R it is "original text.".
+    const world = makeWorld('rebased');
+    const outcome = await publish(world, REBASED_R, document([finding('Line 18, as the base has it.', SAMPLE, 18)], ADVANCED_BASE));
+    assert.equal(status(outcome), 'published', markdown(outcome));
+    const review = theReview(world);
+    assert.equal(review.request.commit_id, REBASED_R);
+    assert.deepEqual(anchors(review), []);
+    assert.ok(review.body.includes(permalink(ADVANCED_BASE, SAMPLE, 18)), review.body);
+    assert.ok(review.body.includes('```\nLine 18: base advanced (N).\n```'), 'the text quoted is the diff base\'s');
     assert.deepEqual(codes(outcome), [['warning', 'inline-placement-unavailable']]);
   });
 
@@ -484,6 +500,17 @@ describe('the CLI (R13.1, R17)', () => {
     const doc = asRecord(parseJson(json.stdout));
     assert.equal(doc['status'], 'blocked');
     assert.deepEqual(asArray(doc['diagnostics']).map((d) => asRecord(d)['code']), ['reviewed-commit-not-in-pull-request']);
+  });
+
+  test('regression: after a rebase, a finding at the diff base on a file R also changed publishes in the body, exit 0 (never operation-failed)', () => {
+    const world = makeWorld('rebased');
+    const sarif = document([finding('Line 18, as the base has it.', SAMPLE, 18)], ADVANCED_BASE);
+    const result = cli(world, ['publish', ...flags(world, REBASED_R, sarif), '--state', world.statePath, '--format', 'json']);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    const doc = asRecord(parseJson(result.stdout));
+    assert.equal(doc['status'], 'published');
+    assert.deepEqual(asArray(doc['diagnostics']).map((d) => asRecord(d)['code']), ['inline-placement-unavailable']);
+    assert.ok(theReview(world).body.includes('Line 18: base advanced (N).'));
   });
 
   test('an undecided association is a note on stderr; validate still exits 0', () => {

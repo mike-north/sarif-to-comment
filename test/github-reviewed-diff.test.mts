@@ -312,10 +312,21 @@ describe('fetchContext returns the reviewed diff (specification R13.1)', () => {
     }
   });
 
-  test('an old-side read of a file without a reviewed patch is refused', async () => {
+  test('an old-side read of a withheld file that R also changed is the diff base\'s own file, even after a rebase', async () => {
     const { client } = clientFor('rebased');
     const { readSource } = await client.fetchContext({ destination: DESTINATION, reviewedCommit: REBASED_R });
-    await assert.rejects(readSource(ADVANCED_BASE, SAMPLE), { code: 'patch-unavailable' });
+    assert.equal(await readSource(ADVANCED_BASE, SAMPLE), sample({ 18: 'base advanced (N).' }).join(''));
+  });
+
+  test('an old-side read of a file whose patch GitHub omitted is still refused: placing it would need that patch', async () => {
+    const { client } = clientFor('ancestor', {
+      override: (url) => (url.pathname.endsWith(`/compare/${BASE}...${ANCESTOR_R}`)
+        ? json({ status: 'ahead', merge_base_commit: { sha: BASE }, files: [{ filename: SAMPLE, status: 'modified', additions: 2, deletions: 2 }] })
+        : undefined),
+    });
+    const { context, readSource } = await client.fetchContext({ destination: DESTINATION, reviewedCommit: ANCESTOR_R });
+    assert.deepEqual(context.fileDiagnostics, [{ path: SAMPLE, reason: 'patch-omitted' }]);
+    await assert.rejects(readSource(BASE, SAMPLE), { code: 'patch-unavailable' });
   });
 });
 
