@@ -1,0 +1,246 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "graphql"
+  },
+  "status": 200,
+  "statusLine": "HTTP/2.0 200 OK",
+  "response": {
+    "data": {
+      "repository": {
+        "pullRequest": {
+          "number": 94,
+          "headRefName": "exp-e2-20261001-ancestor",
+          "headRefOid": "511cd5ed3e9e5656aa5a18f47982c39043956724",
+          "baseRefName": "exp-e2-20261001-base",
+          "baseRefOid": "0c03fd7293730bd5164121ec8f91b9b8833ae34e",
+          "commits": {
+            "nodes": [
+              {
+                "commit": {
+                  "oid": "1b3d51fabf8e0828c14c871a745016fbdea6bbcc",
+                  "messageHeadline": "E2 fixture (ancestor): R changes lines 5-9"
+                }
+              },
+              {
+                "commit": {
+                  "oid": "511cd5ed3e9e5656aa5a18f47982c39043956724",
+                  "messageHeadline": "E2 fixture (ancestor): F changes line 6 after review"
+                }
+              }
+            ]
+          },
+          "reviews": {
+            "nodes": [
+              {
+                "databaseId": 5374198581,
+                "state": "COMMENTED",
+                "commit": {
+                  "oid": "1b3d51fabf8e0828c14c871a745016fbdea6bbcc"
+                },
+                "submittedAt": "2026-10-01T02:19:15Z",
+                "body": "<!-- e2:ancestor:P -->\nE2 fixture review P (ancestor): created at R while R is the head, before the branch moves."
+              },
+              {
+                "databaseId": 5374213771,
+                "state": "COMMENTED",
+                "commit": {
+                  "oid": "1b3d51fabf8e0828c14c871a745016fbdea6bbcc"
+                },
+                "submittedAt": "2026-10-01T02:21:03Z",
+                "body": "<!-- e2:ancestor:H -->\nE2 fixture review H (ancestor): created after the branch moved, with commit_id set to R `1b3d51f`, which is not the head."
+              },
+              {
+                "databaseId": 5374213903,
+                "state": "COMMENTED",
+                "commit": {
+                  "oid": "511cd5ed3e9e5656aa5a18f47982c39043956724"
+                },
+                "submittedAt": "2026-10-01T02:21:05Z",
+                "body": "<!-- e2:ancestor:C -->\nE2 fixture review C (ancestor): control, created at the head `511cd5e`."
+              }
+            ]
+          },
+          "reviewThreads": {
+            "nodes": [
+              {
+                "id": "PRRT_kwDOUuyy7s6nx69i",
+                "isOutdated": false,
+                "isResolved": false,
+                "line": 5,
+                "originalLine": 5,
+                "diffSide": "RIGHT",
+                "path": "docs/experiments/e2/sample-ancestor.md",
+                "comments": {
+                  "nodes": [
+                    {
+                      "databaseId": 4151193788,
+                      "body": "E2 fixture suggestion P5 (ancestor).\n\n```suggestion\nLine 5: applied P5 (ancestor).\n```",
+                      "state": "SUBMITTED",
+                      "outdated": false,
+                      "line": 5,
+                      "originalLine": 5,
+                      "position": 9,
+                      "originalPosition": 9,
+                      "commit": {
+                        "oid": "511cd5ed3e9e5656aa5a18f47982c39043956724"
+                      },
+                      "originalCommit": {
+                        "oid": "1b3d51fabf8e0828c14c871a745016fbdea6bbcc"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "PRRT_kwDOUuyy7s6nx69p",
+                "isOutdated": true,
+                "isResolved": false,
+                "line": null,
+                "originalLine": 6,
+                "diffSide": "RIGHT",
+                "path": "docs/experiments/e2/sample-ancestor.md",
+                "comments": {
+                  "nodes": [
+                    {
+                      "databaseId": 4151193798,
+                      "body": "E2 fixture suggestion P6 (ancestor).\n\n```suggestion\nLine 6: applied P6 (ancestor).\n```",
+                      "state": "SUBMITTED",
+                      "outdated": true,
+                      "line": null,
+                      "originalLine": 6,
+                      "position": 1,
+                      "originalPosition": 10,
+                      "commit": {
+                        "oid": "1b3d51fabf8e0828c14c871a745016fbdea6bbcc"
+                      },
+                      "originalCommit": {
+                        "oid": "1b3d51fabf8e0828c14c871a745016fbdea6bbcc"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "PRRT_kwDOUuyy7s6nx8lb",
+                "isOutdated": false,
+                "isResolved": false,
+                "line": 6,
+                "originalLine": 6,
+                "diffSide": "RIGHT",
+                "path": "docs/experiments/e2/sample-ancestor.md",
+                "comments": {
+                  "nodes": [
+                    {
+                      "databaseId": 4151204479,
+                      "body": "E2 fixture suggestion H6 (ancestor).\n\n```suggestion\nLine 6: applied H6 (ancestor).\n```",
+                      "state": "SUBMITTED",
+                      "outdated": false,
+                      "line": 6,
+                      "originalLine": 6,
+                      "position": 10,
+                      "originalPosition": 10,
+                      "commit": {
+                        "oid": "1b3d51fabf8e0828c14c871a745016fbdea6bbcc"
+                      },
+                      "originalCommit": {
+                        "oid": "1b3d51fabf8e0828c14c871a745016fbdea6bbcc"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "PRRT_kwDOUuyy7s6nx8li",
+                "isOutdated": false,
+                "isResolved": false,
+                "line": 7,
+                "originalLine": 7,
+                "diffSide": "RIGHT",
+                "path": "docs/experiments/e2/sample-ancestor.md",
+                "comments": {
+                  "nodes": [
+                    {
+                      "databaseId": 4151204492,
+                      "body": "E2 fixture suggestion H7 (ancestor).\n\n```suggestion\nLine 7: applied H7 (ancestor).\n```",
+                      "state": "SUBMITTED",
+                      "outdated": false,
+                      "line": 7,
+                      "originalLine": 7,
+                      "position": 11,
+                      "originalPosition": 11,
+                      "commit": {
+                        "oid": "1b3d51fabf8e0828c14c871a745016fbdea6bbcc"
+                      },
+                      "originalCommit": {
+                        "oid": "1b3d51fabf8e0828c14c871a745016fbdea6bbcc"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "PRRT_kwDOUuyy7s6nx8lj",
+                "isOutdated": false,
+                "isResolved": false,
+                "line": 8,
+                "originalLine": 8,
+                "diffSide": "RIGHT",
+                "path": "docs/experiments/e2/sample-ancestor.md",
+                "comments": {
+                  "nodes": [
+                    {
+                      "databaseId": 4151204493,
+                      "body": "E2 fixture suggestion H8 (ancestor).\n\n```suggestion\nLine 8: applied H8 (ancestor).\n```",
+                      "state": "SUBMITTED",
+                      "outdated": false,
+                      "line": 8,
+                      "originalLine": 8,
+                      "position": 12,
+                      "originalPosition": 12,
+                      "commit": {
+                        "oid": "1b3d51fabf8e0828c14c871a745016fbdea6bbcc"
+                      },
+                      "originalCommit": {
+                        "oid": "1b3d51fabf8e0828c14c871a745016fbdea6bbcc"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "PRRT_kwDOUuyy7s6nx8mj",
+                "isOutdated": false,
+                "isResolved": false,
+                "line": 9,
+                "originalLine": 9,
+                "diffSide": "RIGHT",
+                "path": "docs/experiments/e2/sample-ancestor.md",
+                "comments": {
+                  "nodes": [
+                    {
+                      "databaseId": 4151204593,
+                      "body": "E2 fixture suggestion C9 (ancestor).\n\n```suggestion\nLine 9: applied C9 (ancestor).\n```",
+                      "state": "SUBMITTED",
+                      "outdated": false,
+                      "line": 9,
+                      "originalLine": 9,
+                      "position": 13,
+                      "originalPosition": 13,
+                      "commit": {
+                        "oid": "511cd5ed3e9e5656aa5a18f47982c39043956724"
+                      },
+                      "originalCommit": {
+                        "oid": "511cd5ed3e9e5656aa5a18f47982c39043956724"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

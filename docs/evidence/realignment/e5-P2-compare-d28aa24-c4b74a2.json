@@ -1,0 +1,281 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "repos/mike-north/doc-linter/compare/d28aa24815178ce56025303fe98da1d1a0915a9f...c4b74a24b7dab618954aac63520359ffde8bb1a7"
+  },
+  "status": 200,
+  "statusLine": "HTTP/2.0 200 OK",
+  "response": {
+    "url": "https://api.github.com/repos/mike-north/doc-linter/compare/d28aa24815178ce56025303fe98da1d1a0915a9f...c4b74a24b7dab618954aac63520359ffde8bb1a7",
+    "html_url": "https://github.com/mike-north/doc-linter/compare/d28aa24815178ce56025303fe98da1d1a0915a9f...c4b74a24b7dab618954aac63520359ffde8bb1a7",
+    "permalink_url": "https://github.com/mike-north/doc-linter/compare/mike-north:d28aa24...mike-north:c4b74a2",
+    "diff_url": "https://github.com/mike-north/doc-linter/compare/d28aa24815178ce56025303fe98da1d1a0915a9f...c4b74a24b7dab618954aac63520359ffde8bb1a7.diff",
+    "patch_url": "https://github.com/mike-north/doc-linter/compare/d28aa24815178ce56025303fe98da1d1a0915a9f...c4b74a24b7dab618954aac63520359ffde8bb1a7.patch",
+    "base_commit": {
+      "sha": "d28aa24815178ce56025303fe98da1d1a0915a9f",
+      "node_id": "C_kwDOUuyy7toAKGQyOGFhMjQ4MTUxNzhjZTU2MDI1MzAzZmU5OGRhMWQxYTA5MTVhOWY",
+      "commit": {
+        "author": {
+          "name": "Mike North",
+          "email": "<redacted-email>",
+          "date": "2026-09-29T17:13:48Z"
+        },
+        "committer": {
+          "name": "Mike North",
+          "email": "<redacted-email>",
+          "date": "2026-09-29T18:18:48Z"
+        },
+        "message": "Experiment (orphan): C1 reviewed change",
+        "tree": {
+          "sha": "86f2916d6465b2b5251b8a22c137a3127b6af6cc",
+          "url": "https://api.github.com/repos/mike-north/doc-linter/git/trees/86f2916d6465b2b5251b8a22c137a3127b6af6cc"
+        },
+        "url": "https://api.github.com/repos/mike-north/doc-linter/git/commits/d28aa24815178ce56025303fe98da1d1a0915a9f",
+        "comment_count": 0,
+        "verification": {
+          "verified": false,
+          "reason": "unsigned",
+          "signature": null,
+          "payload": null,
+          "verified_at": null
+        }
+      },
+      "url": "https://api.github.com/repos/mike-north/doc-linter/commits/d28aa24815178ce56025303fe98da1d1a0915a9f",
+      "html_url": "https://github.com/mike-north/doc-linter/commit/d28aa24815178ce56025303fe98da1d1a0915a9f",
+      "comments_url": "https://api.github.com/repos/mike-north/doc-linter/commits/d28aa24815178ce56025303fe98da1d1a0915a9f/comments",
+      "author": {
+        "login": "mike-north",
+        "id": 558005,
+        "node_id": "MDQ6VXNlcjU1ODAwNQ==",
+        "avatar_url": "https://avatars.githubusercontent.com/u/558005?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/mike-north",
+        "html_url": "https://github.com/mike-north",
+        "followers_url": "https://api.github.com/users/mike-north/followers",
+        "following_url": "https://api.github.com/users/mike-north/following{/other_user}",
+        "gists_url": "https://api.github.com/users/mike-north/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/mike-north/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/mike-north/subscriptions",
+        "organizations_url": "https://api.github.com/users/mike-north/orgs",
+        "repos_url": "https://api.github.com/users/mike-north/repos",
+        "events_url": "https://api.github.com/users/mike-north/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/mike-north/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "committer": {
+        "login": "mike-north",
+        "id": 558005,
+        "node_id": "MDQ6VXNlcjU1ODAwNQ==",
+        "avatar_url": "https://avatars.githubusercontent.com/u/558005?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/mike-north",
+        "html_url": "https://github.com/mike-north",
+        "followers_url": "https://api.github.com/users/mike-north/followers",
+        "following_url": "https://api.github.com/users/mike-north/following{/other_user}",
+        "gists_url": "https://api.github.com/users/mike-north/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/mike-north/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/mike-north/subscriptions",
+        "organizations_url": "https://api.github.com/users/mike-north/orgs",
+        "repos_url": "https://api.github.com/users/mike-north/repos",
+        "events_url": "https://api.github.com/users/mike-north/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/mike-north/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "parents": [
+        {
+          "sha": "4f1974668dd1800b7926fa0aaf475330b68252a1",
+          "url": "https://api.github.com/repos/mike-north/doc-linter/commits/4f1974668dd1800b7926fa0aaf475330b68252a1",
+          "html_url": "https://github.com/mike-north/doc-linter/commit/4f1974668dd1800b7926fa0aaf475330b68252a1"
+        }
+      ]
+    },
+    "merge_base_commit": {
+      "sha": "d28aa24815178ce56025303fe98da1d1a0915a9f",
+      "node_id": "C_kwDOUuyy7toAKGQyOGFhMjQ4MTUxNzhjZTU2MDI1MzAzZmU5OGRhMWQxYTA5MTVhOWY",
+      "commit": {
+        "author": {
+          "name": "Mike North",
+          "email": "<redacted-email>",
+          "date": "2026-09-29T17:13:48Z"
+        },
+        "committer": {
+          "name": "Mike North",
+          "email": "<redacted-email>",
+          "date": "2026-09-29T18:18:48Z"
+        },
+        "message": "Experiment (orphan): C1 reviewed change",
+        "tree": {
+          "sha": "86f2916d6465b2b5251b8a22c137a3127b6af6cc",
+          "url": "https://api.github.com/repos/mike-north/doc-linter/git/trees/86f2916d6465b2b5251b8a22c137a3127b6af6cc"
+        },
+        "url": "https://api.github.com/repos/mike-north/doc-linter/git/commits/d28aa24815178ce56025303fe98da1d1a0915a9f",
+        "comment_count": 0,
+        "verification": {
+          "verified": false,
+          "reason": "unsigned",
+          "signature": null,
+          "payload": null,
+          "verified_at": null
+        }
+      },
+      "url": "https://api.github.com/repos/mike-north/doc-linter/commits/d28aa24815178ce56025303fe98da1d1a0915a9f",
+      "html_url": "https://github.com/mike-north/doc-linter/commit/d28aa24815178ce56025303fe98da1d1a0915a9f",
+      "comments_url": "https://api.github.com/repos/mike-north/doc-linter/commits/d28aa24815178ce56025303fe98da1d1a0915a9f/comments",
+      "author": {
+        "login": "mike-north",
+        "id": 558005,
+        "node_id": "MDQ6VXNlcjU1ODAwNQ==",
+        "avatar_url": "https://avatars.githubusercontent.com/u/558005?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/mike-north",
+        "html_url": "https://github.com/mike-north",
+        "followers_url": "https://api.github.com/users/mike-north/followers",
+        "following_url": "https://api.github.com/users/mike-north/following{/other_user}",
+        "gists_url": "https://api.github.com/users/mike-north/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/mike-north/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/mike-north/subscriptions",
+        "organizations_url": "https://api.github.com/users/mike-north/orgs",
+        "repos_url": "https://api.github.com/users/mike-north/repos",
+        "events_url": "https://api.github.com/users/mike-north/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/mike-north/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "committer": {
+        "login": "mike-north",
+        "id": 558005,
+        "node_id": "MDQ6VXNlcjU1ODAwNQ==",
+        "avatar_url": "https://avatars.githubusercontent.com/u/558005?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/mike-north",
+        "html_url": "https://github.com/mike-north",
+        "followers_url": "https://api.github.com/users/mike-north/followers",
+        "following_url": "https://api.github.com/users/mike-north/following{/other_user}",
+        "gists_url": "https://api.github.com/users/mike-north/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/mike-north/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/mike-north/subscriptions",
+        "organizations_url": "https://api.github.com/users/mike-north/orgs",
+        "repos_url": "https://api.github.com/users/mike-north/repos",
+        "events_url": "https://api.github.com/users/mike-north/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/mike-north/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "parents": [
+        {
+          "sha": "4f1974668dd1800b7926fa0aaf475330b68252a1",
+          "url": "https://api.github.com/repos/mike-north/doc-linter/commits/4f1974668dd1800b7926fa0aaf475330b68252a1",
+          "html_url": "https://github.com/mike-north/doc-linter/commit/4f1974668dd1800b7926fa0aaf475330b68252a1"
+        }
+      ]
+    },
+    "status": "ahead",
+    "ahead_by": 1,
+    "behind_by": 0,
+    "total_commits": 1,
+    "commits": [
+      {
+        "sha": "c4b74a24b7dab618954aac63520359ffde8bb1a7",
+        "node_id": "C_kwDOUuyy7toAKGM0Yjc0YTI0YjdkYWI2MTg5NTRhYWM2MzUyMDM1OWZmZGU4YmIxYTc",
+        "commit": {
+          "author": {
+            "name": "Mike North",
+            "email": "<redacted-email>",
+            "date": "2026-10-01T03:00:00Z"
+          },
+          "committer": {
+            "name": "Mike North",
+            "email": "<redacted-email>",
+            "date": "2026-10-01T03:00:00Z"
+          },
+          "message": "Experiment (E5): control P2 edits line 10 on top of the current head d28aa24\n\nDangling commit for the companion-fidelity experiment. No ref points at it.",
+          "tree": {
+            "sha": "c0d28f08f42833fc0d298fc7c87b5f6b5527cd02",
+            "url": "https://api.github.com/repos/mike-north/doc-linter/git/trees/c0d28f08f42833fc0d298fc7c87b5f6b5527cd02"
+          },
+          "url": "https://api.github.com/repos/mike-north/doc-linter/git/commits/c4b74a24b7dab618954aac63520359ffde8bb1a7",
+          "comment_count": 0,
+          "verification": {
+            "verified": false,
+            "reason": "unsigned",
+            "signature": null,
+            "payload": null,
+            "verified_at": null
+          }
+        },
+        "url": "https://api.github.com/repos/mike-north/doc-linter/commits/c4b74a24b7dab618954aac63520359ffde8bb1a7",
+        "html_url": "https://github.com/mike-north/doc-linter/commit/c4b74a24b7dab618954aac63520359ffde8bb1a7",
+        "comments_url": "https://api.github.com/repos/mike-north/doc-linter/commits/c4b74a24b7dab618954aac63520359ffde8bb1a7/comments",
+        "author": {
+          "login": "mike-north",
+          "id": 558005,
+          "node_id": "MDQ6VXNlcjU1ODAwNQ==",
+          "avatar_url": "https://avatars.githubusercontent.com/u/558005?v=4",
+          "gravatar_id": "",
+          "url": "https://api.github.com/users/mike-north",
+          "html_url": "https://github.com/mike-north",
+          "followers_url": "https://api.github.com/users/mike-north/followers",
+          "following_url": "https://api.github.com/users/mike-north/following{/other_user}",
+          "gists_url": "https://api.github.com/users/mike-north/gists{/gist_id}",
+          "starred_url": "https://api.github.com/users/mike-north/starred{/owner}{/repo}",
+          "subscriptions_url": "https://api.github.com/users/mike-north/subscriptions",
+          "organizations_url": "https://api.github.com/users/mike-north/orgs",
+          "repos_url": "https://api.github.com/users/mike-north/repos",
+          "events_url": "https://api.github.com/users/mike-north/events{/privacy}",
+          "received_events_url": "https://api.github.com/users/mike-north/received_events",
+          "type": "User",
+          "user_view_type": "public",
+          "site_admin": false
+        },
+        "committer": {
+          "login": "mike-north",
+          "id": 558005,
+          "node_id": "MDQ6VXNlcjU1ODAwNQ==",
+          "avatar_url": "https://avatars.githubusercontent.com/u/558005?v=4",
+          "gravatar_id": "",
+          "url": "https://api.github.com/users/mike-north",
+          "html_url": "https://github.com/mike-north",
+          "followers_url": "https://api.github.com/users/mike-north/followers",
+          "following_url": "https://api.github.com/users/mike-north/following{/other_user}",
+          "gists_url": "https://api.github.com/users/mike-north/gists{/gist_id}",
+          "starred_url": "https://api.github.com/users/mike-north/starred{/owner}{/repo}",
+          "subscriptions_url": "https://api.github.com/users/mike-north/subscriptions",
+          "organizations_url": "https://api.github.com/users/mike-north/orgs",
+          "repos_url": "https://api.github.com/users/mike-north/repos",
+          "events_url": "https://api.github.com/users/mike-north/events{/privacy}",
+          "received_events_url": "https://api.github.com/users/mike-north/received_events",
+          "type": "User",
+          "user_view_type": "public",
+          "site_admin": false
+        },
+        "parents": [
+          {
+            "sha": "d28aa24815178ce56025303fe98da1d1a0915a9f",
+            "url": "https://api.github.com/repos/mike-north/doc-linter/commits/d28aa24815178ce56025303fe98da1d1a0915a9f",
+            "html_url": "https://github.com/mike-north/doc-linter/commit/d28aa24815178ce56025303fe98da1d1a0915a9f"
+          }
+        ]
+      }
+    ],
+    "files": [
+      {
+        "sha": "f21d9e6027f25ddfb34131295dc47addb50e6e87",
+        "filename": "docs/experiments/forcepush/sample-orphan.md",
+        "status": "modified",
+        "additions": 1,
+        "deletions": 1,
+        "changes": 2,
+        "blob_url": "https://github.com/mike-north/doc-linter/blob/c4b74a24b7dab618954aac63520359ffde8bb1a7/docs%2Fexperiments%2Fforcepush%2Fsample-orphan.md",
+        "raw_url": "https://github.com/mike-north/doc-linter/raw/c4b74a24b7dab618954aac63520359ffde8bb1a7/docs%2Fexperiments%2Fforcepush%2Fsample-orphan.md",
+        "contents_url": "https://api.github.com/repos/mike-north/doc-linter/contents/docs%2Fexperiments%2Fforcepush%2Fsample-orphan.md?ref=c4b74a24b7dab618954aac63520359ffde8bb1a7",
+        "patch": "@@ -7,7 +7,7 @@ Line 06: original text.\n Line 07: stable filler text for the experiment.\n Line 08: stable filler text for the experiment.\n Line 09: stable filler text for the experiment.\n-Line 10: context line.\n+Line 10: E5 proposal edits a context line.\n Line 11: stable filler text for the experiment.\n Line 12: stable filler text for the experiment.\n Line 13: stable filler text for the experiment."
+      }
+    ]
+  }
+}

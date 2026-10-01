@@ -1,0 +1,193 @@
+{
+  "cases": [
+    {
+      "case": "#46",
+      "path": "docs/experiments/forcepush/sample-amend.md",
+      "github": {
+        "status": "diverged",
+        "aheadBy": 2,
+        "behindBy": 1,
+        "mergeBase": "c29a1b22f7d7b91f12f41893ad25f555b3f9101f",
+        "commits": [
+          "e69981ed42926b07d0ff3f25d98558229afd348e",
+          "6089e282c86189816b111792ff81c27d2f7b389d"
+        ],
+        "listsReviewedCommit": true,
+        "fileSha": "d0ac2ede9fd2cd9c89aba395a420d5d19c893458",
+        "additions": 3,
+        "deletions": 3,
+        "mergeable": "CONFLICTING",
+        "mergeStateStatus": "DIRTY"
+      },
+      "local": {
+        "mergeBase": "c29a1b22f7d7b91f12f41893ad25f555b3f9101f",
+        "reviewedIsAncestorOfHead": false,
+        "proposalBlob": "d0ac2ede9fd2cd9c89aba395a420d5d19c893458",
+        "mergeClean": false,
+        "mergeBlob": "d7a6dd63cee49af95cfa4bf7695ade209ec58107",
+        "expectedBlob": "4be55369f0c8c4d2e4c52049fbef7b7845b3404b",
+        "filesMergeChangesBeyondProposal": [
+          "docs/experiments/forcepush/sample-amend.md"
+        ]
+      },
+      "checks": {
+        "githubMergeBaseEqualsLocal": true,
+        "githubPatchEqualsLocalThreeDotDiff": true,
+        "githubPatchEqualsHeadToProjectedMerge": false,
+        "githubFileShaIsProposalBlob": true,
+        "githubFileShaIsProjectedMergeBlob": false,
+        "prFilesEqualCompareFiles": true,
+        "mergeabilityAgreesWithProjection": true
+      }
+    },
+    {
+      "case": "#48",
+      "path": "docs/experiments/forcepush/sample-rebase.md",
+      "github": {
+        "status": "diverged",
+        "aheadBy": 2,
+        "behindBy": 2,
+        "mergeBase": "7b5863eac107dddf2a4014dcb9ccc945bbb5de58",
+        "commits": [
+          "7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc",
+          "e90f59f65a23339ecce44250568a5d5abdd7101e"
+        ],
+        "listsReviewedCommit": true,
+        "fileSha": "38fa45f5c6f7ebf4e2a48b6b76ecbf1929a8108c",
+        "additions": 3,
+        "deletions": 3,
+        "mergeable": "CONFLICTING",
+        "mergeStateStatus": "DIRTY"
+      },
+      "local": {
+        "mergeBase": "7b5863eac107dddf2a4014dcb9ccc945bbb5de58",
+        "reviewedIsAncestorOfHead": false,
+        "proposalBlob": "38fa45f5c6f7ebf4e2a48b6b76ecbf1929a8108c",
+        "mergeClean": false,
+        "mergeBlob": "554f80ab254baad93ee97a6131c65cbc28c52b49",
+        "expectedBlob": "7ce4b919bf3e4f13d0669ab6d6142b16ff539003",
+        "filesMergeChangesBeyondProposal": [
+          "docs/experiments/forcepush/sample-rebase.md"
+        ]
+      },
+      "checks": {
+        "githubMergeBaseEqualsLocal": true,
+        "githubPatchEqualsLocalThreeDotDiff": true,
+        "githubPatchEqualsHeadToProjectedMerge": false,
+        "githubFileShaIsProposalBlob": true,
+        "githubFileShaIsProjectedMergeBlob": false,
+        "prFilesEqualCompareFiles": true,
+        "mergeabilityAgreesWithProjection": true
+      }
+    },
+    {
+      "case": "#52",
+      "path": "docs/experiments/forcepush/sample-orphan.md",
+      "github": {
+        "status": "diverged",
+        "aheadBy": 2,
+        "behindBy": 1,
+        "mergeBase": "4f1974668dd1800b7926fa0aaf475330b68252a1",
+        "commits": [
+          "eb6c2f6bbceb78a957684917cdb1a50cf9850cd4",
+          "d92f82cf2802494276dac4cfb90e951a1487671d"
+        ],
+        "listsReviewedCommit": true,
+        "fileSha": "c77b42b3823493390d6e558cd646f22e498c8755",
+        "additions": 3,
+        "deletions": 3,
+        "mergeable": "MERGEABLE",
+        "mergeStateStatus": "CLEAN"
+      },
+      "local": {
+        "mergeBase": "4f1974668dd1800b7926fa0aaf475330b68252a1",
+        "reviewedIsAncestorOfHead": false,
+        "proposalBlob": "c77b42b3823493390d6e558cd646f22e498c8755",
+        "mergeClean": true,
+        "mergeBlob": "14543589ccbf3fdcc1c5b4978e0c30bab2f6a7af",
+        "expectedBlob": "b1f4471bb4d133608ccf6af977fe28bd68dcfc79",
+        "filesMergeChangesBeyondProposal": [
+          "docs/experiments/forcepush/sample-orphan.md"
+        ]
+      },
+      "checks": {
+        "githubMergeBaseEqualsLocal": true,
+        "githubPatchEqualsLocalThreeDotDiff": true,
+        "githubPatchEqualsHeadToProjectedMerge": true,
+        "githubFileShaIsProposalBlob": true,
+        "githubFileShaIsProjectedMergeBlob": false,
+        "prFilesEqualCompareFiles": true,
+        "mergeabilityAgreesWithProjection": true
+      }
+    },
+    {
+      "case": "P",
+      "path": "docs/experiments/forcepush/sample-orphan.md",
+      "github": {
+        "status": "diverged",
+        "aheadBy": 2,
+        "behindBy": 1,
+        "mergeBase": "4f1974668dd1800b7926fa0aaf475330b68252a1",
+        "commits": [
+          "eb6c2f6bbceb78a957684917cdb1a50cf9850cd4",
+          "9b513c482973851d58ffcaec0740c10b429c3197"
+        ],
+        "listsReviewedCommit": true,
+        "fileSha": "0fb3b2397f686f1c53d03e493e7219a8ffddce79",
+        "additions": 3,
+        "deletions": 3
+      },
+      "local": {
+        "mergeBase": "4f1974668dd1800b7926fa0aaf475330b68252a1",
+        "reviewedIsAncestorOfHead": false,
+        "proposalBlob": "0fb3b2397f686f1c53d03e493e7219a8ffddce79",
+        "mergeClean": true,
+        "mergeBlob": "4d1afabf0badda0250e709a6eb6b2f316dd8dfd5",
+        "expectedBlob": "f21d9e6027f25ddfb34131295dc47addb50e6e87",
+        "filesMergeChangesBeyondProposal": [
+          "docs/experiments/forcepush/sample-orphan.md"
+        ]
+      },
+      "checks": {
+        "githubMergeBaseEqualsLocal": true,
+        "githubPatchEqualsLocalThreeDotDiff": true,
+        "githubPatchEqualsHeadToProjectedMerge": true,
+        "githubFileShaIsProposalBlob": true,
+        "githubFileShaIsProjectedMergeBlob": false
+      }
+    },
+    {
+      "case": "P2",
+      "path": "docs/experiments/forcepush/sample-orphan.md",
+      "github": {
+        "status": "ahead",
+        "aheadBy": 1,
+        "behindBy": 0,
+        "mergeBase": "d28aa24815178ce56025303fe98da1d1a0915a9f",
+        "commits": [
+          "c4b74a24b7dab618954aac63520359ffde8bb1a7"
+        ],
+        "listsReviewedCommit": false,
+        "fileSha": "f21d9e6027f25ddfb34131295dc47addb50e6e87",
+        "additions": 1,
+        "deletions": 1
+      },
+      "local": {
+        "mergeBase": "d28aa24815178ce56025303fe98da1d1a0915a9f",
+        "reviewedIsAncestorOfHead": true,
+        "proposalBlob": "f21d9e6027f25ddfb34131295dc47addb50e6e87",
+        "mergeClean": true,
+        "mergeBlob": "f21d9e6027f25ddfb34131295dc47addb50e6e87",
+        "expectedBlob": "f21d9e6027f25ddfb34131295dc47addb50e6e87",
+        "filesMergeChangesBeyondProposal": []
+      },
+      "checks": {
+        "githubMergeBaseEqualsLocal": true,
+        "githubPatchEqualsLocalThreeDotDiff": true,
+        "githubPatchEqualsHeadToProjectedMerge": true,
+        "githubFileShaIsProposalBlob": true,
+        "githubFileShaIsProjectedMergeBlob": true
+      }
+    }
+  ]
+}

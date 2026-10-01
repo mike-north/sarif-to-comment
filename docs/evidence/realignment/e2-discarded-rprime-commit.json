@@ -1,0 +1,50 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "repos/mike-north/doc-linter/git/commits",
+    "body": {
+      "message": "E2 fixture (discarded): R-prime rewrites R, line 6 differs",
+      "tree": "adfdcbd1fcc63ec4debb5436d45f3c0420864318",
+      "parents": [
+        "0c03fd7293730bd5164121ec8f91b9b8833ae34e"
+      ]
+    }
+  },
+  "status": 201,
+  "statusLine": "HTTP/2.0 201 Created",
+  "response": {
+    "sha": "54bd5cdb688b1f568b003698e22d9d01672bb433",
+    "node_id": "C_kwDOUuyy7toAKDU0YmQ1Y2RiNjg4YjFmNTY4YjAwMzY5OGUyMmQ5ZDAxNjcyYmI0MzM",
+    "url": "https://api.github.com/repos/mike-north/doc-linter/git/commits/54bd5cdb688b1f568b003698e22d9d01672bb433",
+    "html_url": "https://github.com/mike-north/doc-linter/commit/54bd5cdb688b1f568b003698e22d9d01672bb433",
+    "author": {
+      "name": "Mike North",
+      "email": "<redacted-email>",
+      "date": "2026-10-01T02:20:16Z"
+    },
+    "committer": {
+      "name": "Mike North",
+      "email": "<redacted-email>",
+      "date": "2026-10-01T02:20:16Z"
+    },
+    "tree": {
+      "sha": "adfdcbd1fcc63ec4debb5436d45f3c0420864318",
+      "url": "https://api.github.com/repos/mike-north/doc-linter/git/trees/adfdcbd1fcc63ec4debb5436d45f3c0420864318"
+    },
+    "message": "E2 fixture (discarded): R-prime rewrites R, line 6 differs",
+    "parents": [
+      {
+        "sha": "0c03fd7293730bd5164121ec8f91b9b8833ae34e",
+        "url": "https://api.github.com/repos/mike-north/doc-linter/git/commits/0c03fd7293730bd5164121ec8f91b9b8833ae34e",
+        "html_url": "https://github.com/mike-north/doc-linter/commit/0c03fd7293730bd5164121ec8f91b9b8833ae34e"
+      }
+    ],
+    "verification": {
+      "verified": false,
+      "reason": "unsigned",
+      "signature": null,
+      "payload": null,
+      "verified_at": null
+    }
+  }
+}

@@ -1,0 +1,109 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "repos/mike-north/doc-linter/commits/255d5dc347533f66bc79dad45df9c49c11cf1b58"
+  },
+  "status": 200,
+  "statusLine": "HTTP/2.0 200 OK",
+  "response": {
+    "sha": "255d5dc347533f66bc79dad45df9c49c11cf1b58",
+    "node_id": "C_kwDOUuyy7toAKDI1NWQ1ZGMzNDc1MzNmNjZiYzc5ZGFkNDVkZjljNDljMTFjZjFiNTg",
+    "commit": {
+      "author": {
+        "name": "Mike North",
+        "email": "<redacted-email>",
+        "date": "2026-10-01T02:28:11Z"
+      },
+      "committer": {
+        "name": "GitHub",
+        "email": "<redacted-email>",
+        "date": "2026-10-01T02:28:11Z"
+      },
+      "message": "E2 apply H7 (discarded, single)",
+      "tree": {
+        "sha": "cdf5c69e9bc861cf586b5d290b51d5067aee0c8b",
+        "url": "https://api.github.com/repos/mike-north/doc-linter/git/trees/cdf5c69e9bc861cf586b5d290b51d5067aee0c8b"
+      },
+      "url": "https://api.github.com/repos/mike-north/doc-linter/git/commits/255d5dc347533f66bc79dad45df9c49c11cf1b58",
+      "comment_count": 0,
+      "verification": {
+        "verified": true,
+        "reason": "valid",
+        "signature": "-----BEGIN PGP SIGNATURE-----\n\nwsFcBAABCAAQBQJqvcU7CRC1aQ7uu5UhlAAAeRgQADZh60AVNlU2B3u9kSE8v++m\n68cBLPutZNQ12gThaLQmCTKXS/dclMT8ZvhUrWWfNzubVSq4nE1XsI17uIDT9Tsj\nRxxSDkd8yds/kG28bacwrza/IqenLoe3fVBy7aR1WR/pFMn+pcEEYWBF1wtodFRR\nhY5UuKKUpBFU/TLBABtS62e55e4d3Rm6KwdzjdGe//7R5fDk1hCn4bxtG9zfuiJs\nhpigDNQVjGE0uNtWjH2/vbs+fkCsKawMGbFgC5702UaN1QxsqpJqesoQ/6Lte7b/\nxjDZQazsh/T11YyZshw+yTetZRU77qaKkp4hkRONFwxkzN0rsiEfnjR0ht08dvY4\nJES6PZ+7tu/snOQSuG7LrX7NpzQa8BFDCNCpISTRYExwKq4PxvXJtABeQNVaIwaf\nA2oTiVo2PkUw/rmYGUZJRkOH2mjbgqD12v7qvJmposvHfLC9i/WiUgDbdv0DyUHH\nUKnr4+X8CITWfDjBml9ZptMe5L4TRM7IGzLcqvns2CX+OrrqgjHrTgohqMznbPru\n+yULEdhe6cIa+EeofjyjemP+2o7vbW46tVv9tSWaXqqCRklJIGYCrDPe7p6GXpjK\n/tUMkkUWduUHn4bWo3w2ICtYv/TXceOjv5yvTsO4UTxOkIBMLcvhMUTvz4c7UAKo\ne05kIb9H74IjvGUXMas0\n=OCdR\n-----END PGP SIGNATURE-----\n",
+        "payload": "tree cdf5c69e9bc861cf586b5d290b51d5067aee0c8b\nparent 54bd5cdb688b1f568b003698e22d9d01672bb433\nauthor Mike North <<redacted-email>> 1790821691 -0700\ncommitter GitHub <<redacted-email>> 1790821691 -0700\n\nE2 apply H7 (discarded, single)",
+        "verified_at": "2026-10-01T02:28:12Z"
+      }
+    },
+    "url": "https://api.github.com/repos/mike-north/doc-linter/commits/255d5dc347533f66bc79dad45df9c49c11cf1b58",
+    "html_url": "https://github.com/mike-north/doc-linter/commit/255d5dc347533f66bc79dad45df9c49c11cf1b58",
+    "comments_url": "https://api.github.com/repos/mike-north/doc-linter/commits/255d5dc347533f66bc79dad45df9c49c11cf1b58/comments",
+    "author": {
+      "login": "mike-north",
+      "id": 558005,
+      "node_id": "MDQ6VXNlcjU1ODAwNQ==",
+      "avatar_url": "https://avatars.githubusercontent.com/u/558005?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/mike-north",
+      "html_url": "https://github.com/mike-north",
+      "followers_url": "https://api.github.com/users/mike-north/followers",
+      "following_url": "https://api.github.com/users/mike-north/following{/other_user}",
+      "gists_url": "https://api.github.com/users/mike-north/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/mike-north/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/mike-north/subscriptions",
+      "organizations_url": "https://api.github.com/users/mike-north/orgs",
+      "repos_url": "https://api.github.com/users/mike-north/repos",
+      "events_url": "https://api.github.com/users/mike-north/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/mike-north/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "committer": {
+      "login": "web-flow",
+      "id": 19864447,
+      "node_id": "MDQ6VXNlcjE5ODY0NDQ3",
+      "avatar_url": "https://avatars.githubusercontent.com/u/19864447?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/web-flow",
+      "html_url": "https://github.com/web-flow",
+      "followers_url": "https://api.github.com/users/web-flow/followers",
+      "following_url": "https://api.github.com/users/web-flow/following{/other_user}",
+      "gists_url": "https://api.github.com/users/web-flow/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/web-flow/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/web-flow/subscriptions",
+      "organizations_url": "https://api.github.com/users/web-flow/orgs",
+      "repos_url": "https://api.github.com/users/web-flow/repos",
+      "events_url": "https://api.github.com/users/web-flow/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/web-flow/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "parents": [
+      {
+        "sha": "54bd5cdb688b1f568b003698e22d9d01672bb433",
+        "url": "https://api.github.com/repos/mike-north/doc-linter/commits/54bd5cdb688b1f568b003698e22d9d01672bb433",
+        "html_url": "https://github.com/mike-north/doc-linter/commit/54bd5cdb688b1f568b003698e22d9d01672bb433"
+      }
+    ],
+    "stats": {
+      "total": 2,
+      "additions": 1,
+      "deletions": 1
+    },
+    "files": [
+      {
+        "sha": "10d707436e60ed03dfb544b53a3ac4d39d49fb87",
+        "filename": "docs/experiments/e2/sample-discarded.md",
+        "status": "modified",
+        "additions": 1,
+        "deletions": 1,
+        "changes": 2,
+        "blob_url": "https://github.com/mike-north/doc-linter/blob/255d5dc347533f66bc79dad45df9c49c11cf1b58/docs%2Fexperiments%2Fe2%2Fsample-discarded.md",
+        "raw_url": "https://github.com/mike-north/doc-linter/raw/255d5dc347533f66bc79dad45df9c49c11cf1b58/docs%2Fexperiments%2Fe2%2Fsample-discarded.md",
+        "contents_url": "https://api.github.com/repos/mike-north/doc-linter/contents/docs%2Fexperiments%2Fe2%2Fsample-discarded.md?ref=255d5dc347533f66bc79dad45df9c49c11cf1b58",
+        "patch": "@@ -4,7 +4,7 @@ Line 3: original text.\n Line 4: original text.\n Line 5: reviewed change (R).\n Line 6: rewritten change (R').\n-Line 7: reviewed change (R).\n+Line 7: applied H7 (discarded).\n Line 8: reviewed change (R).\n Line 9: reviewed change (R).\n Line 10: original text."
+      }
+    ]
+  }
+}

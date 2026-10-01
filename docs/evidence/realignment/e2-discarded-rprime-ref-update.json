@@ -1,0 +1,22 @@
+{
+  "request": {
+    "method": "PATCH",
+    "path": "repos/mike-north/doc-linter/git/refs/heads/exp-e2-20261001-discarded",
+    "body": {
+      "sha": "54bd5cdb688b1f568b003698e22d9d01672bb433",
+      "force": true
+    }
+  },
+  "status": 200,
+  "statusLine": "HTTP/2.0 200 OK",
+  "response": {
+    "ref": "refs/heads/exp-e2-20261001-discarded",
+    "node_id": "REF_kwDOUuyy7toAJHJlZnMvaGVhZHMvZXhwLWUyLTIwMjYxMDAxLWRpc2NhcmRlZA",
+    "url": "https://api.github.com/repos/mike-north/doc-linter/git/refs/heads/exp-e2-20261001-discarded",
+    "object": {
+      "sha": "54bd5cdb688b1f568b003698e22d9d01672bb433",
+      "type": "commit",
+      "url": "https://api.github.com/repos/mike-north/doc-linter/git/commits/54bd5cdb688b1f568b003698e22d9d01672bb433"
+    }
+  }
+}

@@ -1,0 +1,33 @@
+── [4151162432] docs/experiments/forcepush/sample-control.md:5 (mike-north) ──
+E4 suggestion on line 5. Part 1 of 3 of one linked suggestion group.
+
+Other parts: [part 2 of 3, line 15](https://github.com/mike-north/doc-linter/pull/93#discussion_r4151162440) and [part 3 of 3, line 18](https://github.com/mike-north/doc-linter/pull/93#discussion_r4151162443).
+
+Apply the three parts together: on the Files changed tab, choose "Add suggestion to batch" on each part, then "Commit suggestions".
+
+```suggestion
+Line 05: linked-group suggested text.
+```
+
+── [4151162440] docs/experiments/forcepush/sample-control.md:15 (mike-north) ──
+E4 suggestion on line 15. Part 2 of 3 of one linked suggestion group.
+
+Other parts: [part 1 of 3, line 5](https://github.com/mike-north/doc-linter/pull/93#discussion_r4151162432) and [part 3 of 3, line 18](https://github.com/mike-north/doc-linter/pull/93#discussion_r4151162443).
+
+Apply the three parts together: on the Files changed tab, choose "Add suggestion to batch" on each part, then "Commit suggestions".
+
+```suggestion
+Line 15: linked-group suggested text.
+```
+
+── [4151162443] docs/experiments/forcepush/sample-control.md:18 (mike-north) ──
+E4 suggestion on line 18. Part 3 of 3 of one linked suggestion group.
+
+Other parts: [part 1 of 3, line 5](https://github.com/mike-north/doc-linter/pull/93#discussion_r4151162432) and [part 2 of 3, line 15](https://github.com/mike-north/doc-linter/pull/93#discussion_r4151162440).
+
+Apply the three parts together: on the Files changed tab, choose "Add suggestion to batch" on each part, then "Commit suggestions".
+
+```suggestion
+Line 18: linked-group suggested text.
+```
+

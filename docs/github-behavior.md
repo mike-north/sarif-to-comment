@@ -1,6 +1,6 @@
 # Observed GitHub behavior
 
-This is the project's starting point for questions about what GitHub actually does. It consolidates existing experiments so that established observations do not have to be rediscovered in a conversation. Seeded September 30, 2026 from the reports and evidence below; no new experiment was performed to create this register. GH-14 was added the same day from the existing force-push report. GH-15 and GH-16 were added October 1, 2026 from new, bounded experiments on the same fixtures.
+This is the project's starting point for questions about what GitHub actually does. It consolidates existing experiments so that established observations do not have to be rediscovered in a conversation. Seeded September 30, 2026 from the reports and evidence below; no new experiment was performed to create this register. GH-14 was added the same day from the existing force-push report. GH-15 and GH-16 were added October 1, 2026 from new, bounded experiments on the same fixtures. GH-17, GH-18 and GH-19 were added the same day: GH-17 from a new fixture, GH-18 from readbacks of the same fixtures plus two commits with no ref, and GH-19 from a new, bounded experiment on two new fixtures.
 
 An observation establishes the recorded case, with its conditions. It is not a universal guarantee, an implementation requirement, or proof that this library currently supports the behavior. GitHub documentation describes advertised behavior; keep it distinct from observed outcomes, especially when the two appear to disagree. Product choices belong in the [decision log](design-decisions.md).
 
@@ -77,6 +77,20 @@ Most seeded observations used one authenticated account and synthetic, same-repo
 **Evidence:** [Application/readback report](suggestion-application-e2e.md), [submitted readback](evidence/suggestion-application/raw/pr16-readback-03-suggestions-submitted.json), [head-advancement report](milestone-e2e-evidence.md), [after advancement](evidence/milestone-e2e/pr15-readback-05-after-head-advance.json).
 
 **Limits:** Readback shapes from these fixtures. The attempted base-advancement case did not produce a different `base.sha`; that variant was not observed. Persistence of existing comments does not prove eligibility for creating new historical comments; GH-16 records that separately.
+
+### GH-17 — A pending review's comments had their final IDs and URLs, and their bodies could be edited before submission
+
+**Observed October 1, 2026:** On a new draft fixture, [#93](https://github.com/mike-north/doc-linter/pull/93), with its own base branch at an existing fixture commit. One pending review (no `event`) held three single-line native suggestions, on lines 5, 15 and 18 of one file.
+
+- **IDs and URLs were present while pending.** `GET …/reviews/<id>/comments` returned each comment's `id`, `node_id` and `html_url` (`…/pull/93#discussion_r<id>`). GraphQL returned the same `databaseId`, `id` and `url` with `state: PENDING`. None of them changed on submission.
+- **Pending comment bodies were edited through GraphQL.** `updatePullRequestReviewComment` answered HTTP 200 for each comment, and the review stayed `PENDING`. Each new body added "part N of 3", links to the other two comments by `#discussion_r<id>` URL, a batch-apply instruction, and the original suggestion block.
+- **The review body was edited through REST while pending.** `PUT …/pulls/<pr>/reviews/<id>` answered HTTP 200, and the review stayed `PENDING`. The new body had the three links and a hidden marker.
+- **Everything was preserved exactly.** Read back before and after submission through REST and GraphQL, the review body with its marker and every comment body with its suggestion block equaled what was sent, byte for byte.
+- **The links still pointed at the comments after submission.** `POST …/events` with `COMMENT` answered HTTP 200. Each link's URL equaled its target's `html_url` after submission. `lastEditedAt` stayed `null` on the review and on the comments throughout.
+
+**Evidence:** [E4 and E5 record](evidence/realignment/e4-e5-readme.md), with each request and response in `evidence/realignment/e4-*.json`.
+
+**Limits:** No page was opened. Whether the links render and navigate, whether the suggestions render as applicable, and batch application with byte comparison are unobserved. REST `PATCH …/pulls/comments/<id>` on a pending comment was denied by a local hook and never sent, so it is untested. One account, which also authored the PR; three comments in one file; no multi-line suggestions.
 
 ## Native suggestions and literal content
 
@@ -166,7 +180,7 @@ Do not promote them to observed merge outcomes.
 - A retry after a second rewrite.
 - An actual merge of any companion.
 
-Later experiments covered two of these: submitting a pending review across a rewrite (GH-15) and new inline comments at a historical `commit_id` (GH-16). The others remain untested.
+Later experiments covered three of these: submitting a pending review across a rewrite (GH-15), new inline comments at a historical `commit_id` (GH-16), and, on new fixtures, applying a native suggestion whose comment had moved to the head or become outdated (GH-19). The others remain untested. GH-18 repeated the merge projections at the current heads, still without merging.
 
 **Evidence:** The [force-push experiment report](force-push-experiment.md), with its inline readback excerpts, and the live PRs, reviews and branches it lists, which were left in place. No raw readback files from the run itself are retained in the repository.
 
@@ -215,6 +229,62 @@ Later implementation runs separately observed companions proposed on the reviewe
 
 **Limits:** Plain single-line comments only: no native suggestions, no multi-line ranges and no file-level comments. Rendering was not observed, so whether the web interface shows these comments in the current diff, as outdated, or only in the conversation is unknown. No later push to these branches, so repositioning on a later push is untested. One account; same-repository draft PRs; no forks or cross-repository commits.
 
+### GH-18 — A companion's file list and compare showed the merge-base diff, not what a merge would change
+
+**Observed October 1, 2026:** Reads of the GH-14 companions #46, #48 and #52, and two new commits created with the Git data API and no ref. P's parent is #52's discarded reviewed commit `eb6c2f6`. P2, the control, has the current head `d28aa24` as its parent. Both carry the same line-10 edit.
+
+- **The PR file list equaled the compare.** For each of #46, #48 and #52, `GET …/pulls/<pr>/files` returned exactly the list from `GET …/compare/<target head>...<companion head>`, every field included.
+- **Both showed the diff from the merge base to the companion.** Each listed the discarded reviewed commit and showed +3 −3 at lines 5, 6 and 10, and each file `sha` was the companion's blob. A fresh read reported #46 and #48 CONFLICTING and #52 MERGEABLE.
+- **A commit with no ref was compared the same way.** `compare/d28aa24...P` answered HTTP 200: `diverged`, listing `eb6c2f6`, +3 −3 at lines 5, 6 and 10, the same shape as #52. `compare/d28aa24...P2` was `ahead` 1, listed only P2 and showed +1 −1 at line 10. GitHub also served both commits to `git fetch` by SHA.
+
+**Local projection, not a merge:** `git merge-tree` compared the merge of each companion into its target with the head plus only the proposal (a cherry-pick).
+
+- **#52 and P:** clean merges that would restore lines 5 and 6, which the head had dropped, besides the proposal.
+- **#46 and #48:** conflict at line 5 at their current heads.
+- **P2:** equal to head + proposal.
+- **#46 and #48 at the earlier heads** where GH-14 found them MERGEABLE (`3007343`, `62ed990`): clean, and equal to head + proposal, as GH-14 inferred.
+
+These projections agree with every GitHub readback above. But the readbacks alone do not separate a faithful companion from one that restores content:
+
+- They show the merge-base diff. On #46 and #48 that includes line 6, which the head already had.
+- They name the same single file for P2 as for P.
+- No readback shows the merged file.
+
+**Evidence:** [E4 and E5 record](evidence/realignment/e4-e5-readme.md), with the readbacks in `evidence/realignment/e5-*.json`, the projection in `e5-merge-tree-projection.json` and the field-by-field comparison in `e5-prediction-vs-github.json`.
+
+**Limits:** Nothing was merged; every merge outcome is a local projection with Git 2.54.0, and GitHub's own merge may differ. P and P2 have no pull request, so no mergeability verdict. Retention of commits with no ref is unknown. One modified file per companion; no renames, whole-file additions or deletions, binary content or forks.
+
+### GH-19 — Native suggestions anchored at an older commit applied exactly to the head; changed lines could not be applied
+
+**Observed October 1, 2026:** Two new draft PRs, [#94](https://github.com/mike-north/doc-linter/pull/94) and [#95](https://github.com/mike-north/doc-linter/pull/95), on a fixture base branch cut from a fixture commit, not `main`. In each, the reviewed commit R rewrote lines 5–9 of a 20-line file.
+
+- On #94 an ordinary push then changed line 6, so R stayed an ancestor of the head.
+- On #95 a force-push replaced R with a commit that differs from R only on line 6, so R left the PR.
+- Single-line native suggestions were created with `POST …/reviews`: at R before the push, at R after the push (a historical `commit_id`), and at the new head as a control.
+- They were applied in the web interface's Files changed tab, singly and as batches of two, and every resulting file was compared with the expected bytes by GH-08's method.
+
+The results:
+
+- **Unchanged lines were offered and applied exactly, in both cases.** Suggestions at R on lines the head had not changed appeared in the current diff with "Add to batch" and "Commit suggestions". This held whether they were created before the push or after it, and whether R was an ancestor or discarded.
+  - Every application produced a commit whose single parent was the previous head and which changed only that file.
+  - The file matched, byte for byte and by blob id, the head's previous file with exactly the suggested lines replaced. The head's own change to line 6 was kept, so nothing from R was restored.
+  - This held for three single commits and for two batches. One batch mixed a suggestion at R with one at the head (#94); the other had both at the discarded R (#95).
+- **Lines the head changed could not be applied.** On line 6, the web interface labelled both suggestions "Outdated" and disabled applying and batching ("Outdated suggestions cannot be applied."). This held for the suggestion created before the push and for the one created afterwards at R. Neither appeared in Files changed, so no application overwrote the head's change.
+- **The API and the web interface disagreed for one of them.** The suggestion created after the push with `commit_id` R on line 6 was reported by REST and GraphQL as current at R (`line` 6, `outdated: false`, thread `isOutdated: false`). The interface still treated it as outdated. The one created before the push was outdated in both (`line: null`, `outdated: true`).
+- **Rendering of historical comments.** New suggestion comments at a historical `commit_id` on unchanged lines rendered in the current Files changed diff at their line, on both the ancestor and the discarded case. This partly answers GH-16's rendering question, for suggestions.
+- **Other details.** GitHub committed each application as the signed-in user, with GitHub as committer and a verified signature, and added a `Co-authored-by:` trailer only to batch commits. Applied threads became resolved. After the applications every thread, including the unapplied ones, reported `outdated: true`.
+
+**Evidence:** [E2 record](evidence/realignment/e2-readme.md), the exact-bytes comparison in [`e2-applied-files.json`](evidence/realignment/e2-applied-files.json), raw requests and readbacks in `evidence/realignment/e2-*.json`, and screenshots in `evidence/realignment/e2-*-ui-*.jpg`.
+
+**Limits:**
+
+- One account, which was also the PR author; same-repository draft PRs; no forks.
+- One-line LF replacements only. No multi-line, insertion, deletion, CRLF or final-line shapes.
+- Application only from Files changed, never from the conversation tab's "Apply suggestion".
+- No suggestion on a line the head changed to identical text, or adjacent to a changed line.
+- Why the interface judges the post-push line-6 suggestion outdated is not established.
+- Nothing was merged.
+
 ## Existing summaries whose primary evidence needs a repository home
 
 **Product boundary:** The [settled force-push decisions](design-decisions.md#settled-force-push-boundary--september-30-2026) distinguish host review lifecycle, upstream follow-up and this project's faithful-publication responsibilities. Capability gaps below are experiment questions, not authority to invent a review-maintenance service.
@@ -223,15 +293,15 @@ The force-push experiment now has a repository home. Its report is [force-push-e
 
 Two working summaries of the experiment, a briefing and a responsibility review, exist only in the maintainer's uncommitted working logs. GH-14 keeps their distinctions between observed, inferred and untested results, and nothing in this register depends on them.
 
-Keep the established limits attached. The removed-content restoration case was a local `merge-tree` projection plus a live mergeability verdict, **not a live merge**. Native-suggestion application after the branch moved, and a retry after a second rewrite, remain untested. Newly published historical inline comments and the submission of a pending review after a rewrite were later recorded in GH-16 and GH-15. Do not promote the projection to an observed GitHub merge outcome.
+Keep the established limits attached. The removed-content restoration case was a local `merge-tree` projection plus a live mergeability verdict, **not a live merge**. A retry after a second rewrite remains untested. Newly published historical inline comments and the submission of a pending review after a rewrite were later recorded in GH-16 and GH-15. GH-19 later recorded native-suggestion application after the branch moved, on new fixtures and within its limits. GH-18 repeated the projection at the current heads, with a control, and it is still a projection. Do not promote the projection to an observed GitHub merge outcome.
 
 ## Cases this register does not establish
 
 - Sibling alternatives automatically closing when the merged referencing companion targets the original feature branch (GH-01 only established a default-branch source).
 - An optional Actions workflow performing abandonment cleanup (GH-02 established the condition motivating it).
-- Pending-comment discovery, editing and post-submission links for a cross-linked native-suggestion group.
-- Native suggestions published at a historical or discarded commit (GH-16 covers plain inline comments only); native-suggestion application after the branch moved; an actual merge of a companion built on a discarded commit (GH-14 records each as untested).
-- How the web interface renders the reviews and comments in GH-15 and GH-16; only API state was recorded.
+- Rendering, link navigation and batch application of a cross-linked native-suggestion group. GH-17 covers only the API steps: pending-comment discovery, editing, and the links' targets after submission.
+- Native suggestions published at a historical or discarded commit, and native-suggestion application after the branch moved, beyond GH-19's one-line LF replacements applied from Files changed after one ordinary push or one force-push (GH-16 covers plain inline comments only); an actual merge of a companion built on a discarded commit (GH-14 records each as untested).
+- How the web interface renders the reviews and comments in GH-15 and GH-16; only API state was recorded. GH-19 observed where new suggestion comments at a historical `commit_id` rendered on its own fixtures, not GH-16's plain comments.
 - Any broader behavior excluded by an entry's stated limits.
 
 These boundaries preserve the observed facts; they are not a request to perform new experiments.

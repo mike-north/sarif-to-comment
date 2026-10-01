@@ -1,0 +1,50 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "repos/mike-north/doc-linter/git/commits",
+    "body": {
+      "message": "E2 fixture (discarded): R changes lines 5-9",
+      "tree": "55006e8af1a8753b74fffb9fec177f6221f0a4cf",
+      "parents": [
+        "0c03fd7293730bd5164121ec8f91b9b8833ae34e"
+      ]
+    }
+  },
+  "status": 201,
+  "statusLine": "HTTP/2.0 201 Created",
+  "response": {
+    "sha": "639c1f8d34703d6329a33cea0cad51853ce1b891",
+    "node_id": "C_kwDOUuyy7toAKDYzOWMxZjhkMzQ3MDNkNjMyOWEzM2NlYTBjYWQ1MTg1M2NlMWI4OTE",
+    "url": "https://api.github.com/repos/mike-north/doc-linter/git/commits/639c1f8d34703d6329a33cea0cad51853ce1b891",
+    "html_url": "https://github.com/mike-north/doc-linter/commit/639c1f8d34703d6329a33cea0cad51853ce1b891",
+    "author": {
+      "name": "Mike North",
+      "email": "<redacted-email>",
+      "date": "2026-10-01T02:18:15Z"
+    },
+    "committer": {
+      "name": "Mike North",
+      "email": "<redacted-email>",
+      "date": "2026-10-01T02:18:15Z"
+    },
+    "tree": {
+      "sha": "55006e8af1a8753b74fffb9fec177f6221f0a4cf",
+      "url": "https://api.github.com/repos/mike-north/doc-linter/git/trees/55006e8af1a8753b74fffb9fec177f6221f0a4cf"
+    },
+    "message": "E2 fixture (discarded): R changes lines 5-9",
+    "parents": [
+      {
+        "sha": "0c03fd7293730bd5164121ec8f91b9b8833ae34e",
+        "url": "https://api.github.com/repos/mike-north/doc-linter/git/commits/0c03fd7293730bd5164121ec8f91b9b8833ae34e",
+        "html_url": "https://github.com/mike-north/doc-linter/commit/0c03fd7293730bd5164121ec8f91b9b8833ae34e"
+      }
+    ],
+    "verification": {
+      "verified": false,
+      "reason": "unsigned",
+      "signature": null,
+      "payload": null,
+      "verified_at": null
+    }
+  }
+}

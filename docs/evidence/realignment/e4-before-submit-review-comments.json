@@ -1,0 +1,196 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "repos/mike-north/doc-linter/pulls/93/reviews/5374159934/comments"
+  },
+  "status": 200,
+  "statusLine": "HTTP/2.0 200 OK",
+  "response": [
+    {
+      "id": 4151162432,
+      "node_id": "PRRC_kwDOUuyy7s73bbZA",
+      "url": "https://api.github.com/repos/mike-north/doc-linter/pulls/comments/4151162432",
+      "pull_request_review_id": 5374159934,
+      "diff_hunk": "@@ -2,7 +2,7 @@\n \n Line 03: stable filler text for the experiment.\n Line 04: stable filler text for the experiment.\n-Line 05: original text.\n+Line 05: linked-group draft text.",
+      "path": "docs/experiments/forcepush/sample-control.md",
+      "position": 5,
+      "original_position": 5,
+      "commit_id": "04d5d812ccedf3accb3011fe65494481760c72fa",
+      "user": {
+        "login": "mike-north",
+        "id": 558005,
+        "node_id": "MDQ6VXNlcjU1ODAwNQ==",
+        "avatar_url": "https://avatars.githubusercontent.com/u/558005?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/mike-north",
+        "html_url": "https://github.com/mike-north",
+        "followers_url": "https://api.github.com/users/mike-north/followers",
+        "following_url": "https://api.github.com/users/mike-north/following{/other_user}",
+        "gists_url": "https://api.github.com/users/mike-north/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/mike-north/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/mike-north/subscriptions",
+        "organizations_url": "https://api.github.com/users/mike-north/orgs",
+        "repos_url": "https://api.github.com/users/mike-north/repos",
+        "events_url": "https://api.github.com/users/mike-north/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/mike-north/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "body": "E4 suggestion on line 5. Part 1 of 3 of one linked suggestion group.\n\nOther parts: [part 2 of 3, line 15](https://github.com/mike-north/doc-linter/pull/93#discussion_r4151162440) and [part 3 of 3, line 18](https://github.com/mike-north/doc-linter/pull/93#discussion_r4151162443).\n\nApply the three parts together: on the Files changed tab, choose \"Add suggestion to batch\" on each part, then \"Commit suggestions\".\n\n```suggestion\nLine 05: linked-group suggested text.\n```",
+      "created_at": "2026-10-01T02:13:19Z",
+      "updated_at": "2026-10-01T02:18:47Z",
+      "html_url": "https://github.com/mike-north/doc-linter/pull/93#discussion_r4151162432",
+      "pull_request_url": "https://api.github.com/repos/mike-north/doc-linter/pulls/93",
+      "author_association": "OWNER",
+      "_links": {
+        "self": {
+          "href": "https://api.github.com/repos/mike-north/doc-linter/pulls/comments/4151162432"
+        },
+        "html": {
+          "href": "https://github.com/mike-north/doc-linter/pull/93#discussion_r4151162432"
+        },
+        "pull_request": {
+          "href": "https://api.github.com/repos/mike-north/doc-linter/pulls/93"
+        }
+      },
+      "original_commit_id": "04d5d812ccedf3accb3011fe65494481760c72fa",
+      "reactions": {
+        "url": "https://api.github.com/repos/mike-north/doc-linter/pulls/comments/4151162432/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      }
+    },
+    {
+      "id": 4151162440,
+      "node_id": "PRRC_kwDOUuyy7s73bbZI",
+      "url": "https://api.github.com/repos/mike-north/doc-linter/pulls/comments/4151162440",
+      "pull_request_review_id": 5374159934,
+      "diff_hunk": "@@ -12,9 +12,9 @@ Line 11: stable filler text for the experiment.\n Line 12: stable filler text for the experiment.\n Line 13: stable filler text for the experiment.\n Line 14: stable filler text for the experiment.\n-Line 15: original text.\n+Line 15: linked-group draft text.",
+      "path": "docs/experiments/forcepush/sample-control.md",
+      "position": 14,
+      "original_position": 14,
+      "commit_id": "04d5d812ccedf3accb3011fe65494481760c72fa",
+      "user": {
+        "login": "mike-north",
+        "id": 558005,
+        "node_id": "MDQ6VXNlcjU1ODAwNQ==",
+        "avatar_url": "https://avatars.githubusercontent.com/u/558005?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/mike-north",
+        "html_url": "https://github.com/mike-north",
+        "followers_url": "https://api.github.com/users/mike-north/followers",
+        "following_url": "https://api.github.com/users/mike-north/following{/other_user}",
+        "gists_url": "https://api.github.com/users/mike-north/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/mike-north/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/mike-north/subscriptions",
+        "organizations_url": "https://api.github.com/users/mike-north/orgs",
+        "repos_url": "https://api.github.com/users/mike-north/repos",
+        "events_url": "https://api.github.com/users/mike-north/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/mike-north/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "body": "E4 suggestion on line 15. Part 2 of 3 of one linked suggestion group.\n\nOther parts: [part 1 of 3, line 5](https://github.com/mike-north/doc-linter/pull/93#discussion_r4151162432) and [part 3 of 3, line 18](https://github.com/mike-north/doc-linter/pull/93#discussion_r4151162443).\n\nApply the three parts together: on the Files changed tab, choose \"Add suggestion to batch\" on each part, then \"Commit suggestions\".\n\n```suggestion\nLine 15: linked-group suggested text.\n```",
+      "created_at": "2026-10-01T02:13:20Z",
+      "updated_at": "2026-10-01T02:19:50Z",
+      "html_url": "https://github.com/mike-north/doc-linter/pull/93#discussion_r4151162440",
+      "pull_request_url": "https://api.github.com/repos/mike-north/doc-linter/pulls/93",
+      "author_association": "OWNER",
+      "_links": {
+        "self": {
+          "href": "https://api.github.com/repos/mike-north/doc-linter/pulls/comments/4151162440"
+        },
+        "html": {
+          "href": "https://github.com/mike-north/doc-linter/pull/93#discussion_r4151162440"
+        },
+        "pull_request": {
+          "href": "https://api.github.com/repos/mike-north/doc-linter/pulls/93"
+        }
+      },
+      "original_commit_id": "04d5d812ccedf3accb3011fe65494481760c72fa",
+      "reactions": {
+        "url": "https://api.github.com/repos/mike-north/doc-linter/pulls/comments/4151162440/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      }
+    },
+    {
+      "id": 4151162443,
+      "node_id": "PRRC_kwDOUuyy7s73bbZL",
+      "url": "https://api.github.com/repos/mike-north/doc-linter/pulls/comments/4151162443",
+      "pull_request_review_id": 5374159934,
+      "diff_hunk": "@@ -12,9 +12,9 @@ Line 11: stable filler text for the experiment.\n Line 12: stable filler text for the experiment.\n Line 13: stable filler text for the experiment.\n Line 14: stable filler text for the experiment.\n-Line 15: original text.\n+Line 15: linked-group draft text.\n Line 16: stable filler text for the experiment.\n Line 17: stable filler text for the experiment.\n-Line 18: original text.\n+Line 18: linked-group draft text.",
+      "path": "docs/experiments/forcepush/sample-control.md",
+      "position": 18,
+      "original_position": 18,
+      "commit_id": "04d5d812ccedf3accb3011fe65494481760c72fa",
+      "user": {
+        "login": "mike-north",
+        "id": 558005,
+        "node_id": "MDQ6VXNlcjU1ODAwNQ==",
+        "avatar_url": "https://avatars.githubusercontent.com/u/558005?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/mike-north",
+        "html_url": "https://github.com/mike-north",
+        "followers_url": "https://api.github.com/users/mike-north/followers",
+        "following_url": "https://api.github.com/users/mike-north/following{/other_user}",
+        "gists_url": "https://api.github.com/users/mike-north/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/mike-north/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/mike-north/subscriptions",
+        "organizations_url": "https://api.github.com/users/mike-north/orgs",
+        "repos_url": "https://api.github.com/users/mike-north/repos",
+        "events_url": "https://api.github.com/users/mike-north/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/mike-north/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "body": "E4 suggestion on line 18. Part 3 of 3 of one linked suggestion group.\n\nOther parts: [part 1 of 3, line 5](https://github.com/mike-north/doc-linter/pull/93#discussion_r4151162432) and [part 2 of 3, line 15](https://github.com/mike-north/doc-linter/pull/93#discussion_r4151162440).\n\nApply the three parts together: on the Files changed tab, choose \"Add suggestion to batch\" on each part, then \"Commit suggestions\".\n\n```suggestion\nLine 18: linked-group suggested text.\n```",
+      "created_at": "2026-10-01T02:13:20Z",
+      "updated_at": "2026-10-01T02:20:26Z",
+      "html_url": "https://github.com/mike-north/doc-linter/pull/93#discussion_r4151162443",
+      "pull_request_url": "https://api.github.com/repos/mike-north/doc-linter/pulls/93",
+      "author_association": "OWNER",
+      "_links": {
+        "self": {
+          "href": "https://api.github.com/repos/mike-north/doc-linter/pulls/comments/4151162443"
+        },
+        "html": {
+          "href": "https://github.com/mike-north/doc-linter/pull/93#discussion_r4151162443"
+        },
+        "pull_request": {
+          "href": "https://api.github.com/repos/mike-north/doc-linter/pulls/93"
+        }
+      },
+      "original_commit_id": "04d5d812ccedf3accb3011fe65494481760c72fa",
+      "reactions": {
+        "url": "https://api.github.com/repos/mike-north/doc-linter/pulls/comments/4151162443/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      }
+    }
+  ]
+}

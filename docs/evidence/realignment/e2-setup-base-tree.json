@@ -1,0 +1,145 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "repos/mike-north/doc-linter/git/trees",
+    "body": {
+      "base_tree": "1a4df55d12ca077b87ee2dd05370b6555688f087",
+      "tree": [
+        {
+          "path": "docs/experiments/e2/sample-ancestor.md",
+          "mode": "100644",
+          "type": "blob",
+          "content": "Line 1: original text.\nLine 2: original text.\nLine 3: original text.\nLine 4: original text.\nLine 5: original text.\nLine 6: original text.\nLine 7: original text.\nLine 8: original text.\nLine 9: original text.\nLine 10: original text.\nLine 11: original text.\nLine 12: original text.\nLine 13: original text.\nLine 14: original text.\nLine 15: original text.\nLine 16: original text.\nLine 17: original text.\nLine 18: original text.\nLine 19: original text.\nLine 20: original text.\n"
+        },
+        {
+          "path": "docs/experiments/e2/sample-discarded.md",
+          "mode": "100644",
+          "type": "blob",
+          "content": "Line 1: original text.\nLine 2: original text.\nLine 3: original text.\nLine 4: original text.\nLine 5: original text.\nLine 6: original text.\nLine 7: original text.\nLine 8: original text.\nLine 9: original text.\nLine 10: original text.\nLine 11: original text.\nLine 12: original text.\nLine 13: original text.\nLine 14: original text.\nLine 15: original text.\nLine 16: original text.\nLine 17: original text.\nLine 18: original text.\nLine 19: original text.\nLine 20: original text.\n"
+        }
+      ]
+    }
+  },
+  "status": 201,
+  "statusLine": "HTTP/2.0 201 Created",
+  "response": {
+    "sha": "20abb9a16e5f59181f9d73902124cf6ccad89f65",
+    "url": "https://api.github.com/repos/mike-north/doc-linter/git/trees/20abb9a16e5f59181f9d73902124cf6ccad89f65",
+    "tree": [
+      {
+        "path": ".github",
+        "mode": "040000",
+        "type": "tree",
+        "sha": "87ae35cc858278d06de995eaa674fa444826a121",
+        "url": "https://api.github.com/repos/mike-north/doc-linter/git/trees/87ae35cc858278d06de995eaa674fa444826a121"
+      },
+      {
+        "path": ".gitignore",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "c7b696527a645c3bec3f9acaefa954930a35ef5a",
+        "size": 61,
+        "url": "https://api.github.com/repos/mike-north/doc-linter/git/blobs/c7b696527a645c3bec3f9acaefa954930a35ef5a"
+      },
+      {
+        "path": "AGENTS.md",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "7a6b643ccc315bdb15f9fdabf58b180ed1753125",
+        "size": 4601,
+        "url": "https://api.github.com/repos/mike-north/doc-linter/git/blobs/7a6b643ccc315bdb15f9fdabf58b180ed1753125"
+      },
+      {
+        "path": "README.md",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "32aa575ac7e9ea45b54dbb8074496d7c0ddaba15",
+        "size": 16192,
+        "url": "https://api.github.com/repos/mike-north/doc-linter/git/blobs/32aa575ac7e9ea45b54dbb8074496d7c0ddaba15"
+      },
+      {
+        "path": "assets",
+        "mode": "040000",
+        "type": "tree",
+        "sha": "bed3f249c61e3fef5bb7ea28f32bb6571ed468b2",
+        "url": "https://api.github.com/repos/mike-north/doc-linter/git/trees/bed3f249c61e3fef5bb7ea28f32bb6571ed468b2"
+      },
+      {
+        "path": "checks",
+        "mode": "040000",
+        "type": "tree",
+        "sha": "4cb723f252e4747e95aa9ff3991e2342d28877a9",
+        "url": "https://api.github.com/repos/mike-north/doc-linter/git/trees/4cb723f252e4747e95aa9ff3991e2342d28877a9"
+      },
+      {
+        "path": "docs",
+        "mode": "040000",
+        "type": "tree",
+        "sha": "20d871a530868302431656b1fcf8e3d0ea15bef3",
+        "url": "https://api.github.com/repos/mike-north/doc-linter/git/trees/20d871a530868302431656b1fcf8e3d0ea15bef3"
+      },
+      {
+        "path": "jest.config.js",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "ce4af627310ffbef982787d6253ec47657b074d2",
+        "size": 1472,
+        "url": "https://api.github.com/repos/mike-north/doc-linter/git/blobs/ce4af627310ffbef982787d6253ec47657b074d2"
+      },
+      {
+        "path": "package-lock.json",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "6c6cc8b693f10c0cb467f9df73bf0a033f7ca02b",
+        "size": 250716,
+        "url": "https://api.github.com/repos/mike-north/doc-linter/git/blobs/6c6cc8b693f10c0cb467f9df73bf0a033f7ca02b"
+      },
+      {
+        "path": "package.json",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "4edc3f40ebe7b9a49691ba228bdb973a235879bc",
+        "size": 2555,
+        "url": "https://api.github.com/repos/mike-north/doc-linter/git/blobs/4edc3f40ebe7b9a49691ba228bdb973a235879bc"
+      },
+      {
+        "path": "scripts",
+        "mode": "040000",
+        "type": "tree",
+        "sha": "58e58a7718647fee419166da5eaa151eefc58107",
+        "url": "https://api.github.com/repos/mike-north/doc-linter/git/trees/58e58a7718647fee419166da5eaa151eefc58107"
+      },
+      {
+        "path": "src",
+        "mode": "040000",
+        "type": "tree",
+        "sha": "658e74328b1340fb24a4ee5de30a6a7423a560e0",
+        "url": "https://api.github.com/repos/mike-north/doc-linter/git/trees/658e74328b1340fb24a4ee5de30a6a7423a560e0"
+      },
+      {
+        "path": "test",
+        "mode": "040000",
+        "type": "tree",
+        "sha": "2d28ad78a836e7447a6f5fa3dc7b4af1fefb9e9b",
+        "url": "https://api.github.com/repos/mike-north/doc-linter/git/trees/2d28ad78a836e7447a6f5fa3dc7b4af1fefb9e9b"
+      },
+      {
+        "path": "tsconfig.build.json",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "81f6b9551c0cfcdaabdd97cd15d61cfd2d7a04ca",
+        "size": 157,
+        "url": "https://api.github.com/repos/mike-north/doc-linter/git/blobs/81f6b9551c0cfcdaabdd97cd15d61cfd2d7a04ca"
+      },
+      {
+        "path": "tsconfig.json",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "6a6c643c6e287ea9bcd9adf454bef5b5e64811a1",
+        "size": 786,
+        "url": "https://api.github.com/repos/mike-north/doc-linter/git/blobs/6a6c643c6e287ea9bcd9adf454bef5b5e64811a1"
+      }
+    ],
+    "truncated": false
+  }
+}

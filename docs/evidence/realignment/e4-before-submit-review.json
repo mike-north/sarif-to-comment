@@ -1,0 +1,47 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "repos/mike-north/doc-linter/pulls/93/reviews/5374159934"
+  },
+  "status": 200,
+  "statusLine": "HTTP/2.0 200 OK",
+  "response": {
+    "id": 5374159934,
+    "node_id": "PRR_kwDOUuyy7s8AAAABQFMsPg",
+    "user": {
+      "login": "mike-north",
+      "id": 558005,
+      "node_id": "MDQ6VXNlcjU1ODAwNQ==",
+      "avatar_url": "https://avatars.githubusercontent.com/u/558005?u=a27f905c8f24e1ad227d32905fa5512fd615153d&v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/mike-north",
+      "html_url": "https://github.com/mike-north",
+      "followers_url": "https://api.github.com/users/mike-north/followers",
+      "following_url": "https://api.github.com/users/mike-north/following{/other_user}",
+      "gists_url": "https://api.github.com/users/mike-north/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/mike-north/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/mike-north/subscriptions",
+      "organizations_url": "https://api.github.com/users/mike-north/orgs",
+      "repos_url": "https://api.github.com/users/mike-north/repos",
+      "events_url": "https://api.github.com/users/mike-north/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/mike-north/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "body": "E4 linked-group experiment on #93: one pending review with three native suggestions that form one group. Fixture only; do not act on this review.\n\nThe group has three parts:\n\n1. [Part 1 of 3, line 5](https://github.com/mike-north/doc-linter/pull/93#discussion_r4151162432)\n2. [Part 2 of 3, line 15](https://github.com/mike-north/doc-linter/pull/93#discussion_r4151162440)\n3. [Part 3 of 3, line 18](https://github.com/mike-north/doc-linter/pull/93#discussion_r4151162443)\n\nApply the three parts together: on the Files changed tab, choose \"Add suggestion to batch\" on each part, then \"Commit suggestions\".\n\n<!-- e4:93:linkgroup parts=4151162432,4151162440,4151162443 -->",
+    "state": "PENDING",
+    "html_url": "https://github.com/mike-north/doc-linter/pull/93#pullrequestreview-5374159934",
+    "pull_request_url": "https://api.github.com/repos/mike-north/doc-linter/pulls/93",
+    "author_association": "OWNER",
+    "_links": {
+      "html": {
+        "href": "https://github.com/mike-north/doc-linter/pull/93#pullrequestreview-5374159934"
+      },
+      "pull_request": {
+        "href": "https://api.github.com/repos/mike-north/doc-linter/pulls/93"
+      }
+    },
+    "commit_id": "04d5d812ccedf3accb3011fe65494481760c72fa"
+  }
+}
