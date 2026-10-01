@@ -3,12 +3,14 @@
  * (src/git-attributes.cts; docs/companion-suggestion-pr-contract.md §2.5.1).
  *
  * Each expectation follows gitattributes(5) and the pattern rules it adopts
- * from gitignore(5), and Git's attr.c for precedence and macros; every case
- * here agrees with `git check-attr merge` on the same files.
+ * from gitignore(5), Git's attr.c for line syntax, precedence and macros, and
+ * wildmatch.c for patterns; every case here agrees with `git check-attr` on
+ * the same files with `core.ignorecase` off (as on GitHub's Linux hosts).
  *
  * @see https://git-scm.com/docs/gitattributes
  * @see https://git-scm.com/docs/gitignore#_pattern_format
  * @see https://github.com/git/git/blob/master/attr.c
+ * @see https://github.com/git/git/blob/master/wildmatch.c
  */
 
 import * as assert from 'node:assert/strict';
@@ -139,13 +141,107 @@ describe('mergeDriverOf: the merge driver in effect', () => {
   });
 });
 
+describe('lines Git discards are discarded (attr.c parse_attr_line)', () => {
+  test('regression: a `#` after attributes is an attribute name, which is invalid, so the whole line is discarded', () => {
+    assert.deepEqual(driver('h', { '': '* merge=union\nh merge=text # c\n' }), other('merge=union'));
+  });
+
+  test('regression: any invalid attribute name discards the whole line', () => {
+    assert.deepEqual(driver('f', { '': '* merge=union\nf merge=text bad@name\n' }), other('merge=union'));
+    // Names may not start with `-`, and the `builtin_` prefix is reserved.
+    assert.deepEqual(driver('f', { '': '* merge=union\nf merge=text --x\n' }), other('merge=union'));
+    assert.deepEqual(driver('f', { '': '* merge=union\nf merge=text builtin_x\n' }), other('merge=union'));
+    assert.deepEqual(driver('f', { '': '* merge=union\nf merge=text =x\n' }), other('merge=union'));
+    // Names use letters, digits, `_`, `.` and `-`.
+    assert.deepEqual(driver('f', { '': '* merge=union\nf merge=text a.b_c-D9\n' }), TEXT);
+  });
+
+  test('regression: a line of 2,048 bytes or more is ignored; one byte shorter is read', () => {
+    const line = (bytes: number): string => `*${' '.repeat(bytes - '*merge=text'.length)}merge=text`;
+    assert.equal(line(2048).length, 2048);
+    assert.deepEqual(driver('f', { '': `* merge=union\n${line(2048)}\n` }), other('merge=union'));
+    assert.deepEqual(driver('f', { '': `* merge=union\n${line(2047)}\n` }), TEXT);
+    // The length is counted in bytes, not characters.
+    const wide = `* merge=union\nf${' '.repeat(2030)}merge=text x=${'é'.repeat(8)}\n`;
+    assert.deepEqual(driver('f', { '': wide }), other('merge=union'));
+  });
+
+  test('a NUL byte ends the file, as Git reads it', () => {
+    assert.deepEqual(driver('f', { '': '* merge=union\n\u0000f merge=text\n' }), other('merge=union'));
+  });
+
+  test('a `[attr]` line outside the root file is discarded, not read as a pattern', () => {
+    assert.deepEqual(driver('d/[attr]u', { d: '[attr]u merge=union\n' }), TEXT);
+  });
+
+  test('an invalid macro name discards the definition', () => {
+    assert.deepEqual(driver('a', { '': '[attr]bad@u merge=union\na bad@u\n' }), TEXT);
+  });
+});
+
+describe('attribute and macro syntax (attr.c parse_attr)', () => {
+  test('regression: `-name=value` unsets and `!name=value` unspecifies; the value is ignored', () => {
+    assert.deepEqual(driver('f', { '': 'f -merge=x\n' }), other('-merge=x'));
+    assert.deepEqual(driver('g', { '': '* merge=union\ng !merge=x\n' }), TEXT);
+  });
+
+  test('regression: a quoted `[attr]` definition is a macro', () => {
+    assert.deepEqual(driver('a', { '': '"[attr]u" merge=union\na u\n' }), other('u'));
+    assert.deepEqual(driver('a', { '': '"[attr] u" merge=union\na u\n' }), other('u'));
+  });
+
+  test('`[attr]` alone is a pattern, not a macro: a class of the letters a, t and r', () => {
+    assert.deepEqual(driver('t', { '': '"[attr]" merge=union\n' }), other('merge=union'));
+    assert.deepEqual(driver('[attr]', { '': '"[attr]" merge=union\n' }), TEXT);
+  });
+});
+
+describe('bracket expressions as wildmatch reads them', () => {
+  test('regression: a `]` first in a class is a member', () => {
+    assert.deepEqual(driver(']', { '': '[]x] merge=union\n' }), other('merge=union'));
+    assert.deepEqual(driver('x', { '': '[]x] merge=union\n' }), other('merge=union'));
+    assert.deepEqual(driver('y', { '': '[]x] merge=union\n' }), TEXT);
+    assert.equal(patternMatches('[!]x]', '', ']'), false);
+    assert.equal(patternMatches('[!]x]', '', 'y'), true);
+  });
+
+  test('ranges, escapes and POSIX classes inside a class', () => {
+    assert.equal(patternMatches('[a-c]q', '', 'bq'), true);
+    assert.equal(patternMatches('[a-c]q', '', 'dq'), false);
+    assert.equal(patternMatches('[a-]', '', '-'), true);
+    assert.equal(patternMatches('[\\]]', '', ']'), true);
+    assert.equal(patternMatches('[[:digit:]x]', '', '7'), true);
+    assert.equal(patternMatches('[[:digit:]x]', '', 'x'), true);
+    assert.equal(patternMatches('[[:digit:]x]', '', 'y'), false);
+    assert.equal(patternMatches('[[:upper:]]', '', 'A'), true);
+    assert.equal(patternMatches('[[:upper:]]', '', 'a'), false);
+    assert.equal(patternMatches('[^/]', '', 'a'), true);
+  });
+
+  test('a pattern Git cannot complete matches nothing: an unclosed class, an unknown POSIX class, a trailing backslash', () => {
+    assert.equal(patternMatches('[ab', '', '[ab'), false);
+    assert.equal(patternMatches('[[:nope:]]', '', 'a'), false);
+    assert.equal(patternMatches('a\\', '', 'a\\'), false);
+  });
+
+  test('a class matches one byte, as wildmatch does, never a slash', () => {
+    assert.equal(patternMatches('d[!x]e', '', 'd/e'), false);
+    assert.equal(patternMatches('?', '', 'é'), false, 'é is two bytes');
+    assert.equal(patternMatches('??', '', 'é'), true);
+  });
+});
+
 describe('couldAssignMerge: whether a version of a changed attributes file matters', () => {
   test('a file that sets no merge attribute and no macro touching merge cannot', () => {
     assert.equal(couldAssignMerge(parseAttributes('*.png -diff\n*.sh text eol=lf\n'), []), false);
+    // A line Git discards assigns nothing.
+    assert.equal(couldAssignMerge(parseAttributes('f merge=union bad@name\n'), []), false);
   });
 
   test('a merge attribute in any state, the built-in macro, or a macro that sets merge can', () => {
     assert.equal(couldAssignMerge(parseAttributes('f merge=text\n'), []), true);
+    assert.equal(couldAssignMerge(parseAttributes('f -merge=x\n'), []), true);
+    assert.equal(couldAssignMerge(parseAttributes('"[attr]u" merge=union\n'), []), true);
     assert.equal(couldAssignMerge(parseAttributes('f !merge\n'), []), true);
     assert.equal(couldAssignMerge(parseAttributes('*.png binary\n'), []), true);
     assert.equal(couldAssignMerge(parseAttributes('f mine\n'), [parseAttributes('[attr]mine merge=union\n').macros]), true);

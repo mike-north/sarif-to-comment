@@ -312,6 +312,11 @@ describe('merge attributes: a driver other than the text merge is a limit', () =
     assert.deepEqual(await project(w, [change]), mergeAttribute('f', 'merge=union'));
   });
 
+  test('regression: the text merge named on a line that ends in a comment-like word is discarded with that line, as Git discards it', async () => {
+    const { w, change } = reviewersCase({ '.gitattributes': '* merge=union\nf merge=text # keep the text merge\n' });
+    assert.deepEqual(await project(w, [change]), mergeAttribute('f', 'merge=union'));
+  });
+
   test('the same history without attributes, or with the text merge named, conflicts', async () => {
     for (const attributes of [{}, { '.gitattributes': 'f merge=text\n' }, { '.gitattributes': 'f merge\n' }, { '.gitattributes': '* merge=union\nf !merge\n' }]) {
       const { w, change } = reviewersCase(attributes);
@@ -413,6 +418,11 @@ describe('attributes files that differ between the commits', () => {
       [COMMIT.H]: { '.gitattributes': '[attr]keep merge=union\n', 'd/.gitattributes': 'x keep\n', g: 'g\n' },
     });
     assert.deepEqual(await project(w, [edit('g', 'G\n')]), { verdict: 'unfaithful', reasons: [], limits: [{ kind: 'attributes-changed', path: 'd/.gitattributes' }] });
+  });
+
+  test('regression: one that unsets merge with a value (`-merge=x`) could assign a driver, so it is a limit', async () => {
+    const w = world({ [COMMIT.M]: { '.gitattributes': '*.png -diff\n', g: 'g\n' }, [COMMIT.R]: { '.gitattributes': '*.png -diff\n', g: 'g\n' }, [COMMIT.H]: { '.gitattributes': '*.png -diff\nx -merge=x\n', g: 'g\n' } });
+    assert.deepEqual(await project(w, [edit('g', 'G\n')]), { verdict: 'unfaithful', reasons: [], limits: [{ kind: 'attributes-changed', path: '.gitattributes' }] });
   });
 
   test('a proposal that changes an attributes file to set a merge driver is a limit', async () => {
