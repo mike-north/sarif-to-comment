@@ -316,19 +316,19 @@ function expectedGroupPullBody(id: string, publication: string): string {
 /**
  * §2.13.3: the companion index a review that creates these suggestion pull
  * requests begins with, then the separator to its first section; each title
- * as the index shows it (`#` escaped).
+ * as the index shows it, as a code span.
  */
 function companionIndex(...created: readonly (readonly [number: number, title: string])[]): string[] {
   return [
     '**Companion pull requests of this review:**',
     '',
-    ...created.map(([n, title]) => `- [#${String(n)}](${pullUrl(n)}): ${title} — created with this review`),
+    ...created.map(([n, title]) => `- [#${String(n)}](${pullUrl(n)}): \`${title}\` — created with this review`),
     '',
     '---',
     '',
   ];
 }
-const GROUP_TITLE = 'Suggestion for \\#7: retry-with-test (2 changes)';
+const GROUP_TITLE = 'Suggestion for #7: retry-with-test (2 changes)';
 
 function expectedGroupReviewBody(number: number): string {
   return [
@@ -569,7 +569,7 @@ describe('standalone file operations (A28)', () => {
     const [review] = world.host.reviews();
     assert.ok(review);
     assert.equal(review.request.body.replace(REVIEW_MARKER, ''), [
-      ...companionIndex([101, 'Suggestion for \\#7: create docs/guide.md'], [102, 'Suggestion for \\#7: delete obsolete.txt']),
+      ...companionIndex([101, 'Suggestion for #7: create docs/guide.md'], [102, 'Suggestion for #7: delete obsolete.txt']),
       `**Suggestion pull request:** [#101](${pullUrl(101)})`,
       '',
       'Merging it into `feature/retry` applies this change:',
@@ -803,7 +803,7 @@ describe('group rules (§2.3–§2.4), identical in validate and publish', () =>
     const [review] = world.host.reviews();
     assert.ok(review);
     assert.equal(review.request.body.replace(REVIEW_MARKER, ''), [
-      ...companionIndex([pull.number, 'Suggestion for \\#7: g (2 changes)']),
+      ...companionIndex([pull.number, 'Suggestion for #7: g (2 changes)']),
       `**Suggestion pull request:** [#${String(pull.number)}](${pullUrl(pull.number)})`,
       '',
       'Merging it into `feature/retry` applies these 2 changes together:',
@@ -1391,7 +1391,7 @@ describe('a native multi-change fix (one SARIF fix with several changes)', () =>
     const [review] = world.host.reviews();
     assert.ok(review);
     assert.equal(review.request.body.replace(REVIEW_MARKER, ''), [
-      ...companionIndex([pull.number, 'Suggestion for \\#7: 2 changes']),
+      ...companionIndex([pull.number, 'Suggestion for #7: 2 changes']),
       `**Suggestion pull request:** [#${String(pull.number)}](${pullUrl(pull.number)})`,
       '',
       'Merging it into `feature/retry` applies these 2 changes together:',

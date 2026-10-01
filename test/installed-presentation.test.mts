@@ -110,7 +110,7 @@ describe('the installed package accepts presentation callbacks', () => {
     assert.equal(body.replace(REVIEW_MARKER, ''), [
       '**Companion pull requests of this review:**',
       '',
-      `- [#${number}](https://github.com/octo/widgets/pull/${number}): Suggestion for \\#7: create docs/guide.md — created with this review`,
+      `- [#${number}](https://github.com/octo/widgets/pull/${number}): \`Suggestion for #7: create docs/guide.md\` — created with this review`,
       '',
       '---',
       '',

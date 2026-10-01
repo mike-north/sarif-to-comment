@@ -165,13 +165,13 @@ function createdSection(unit: IUnit, number: number, reappliedOnto?: string): st
 
 /**
  * §2.13.3: the companion index a review that creates these suggestion pull
- * requests begins with; a title is shown as plain text, so its `#` is escaped.
+ * requests begins with; a title is shown as a code span.
  */
 function companionIndex(...created: readonly (readonly [unit: IUnit, number: number])[]): string[] {
   return [
     '**Companion pull requests of this review:**',
     '',
-    ...created.map(([unit, n]) => `- [#${String(n)}](${pullUrl(n)}): ${unit.title.replace('#', '\\#')} — created with this review`),
+    ...created.map(([unit, n]) => `- [#${String(n)}](${pullUrl(n)}): \`${unit.title}\` — created with this review`),
   ];
 }
 

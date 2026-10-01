@@ -55,8 +55,8 @@ function expectedIndex(createdNumber: number): string {
   return [
     '**Companion pull requests of this review:**',
     '',
-    `- [#${String(createdNumber)}](${pullUrl(createdNumber)}): Suggestion for \\#7: create docs/guide.md — created with this review`,
-    `- [#97](${pullUrl(97)}): Suggestion for \\#7: edit notes.txt — reused; it was open when this review was prepared`,
+    `- [#${String(createdNumber)}](${pullUrl(createdNumber)}): \`Suggestion for #7: create docs/guide.md\` — created with this review`,
+    `- [#97](${pullUrl(97)}): \`Suggestion for #7: edit notes.txt\` — reused; it was open when this review was prepared`,
   ].join('\n');
 }
 
@@ -102,7 +102,7 @@ describe('the installed package indexes a review\'s companions', () => {
     assert.ok(onlyReview(world).body.startsWith(`${expectedIndex(number)}\n\n---\n\n**Suggestion pull request:** [#${String(number)}]`), onlyReview(world).body);
   });
 
-  test('library: existingCompanions through the installed functions, and a retry reports the same note', { skip, timeout: 300_000 }, () => {
+  test('library: existingCompanions and a companionIndex callback through the installed functions, and a retry reports the same note', { skip, timeout: 300_000 }, () => {
     const { consumer } = installIntoConsumer();
     const world = makeWorld();
     world.host.seedPulls([earlier(97)]);
@@ -115,7 +115,11 @@ describe('the installed package indexes a review\'s companions', () => {
         destination: { owner: 'octo', repo: 'widgets', pullNumber: 7 },
         reviewedCommit: process.env.REVIEW_COMMIT,
         token: process.env.GH_TOKEN,
-        options: { delivery: { fileOperations: ['companion'] }, existingCompanions: [97] },
+        options: {
+          delivery: { fileOperations: ['companion'] },
+          existingCompanions: [97],
+          presentation: { companionIndex: (c) => c.companions.map((x) => '* ' + x.link + ' (' + x.origin + ')').join('\n') },
+        },
       };
       await assert.rejects(validateSarifReview({ ...input, options: { existingCompanions: [97, 97] } }), TypeError);
       const assessed = await validateSarifReview(input);
@@ -133,7 +137,8 @@ describe('the installed package indexes a review\'s companions', () => {
     assert.equal(ran.status, 0, ran.stdout + ran.stderr);
     assert.deepEqual(parseJson(ran.stdout), [['companion-reused', REUSED]]);
     const number = createdNumber(world);
-    assert.ok(onlyReview(world).body.startsWith(expectedIndex(number)), onlyReview(world).body);
+    // The caller's companionIndex callback shaped the index (D60).
+    assert.ok(onlyReview(world).body.startsWith(`* [#${String(number)}](${pullUrl(number)}) (created)\n* [#97](${pullUrl(97)}) (reused)\n\n---\n\n`), onlyReview(world).body);
     assert.equal(writes(world).filter((w) => w.endsWith('/reviews')).length, 1, 'the retry sent nothing');
   });
 });

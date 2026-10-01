@@ -341,7 +341,7 @@ describe('golden presentation: the published review and its companions', () => {
       assert.equal(reviewBodyWithoutMarker(world), [
         '**Companion pull requests of this review:**',
         '',
-        `- [#${number}](https://github.com/octo/widgets/pull/${number}): Suggestion for \\#7: create docs/guide.md — created with this review`,
+        `- [#${number}](https://github.com/octo/widgets/pull/${number}): \`Suggestion for #7: create docs/guide.md\` — created with this review`,
         '',
         '---',
         '',

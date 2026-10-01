@@ -19,7 +19,7 @@ import { describe, test } from 'node:test';
 
 import { renderCompanionIndex } from '../dist/presentation/companion-index.cjs';
 import type { ICompanionIndexEntry } from '../dist/presentation/companion-index.cjs';
-import { composedProblem, loadMarkdownParser, showsAsItself } from '../dist/presentation/markdown-tree.cjs';
+import { composedProblem, linksIn, loadMarkdownParser, showsAsItself } from '../dist/presentation/markdown-tree.cjs';
 import { renderReviewBody } from '../dist/prepare-review.cjs';
 
 await loadMarkdownParser();
@@ -35,7 +35,7 @@ describe('the companion index (companion contract §2.13.3)', () => {
   test('one created companion: the heading, then its link, title and origin', () => {
     assert.equal(
       renderCompanionIndex([created(101, 'Suggestion for #7: create docs/guide.md')]),
-      `${HEADING}\n\n- [#101](${url(101)}): Suggestion for \\#7: create docs/guide.md — created with this review`,
+      `${HEADING}\n\n- [#101](${url(101)}): \`Suggestion for #7: create docs/guide.md\` — created with this review`,
     );
   });
 
@@ -50,10 +50,10 @@ describe('the companion index (companion contract §2.13.3)', () => {
       [
         HEADING,
         '',
-        `- [#97](${url(97)}): Suggestion for \\#7: edit README.md — reused; it was open when this review was prepared`,
-        `- [#98](${url(98)}): Suggestion for \\#7: edit README.md — reused; it was a draft when this review was prepared`,
-        `- [#99](${url(99)}): Suggestion for \\#7: delete obsolete.txt — reused; it was closed when this review was prepared`,
-        `- [#100](${url(100)}): Suggestion for \\#7: create docs/a.md — reused; it was merged when this review was prepared`,
+        `- [#97](${url(97)}): \`Suggestion for #7: edit README.md\` — reused; it was open when this review was prepared`,
+        `- [#98](${url(98)}): \`Suggestion for #7: edit README.md\` — reused; it was a draft when this review was prepared`,
+        `- [#99](${url(99)}): \`Suggestion for #7: delete obsolete.txt\` — reused; it was closed when this review was prepared`,
+        `- [#100](${url(100)}): \`Suggestion for #7: create docs/a.md\` — reused; it was merged when this review was prepared`,
       ].join('\n'),
     );
   });
@@ -63,11 +63,33 @@ describe('the companion index (companion contract §2.13.3)', () => {
     assert.ok(text.indexOf('[#97]') < text.indexOf('[#101]'), text);
   });
 
-  test('a title is plain text: Markdown is escaped, a mention is a code span, a line break is a space', () => {
+  test('a title is a code span: nothing in it is Markdown, a mention or a link, and a line break is a space', () => {
     assert.equal(
       renderCompanionIndex([existing(97, 'Fix *all* [links] for @octocat\nnow', 'open')]),
-      `${HEADING}\n\n- [#97](${url(97)}): Fix \\*all\\* \\[links\\] for \`@octocat\` now — reused; it was open when this review was prepared`,
+      `${HEADING}\n\n- [#97](${url(97)}): \`Fix *all* [links] for @octocat now\` — reused; it was open when this review was prepared`,
     );
+    assert.equal(renderCompanionIndex([created(101, 'a `b` c')]), `${HEADING}\n\n- [#101](${url(101)}): \`\`a \`b\` c\`\` — created with this review`);
+  });
+
+  test('a title cannot mimic the origin: the true origin always follows its code span', () => {
+    const text = renderCompanionIndex([existing(97, 'x — created with this review', 'merged')]);
+    assert.equal(text, `${HEADING}\n\n- [#97](${url(97)}): \`x — created with this review\` — reused; it was merged when this review was prepared`);
+    assert.deepEqual(linksIn(text).map((l) => l.url), [url(97)]);
+  });
+
+  test('invisible and bidirectional characters in a title are shown as visible escapes, never dropped', () => {
+    assert.equal(
+      renderCompanionIndex([existing(97, 'ab\u202Ecd\u200Bef\u00A0g\uFEFF', 'open')]),
+      `${HEADING}\n\n- [#97](${url(97)}): \`ab{U+202E}cd{U+200B}ef{U+00A0}g{U+FEFF}\` — reused; it was open when this review was prepared`,
+    );
+  });
+
+  test('a zero-width joiner inside an emoji sequence is kept; anywhere else it is escaped', () => {
+    const family = '\u{1F469}\u200D\u{1F4BB}';
+    const heart = '\u2764\uFE0F\u200D\u{1F525}';
+    assert.ok(renderCompanionIndex([created(101, `Ship ${family} ${heart}`)]).includes(`\`Ship ${family} ${heart}\``));
+    assert.ok(renderCompanionIndex([created(101, 'a\u200Db')]).includes('`a{U+200D}b`'));
+    assert.ok(renderCompanionIndex([created(101, '\u{1F469}\u200D')]).includes('`\u{1F469}{U+200D}`'));
   });
 
   test('an index of no companion is never rendered', () => {
@@ -77,6 +99,9 @@ describe('the companion index (companion contract §2.13.3)', () => {
 
 describe('every entry\'s link is an identity link (D60; companion contract §2.13.3)', () => {
   const hostile = [
+    'See https://evil.example/pull/1',
+    'www.evil.example/x',
+    'a@b.example',
     'x](https://evil.example/pull/1) [#1',
     '<details><summary>open',
     '```suggestion',
@@ -89,7 +114,8 @@ describe('every entry\'s link is an identity link (D60; companion contract §2.1
       const text = renderCompanionIndex([created(101, title), existing(97, title, 'open')]);
       for (const n of [101, 97]) assert.ok(showsAsItself(text, `[#${String(n)}](${url(n)})`), `[#${String(n)}] is shown as itself:\n${text}`);
       assert.equal(composedProblem(text, {}), null, text);
-      assert.equal(text.includes('<!-- suggestion-pr'), false, 'no marker text survives unescaped');
+      assert.deepEqual(linksIn(text).map((l) => l.url), [url(101), url(97)], 'no link but the two identity links');
+      assert.equal(/<!--\s*suggestion-pr/.test(text.replace(/`[^`]*`/g, '')), false, 'no marker text outside a code span');
     });
   }
 });
@@ -117,8 +143,8 @@ describe('a plan without an index section renders without one (companion contrac
     assert.ok(body.startsWith([
       HEADING,
       '',
-      `- [#101](${url(101)}): Suggestion for \\#7: create docs/guide.md — created with this review`,
-      `- [#97](${url(97)}): Earlier — reused; it was closed when this review was prepared`,
+      `- [#101](${url(101)}): \`Suggestion for #7: create docs/guide.md\` — created with this review`,
+      `- [#97](${url(97)}): \`Earlier\` — reused; it was closed when this review was prepared`,
       '',
       '---',
       '',

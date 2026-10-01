@@ -431,7 +431,7 @@ describe('mixed documents (#37)', () => {
     assert.deepEqual(outcome['suggestions'], [{ number: pull.number, url: pullUrl(pull.number), branch: pull.head, mergeable: 'unknown' }]);
     assert.equal(reviewBodyOf(world), [
       // Companion contract §2.13.3: the index lists the created one only; the fallback is a body section.
-      `**Companion pull requests of this review:**\n\n- [#${String(pull.number)}](${pullUrl(pull.number)}): Suggestion for \\#7: create docs/new.md — created with this review`,
+      `**Companion pull requests of this review:**\n\n- [#${String(pull.number)}](${pullUrl(pull.number)}): \`Suggestion for #7: create docs/new.md\` — created with this review`,
       [
         `**Suggestion pull request:** [#${String(pull.number)}](${pullUrl(pull.number)})`, '',
         'Merging it into `feature/retry` applies this change:', '',

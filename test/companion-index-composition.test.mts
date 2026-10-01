@@ -34,6 +34,9 @@ import {
 } from './support/delivery-world.mts';
 import type { IWorld, Json } from './support/delivery-world.mts';
 import { asArray, asRecord, asString, parseJson } from './support/runtime-types.mts';
+import { linksIn, loadMarkdownParser } from '../dist/presentation/markdown-tree.cjs';
+
+await loadMarkdownParser();
 
 // ---------------------------------------------------------------------------
 // Documents and existing companions
@@ -65,9 +68,10 @@ const guideSection = (n: number): string => [
 ].join('\n');
 
 const HEADING = '**Companion pull requests of this review:**';
-const createdEntry = (n: number, title: string): string => `- [#${String(n)}](${pullUrl(n)}): ${title} — created with this review`;
+/** An entry of the index; `title` without backticks, shown as a code span (§2.13.3). */
+const createdEntry = (n: number, title: string): string => `- [#${String(n)}](${pullUrl(n)}): \`${title}\` — created with this review`;
 const existingEntry = (n: number, title: string, state: string): string =>
-  `- [#${String(n)}](${pullUrl(n)}): ${title} — reused; it was ${state} when this review was prepared`;
+  `- [#${String(n)}](${pullUrl(n)}): \`${title}\` — reused; it was ${state} when this review was prepared`;
 const index = (...entries: string[]): string => [HEADING, '', ...entries].join('\n');
 const SEPARATOR = '\n\n---\n\n';
 
@@ -84,8 +88,7 @@ function marker(id: string, original: { readonly owner?: string; readonly repo?:
 }
 
 const EXISTING_TITLE = 'Suggestion for #7: edit notes.txt';
-/** The title as the index renders it: plain text, `#` escaped (contract §2.13.3). */
-const EXISTING_INDEXED = 'Suggestion for \\#7: edit notes.txt';
+const EXISTING_INDEXED = EXISTING_TITLE;
 
 /**
  * A suggestion pull request of #7 that an earlier review created, conforming
@@ -183,7 +186,7 @@ describe('a review that creates companions indexes them (§2.13.3)', () => {
     assert.ok(pull);
     assert.equal(pull.title, 'Suggestion for #7: create docs/guide.md');
     assert.equal(onlyReview(world).body, [
-      index(createdEntry(pull.number, 'Suggestion for \\#7: create docs/guide.md')),
+      index(createdEntry(pull.number, 'Suggestion for #7: create docs/guide.md')),
       NOTE_SECTION,
       guideSection(pull.number),
     ].join(SEPARATOR));
@@ -201,7 +204,7 @@ describe('a review that creates companions indexes them (§2.13.3)', () => {
     assert.ok(pull);
     assert.equal(pull.title, 'Suggestion for #7: 2 proposals (2 changes)');
     const body = onlyReview(world).body;
-    assert.ok(body.startsWith(`${index(createdEntry(pull.number, 'Suggestion for \\#7: 2 proposals (2 changes)'))}${SEPARATOR}`), body);
+    assert.ok(body.startsWith(`${index(createdEntry(pull.number, 'Suggestion for #7: 2 proposals (2 changes)'))}${SEPARATOR}`), body);
     assert.equal(body.split(`](${pullUrl(pull.number)})`).length - 1, 3, 'linked by the index and by each proposal\'s section');
     assert.ok(body.includes(`**Suggestion pull request:** [#${String(pull.number)}](${pullUrl(pull.number)}), proposal 1 of 2`), body);
     assert.ok(body.includes(`**Suggestion pull request:** [#${String(pull.number)}](${pullUrl(pull.number)}), proposal 2 of 2`), body);
@@ -282,7 +285,7 @@ describe('existing companions (§2.13.2, §2.13.3)', () => {
     const [pull] = createdPulls(world, [97]);
     assert.ok(pull);
     assert.equal(onlyReview(world).body, [
-      index(createdEntry(pull.number, 'Suggestion for \\#7: create docs/guide.md'), existingEntry(97, EXISTING_INDEXED, 'a draft')),
+      index(createdEntry(pull.number, 'Suggestion for #7: create docs/guide.md'), existingEntry(97, EXISTING_INDEXED, 'a draft')),
       NOTE_SECTION,
       guideSection(pull.number),
     ].join(SEPARATOR));
@@ -299,15 +302,17 @@ describe('existing companions (§2.13.2, §2.13.3)', () => {
     assert.equal(status(outcome), 'published', markdown(outcome));
   });
 
-  test('a title is shown literally, so it can neither open HTML nor hide the links (composed-text checkpoint)', async () => {
+  test('a title is a code span, so it can neither open HTML, hide the links nor link anywhere (composed-text checkpoint)', async () => {
     const world = makeWorld();
-    world.host.seedPulls([existing(97, { title: '<details> `x` $\\phantom{y}$ [link](https://example.com)' })]);
+    world.host.seedPulls([existing(97, { title: '<details> `x` $\\phantom{y}$ [link](https://example.com) www.evil.example' })]);
     const outcome = await publish(world, document([note()]), withExisting([97]));
     assert.equal(status(outcome), 'published', markdown(outcome));
-    assert.ok(onlyReview(world).body.startsWith(`${HEADING}\n\n- [#97](${pullUrl(97)}): \\<details\\> \\\`x\\\` \\$\\\\phantom\\{y\\}\\$ \\[link\\](https://example.com) — reused;`), onlyReview(world).body);
+    const { body } = onlyReview(world);
+    assert.ok(body.startsWith(`${HEADING}\n\n- [#97](${pullUrl(97)}): \`\`<details> \`x\` $\\phantom{y}$ [link](https://example.com) www.evil.example\`\` — reused;`), body);
+    assert.deepEqual(linksIn(body.split(SEPARATOR)[0] ?? '').map((l) => l.url), [pullUrl(97)]);
   });
 
-  test('presentation callbacks still apply around the index, which stays built in', async () => {
+  test('other presentation callbacks apply around the built-in index', async () => {
     const world = makeWorld();
     world.host.seedPulls([existing(97)]);
     const presentation = { finding: (context: { readonly markdown: string }): string => `**Finding.** ${context.markdown}` };
@@ -459,7 +464,7 @@ describe('identity and recovery (§2.13.1, §2.13.4)', () => {
     assert.equal(createdPulls(world, [97]).length, 1, 'no second suggestion pull request');
     assert.equal(onlyReview(world).body, sent);
     assert.equal(sent, [
-      index(createdEntry(pull.number, 'Suggestion for \\#7: create docs/guide.md'), existingEntry(97, EXISTING_INDEXED, 'a draft')),
+      index(createdEntry(pull.number, 'Suggestion for #7: create docs/guide.md'), existingEntry(97, EXISTING_INDEXED, 'a draft')),
       NOTE_SECTION,
       guideSection(pull.number),
     ].join(SEPARATOR));
@@ -472,6 +477,174 @@ describe('identity and recovery (§2.13.1, §2.13.4)', () => {
     assert.equal(status(outcome), 'rejected', markdown(outcome));
     assert.equal(world.host.reviews().length, 0);
   });
+});
+
+// ---------------------------------------------------------------------------
+// Customizing the index and the companion sections (D60; review presentation
+// contract §7; companion contract §2.13.3, §2.13.4)
+
+/** What a companion callback receives about each companion (README, "Customizing how the review reads"). */
+interface ICompanionSeen {
+  readonly number: number;
+  readonly url: string;
+  readonly title: string;
+  readonly origin: string;
+  readonly state?: string;
+  readonly link: string;
+}
+interface IIndexSeen { readonly pullNumber: number; readonly companions: readonly ICompanionSeen[]; readonly markdown: string; readonly required: readonly string[] }
+interface IReferenceSeen {
+  readonly companion: ICompanionSeen; readonly proposal: number; readonly proposals: number; readonly changes: string; readonly findings: string;
+  readonly markdown: string; readonly required: readonly string[];
+}
+
+/** An index callback that lists each companion as a bullet with its origin, recording every context it receives. */
+function listIndex(seen: IIndexSeen[] = []): (context: IIndexSeen) => string {
+  return (context) => {
+    seen.push(context);
+    return ['### Proposals', '', ...context.companions.map((c) => `* ${c.link} (${c.origin}${c.state === undefined ? '' : `, ${c.state}`})`)].join('\n');
+  };
+}
+/** A reference callback that keeps the link, change list and findings under a heading. */
+function headedReference(seen: IReferenceSeen[] = []): (context: IReferenceSeen) => string {
+  return (context) => {
+    seen.push(context);
+    return `### ${context.companion.link}, ${String(context.proposal)} of ${String(context.proposals)}\n\n${context.changes}\n\n${context.findings}`;
+  };
+}
+
+const PLACEHOLDER = 2_147_483_647;
+const refusedBy = (component: string, rule: RegExp) => (err: unknown): boolean =>
+  err instanceof TypeError && err.message.startsWith(`Invalid presentation: options.presentation.${component} returned Markdown that `) && rule.test(err.message);
+
+describe('companion index and companion section callbacks (D60, §2.13.3)', () => {
+  test('both callbacks shape the body; they see each companion\'s number, link, title, origin and state', async () => {
+    const world = makeWorld();
+    world.host.seedPulls([existing(97)]);
+    const indexSeen: IIndexSeen[] = [];
+    const referenceSeen: IReferenceSeen[] = [];
+    const presentation = { companionIndex: listIndex(indexSeen), companionReference: headedReference(referenceSeen) };
+    const sarif = document([note(), guide()], [GUIDE_ARTIFACT]);
+    const outcome = await publish(world, sarif, withExisting([97], { ...COMPANIONS, presentation }));
+    assert.equal(status(outcome), 'published', markdown(outcome));
+    const [pull] = createdPulls(world, [97]);
+    assert.ok(pull);
+    const n = pull.number;
+    assert.equal(onlyReview(world).body, [
+      `### Proposals\n\n* [#${String(n)}](${pullUrl(n)}) (created)\n* [#97](${pullUrl(97)}) (reused, draft)`,
+      NOTE_SECTION,
+      [`### [#${String(n)}](${pullUrl(n)}), 1 of 1`, '', '- New file `docs/guide.md`: 25 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644', '', 'Add a guide.', '', ATTRIBUTION].join('\n'),
+    ].join(SEPARATOR));
+    // Called during preparation, with a placeholder number, to check it before any write; then once, with the real number.
+    assert.deepEqual(indexSeen.map((c) => c.companions.map((x) => x.number)), [[PLACEHOLDER, 97], [n, 97]]);
+    const real = indexSeen[1];
+    assert.ok(real);
+    assert.deepEqual(real.companions, [
+      { number: n, url: pullUrl(n), title: 'Suggestion for #7: create docs/guide.md', origin: 'created', link: `[#${String(n)}](${pullUrl(n)})` },
+      { number: 97, url: pullUrl(97), title: EXISTING_TITLE, origin: 'reused', state: 'draft', link: `[#97](${pullUrl(97)})` },
+    ]);
+    assert.equal(real.pullNumber, PULL);
+    assert.deepEqual(real.required, [`[#${String(n)}](${pullUrl(n)})`, `[#97](${pullUrl(97)})`]);
+    assert.equal(real.markdown, index(createdEntry(n, 'Suggestion for #7: create docs/guide.md'), existingEntry(97, EXISTING_TITLE, 'a draft')));
+    assert.deepEqual(referenceSeen.map((c) => c.companion.number), [PLACEHOLDER, n]);
+    assert.deepEqual(referenceSeen[1]?.required, [`[#${String(n)}](${pullUrl(n)})`, referenceSeen[1]?.changes, referenceSeen[1]?.findings]);
+  });
+
+  test('with only existing companions, the index callback runs once, during preparation, with the real numbers', async () => {
+    const world = makeWorld();
+    world.host.seedPulls([existing(97)]);
+    const seen: IIndexSeen[] = [];
+    const outcome = await publish(world, document([note()]), withExisting([97], { presentation: { companionIndex: listIndex(seen) } }));
+    assert.equal(status(outcome), 'published', markdown(outcome));
+    assert.deepEqual(seen.map((c) => c.companions.map((x) => x.number)), [[97]]);
+    assert.equal(onlyReview(world).body, [`### Proposals\n\n* [#97](${pullUrl(97)}) (reused, draft)`, NOTE_SECTION].join(SEPARATOR));
+  });
+
+  const refused: readonly (readonly [string, Json, RegExp])[] = [
+    ['an index that drops an entry', { companionIndex: (c: IIndexSeen) => c.companions[0]?.link ?? '' }, /omits a required fragment/],
+    ['an index that swaps the numbers of two links', { companionIndex: (c: IIndexSeen) => c.companions.map((x, i) => `* [#${String(c.companions[1 - i]?.number)}](${x.url})`).join('\n') }, /omits a required fragment/],
+    ['an index that re-points a companion\'s number elsewhere', { companionIndex: (c: IIndexSeen) => `${c.markdown}\n\nSee [#97](https://evil.example/pull/97).` }, /links the text "#97" to "https:\/\/evil\.example\/pull\/97"/],
+    ['an index that adds an autolink', { companionIndex: (c: IIndexSeen) => `${c.markdown}\n\nMore at https://evil.example/x` }, /adds a link to "https:\/\/evil\.example\/x"/],
+    ['an index that adds raw HTML', { companionIndex: (c: IIndexSeen) => `<details>\n\n${c.markdown}\n\n</details>` }, /adds raw HTML/],
+    ['a section that drops its findings', { companionReference: (c: IReferenceSeen) => `${c.companion.link}\n\n${c.changes}` }, /omits a required fragment/],
+    ['a section that re-points its companion link', { companionReference: (c: IReferenceSeen) => `${c.markdown}\n\n[#${String(c.companion.number)}](https://evil.example)` }, /links the text/],
+  ];
+  for (const [what, presentation, rule] of refused) {
+    test(`${what} is refused with the presentation TypeError, before any write`, async () => {
+      const world = makeWorld();
+      world.host.seedPulls([existing(97)]);
+      const sarif = document([note(), guide()], [GUIDE_ARTIFACT]);
+      const component = Object.keys(presentation)[0] ?? '';
+      await assert.rejects(validate(world, sarif, withExisting([97], { ...COMPANIONS, presentation })), refusedBy(component, rule));
+      await assert.rejects(publish(world, sarif, withExisting([97], { ...COMPANIONS, presentation })), refusedBy(component, rule));
+      assert.deepEqual(writes(world), [], 'nothing is written');
+    });
+  }
+
+  test('a title the callback shows itself may not bring a link or an invisible character with it', async () => {
+    for (const [title, rule] of [['See https://evil.example/pull/1', /adds a link to "https:\/\/evil\.example\/pull\/1"/], ['ab‮cd', /U\+202E, an invisible character/]] as const) {
+      const world = makeWorld();
+      world.host.seedPulls([existing(97, { title })]);
+      const presentation = { companionIndex: (c: IIndexSeen) => c.companions.map((x) => `* ${x.link}: ${x.title}`).join('\n') };
+      await assert.rejects(publish(world, document([note()]), withExisting([97], { presentation })), refusedBy('companionIndex', rule));
+      assert.deepEqual(writes(world), []);
+    }
+  });
+
+  test('a callback that only fails with the real numbers is refused after its companions exist, before the review; a retry with a corrected callback completes it', async () => {
+    const world = makeWorld();
+    const sarif = document([note(), guide()], [GUIDE_ARTIFACT]);
+    // Well-behaved for the placeholder checked before any write, broken once the real number is known.
+    const fragile = { companionIndex: (c: IIndexSeen) => (c.companions.every((x) => x.number === PLACEHOLDER) ? c.markdown : 'No proposals.') };
+    await assert.rejects(publish(world, sarif, { ...COMPANIONS, presentation: fragile }), refusedBy('companionIndex', /omits a required fragment/));
+    const [pull] = createdPulls(world, []);
+    assert.ok(pull, 'the suggestion pull request was created before the review was composed');
+    assert.equal(world.host.reviews().length, 0, 'no review was sent');
+    const retry = await publish(world, sarif, { ...COMPANIONS, presentation: { companionIndex: listIndex() } });
+    assert.equal(status(retry), 'published', markdown(retry));
+    assert.equal(createdPulls(world, []).length, 1, 'nothing was created again');
+    assert.ok(onlyReview(world).body.startsWith(`### Proposals\n\n* [#${String(pull.number)}](${pullUrl(pull.number)}) (created)${SEPARATOR}`), onlyReview(world).body);
+  });
+
+  test('a call that resumes before the review step composes it with its own callbacks', async () => {
+    const world = makeWorld(undefined, { companion: { loseResponse: ['pull'] } });
+    world.host.hide({ pulls: 1 });
+    const sarif = document([note(), guide()], [GUIDE_ARTIFACT]);
+    const first = await publish(world, sarif, { ...COMPANIONS, presentation: { companionIndex: listIndex() } });
+    assert.equal(status(first), 'uncertain', markdown(first));
+    world.host.setConfig({ companion: {} });
+    const seen: IIndexSeen[] = [];
+    const later = { companionIndex: (c: IIndexSeen): string => { seen.push(c); return `${c.markdown}\n\n_Resumed._`; } };
+    const outcome = await publish(world, sarif, { ...COMPANIONS, presentation: later });
+    assert.equal(status(outcome), 'published', markdown(outcome));
+    const [pull] = createdPulls(world, []);
+    assert.ok(pull);
+    assert.deepEqual(seen.map((c) => c.companions.map((x) => x.number)), [[pull.number]], 'not prepared again: called once, with the real number');
+    assert.ok(onlyReview(world).body.startsWith(`${index(createdEntry(pull.number, 'Suggestion for #7: create docs/guide.md'))}\n\n_Resumed._${SEPARATOR}`), onlyReview(world).body);
+  });
+
+  for (const [what, existingOnly] of [['with only existing companions', true], ['with created companions', false]] as const) {
+    test(`${what}: a review that could not be confirmed is recovered with the identical body, and no callback runs again`, async () => {
+      const world = makeWorld(undefined, { create: 'lose-response' });
+      world.host.seedPulls([existing(97)]);
+      const sarif = existingOnly ? document([note()]) : document([note(), guide()], [GUIDE_ARTIFACT]);
+      const options = existingOnly ? withExisting([97]) : withExisting([97], COMPANIONS);
+      const first = await publishBlind(world, sarif, { ...options, presentation: { companionIndex: listIndex(), companionReference: headedReference() } });
+      assert.equal(status(first), 'uncertain', markdown(first));
+      const sent = onlyReview(world).body;
+      assert.ok(sent.startsWith('### Proposals'), sent);
+      const calls: string[] = [];
+      const other = {
+        companionIndex: (c: IIndexSeen): string => { calls.push('index'); return c.markdown; },
+        companionReference: (c: IReferenceSeen): string => { calls.push('reference'); return c.markdown; },
+      };
+      const retry = await publish(world, sarif, { ...options, presentation: other });
+      assert.equal(status(retry), 'published', markdown(retry));
+      assert.deepEqual(calls, [], 'the recorded body is reused, never composed again');
+      assert.equal(world.host.reviews().length, 1);
+      assert.equal(onlyReview(world).body, sent);
+    });
+  }
 });
 
 // ---------------------------------------------------------------------------

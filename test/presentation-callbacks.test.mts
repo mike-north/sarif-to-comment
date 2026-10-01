@@ -472,7 +472,7 @@ describe('publication with presentation callbacks (fake GitHub host)', () => {
       // Companion contract §2.13.3: the companion index is built in, whatever the callbacks.
       '**Companion pull requests of this review:**',
       '',
-      `- [#${number}](https://github.com/octo/widgets/pull/${number}): Suggestion for \\#7: create docs/guide.md — created with this review`,
+      `- [#${number}](https://github.com/octo/widgets/pull/${number}): \`Suggestion for #7: create docs/guide.md\` — created with this review`,
       '',
       '---',
       '',
