@@ -305,7 +305,7 @@ describe('creation content and facts (contract §2)', () => {
     ['no final newline', 'alpha\nbeta', '10 bytes of UTF-8 text · LF line endings · no newline at end of file · mode 100644', '```\nalpha\nbeta\n```'],
     ['a single line without a newline', 'solo', '4 bytes of UTF-8 text · no line breaks · no newline at end of file · mode 100644', '```\nsolo\n```'],
     ['CRLF line endings', 'one\r\ntwo\r\n', '10 bytes of UTF-8 text · CRLF line endings · ends with a newline · mode 100644', '```\none\r\ntwo\n```'],
-    ['a byte-order mark', '﻿hello\n', '9 bytes of UTF-8 text · begins with a byte-order mark · LF line endings · ends with a newline · mode 100644', '```\nhello\n```'],
+    ['a byte-order mark', '\uFEFFhello\n', '9 bytes of UTF-8 text · begins with a byte-order mark · LF line endings · ends with a newline · mode 100644', '```\nhello\n```'],
     ['only a byte-order mark', '﻿', '3 bytes of UTF-8 text · begins with a byte-order mark · no content after the byte-order mark · mode 100644', null],
     ['multibyte UTF-8', 'héllo 🎉\n', '12 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644', '```\nhéllo 🎉\n```'],
     ['trailing whitespace and tabs', '\tindented  \n  \n', '15 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644', '```\n\tindented  \n  \n```'],
@@ -415,7 +415,7 @@ describe('two findings on one proposal (R8, R1)', () => {
     const { outcome } = await prepare(sarif);
     assertReady(outcome);
     assert.equal(outcome.review.body, deletionSection('obsolete.txt', [
-      `**Source:** [obsolete.txt line 2 at ${SHORT}](${permalink('obsolete.txt', '#L2')})\n\n\`\`\`\nsecond line\n\`\`\`\n\n${item('Whole file is obsolete.')}`,
+      `**Source:** [obsolete.txt line 2 at ${SHORT}](${permalink('obsolete.txt', '?plain=1#L2')})\n\n\`\`\`\nsecond line\n\`\`\`\n\n${item('Whole file is obsolete.')}`,
       item('Also no longer used.'),
     ]));
     assert.deepEqual(outcome.review.comments, [], 'a deletion finding is never an inline comment');
@@ -479,10 +479,16 @@ describe('whole-review refusals (contract §2 Refusals)', () => {
     ['a C0 control', 'bell\u0007\n'],
     ['DEL', 'del\u007f\n'],
     ['a C1 control', 'c1\u0085\n'],
-    ['a byte-order mark after the start', 'a﻿b\n'],
-    ['a bidirectional override', 'abc‮def\n'],
-    ['a line separator', 'a b\n'],
+    ['a byte-order mark after the start', 'a\uFEFFb\n'],
+    ['a bidirectional override', 'abc\u202Edef\n'],
+    ['a line separator', 'a\u2028b\n'],
     ['a lone surrogate', 'bad \uD800 text\n'],
+    // Every format character (Unicode category Cf) and U+00A0 (contract §2 Refusals).
+    ['a zero-width space', 'a\u200Bb\n'],
+    ['a word joiner', 'a\u2060b\n'],
+    ['a soft hyphen', 'a\u00ADb\n'],
+    ['a tag character', 'a\u{E0001}b\n'],
+    ['a no-break space', 'a\u00A0b\n'],
   ];
   for (const [label, text] of refusedContent) {
     test(`content with ${label} cannot be shown exactly and blocks`, async () => {

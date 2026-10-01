@@ -259,6 +259,6 @@ describe('the installed package delivers groups on the original pull request', (
     const batch = delivery.onlyReview(jointWorld);
     assert.deepEqual(batch.comments.map((c) => c.line), [2, 3]);
     assert.ok(batch.comments.every((c) => c.body.includes("**Fix with 2 changes:** apply this suggestion together with the fix's other suggestions, listed in the review body.")));
-    assert.equal(batch.body, '**Fix with 2 changes:** apply these 2 suggestions together, in one commit: add each of them to one batch of suggestions on the pull request, then commit the batch.\n\n- `README.md` line 2\n- `README.md` line 3');
+    assert.equal(batch.body, '**Fix with 2 changes:** apply these 2 suggestions together, in one commit: add each of them to one batch of suggestions on the pull request, then commit the batch. Nothing checks that they are applied together.\n\n- `README.md` line 2\n- `README.md` line 3');
   });
 });

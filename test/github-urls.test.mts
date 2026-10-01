@@ -57,11 +57,19 @@ describe('the GitHub web URL builder', () => {
     for (const url of [pullRequestUrl(REPO, 7), reviewUrl(REPO, 7, 1), reviewCommentUrl(REPO, 7, 1)]) assertStable(url);
   });
 
-  test('a commit URL and a blob permalink without and with lines', () => {
+  test('a commit URL and a blob permalink without and with lines; a line permalink asks for the source view', () => {
     assert.equal(commitUrl(REPO, C), `${BASE}/commit/${C}`);
-    assert.equal(blobUrl(REPO, C, 'src/app.js'), `${BASE}/blob/${C}/src/app.js`);
-    assert.equal(blobUrl(REPO, C, 'src/app.js', { startLine: 3, endLine: 3 }), `${BASE}/blob/${C}/src/app.js#L3`);
-    assert.equal(blobUrl(REPO, C, 'src/app.js', { startLine: 2, endLine: 9 }), `${BASE}/blob/${C}/src/app.js#L2-L9`);
+    assert.equal(blobUrl(REPO, C, 'src/app.js'), `${BASE}/blob/${C}/src/app.js`, 'no lines: no query, so a rendered file shows its preview');
+    assert.equal(blobUrl(REPO, C, 'src/app.js', { startLine: 3, endLine: 3 }), `${BASE}/blob/${C}/src/app.js?plain=1#L3`);
+    assert.equal(blobUrl(REPO, C, 'src/app.js', { startLine: 2, endLine: 9 }), `${BASE}/blob/${C}/src/app.js?plain=1#L2-L9`);
+  });
+
+  test('regression: a line permalink into a rendered file type (Markdown) opens the source view, where the line anchor exists', () => {
+    // A rendered file's default view is its preview, which has no line anchors (live browser check, docs/evidence/original-pr-groups/ui-check.md).
+    assert.equal(blobUrl(REPO, C, 'README.md', { startLine: 5, endLine: 5 }), `${BASE}/blob/${C}/README.md?plain=1#L5`);
+    const parsed = new URL(blobUrl(REPO, C, 'docs/guide.md', { startLine: 2, endLine: 4 }));
+    assert.equal(parsed.search, '?plain=1');
+    assert.equal(parsed.hash, '#L2-L4');
   });
 
   test('compare URLs: commits, and ref names whose "/" separators are kept', () => {
@@ -85,11 +93,11 @@ describe('the GitHub web URL builder', () => {
     for (const [label, filePath, encoded] of cases) {
       test(label, () => {
         const url = blobUrl(REPO, C, filePath, { startLine: 1, endLine: 2 });
-        assert.equal(url, `${BASE}/blob/${C}/${encoded}#L1-L2`);
+        assert.equal(url, `${BASE}/blob/${C}/${encoded}?plain=1#L1-L2`);
         assertStable(url);
         const parsed = new URL(url);
         assert.equal(parsed.hash, '#L1-L2', 'the path never leaks into the fragment');
-        assert.equal(parsed.search, '', 'the path never leaks into a query');
+        assert.equal(parsed.search, '?plain=1', 'the path never leaks into the query');
       });
     }
 

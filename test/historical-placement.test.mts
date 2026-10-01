@@ -94,7 +94,7 @@ function anchors(review: IStoredHttpReview): [string, string, number][] {
 
 /** An exact link to whole line `n` of a file at a commit (src/github-urls.cts). */
 function permalink(commit: string, filePath: string, n: number): string {
-  return `https://github.com/${OWNER}/${REPO}/blob/${commit}/${filePath}#L${String(n)}`;
+  return `https://github.com/${OWNER}/${REPO}/blob/${commit}/${filePath}?plain=1#L${String(n)}`;
 }
 
 /** The outcome's diagnostics as [severity, code]. */

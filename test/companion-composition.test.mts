@@ -272,7 +272,7 @@ const attribution = '<sub>— Review bot 1.0.0</sub>';
 
 /** §2.11: the findings of the worked example's group, as both the review and the pull request show them. */
 const GROUP_ITEMS = [
-  `**Source:** [src/client.ts line 2 at ${SHORT}](${blob('src/client.ts', '#L2')})`,
+  `**Source:** [src/client.ts line 2 at ${SHORT}](${blob('src/client.ts', '?plain=1#L2')})`,
   '',
   '```',
   '  const response = await request(id);',
@@ -291,7 +291,7 @@ const GROUP_ITEMS = [
   attribution,
 ];
 const GROUP_CHANGES = [
-  `- Edited [src/client.ts line 2 at ${SHORT}](${blob('src/client.ts', '#L2')})`,
+  `- Edited [src/client.ts line 2 at ${SHORT}](${blob('src/client.ts', '?plain=1#L2')})`,
   '- New file `test/client.test.ts`: 112 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644',
 ];
 
@@ -459,7 +459,7 @@ describe('grouped code and test changes (A29)', () => {
   test('the defaults: the mixed manual group on the original pull request, nothing split; the typo stays a native suggestion', async () => {
     const world = makeWorld();
     const body = await assertMixedManualGroup(world, groupedCodeAndTest(), 'retry-with-test', ['`src/client.ts` line 2', '`test/client.test.ts`: new file']);
-    assert.ok(body.includes(`**Proposed edit, to make by hand:** replace [src/client.ts line 2 at ${SHORT}](${blob('src/client.ts', '#L2')}) with:\n\n\`\`\`\n${RETRY}\n\`\`\``), body);
+    assert.ok(body.includes(`**Proposed edit, to make by hand:** replace [src/client.ts line 2 at ${SHORT}](${blob('src/client.ts', '?plain=1#L2')}) with:\n\n\`\`\`\n${RETRY}\n\`\`\``), body);
     assert.ok(body.includes('**Suggestion group `retry-with-test` — change 2 of 2**\n\n**Proposed new file:** `test/client.test.ts`'), body);
     const [review] = world.host.reviews();
     assert.ok(review);
@@ -481,8 +481,8 @@ describe('grouped code and test changes (A29)', () => {
     assert.deepEqual(world.host.fileOnBranch(branch, 'bin/run.sh'), Buffer.from('#!/bin/sh -e\necho "run"\n'));
     assert.equal(world.host.filesOnBranch(branch).get('bin/run.sh'), '100755');
     assert.ok(pull.body.includes([
-      `- Edited [bin/run.sh line 2 at ${SHORT}](${blob('bin/run.sh', '#L2')})`,
-      `- Edited [bin/run.sh line 1 at ${SHORT}](${blob('bin/run.sh', '#L1')})`,
+      `- Edited [bin/run.sh line 2 at ${SHORT}](${blob('bin/run.sh', '?plain=1#L2')})`,
+      `- Edited [bin/run.sh line 1 at ${SHORT}](${blob('bin/run.sh', '?plain=1#L1')})`,
     ].join('\n')), pull.body);
   });
 });
@@ -738,11 +738,11 @@ describe('group rules (§2.3–§2.4), identical in validate and publish', () =>
     assert.deepEqual(world.host.fileOnBranch(branch, 'src/client.ts'), Buffer.from(EDITED_CLIENT));
     assert.deepEqual(world.host.fileOnBranch(branch, 'docs/a.md'), Buffer.from(PAGE_A));
     const changes = [
-      `- Edited [src/client.ts line 2 at ${SHORT}](${blob('src/client.ts', '#L2')})`,
+      `- Edited [src/client.ts line 2 at ${SHORT}](${blob('src/client.ts', '?plain=1#L2')})`,
       '- New file `docs/a.md`: 17 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644',
     ];
     const items = [
-      `**Source:** [src/client.ts line 2 at ${SHORT}](${blob('src/client.ts', '#L2')})`,
+      `**Source:** [src/client.ts line 2 at ${SHORT}](${blob('src/client.ts', '?plain=1#L2')})`,
       '',
       '```',
       '  const response = await request(id);',
@@ -1321,11 +1321,11 @@ describe('a native multi-change fix (one SARIF fix with several changes)', () =>
   });
 
   const MULTI_CHANGES = [
-    `- Edited [src/client.ts line 2 at ${SHORT}](${blob('src/client.ts', '#L2')})`,
-    `- Edited [README.md line 2 at ${SHORT}](${blob('README.md', '#L2')})`,
+    `- Edited [src/client.ts line 2 at ${SHORT}](${blob('src/client.ts', '?plain=1#L2')})`,
+    `- Edited [README.md line 2 at ${SHORT}](${blob('README.md', '?plain=1#L2')})`,
   ];
   const MULTI_ITEM = [
-    `**Source:** [src/client.ts line 2 at ${SHORT}](${blob('src/client.ts', '#L2')})`,
+    `**Source:** [src/client.ts line 2 at ${SHORT}](${blob('src/client.ts', '?plain=1#L2')})`,
     '',
     '```',
     '  const response = await request(id);',
@@ -1399,8 +1399,8 @@ describe('a native multi-change fix (one SARIF fix with several changes)', () =>
     assert.ok(pull.body.includes([
       'Merging this pull request into `feature/retry` applies these 2 changes together:',
       '',
-      `- Edited [src/client.ts line 1 at ${SHORT}](${blob('src/client.ts', '#L1')})`,
-      `- Edited [src/client.ts line 3 at ${SHORT}](${blob('src/client.ts', '#L3')})`,
+      `- Edited [src/client.ts line 1 at ${SHORT}](${blob('src/client.ts', '?plain=1#L1')})`,
+      `- Edited [src/client.ts line 3 at ${SHORT}](${blob('src/client.ts', '?plain=1#L3')})`,
     ].join('\n')), pull.body);
     assert.deepEqual(world.host.fileOnBranch(branch, 'src/client.ts'), Buffer.from([
       'export async function fetchWidget(id: string): Promise<string> {\n', CLIENT[1], '  return String(response.body);\n', CLIENT[3],
@@ -1421,7 +1421,7 @@ describe('a native multi-change fix (one SARIF fix with several changes)', () =>
     assert.equal(status(outcome), 'published', markdown(outcome));
     const { pull, branch } = onlyPull(world);
     assert.equal(pull.title, 'Suggestion for #7: edit README.md');
-    assert.ok(pull.body.includes(`applies this change:\n\n- Edited [README.md line 2 at ${SHORT}](${blob('README.md', '#L2')})\n`), pull.body);
+    assert.ok(pull.body.includes(`applies this change:\n\n- Edited [README.md line 2 at ${SHORT}](${blob('README.md', '?plain=1#L2')})\n`), pull.body);
     assert.deepEqual(world.host.fileOnBranch(branch, 'README.md'), Buffer.from('# Widgets\nThe widget API.\n'));
   });
 

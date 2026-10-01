@@ -331,7 +331,7 @@ function deepFreeze<T>(value: T): T {
 }
 
 const permalink = (commit: string, filePath: string, start?: number, end?: number) => `https://github.com/acme/widgets/blob/${commit}/${
-  filePath.split('/').map(encodeURIComponent).join('/')}${start === undefined ? '' : `#L${String(start)}${end && end !== start ? `-L${String(end)}` : ''}`}`;
+  filePath.split('/').map(encodeURIComponent).join('/')}${start === undefined ? '' : `?plain=1#L${String(start)}${end && end !== start ? `-L${String(end)}` : ''}`}`;
 
 // ---------------------------------------------------------------------------
 
@@ -1050,7 +1050,7 @@ describe('native suggestions from standard fixes', () => {
     }] }] })]), { realReplacement: true });
     assertReady(outcome);
     assert.deepEqual(outcome.review.comments.map((c) => [c.path, c.line]), [['src/app.js', 3], ['src/app.js', 17]], 'one suggestion per change');
-    assert.equal(outcome.review.body, '**Fix with 2 changes:** apply these 2 suggestions together, in one commit: add each of them to one batch of suggestions on the pull request, then commit the batch.\n\n'
+    assert.equal(outcome.review.body, '**Fix with 2 changes:** apply these 2 suggestions together, in one commit: add each of them to one batch of suggestions on the pull request, then commit the batch. Nothing checks that they are applied together.\n\n'
       + '- `src/app.js` line 3\n- `src/app.js` line 17');
   });
   blockedFix('a binary replacement is unsupported', [{ artifactChanges: [{

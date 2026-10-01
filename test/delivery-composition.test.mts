@@ -50,7 +50,7 @@ const MANUAL_GUIDANCE = (label: string, count: number): string =>
 const PART = (label: string, n: number, count: number): string => `**${label} — change ${String(n)} of ${String(count)}**`;
 /** An edit made by hand (§8.10): its exact replacement of one line, linked at the reviewed commit, then its findings. */
 const MANUAL_EDIT = (file: string, line: number, shown: string, findings: string): string =>
-  `**Proposed edit, to make by hand:** replace [${file} line ${String(line)} at ${SHORT}](${blobUrl(file, `#L${String(line)}`)}) with:\n\n\`\`\`\n${shown}\n\`\`\`\n\n${findings}`;
+  `**Proposed edit, to make by hand:** replace [${file} line ${String(line)} at ${SHORT}](${blobUrl(file, `?plain=1#L${String(line)}`)}) with:\n\n\`\`\`\n${shown}\n\`\`\`\n\n${findings}`;
 
 const HEADLINE_FALLBACK = '**Published with 1 warning:** A proposal is delivered by a later mechanism of its delivery list.';
 
@@ -75,7 +75,7 @@ function readmeWith(edited: Readonly<Record<number, string>>): string {
 
 /** A finding section of the README at line `line` (§2.11 ITEMS), quoting the reviewed line. */
 function readmeItem(line: number, message: string): string {
-  return [`**Source:** [README.md line ${String(line)} at ${SHORT}](${blobUrl('README.md', `#L${String(line)}`)})`, '', '```', String(README[line - 1]).replace(/\n$/, ''), '```', '', message, '', ATTRIBUTION].join('\n');
+  return [`**Source:** [README.md line ${String(line)} at ${SHORT}](${blobUrl('README.md', `?plain=1#L${String(line)}`)})`, '', '```', String(README[line - 1]).replace(/\n$/, ''), '```', '', message, '', ATTRIBUTION].join('\n');
 }
 
 /** A creation or deletion section, as the file-operation contract presents a whole-file proposal. */
@@ -327,7 +327,7 @@ describe('groups stay whole (D49, D51; §8.3–§8.5, §8.8)', () => {
       { path: 'README.md', line: 3, side: 'RIGHT', body: ['Fix the spelling.', '', ATTRIBUTION, '', note, '', '```suggestion', 'Receive updates.', '```'].join('\n') },
     ]);
     assert.equal(review.body, [
-      '**Suggestion group `pair`:** apply these 2 suggestions together, in one commit: add each of them to one batch of suggestions on the pull request, then commit the batch.',
+      '**Suggestion group `pair`:** apply these 2 suggestions together, in one commit: add each of them to one batch of suggestions on the pull request, then commit the batch. Nothing checks that they are applied together.',
       '',
       '- `README.md` line 2',
       '- `README.md` line 3',
@@ -429,7 +429,7 @@ describe('groups stay whole (D49, D51; §8.3–§8.5, §8.8)', () => {
     ]]);
     assert.deepEqual(diagnostics(assessed), diagnostics(outcome), 'validate reports what publish does');
     assert.ok(markdown(outcome).startsWith(`## Draft review published\n\n${HEADLINE_FALLBACK}\n\n`), markdown(outcome));
-    const retryItem = [`**Source:** [src/client.ts line 2 at ${SHORT}](${blobUrl('src/client.ts', '#L2')})`, '', '```', '  const response = await request(id);', '```', '', 'Retry once on timeout.', '', ATTRIBUTION].join('\n');
+    const retryItem = [`**Source:** [src/client.ts line 2 at ${SHORT}](${blobUrl('src/client.ts', '?plain=1#L2')})`, '', '```', '  const response = await request(id);', '```', '', 'Retry once on timeout.', '', ATTRIBUTION].join('\n');
     const review = onlyReview(world);
     assert.equal(review.body, [
       `${MANUAL_GUIDANCE('Suggestion group `pair`', 2)}\n\n- \`README.md\` line 2\n- \`src/client.ts\` line 2`,
@@ -454,7 +454,7 @@ describe('groups stay whole (D49, D51; §8.3–§8.5, §8.8)', () => {
       { path: 'README.md', line: 3, side: 'RIGHT', body: ['Fix both lines.', '', ATTRIBUTION, '', note, '', '```suggestion', 'Receive updates.', '```'].join('\n') },
     ]);
     assert.equal(review.body, [
-      '**Fix with 2 changes:** apply these 2 suggestions together, in one commit: add each of them to one batch of suggestions on the pull request, then commit the batch.',
+      '**Fix with 2 changes:** apply these 2 suggestions together, in one commit: add each of them to one batch of suggestions on the pull request, then commit the batch. Nothing checks that they are applied together.',
       '',
       '- `README.md` line 2',
       '- `README.md` line 3',
@@ -505,7 +505,7 @@ describe('groups stay whole (D49, D51; §8.3–§8.5, §8.8)', () => {
       [4, ['Use the American spelling.', '', ATTRIBUTION, '', note, '', '```suggestion', 'License: MIT.', '```'].join('\n')],
     ]);
     assert.equal(review.body, [
-      '**Suggestion group `pair`:** apply these 3 suggestions together, in one commit: add each of them to one batch of suggestions on the pull request, then commit the batch.',
+      '**Suggestion group `pair`:** apply these 3 suggestions together, in one commit: add each of them to one batch of suggestions on the pull request, then commit the batch. Nothing checks that they are applied together.',
       '',
       '- `README.md` line 2',
       '- `README.md` line 3',
@@ -569,7 +569,7 @@ describe('strict lists and announced fallback (D55; §10)', () => {
       `The edit of \`src/client.ts\` line 2 is delivered as \`review-body\`. \`edits\` is \`[native, review-body]\`, ${CALLER('--edits', 'edits')}, and the mechanisms listed before it are unavailable:\n\n- \`native\`: ${RETRY_NOT_INLINE}`,
     ]]);
     assert.deepEqual(diagnostics(assessed), diagnostics(outcome));
-    const retryItem = [`**Source:** [src/client.ts line 2 at ${SHORT}](${blobUrl('src/client.ts', '#L2')})`, '', '```', '  const response = await request(id);', '```', '', 'Retry once on timeout.', '', ATTRIBUTION].join('\n');
+    const retryItem = [`**Source:** [src/client.ts line 2 at ${SHORT}](${blobUrl('src/client.ts', '?plain=1#L2')})`, '', '```', '  const response = await request(id);', '```', '', 'Retry once on timeout.', '', ATTRIBUTION].join('\n');
     const review = onlyReview(world);
     assert.equal(review.body, MANUAL_EDIT('src/client.ts', 2, '  const response = await request(id).catch(() => request(id));', retryItem));
     assert.equal(review.comments.length, 1, 'the eligible edit stays a native suggestion');
@@ -647,8 +647,8 @@ describe('companion bundles (D52; §9)', () => {
     // A deletion finding without a region has no source line: the change list already names the file (file-operation contract §2).
     const obsoleteItem = ['Remove the obsolete file.', '', ATTRIBUTION].join('\n');
     const sections = [
-      ['- Edited [README.md line 4 at feedfee](' + blobUrl('README.md', '#L4') + ')', readmeItem(4, 'Use the American spelling.')],
-      ['- Edited [README.md line 2 at feedfee](' + blobUrl('README.md', '#L2') + ')\n- Edited [README.md line 3 at feedfee](' + blobUrl('README.md', '#L3') + ')',
+      ['- Edited [README.md line 4 at feedfee](' + blobUrl('README.md', '?plain=1#L4') + ')', readmeItem(4, 'Use the American spelling.')],
+      ['- Edited [README.md line 2 at feedfee](' + blobUrl('README.md', '?plain=1#L2') + ')\n- Edited [README.md line 3 at feedfee](' + blobUrl('README.md', '?plain=1#L3') + ')',
         `${readmeItem(2, 'Fix the typo.')}\n\n---\n\n${readmeItem(3, 'Fix the spelling.')}`],
       [`- Deleted file [obsolete.txt at feedfee](${blobUrl('obsolete.txt')}): the whole file is removed`, obsoleteItem],
     ] as const;

@@ -52,10 +52,10 @@ const UNCHANGED: Readonly<Record<string, string>> = {
   'crlf.txt': 'one\r\ntwo\r\n',
   'tail.txt': 'first\nlast',
   'crlf-tail.txt': 'one\r\ntwo',
-  'bom.txt': '﻿title\nbody\n',
+  'bom.txt': '\uFEFFtitle\nbody\n',
   'obsolete.txt': 'old\n',
   ' lead.txt': 'x\n',
-  'odd‎name.txt': 'x\n',
+  'odd\u200Ename.txt': 'x\n',
 };
 const SNAPSHOTS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   [R]: { 'README.md': '# Widgets\nTeh widget client.\nRecieve updates.\nLicence: MIT.\n', ...UNCHANGED },
@@ -162,12 +162,12 @@ const permalink = (encodedPath: string, anchor = ''): string => `https://github.
 
 /** A finding section with its source link and the quoted reviewed line (review presentation contract §5). */
 function sectionAt(path: string, line: number, quoted: string, message: string): string {
-  return [`**Source:** [${path} line ${String(line)} at ${SHORT}](${permalink(path, `#L${String(line)}`)})`, '', '```', quoted, '```', '', message, '', ATTRIBUTION].join('\n');
+  return [`**Source:** [${path} line ${String(line)} at ${SHORT}](${permalink(path, `?plain=1#L${String(line)}`)})`, '', '```', quoted, '```', '', message, '', ATTRIBUTION].join('\n');
 }
 
 /** A manual edit section (§8.10) replacing one line of `path` with `shown` (its LF block text). */
 function manualEdit(path: string, line: number, shown: string, findings: string, details = ''): string {
-  return `**Proposed edit, to make by hand:** replace [${path} line ${String(line)} at ${SHORT}](${permalink(path, `#L${String(line)}`)}) with${details === '' ? '' : ` (${details})`}:\n\n\`\`\`\n${shown}\n\`\`\`\n\n${findings}`;
+  return `**Proposed edit, to make by hand:** replace [${path} line ${String(line)} at ${SHORT}](${permalink(path, `?plain=1#L${String(line)}`)}) with${details === '' ? '' : ` (${details})`}:\n\n\`\`\`\n${shown}\n\`\`\`\n\n${findings}`;
 }
 
 /** The first paragraph of a manual group's guidance (§8.10). */
@@ -176,7 +176,7 @@ const groupGuidance = (label: string, count: number): string =>
 
 const NOTE = (label: string, owner: 'group' | 'fix'): string => `**${label}:** apply this suggestion together with the ${owner}'s other suggestions, listed in the review body.`;
 const BATCH_GUIDANCE = (label: string, count: number): string =>
-  `**${label}:** apply these ${String(count)} suggestions together, in one commit: add each of them to one batch of suggestions on the pull request, then commit the batch.`;
+  `**${label}:** apply these ${String(count)} suggestions together, in one commit: add each of them to one batch of suggestions on the pull request, then commit the batch. Nothing checks that they are applied together.`;
 
 /** The message and first remedy of the one `delivery-unavailable` a blocked outcome carries. */
 function unavailable(outcome: IBlockedOutcome): { readonly message: string; readonly remedy: string | undefined } {
@@ -228,7 +228,7 @@ describe('an edit made by hand in the review body (`edits: review-body`, §8.10)
     const outcome = await ready(document([fenced]), { edits: ['native', 'review-body'] });
     assert.deepEqual(outcome.warnings.map((w) => w.code), ['delivery-fallback']);
     assert.ok(outcome.warnings[0]?.message.includes('- `native`: GitHub applied a nested ``` suggestion as a deletion; this replacement cannot be a native suggestion.'));
-    assert.equal(outcome.review.body, `**Proposed edit, to make by hand:** replace [README.md line 2 at ${SHORT}](${permalink('README.md', '#L2')}) with:\n\n\`\`\`\`\nUse \`\`\`js\n\`\`\`\`\n\n${sectionAt('README.md', 2, 'Teh widget client.', 'Show the language.')}`);
+    assert.equal(outcome.review.body, `**Proposed edit, to make by hand:** replace [README.md line 2 at ${SHORT}](${permalink('README.md', '?plain=1#L2')}) with:\n\n\`\`\`\`\nUse \`\`\`js\n\`\`\`\`\n\n${sectionAt('README.md', 2, 'Teh widget client.', 'Show the language.')}`);
     assertNoSuggestion(outcome.review.body);
   });
 });
@@ -242,42 +242,48 @@ describe('the block and its details determine the replacement\'s exact bytes (§
 
   test('a CRLF file: the block shows LF breaks, and CRLF is stated', async () => {
     assert.equal(await editOf('crlf.txt', { startLine: 2 }, 'TWO'),
-      sectionFor(`replace [crlf.txt line 2 at ${SHORT}](${permalink('crlf.txt', '#L2')}) with (CRLF line endings):\n\n\`\`\`\nTWO\n\`\`\``));
+      sectionFor(`replace [crlf.txt line 2 at ${SHORT}](${permalink('crlf.txt', '?plain=1#L2')}) with (CRLF line endings):\n\n\`\`\`\nTWO\n\`\`\``));
   });
 
   test('a last line without a newline is stated', async () => {
     assert.equal(await editOf('tail.txt', { startLine: 2 }, 'LAST'),
-      sectionFor(`replace [tail.txt line 2 at ${SHORT}](${permalink('tail.txt', '#L2')}) with (no newline at end of file):\n\n\`\`\`\nLAST\n\`\`\``));
+      sectionFor(`replace [tail.txt line 2 at ${SHORT}](${permalink('tail.txt', '?plain=1#L2')}) with (no newline at end of file):\n\n\`\`\`\nLAST\n\`\`\``));
   });
 
   test('both details, in order', async () => {
     assert.equal(await editOf('crlf-tail.txt', { startLine: 2 }, 'X\r\nY'),
-      sectionFor(`replace [crlf-tail.txt line 2 at ${SHORT}](${permalink('crlf-tail.txt', '#L2')}) with (CRLF line endings, no newline at end of file):\n\n\`\`\`\nX\nY\n\`\`\``));
+      sectionFor(`replace [crlf-tail.txt line 2 at ${SHORT}](${permalink('crlf-tail.txt', '?plain=1#L2')}) with (CRLF line endings, no newline at end of file):\n\n\`\`\`\nX\nY\n\`\`\``));
   });
 
   test('the file\'s own byte-order mark, kept by a replacement of line 1, is not shown', async () => {
     assert.equal(await editOf('bom.txt', { startLine: 1 }, 'Title'),
-      sectionFor(`replace [bom.txt line 1 at ${SHORT}](${permalink('bom.txt', '#L1')}) with:\n\n\`\`\`\nTitle\n\`\`\``));
+      sectionFor(`replace [bom.txt line 1 at ${SHORT}](${permalink('bom.txt', '?plain=1#L1')}) with:\n\n\`\`\`\nTitle\n\`\`\``));
   });
 
   test('removed lines are "delete", with no block; a line emptied is a block of one empty line', async () => {
     assert.equal(await editOf('src/app.ts', { startLine: 2, startColumn: 1, endLine: 4, endColumn: 1 }, ''),
-      sectionFor(`delete [src/app.ts lines 2-3 at ${SHORT}](${permalink('src/app.ts', '#L2-L3')}).`));
+      sectionFor(`delete [src/app.ts lines 2-3 at ${SHORT}](${permalink('src/app.ts', '?plain=1#L2-L3')}).`));
     assert.equal(await editOf('src/app.ts', { startLine: 3 }, ''),
-      sectionFor(`replace [src/app.ts line 3 at ${SHORT}](${permalink('src/app.ts', '#L3')}) with:\n\n\`\`\`\n\n\`\`\``));
+      sectionFor(`replace [src/app.ts line 3 at ${SHORT}](${permalink('src/app.ts', '?plain=1#L3')}) with:\n\n\`\`\`\n\n\`\`\``));
   });
 });
 
 describe('a replacement that cannot be shown exactly is an obstacle, not a refusal (§8.10)', () => {
   const cases: readonly (readonly [label: string, uri: string, path: string, text: string, reason: string])[] = [
-    ['an invisible formatting character', 'src/app.ts', 'src/app.ts', '‎b', 'replacement line 1 contains U+200E, which a code block does not show'],
-    ['a bidirectional control on a later line', 'src/app.ts', 'src/app.ts', 'ok\nbad‮', 'replacement line 2 contains U+202E, which a code block does not show'],
+    ['an invisible formatting character', 'src/app.ts', 'src/app.ts', '\u200Eb', 'replacement line 1 contains U+200E, which a code block does not show'],
+    ['a bidirectional control on a later line', 'src/app.ts', 'src/app.ts', 'ok\nbad\u202E', 'replacement line 2 contains U+202E, which a code block does not show'],
+    // Every format character (Unicode category Cf) and U+00A0 (regression, independent review of "shown exactly").
+    ['a zero-width space', 'src/app.ts', 'src/app.ts', 'b\u200Bb', 'replacement line 1 contains U+200B, which a code block does not show'],
+    ['a word joiner', 'src/app.ts', 'src/app.ts', 'b\u2060b', 'replacement line 1 contains U+2060, which a code block does not show'],
+    ['a soft hyphen', 'src/app.ts', 'src/app.ts', 'b\u00ADb', 'replacement line 1 contains U+00AD, which a code block does not show'],
+    ['a tag character', 'src/app.ts', 'src/app.ts', 'b\u{E0001}b', 'replacement line 1 contains U+E0001, which a code block does not show'],
+    ['a no-break space, which renders as a space', 'src/app.ts', 'src/app.ts', 'b\u00A0b', 'replacement line 1 contains U+00A0, which a code block does not show'],
     ['an unpaired surrogate', 'src/app.ts', 'src/app.ts', 'x\uD800', 'replacement line 1 contains an unpaired surrogate, which is not UTF-8 text'],
     ['a carriage return inside a line', 'src/app.ts', 'src/app.ts', 'a\rb', 'replacement line 1 contains a carriage return that does not end a line'],
     ['mixed line endings', 'src/app.ts', 'src/app.ts', 'X\r\nY', 'it mixes CRLF and LF line endings, and only one style can be stated'],
     ['a line that could open a suggestion block', 'src/app.ts', 'src/app.ts', '```suggestion\nx\n```', 'a line of it could open a suggestion block, which a proposal made by hand never shows'],
     ['a path with leading whitespace', '%20lead.txt', ' lead.txt', 'y', 'the file path begins or ends with whitespace, which Markdown does not show'],
-    ['a path with an invisible character', 'odd%E2%80%8Ename.txt', 'odd‎name.txt', 'y', 'the file path contains U+200E, which cannot be shown exactly'],
+    ['a path with an invisible character', 'odd%E2%80%8Ename.txt', 'odd\u200Ename.txt', 'y', 'the file path contains U+200E, which cannot be shown exactly'],
   ];
   for (const [label, uri, path, text, reason] of cases) {
     test(`${label}: blocked under a strict list, with its reason and the remedy to change the replacement`, async () => {
@@ -291,7 +297,7 @@ describe('a replacement that cannot be shown exactly is an obstacle, not a refus
   }
 
   test('a later listed mechanism delivers the edit instead, announcing the obstacle', async () => {
-    const sarif = document([result('Mark it.', { location: at('README.md', 2), fix: linesFix('README.md', { 2: 'The widget‎ client.' }) })]);
+    const sarif = document([result('Mark it.', { location: at('README.md', 2), fix: linesFix('README.md', { 2: 'The widget\u200E client.' }) })]);
     const outcome = await ready(sarif, { edits: ['review-body', 'native'] });
     assert.deepEqual(outcome.warnings.map((w) => [w.code, w.message]), [[
       'delivery-fallback',
@@ -304,7 +310,7 @@ describe('a replacement that cannot be shown exactly is an obstacle, not a refus
 
   test('a group names each change that cannot be shown, in order, under one bullet', async () => {
     const sarif = document([
-      result('First.', { group: 'g', fix: regionFix('src/app.ts', { startLine: 2 }, '‎b') }),
+      result('First.', { group: 'g', fix: regionFix('src/app.ts', { startLine: 2 }, '\u200Eb') }),
       result('Second.', { group: 'g', fix: regionFix('src/app.ts', { startLine: 3 }, 'C') }),
       result('Third.', { group: 'g', fix: regionFix('src/app.ts', { startLine: 4 }, 'a\rd') }),
     ]);
@@ -416,7 +422,7 @@ describe('the mixed manual group (`fileOperations: manual` for a group with a wh
   });
 
   test('an edit of the group that cannot be shown exactly makes `manual` unavailable for the whole group', async () => {
-    const hidden = result('Hidden.', { group: 'helper', fix: regionFix('src/app.ts', { startLine: 2 }, ' ') });
+    const hidden = result('Hidden.', { group: 'helper', fix: regionFix('src/app.ts', { startLine: 2 }, '\u2028') });
     const { message } = unavailable(await blocked(document([GUIDE_FINDING, hidden], ARTIFACTS.slice(0, 1))));
     assert.equal(message, 'The group `helper` cannot be delivered. `fileOperations` is `[manual]`, the default, and no mechanism it lists is available:\n\n'
       + '- `manual`: The replacement of `src/app.ts` line 2 cannot be shown exactly in the review body: replacement line 1 contains U+2028, which a code block does not show.');
@@ -514,7 +520,8 @@ describe('size limits (§8.10): a manual section over the body limit blocks; not
 
 describe('the manual edit component is customizable; the group\'s guidance and labels are the core\'s (§8.10; review presentation contract §7)', () => {
   const USE_B = result('Use B.', { location: at('src/app.ts', 2), fix: linesFix('src/app.ts', { 2: 'B' }) });
-  const LOCATION = `[src/app.ts line 2 at ${SHORT}](${permalink('src/app.ts', '#L2')})`;
+  const URL = permalink('src/app.ts', '?plain=1#L2');
+  const LOCATION = `[src/app.ts line 2 at ${SHORT}](${URL})`;
   const FINDINGS = sectionAt('src/app.ts', 2, 'b', 'Use B.');
 
   test('the callback receives the edit, its location link, block and findings, and the built-in Markdown, with the required fragments', async () => {
@@ -529,10 +536,10 @@ describe('the manual edit component is customizable; the group\'s guidance and l
     });
     assert.equal(outcome.review.body, `### Edit ${LOCATION} by hand\n\n\`\`\`\nB\n\`\`\`\n\n${FINDINGS}`);
     assert.deepEqual(seen, [{
-      path: 'src/app.ts', startLine: 2, endLine: 2, commit: R, url: permalink('src/app.ts', '#L2'),
+      path: 'src/app.ts', startLine: 2, endLine: 2, commit: R, url: permalink('src/app.ts', '?plain=1#L2'),
       location: LOCATION, replacement: '```\nB\n```', findings: FINDINGS,
       markdown: manualEdit('src/app.ts', 2, 'B', FINDINGS),
-      required: [LOCATION, '```\nB\n```', FINDINGS],
+      required: [LOCATION, URL, '```\nB\n```', FINDINGS],
     }]);
   });
 
@@ -544,9 +551,9 @@ describe('the manual edit component is customizable; the group\'s guidance and l
     const [crlf, deletion] = seen;
     assert.ok(crlf && deletion);
     assert.equal(crlf.details, 'CRLF line endings');
-    assert.deepEqual(crlf.required, [`[crlf.txt line 2 at ${SHORT}](${permalink('crlf.txt', '#L2')})`, '```\nTWO\n```', 'CRLF line endings', `Change it.\n\n${ATTRIBUTION}`]);
+    assert.deepEqual(crlf.required, [`[crlf.txt line 2 at ${SHORT}](${permalink('crlf.txt', '?plain=1#L2')})`, permalink('crlf.txt', '?plain=1#L2'), '```\nTWO\n```', 'CRLF line endings', `Change it.\n\n${ATTRIBUTION}`]);
     assert.equal(Object.hasOwn(deletion, 'replacement'), false, 'absent, not undefined');
-    assert.deepEqual(deletion.required, [`[src/app.ts lines 2-3 at ${SHORT}](${permalink('src/app.ts', '#L2-L3')})`, `Drop them.\n\n${ATTRIBUTION}`]);
+    assert.deepEqual(deletion.required, [`[src/app.ts lines 2-3 at ${SHORT}](${permalink('src/app.ts', '?plain=1#L2-L3')})`, permalink('src/app.ts', '?plain=1#L2-L3'), `Drop them.\n\n${ATTRIBUTION}`]);
   });
 
   test('in a group, each edit is the callback\'s, and the guidance and labels around it are kept', async () => {
@@ -555,7 +562,7 @@ describe('the manual edit component is customizable; the group\'s guidance and l
       presentation: { manualEdit: (c: IManualEditPresentationContext) => `Edit ${c.location}:\n\n${c.replacement ?? ''}\n\n${c.findings}` },
     });
     const label = 'Fix with 2 changes';
-    const edit = (line: number, shown: string): string => `Edit [src/app.ts line ${String(line)} at ${SHORT}](${permalink('src/app.ts', `#L${String(line)}`)}):\n\n\`\`\`\n${shown}\n\`\`\`\n\n${sectionAt('src/app.ts', 2, 'b', 'Fix both.')}`;
+    const edit = (line: number, shown: string): string => `Edit [src/app.ts line ${String(line)} at ${SHORT}](${permalink('src/app.ts', `?plain=1#L${String(line)}`)}):\n\n\`\`\`\n${shown}\n\`\`\`\n\n${sectionAt('src/app.ts', 2, 'b', 'Fix both.')}`;
     assert.equal(outcome.review.body, [
       `${groupGuidance(label, 2)}\n\n- \`src/app.ts\` line 2\n- \`src/app.ts\` line 4`,
       `**${label} — change 1 of 2**\n\n${edit(2, 'B')}`,
@@ -563,17 +570,27 @@ describe('the manual edit component is customizable; the group\'s guidance and l
     ].join(SEP));
   });
 
-  const refusals: readonly (readonly [label: string, callback: (c: IManualEditPresentationContext) => string, rule: RegExp])[] = [
-    ['drops the replacement block', (c) => `${c.location}\n\n${c.findings}`, /omits a required fragment, which must appear verbatim: "```\\nB\\n```"/],
-    ['re-points the location link', (c) => `[src/app.ts line 2 at ${SHORT}](https://example.com/)\n\n${c.replacement ?? ''}\n\n${c.findings}`, /omits a required fragment/],
-    ['hides the location inside code', (c) => `\`${c.location}\`\n\n${c.replacement ?? ''}\n\n${c.findings}`, /hides a required fragment/],
-    ['turns the replacement into a suggestion', (c) => `${c.location}\n\n\`\`\`suggestion\nB\n\`\`\`\n\n${c.replacement ?? ''}\n\n${c.findings}`, /could open a suggestion block/],
-  ];
   // A finding without a location: its section has no source link, so only the edit's own link shows the location.
   const UNLOCATED = result('Use B.', { fix: linesFix('src/app.ts', { 2: 'B' }) });
-  for (const [label, callback, rule] of refusals) {
+  // USE_B's finding is on the edited line, so its section's source link is byte-identical to the location
+  // link: it must not stand in for the location (regression, independent review of the manual edit callback).
+  const EVIL = `[src/app.ts line 2 at ${SHORT}](https://evil.example/)`;
+  const SPOOF = /links the text "src\/app\.ts line 2 at 2222222" to "https:\/\/evil\.example\/" rather than its permalink/;
+  const refusals: readonly (readonly [label: string, finding: Json, callback: (c: IManualEditPresentationContext) => string, rule: RegExp])[] = [
+    ['drops the replacement block', UNLOCATED, (c) => `${c.location}\n\n${c.findings}`, /omits a required fragment, which must appear verbatim: "```\\nB\\n```"/],
+    ['re-points the location link', UNLOCATED, (c) => `${EVIL}\n\n${c.replacement ?? ''}\n\n${c.findings}`, /omits a required fragment|links the text/],
+    ['hides the location inside code', UNLOCATED, (c) => `\`${c.location}\`\n\n${c.replacement ?? ''}\n\n${c.findings}`, /hides a required fragment/],
+    ['turns the replacement into a suggestion', UNLOCATED, (c) => `${c.location}\n\n\`\`\`suggestion\nB\n\`\`\`\n\n${c.replacement ?? ''}\n\n${c.findings}`, /could open a suggestion block/],
+    ['re-points the location link while the finding on the edited line shows the same link', USE_B, (c) => `${EVIL}\n\n${c.replacement ?? ''}\n\n${c.findings}`,
+      /shows a required fragment only inside another required fragment|links the text "src\/app\.ts line 2 at 2222222" to "https:\/\/evil\.example\/"/],
+    ['drops the location while the finding on the edited line shows the same link', USE_B, (c) => `Replace line 9 with:\n\n${c.replacement ?? ''}\n\n${c.findings}`,
+      /shows a required fragment only inside another required fragment, but each must be shown on its own: "\[src\/app\.ts line 2/],
+    ['adds a second link with the location\'s text to another destination', UNLOCATED, (c) => `${c.location} (or ${EVIL})\n\n${c.replacement ?? ''}\n\n${c.findings}`, SPOOF],
+    ['shows the permalink only as the text of a link elsewhere', UNLOCATED, (c) => `[${c.url}](https://evil.example/)\n\n${c.replacement ?? ''}\n\n${c.findings}`, /omits a required fragment|hides a required fragment/],
+  ];
+  for (const [label, finding, callback, rule] of refusals) {
     test(`a callback that ${label} is refused before anything is written`, async () => {
-      await assert.rejects(prepareOutcome(document([UNLOCATED]), { edits: ['review-body'] }, { presentation: { manualEdit: callback } }), (error) => {
+      await assert.rejects(prepareOutcome(document([finding]), { edits: ['review-body'] }, { presentation: { manualEdit: callback } }), (error) => {
         assert.ok(error instanceof TypeError);
         assert.match(error.message, /^Invalid presentation: options\.presentation\.manualEdit returned Markdown that /);
         assert.match(error.message, rule);

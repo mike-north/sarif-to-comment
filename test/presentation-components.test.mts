@@ -371,7 +371,7 @@ describe('a native batch (delivery policy §8.8)', () => {
 
   test('the guidance lists every change by path and line, in order', () => {
     assert.equal(renderNativeBatchGuidance(RETRY, [{ path: 'src/a.ts', startLine: 2, endLine: 2 }, { path: 'docs/b.md', startLine: 4, endLine: 6 }]), [
-      '**Suggestion group `retry`:** apply these 2 suggestions together, in one commit: add each of them to one batch of suggestions on the pull request, then commit the batch.',
+      '**Suggestion group `retry`:** apply these 2 suggestions together, in one commit: add each of them to one batch of suggestions on the pull request, then commit the batch. Nothing checks that they are applied together.',
       '',
       '- `src/a.ts` line 2',
       '- `docs/b.md` lines 4-6',
@@ -388,7 +388,7 @@ describe('a native batch (delivery policy §8.8)', () => {
     assert.equal(renderGroupLabel(FIX), 'Fix with 2 changes');
     assert.equal(renderGroupLabel(RETRY), 'Suggestion group `retry`');
     assert.equal(renderNativeBatchGuidance(FIX, [{ path: 'README.md', startLine: 2, endLine: 2 }, { path: 'README.md', startLine: 3, endLine: 3 }]), [
-      '**Fix with 2 changes:** apply these 2 suggestions together, in one commit: add each of them to one batch of suggestions on the pull request, then commit the batch.',
+      '**Fix with 2 changes:** apply these 2 suggestions together, in one commit: add each of them to one batch of suggestions on the pull request, then commit the batch. Nothing checks that they are applied together.',
       '',
       '- `README.md` line 2',
       '- `README.md` line 3',
@@ -400,30 +400,30 @@ describe('a native batch (delivery policy §8.8)', () => {
 
 describe('a replacement made by hand (delivery policy §8.10)', () => {
   const url = (anchor: string): string => `https://github.com/acme/widgets/blob/${C}/README.md${anchor}`;
-  const line2 = { path: 'README.md', startLine: 2, endLine: 2, commit: C, url: url('#L2') };
+  const line2 = { path: 'README.md', startLine: 2, endLine: 2, commit: C, url: url('?plain=1#L2') };
 
   test('a one-line replacement links the replaced line at the reviewed commit and shows the new line in a block', () => {
     const edit = { ...line2, replacement: { shownText: 'The widget client.', crlf: false, finalNewline: true } };
-    assert.equal(manualEditLocation(edit), `[README.md line 2 at 2222222](${url('#L2')})`);
+    assert.equal(manualEditLocation(edit), `[README.md line 2 at 2222222](${url('?plain=1#L2')})`);
     assert.equal(manualEditBlock(edit), '```\nThe widget client.\n```');
     assert.equal(manualEditDetails(edit), undefined, 'LF lines ending with a newline need no details');
-    assert.equal(renderManualReplacement(edit), `replace [README.md line 2 at 2222222](${url('#L2')}) with:\n\n\`\`\`\nThe widget client.\n\`\`\``);
+    assert.equal(renderManualReplacement(edit), `replace [README.md line 2 at 2222222](${url('?plain=1#L2')}) with:\n\n\`\`\`\nThe widget client.\n\`\`\``);
   });
 
   test('CRLF line endings and a missing final newline are stated beside the block, in that order', () => {
-    const edit = { ...line2, startLine: 2, endLine: 3, url: url('#L2-L3'), replacement: { shownText: 'x\ny', crlf: true, finalNewline: false } };
+    const edit = { ...line2, startLine: 2, endLine: 3, url: url('?plain=1#L2-L3'), replacement: { shownText: 'x\ny', crlf: true, finalNewline: false } };
     assert.equal(manualEditDetails(edit), 'CRLF line endings, no newline at end of file');
     assert.equal(renderManualReplacement(edit),
-      `replace [README.md lines 2-3 at 2222222](${url('#L2-L3')}) with (CRLF line endings, no newline at end of file):\n\n\`\`\`\nx\ny\n\`\`\``);
+      `replace [README.md lines 2-3 at 2222222](${url('?plain=1#L2-L3')}) with (CRLF line endings, no newline at end of file):\n\n\`\`\`\nx\ny\n\`\`\``);
     assert.equal(manualEditDetails({ ...edit, replacement: { shownText: 'x', crlf: false, finalNewline: false } }), 'no newline at end of file');
     assert.equal(manualEditDetails({ ...edit, replacement: { shownText: 'x', crlf: true, finalNewline: true } }), 'CRLF line endings');
   });
 
   test('removed lines have no block: "delete … ."', () => {
-    const edit = { ...line2, endLine: 3, url: url('#L2-L3'), replacement: undefined };
+    const edit = { ...line2, endLine: 3, url: url('?plain=1#L2-L3'), replacement: undefined };
     assert.equal(manualEditBlock(edit), undefined);
     assert.equal(manualEditDetails(edit), undefined);
-    assert.equal(renderManualReplacement(edit), `delete [README.md lines 2-3 at 2222222](${url('#L2-L3')}).`);
+    assert.equal(renderManualReplacement(edit), `delete [README.md lines 2-3 at 2222222](${url('?plain=1#L2-L3')}).`);
   });
 
   test('a replacement of one empty line is a block holding one empty line, distinct from deleting it', () => {
@@ -444,7 +444,7 @@ describe('a replacement made by hand (delivery policy §8.10)', () => {
   test('the manual edit section says it is made by hand, then the replacement, then its findings', () => {
     const edit = { ...line2, replacement: { shownText: 'The widget client.', crlf: false, finalNewline: true } };
     assert.equal(renderManualEdit(edit, 'FINDINGS'),
-      `**Proposed edit, to make by hand:** replace [README.md line 2 at 2222222](${url('#L2')}) with:\n\n\`\`\`\nThe widget client.\n\`\`\`\n\nFINDINGS`);
+      `**Proposed edit, to make by hand:** replace [README.md line 2 at 2222222](${url('?plain=1#L2')}) with:\n\n\`\`\`\nThe widget client.\n\`\`\`\n\nFINDINGS`);
     assert.equal(fenceProblem(renderManualEdit(edit, 'FINDINGS')), null, 'never a suggestion block, and nothing left open');
   });
 });

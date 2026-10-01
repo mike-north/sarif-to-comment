@@ -149,7 +149,7 @@ function expectedBody(head: string): string {
     '',
     'The whole file is removed; this is not a proposal to empty it.',
     '',
-    `**Source:** [obsolete.txt line 2 at ${short}](${blob('obsolete.txt', '#L2')})`,
+    `**Source:** [obsolete.txt line 2 at ${short}](${blob('obsolete.txt', '?plain=1#L2')})`,
     '',
     '```',
     'second line',

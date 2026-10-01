@@ -182,7 +182,7 @@ describe('preparation with presentation callbacks', () => {
   test('a customized finding keeps the core\'s source link and quote in the body', async () => {
     const ready = await prepare(FINDINGS, { presentation: COMPACT });
     assert.equal(ready.review.body, [
-      `**Source:** [docs/notes.md lines 2-3 at ${SHORT}](${permalink('docs/notes.md', '#L2-L3')})`,
+      `**Source:** [docs/notes.md lines 2-3 at ${SHORT}](${permalink('docs/notes.md', '?plain=1#L2-L3')})`,
       '',
       '```',
       'second',
@@ -317,7 +317,7 @@ describe('preparation with presentation callbacks', () => {
       '<sub>— T</sub>',
     ].join('\n');
     const deletionFindings = [
-      `**Source:** [obsolete.txt line 2 at ${SHORT}](${permalink('obsolete.txt', '#L2')})`,
+      `**Source:** [obsolete.txt line 2 at ${SHORT}](${permalink('obsolete.txt', '?plain=1#L2')})`,
       '',
       '```',
       'second line',
@@ -350,6 +350,22 @@ describe('preparation with presentation callbacks', () => {
     await assert.rejects(prepareOutcome(unlocated, {
       presentation: { fileDeletion: (c: IFileDeletionPresentationContext) => `Delete ${c.path}.\n\n${c.findings}` },
     }), refusedBy('fileDeletion', /omits a required fragment/));
+  });
+
+  test('regression: a file addition that shows its path only inside a finding is refused (each required fragment counts once)', async () => {
+    const creation = { ...carrying('x', [{ operation: 'create', artifactIndex: 0 }], at('docs/guide.md', { startLine: 1 })), message: { text: 'Add docs/guide.md.', markdown: 'Add `docs/guide.md`.' } };
+    const sarif = log(run(T, [creation], [{ location: { uri: 'docs/guide.md' }, contents: { text: '# Guide\n' }, encoding: 'utf-8' }]));
+    await prepare(sarif, { presentation: { fileAddition: (c: IFileAdditionPresentationContext) => c.markdown } });
+    await assert.rejects(prepareOutcome(sarif, {
+      presentation: { fileAddition: (c: IFileAdditionPresentationContext) => c.markdown.replace('**Proposed new file:** `docs/guide.md`', '**Proposed new file**') },
+    }), refusedBy('fileAddition', /shows a required fragment only inside another required fragment, but each must be shown on its own: "`docs\/guide\.md`"/));
+  });
+
+  test('regression: a file deletion that links its text to another destination is refused, even with its permalink shown', async () => {
+    const unlocated = log(run(T, [carrying('Remove it.', [{ operation: 'delete', artifactIndex: 0 }])], [{ location: { uri: 'obsolete.txt' } }]));
+    await assert.rejects(prepareOutcome(unlocated, {
+      presentation: { fileDeletion: (c: IFileDeletionPresentationContext) => `### Delete [obsolete.txt at ${SHORT}](https://evil.example/)\n\n<${c.url}>\n\n${c.findings}` },
+    }), refusedBy('fileDeletion', /links the text "obsolete\.txt at 2222222" to "https:\/\/evil\.example\/" rather than its permalink/));
   });
 
   test('an attribution that drops the producer is refused', async () => {
@@ -444,7 +460,7 @@ describe('publication with presentation callbacks (fake GitHub host)', () => {
     const outcome = await publish(world, sarif, { presentation: COMPANION_PRESENTATION });
     assert.equal(outcome.status, 'published', outcome.markdown);
     assert.equal(reviewBodyWithoutMarker(world), [
-      `**Source:** [docs/index.md line 1 at feedfee](https://github.com/octo/widgets/blob/${HEAD}/docs/index.md#L1)`,
+      `**Source:** [docs/index.md line 1 at feedfee](https://github.com/octo/widgets/blob/${HEAD}/docs/index.md?plain=1#L1)`,
       '',
       '```',
       '# Docs',
