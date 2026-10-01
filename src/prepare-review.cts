@@ -3255,10 +3255,10 @@ class ChangeRegistry {
 
   /**
    * Records that `later` proposes the change `first` already carries, where
-   * at least one of them is an explicit group: the group's suggestion pull
-   * request and the other proposal could not both be accepted, and the
-   * change is never moved into the group (contract §2.3). Reported at
-   * `later`, naming the group (or both groups) and both findings.
+   * at least one of them is an explicit group: the group's delivery and the
+   * other proposal could not both be accepted, and the change is never
+   * moved into the group (contract §2.3). Reported at `later`, naming the
+   * group (or both groups) and both findings.
    */
   private sharedWithGroup(change: UnitChange, first: IChangeProposer, later: IChangeProposer): void {
     const what = changeDescription(change);
@@ -3266,14 +3266,14 @@ class ChangeRegistry {
     const named = (proposer: IChangeProposer): string => `suggestion group ${JSON.stringify(proposer.group)} (${codeSpan(proposer.pointer)})`;
     if (first.group !== undefined && later.group !== undefined) {
       this.report.error('suggestion-group-change-shared', later.pointer,
-        `${what} is proposed both by ${named(first)} and by ${named(later)}; one change cannot be accepted in two suggestion pull requests, and groups are never joined.`,
+        `${what} is proposed both by ${named(first)} and by ${named(later)}; one change cannot be accepted as part of two groups, and groups are never joined.`,
         { path, remedies: ['Take one of the two findings out of its group (`ungroup-fixes`).'] });
       return;
     }
     const [grouped, outside] = first.group !== undefined ? [first, later] : [later, first];
     this.report.error('suggestion-group-change-shared', later.pointer,
       `${what} is proposed both by ${named(grouped)} and by ${codeSpan(outside.pointer)}, which is not in the group; `
-      + 'one change cannot be accepted both in the group\'s suggestion pull request and on its own.',
+      + 'one change cannot be accepted both as part of the group and on its own.',
       { path });
   }
 }

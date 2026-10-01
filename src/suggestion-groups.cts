@@ -448,8 +448,8 @@ function refList(refs: readonly string[]): string {
 }
 
 /** Why two groups (or a group and no group) cannot both carry one change, as the refusals end it. */
-const SHARED_OUTSIDE = 'publication always refuses that, because one change cannot be accepted both in the group\'s suggestion pull request and on its own.';
-const SHARED_BETWEEN_GROUPS = 'publication always refuses that, because one change cannot be accepted in two suggestion pull requests.';
+const SHARED_OUTSIDE = 'publication always refuses that, because one change cannot be accepted both as part of the group and on its own.';
+const SHARED_BETWEEN_GROUPS = 'publication always refuses that, because one change cannot be accepted as part of two groups.';
 
 /** The group name a declared value is reported by: the name, or its JSON text when it is not a string. */
 function groupLabel(value: unknown): string {

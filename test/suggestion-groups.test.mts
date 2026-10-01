@@ -719,7 +719,7 @@ describe('findings that carry the identical change are grouped, or left out, tog
     const [sibling] = selectorsAt(sarif, '/runs/0/results/1');
     const outcome = refused(groupSarifFixes(sarif, { findings: selectorsAt(sarif, '/runs/0/results/0', '/runs/0/results/2'), group: 'pair' }));
     const message = '`/runs/0/results/1` carries the same change as `/runs/0/results/0` of suggestion group "pair", but would stay outside the group; '
-      + 'publication always refuses that, because one change cannot be accepted both in the group\'s suggestion pull request and on its own. '
+      + 'publication always refuses that, because one change cannot be accepted both as part of the group and on its own. '
       + `Name it in the group too: \`${String(sibling)}\`.`;
     assert.deepEqual(outcome, {
       status: 'refused',
@@ -744,7 +744,7 @@ describe('findings that carry the identical change are grouped, or left out, tog
     const extended = refused(groupSarifFixes(started, { findings: selectorsAt(started, '/runs/0/results/0'), group: 'pair' }));
     assert.deepEqual(extended.problems, [expectedProblem('suggestion-group-change-shared', {
       message: '`/runs/0/results/1` carries the same change as `/runs/0/results/0` of suggestion group "pair", but would stay outside the group; '
-        + 'publication always refuses that, because one change cannot be accepted both in the group\'s suggestion pull request and on its own. '
+        + 'publication always refuses that, because one change cannot be accepted both as part of the group and on its own. '
         + `Name it in the group too: \`${String(sibling)}\`.`,
       pointer: '/runs/0/results/1',
     })]);
@@ -764,7 +764,7 @@ describe('findings that carry the identical change are grouped, or left out, tog
     const outcome = refused(groupSarifFixes(sarif, { findings: selectorsAt(sarif, '/runs/0/results/0', '/runs/0/results/2'), group: 'pair' }));
     assert.deepEqual(outcome.problems, [expectedProblem('suggestion-group-change-shared', {
       message: '`/runs/0/results/1` carries the same change as `/runs/0/results/0` of suggestion group "pair", but is in suggestion group "other"; '
-        + 'publication always refuses that, because one change cannot be accepted in two suggestion pull requests. '
+        + 'publication always refuses that, because one change cannot be accepted as part of two groups. '
         + 'Groups are never joined: ungroup it from "other" first to include it.',
       pointer: '/runs/0/results/1',
     })]);
@@ -777,7 +777,7 @@ describe('findings that carry the identical change are grouped, or left out, tog
     const outcome = refused(ungroupSarifFixes(once, { findings: selectorsAt(once, '/runs/0/results/1') }));
     assert.deepEqual(outcome.problems, [expectedProblem('suggestion-group-change-shared', {
       message: '`/runs/0/results/1` carries the same change as `/runs/0/results/0`, which stays in suggestion group "pair"; '
-        + 'publication always refuses that, because one change cannot be accepted both in the group\'s suggestion pull request and on its own. '
+        + 'publication always refuses that, because one change cannot be accepted both as part of the group and on its own. '
         + `Ungroup them together: \`${String(stays)}\`.`,
       pointer: '/runs/0/results/1',
     })]);
@@ -795,7 +795,7 @@ describe('findings that carry the identical change are grouped, or left out, tog
     const outcome = refused(groupSarifFixes(sarif, { findings: selectorsAt(sarif, '/runs/0/results/0', '/runs/0/results/1'), group: 'page' }));
     assert.deepEqual(outcome.problems, [expectedProblem('suggestion-group-change-shared', {
       message: '`/runs/0/results/2` carries the same change as `/runs/0/results/0` of suggestion group "page", but would stay outside the group; '
-        + 'publication always refuses that, because one change cannot be accepted both in the group\'s suggestion pull request and on its own. '
+        + 'publication always refuses that, because one change cannot be accepted both as part of the group and on its own. '
         + `Name it in the group too: \`${String(sibling)}\`.`,
       pointer: '/runs/0/results/2',
     })]);

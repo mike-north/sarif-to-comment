@@ -469,7 +469,7 @@ describe('group-fixes never writes a group that publication refuses (#42)', () =
     const [sibling] = selectorsFor(file, '/runs/0/results/1');
     const selectors = selectorsFor(file, '/runs/0/results/0', '/runs/0/results/2');
     const message = '`/runs/0/results/1` carries the same change as `/runs/0/results/0` of suggestion group "retry-with-test", but would stay outside the group; '
-      + 'publication always refuses that, because one change cannot be accepted both in the group\'s suggestion pull request and on its own. '
+      + 'publication always refuses that, because one change cannot be accepted both as part of the group and on its own. '
       + `Name it in the group too: \`${String(sibling)}\`.`;
 
     const result = run(['group-fixes', '--sarif', file, ...findingFlags(selectors), '--group', 'retry-with-test', '--format', 'json']);

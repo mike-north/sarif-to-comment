@@ -48,7 +48,7 @@ On stderr:
 ```diff
 +✖ error  A group's change is also proposed outside the group  [suggestion-group-change-shared]
 +  /runs/0/results/1
-+  `/runs/0/results/1` carries the same change as `/runs/0/results/0` of suggestion group "retry-with-test", but would stay outside the group; publication always refuses that, because one change cannot be accepted both in the group's suggestion pull request and on its own. Name it in the group too: `/runs/0/results/1@…`.
++  `/runs/0/results/1` carries the same change as `/runs/0/results/0` of suggestion group "retry-with-test", but would stay outside the group; publication always refuses that, because one change cannot be accepted both as part of the group and on its own. Name it in the group too: `/runs/0/results/1@…`.
 +  → Name the finding outside the group in it too (`group-fixes`).
 +  → Or take the group's findings that carry the change out of the group (`ungroup-fixes`).
 +

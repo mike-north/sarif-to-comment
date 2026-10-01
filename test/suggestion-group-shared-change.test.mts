@@ -6,8 +6,8 @@
  *
  * Two findings may explain one change (`add-staged-changes` gives both the
  * identical fix). When a suggestion group holds one of them and the other is
- * outside it, the group's suggestion pull request and the other finding's
- * own presentation would each propose the change, and neither could be
+ * outside it, the group's delivery and the other finding's own
+ * presentation would each propose the change, and neither could be
  * accepted after the other, so publication refuses the review with
  * `suggestion-group-change-shared`, naming the group, both findings and the
  * change (contract §2.3). `group-fixes` and `ungroup-fixes` never write such
@@ -72,7 +72,7 @@ function shared(pointer: string, message: string, remedies?: readonly string[]):
   return remedies === undefined ? documented : { ...documented, remedies: [...remedies] };
 }
 
-const OUTSIDE_TAIL = 'one change cannot be accepted both in the group\'s suggestion pull request and on its own.';
+const OUTSIDE_TAIL = 'one change cannot be accepted both as part of the group and on its own.';
 
 function assertBlockedWith(outcome: Json, expected: readonly Json[]): void {
   assert.equal(status(outcome), 'blocked', markdown(outcome));
@@ -121,7 +121,7 @@ describe('publication refuses a change that a group and a finding outside it bot
     const world = makeWorld(REVIEWED);
     assertBlockedWith(await validateDoc(world, document), [shared('/runs/0/results/1',
       `The replacement of \`${SAMPLE}\` line 6 is proposed both by suggestion group "reword" (\`/runs/0/results/0\`) and by suggestion group "other" (\`/runs/0/results/1\`); `
-      + 'one change cannot be accepted in two suggestion pull requests, and groups are never joined.',
+      + 'one change cannot be accepted as part of two groups, and groups are never joined.',
       ['Take one of the two findings out of its group (`ungroup-fixes`).'])]);
   });
 

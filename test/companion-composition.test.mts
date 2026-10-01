@@ -679,7 +679,7 @@ describe('group rules (§2.3–§2.4), identical in validate and publish', () =>
     ], [{ location: { uri: 'obsolete.txt' } }, created('docs/a.md', PAGE_A)]);
     await assertBlockedEverywhere(makeWorld(), sarif, [
       '- `suggestion-group-change-shared` at `/runs/0/results/2`: The deletion of `obsolete.txt` is proposed both by suggestion group "g" (`/runs/0/results/0`) '
-        + 'and by `/runs/0/results/2`, which is not in the group; one change cannot be accepted both in the group\'s suggestion pull request and on its own.',
+        + 'and by `/runs/0/results/2`, which is not in the group; one change cannot be accepted both as part of the group and on its own.',
     ]);
   });
 
@@ -1016,6 +1016,20 @@ describe('durable identity and recovery (§2.9–§2.10)', () => {
     fs.writeFileSync(world.statePath, fs.readFileSync(world.statePath, 'utf8').replace(HEAD_REF, 'feature/other'));
     await assert.rejects(publish(world, groupedCodeAndTest()), /state-corrupt|not a valid record/);
     assert.equal(count(world, 'POST', PULLS), 1);
+  });
+
+  test('a plan of an unsupported version is corrupt state, never absence', async () => {
+    const world = makeWorld({ companion: { loseResponse: ['pull'] } });
+    world.host.hide({ pulls: 1 });
+    await publish(world, groupedCodeAndTest());
+    // Plan versions 1 and 2 (re-applied suggestions, §2.5.1) are known; 3 is not.
+    const plan = asRecord(parseJson(fs.readFileSync(world.statePath, 'utf8')));
+    const unsupported = JSON.stringify({ ...plan, version: 3 });
+    fs.writeFileSync(world.statePath, unsupported);
+    const before = world.host.log().length;
+    await assert.rejects(publish(world, groupedCodeAndTest()), /not a valid record \(unsupported plan version\)/);
+    assert.equal(world.host.log().length, before, 'nothing is sent');
+    assert.equal(fs.readFileSync(world.statePath, 'utf8'), unsupported, 'the record is kept as found');
   });
 });
 
