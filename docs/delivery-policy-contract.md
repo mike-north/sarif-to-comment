@@ -95,7 +95,7 @@ Every dimension has an explicit default. The defaults never create a companion p
 
 - `edits`: a native suggestion, strictly. An edit that cannot be a native suggestion is blocked, exactly as it is refused without this policy (for example `suggestion-not-inline`). The review body and companion pull requests are the caller's to list.
 - `groupedEdits`: a group whose members are all eligible for native suggestions is offered as one native batch. Any other edit group is blocked. The manual group is never a default (§8.4).
-- `fileOperations`: the review-body section, as the file-operation contract has always published it.
+- `fileOperations`: the review-body section, as the file-operation contract has always published it. A group containing a whole-file operation follows it as a whole (§8.5), so under the defaults such a group is delivered as the **mixed manual group** on the original pull request. Without this policy that group is refused (`suggestion-group-requires-suggestion-prs`). The owner authorized this route: D49's manual route, subsequently confirmed, and D51's no-companion workflow. It is part of the release-review note in §15, item 1.
 
 ## 6. Presets
 
@@ -166,6 +166,8 @@ Alternatives (§2) are presented with their finding (D44). They are never placed
 
 Whether each mechanism is available for each unit is decided by preparation and validation: the native-suggestion eligibility rules (R8, [companion contract §2.4](companion-suggestion-pr-contract.md#24-presentation-form-selection)), what prevents a companion pull request ([companion contract §2.5](companion-suggestion-pr-contract.md#25-repository-target-branch-and-revision): a fork, another base, a size limit, a description limit, …), and the limits of the review-body forms. An unavailable mechanism always carries at least one **obstacle**: a concrete Markdown sentence saying what prevents it. A mechanism is never reported unavailable without one.
 
+Availability is asked for **lazily**, so preparation never works out obstacles nobody needs (for example a companion body under the defaults, which list no companion). For each unit, it is asked only for mechanisms the resolved list names, in list order, at most once each, and never after the first available one. A group member's native eligibility is asked only when `native-batch` is asked for.
+
 ## 9. Companion bundles
 
 The units delivered by `companion` are packaged by `companionBundle` (D52):
@@ -181,7 +183,7 @@ Bundling packages proposals for one convenient merge. It does not claim that the
 The review needs N suggestion pull requests; the limit is 10. Nothing is split or dropped.
 ```
 
-and its remedies are, in order:
+and its remedies, which are the code's catalogued remedies ([Diagnostics](diagnostics.md)), are, in order:
 
 1. ``Bundle them into one companion pull request (`--companion-bundle single`, `delivery.companionBundle: 'single'`).``
 2. `Publish fewer proposals in one review, or group related changes.`
@@ -192,7 +194,7 @@ Under `single` there is at most one companion pull request, so the limit never b
 
 ### 10.1 Blocked: no listed mechanism is available (D55)
 
-When, for a unit, **no mechanism its list names is available**, the publication is **blocked** before any write: no review, branch, pull request or label is created. Every such unit is reported, each with one `delivery-unavailable` error diagnostic. `validate` reports the same outcome as `blocked`. The command line exits **2**; the library returns its `blocked` outcome carrying the diagnostics.
+When, for a unit, **no mechanism its list names is available**, the publication is **blocked** before any write: no review, branch, pull request or label is created. Every such unit is reported, each with one `delivery-unavailable` error diagnostic. A blocked publication carries **no** `delivery-fallback` warning: nothing is delivered, so no unit "is delivered as" anything (D55). The same holds when the companion limit blocks (§9). `validate` reports the same outcome as `blocked`. The command line exits **2**; the library returns its `blocked` outcome carrying the diagnostics.
 
 The message names the unit, the list, its source layer and each listed mechanism's obstacles, exactly as follows:
 
@@ -443,7 +445,7 @@ Each example gives its inputs and the hand-derived expectation. "Eligible" means
 
 **Owner confirmation at release review.**
 
-1. **`groupedEdits` default `[native-batch]`.** Today an edit group without suggestion pull requests is refused; under this default it is delivered as a native batch when every member is eligible. The alternative is a default that blocks every edit group unless the caller chooses.
+1. **`groupedEdits` default `[native-batch]`.** Today an edit group without suggestion pull requests is refused; under this default it is delivered as a native batch when every member is eligible. The alternative is a default that blocks every edit group unless the caller chooses. For the same review, note that the defaults also deliver a group containing a whole-file operation, which is refused today (`suggestion-group-requires-suggestion-prs`), as the mixed manual group (§5, §8.5). That route is already owner-authorized by D49's manual route, subsequently confirmed, and D51's no-companion workflow; it is recorded here so the release review sees every refusal the defaults turn into delivery, not as a new question.
 
 **Resolved since the first draft.**
 
@@ -452,3 +454,4 @@ Each example gives its inputs and the hand-derived expectation. "Eligible" means
 - **The presets.** `original-pr` lists `manual-group` after `native-batch`, because a preset counts as the caller listing it (§8.4). `companion` does not set `companionBundle`; when the limit blocks, its error names the `single` bundle as a remedy (§9). The library accepts `delivery.preset`, like the command line's `--delivery` (§12).
 - **Companion-only options.** `--pr-labels` and `--mark-suggestion-prs-ready` are never usage errors; with no companion planned, publication carries a `companion-options-unused` note naming them (§12).
 - **Reading the configuration.** The file is read only when the caller layers leave some setting undecided; a failed read is operational (§11.1).
+- **Fallback authorized by configuration.** An ordered list in the repository's configuration authorizes fallback in its order, exactly as a caller's list does, because D48 makes the configuration a policy layer the caller chooses (§7). Every such fallback is announced with its source layer (§10.2).
