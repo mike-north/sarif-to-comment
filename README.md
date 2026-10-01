@@ -421,6 +421,8 @@ If that comparison can't establish the old side, you may pass `oldSourceCommit` 
 
 ## Development
 
+Before making GitHub capability claims or repeating host experiments, consult the observed GitHub behavior register in the source repository (`docs/github-behavior.md`). It links existing results, exact tested conditions and evidence limits; advertised behavior in GitHub documentation is recorded separately from observation.
+
 ```sh
 pnpm install
 pnpm run build             # rebuild dist/ from src/, roll up the declarations, regenerate api-report/ and docs/api/

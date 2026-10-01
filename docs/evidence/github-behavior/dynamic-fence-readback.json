@@ -1,0 +1,102 @@
+{
+  "artifact_kind": "historical_evidence_excerpt",
+  "description": "Relevant fields extracted from an existing historical session recording; no host request or experiment was repeated to create this artifact.",
+  "provenance_path_note": "Each source_path names the maintainer's local session recording as <session-recordings>/...; the local root directory is removed and the rest of the path is verbatim.",
+  "issue": {
+    "url": "https://github.com/mike-north/sarif-to-comment/issues/22",
+    "number": 22,
+    "title": "Temporary: verify dynamic Markdown fence rendering",
+    "created_at": "2026-09-29T14:15:20Z",
+    "creation_body_exact": "Temporary GitHub Markdown rendering experiment for `sarif-to-comment`.\n\nExpected: the section below renders as one code block whose text exactly matches the proposed Markdown file, including the triple-backtick example and the fourteen-backtick line.\n\n```````````````\n# Proposed guide\n\nHere is a TypeScript example:\n\n```ts\nconst fence = \"```\";\n```\n\nA deliberately long fence follows:\n\n``````````````\nliteral after the long fence\n```````````````\n\nThis issue will be closed after rendered readback.",
+    "provenance": {
+      "source_path": "<session-recordings>/2026/09/28/rollout-2026-09-28T17-06-36-01a0ea7c-1a96-7e30-9313-c6813bf2f82a.jsonl",
+      "source_line": 764,
+      "timestamp": "2026-09-29T14:15:20.410Z",
+      "ordinal": 19072,
+      "record_type": "response_item",
+      "payload_type": "custom_tool_call_output",
+      "message_id": "ctco_01a0ed85-225a-7cb0-a8a6-e9d6d54b2096",
+      "call_id": "call_ZVyKHDU7NZylbIBwi6IYJqbb"
+    },
+    "creation_request_provenance": {
+      "source_path": "<session-recordings>/2026/09/28/rollout-2026-09-28T17-06-36-01a0ea7c-1a96-7e30-9313-c6813bf2f82a.jsonl",
+      "source_line": 761,
+      "timestamp": "2026-09-29T14:15:16.094Z",
+      "ordinal": 19069,
+      "record_type": "response_item",
+      "payload_type": "custom_tool_call",
+      "message_id": "ctc_0a340f1565fe6ce9016abbc7f2e24c87d086475325b415950e",
+      "call_id": "call_ZVyKHDU7NZylbIBwi6IYJqbb"
+    }
+  },
+  "browser_page_observation": {
+    "page_identity_line_exact": "Browser tab: 1, Title: \"Temporary: verify dynamic Markdown fence rendering · Issue #22 · mike-north/sarif-to-comment · GitHub\", URL: \"https://github.com/mike-north/sarif-to-comment/issues/22\".",
+    "provenance": {
+      "source_path": "<session-recordings>/2026/09/28/rollout-2026-09-28T17-06-36-01a0ea7c-1a96-7e30-9313-c6813bf2f82a.jsonl",
+      "source_line": 769,
+      "timestamp": "2026-09-29T14:15:24.617Z",
+      "ordinal": 19077,
+      "record_type": "response_item",
+      "payload_type": "function_call_output",
+      "message_id": "fco_01a0ed85-32c9-7022-b497-6263339851d1",
+      "call_id": "call_xVeFwyu16eaLiHEWI5ANJ9X7"
+    },
+    "navigation_request_provenance": {
+      "source_path": "<session-recordings>/2026/09/28/rollout-2026-09-28T17-06-36-01a0ea7c-1a96-7e30-9313-c6813bf2f82a.jsonl",
+      "source_line": 766,
+      "timestamp": "2026-09-29T14:15:23.424Z",
+      "ordinal": 19074,
+      "record_type": "response_item",
+      "payload_type": "function_call",
+      "message_id": "fc_0a340f1565fe6ce9016abbc7fa81c087d08e55c62ffbdca93c",
+      "call_id": "call_xVeFwyu16eaLiHEWI5ANJ9X7"
+    }
+  },
+  "browser_assertion": {
+    "code_exact": "const renderedState = await tab.getAXState({disableDiffing:true, emit:false}); const expectedText = ['# Proposed guide','','Here is a TypeScript example:','','```ts','const fence = \"```\";','```','','A deliberately long fence follows:','','``````````````','literal after the long fence'].join('\\n'); nodeRepl.write(JSON.stringify({exactTextPresent: renderedState.includes(expectedText), codeBlockCount: (renderedState.match(/button Copy code to clipboard/g) || []).length})); await tab.getScreenshot();",
+    "provenance": {
+      "source_path": "<session-recordings>/2026/09/28/rollout-2026-09-28T17-06-36-01a0ea7c-1a96-7e30-9313-c6813bf2f82a.jsonl",
+      "source_line": 773,
+      "timestamp": "2026-09-29T14:15:38.360Z",
+      "ordinal": 19081,
+      "record_type": "response_item",
+      "payload_type": "function_call",
+      "message_id": "fc_0a340f1565fe6ce9016abbc8082b1487d08fe598ee95b513cb",
+      "call_id": "call_AMIllEVz5fvUvIsbyheOvzUI"
+    }
+  },
+  "browser_assertion_result": {
+    "text_exact": "{\"exactTextPresent\":true,\"codeBlockCount\":1}",
+    "values_extracted": {
+      "exactTextPresent": true,
+      "codeBlockCount": 1
+    },
+    "provenance": {
+      "source_path": "<session-recordings>/2026/09/28/rollout-2026-09-28T17-06-36-01a0ea7c-1a96-7e30-9313-c6813bf2f82a.jsonl",
+      "source_line": 776,
+      "timestamp": "2026-09-29T14:15:38.771Z",
+      "ordinal": 19084,
+      "record_type": "response_item",
+      "payload_type": "function_call_output",
+      "message_id": "fco_01a0ed85-6a13-7500-ba64-e23112f61add",
+      "call_id": "call_AMIllEVz5fvUvIsbyheOvzUI"
+    }
+  },
+  "summary": {
+    "tested_envelope": "ordinary GitHub issue body",
+    "outer_backtick_fence_length": 15,
+    "included_backtick_cases": [
+      "triple-backtick TypeScript example",
+      "fourteen-backtick line"
+    ],
+    "reported_exact_text_present": true,
+    "reported_code_block_count": 1
+  },
+  "evidence_limits": [
+    "This excerpt preserves recorded observations; it does not confirm current GitHub state.",
+    "The recorded assertion inspected browser accessibility state and counted Copy code to clipboard buttons. It was not a byte comparison of a retrieved file.",
+    "Ordinary issue-body rendering was tested; native Apply suggestion behavior was not tested by this experiment.",
+    "The original result also contains an embedded screenshot, which is not copied into this excerpt.",
+    "No standalone screenshot file path or DOM snapshot artifact was recorded in the selected records."
+  ]
+}
