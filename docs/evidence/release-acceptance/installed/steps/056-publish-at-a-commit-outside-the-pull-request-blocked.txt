@@ -1,0 +1,112 @@
+# 056 publish at a commit outside the pull request: blocked
+feature: historical placement: unrelated commit blocked
+
+$ GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/historical-placement-TkyDhT/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/historical-placement-TkyDhT/review.sarif --repo octo/gadgets --pull 12 --commit e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1 --state <tmp>/historical-placement-TkyDhT/state/review.json --format json
+exit status: 2
+
+checks:
+  PASS  the token never appears in stdout or stderr
+  PASS  exit 2, blocked, reviewed-commit-not-in-pull-request
+  PASS  nothing written, no state file
+
+--- stdout
+{
+  "command": "publish",
+  "status": "blocked",
+  "message": "## Review blocked\n\nNothing was published and no publication state was written.\n\n**Review blocked:** 1 problem must be resolved before publication; nothing was published.\n\n- `reviewed-commit-not-in-pull-request`: Commit e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1 is not part of octo/gadgets#12: it is not the pull request's head d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2 or an ancestor of it, and no force-push of the pull request's branch replaced a head that contains it. GitHub would accept a review at that commit, so nothing was prepared or written.",
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "reviewed-commit-not-in-pull-request",
+      "title": "The reviewed commit does not belong to the pull request",
+      "message": "Commit e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1 is not part of octo/gadgets#12: it is not the pull request's head d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2 or an ancestor of it, and no force-push of the pull request's branch replaced a head that contains it. GitHub would accept a review at that commit, so nothing was prepared or written.",
+      "subject": "octo/gadgets#12",
+      "remedies": [
+        "Check the reviewed commit: review a commit of this pull request.",
+        "Check the pull request number."
+      ]
+    }
+  ]
+}
+
+--- stderr
+
+--- input SARIF (as given to --sarif, before the command)
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Review bot",
+          "version": "1.0.0"
+        }
+      },
+      "columnKind": "utf16CodeUnits",
+      "results": [
+        {
+          "message": {
+            "text": "Line 2 context."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "docs/sample.md"
+                },
+                "region": {
+                  "startLine": 2
+                }
+              }
+            }
+          ]
+        },
+        {
+          "message": {
+            "text": "Reword line 6."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "docs/sample.md"
+                },
+                "region": {
+                  "startLine": 6
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "docs/sample.md"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 6
+                      },
+                      "insertedContent": {
+                        "text": "Line 06: suggested."
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+--- fake host after the command (writes so far, review requests, pull requests)
+{
+  "writesSoFar": [],
+  "reviews": [],
+  "pulls": []
+}

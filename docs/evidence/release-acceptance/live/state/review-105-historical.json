@@ -1,0 +1,104 @@
+{
+  "format": "sarif-to-comment.companion-publication-state",
+  "version": 3,
+  "publication": "32f7478d-39f9-4a09-aef9-ed284107b20b",
+  "destination": {
+    "owner": "mike-north",
+    "repo": "doc-linter",
+    "pullNumber": 105
+  },
+  "reviewedCommit": "bd76c7b51f895276df4d0c6f0418f5a4d24072a8",
+  "inputFingerprint": "sha256:928e680eca36a723d13ee169fb9543c3fba4f1771c8a3d944d6ac9311e339f1f",
+  "authorId": 558005,
+  "submit": false,
+  "headRef": "sarif-u8-forcepush-20261001",
+  "labels": [
+    "suggestion-pr"
+  ],
+  "ready": false,
+  "projection": {
+    "head": "d17de751d8cb4f72fa8558b9522c3f76f212e03c",
+    "mergeBase": "fd5211c768f09671c675ece68fec24d64006205e",
+    "suggestions": [
+      {
+        "verdict": "faithful",
+        "conflicts": []
+      }
+    ]
+  },
+  "delivery": {
+    "edits": {
+      "value": [
+        "native"
+      ],
+      "source": "default"
+    },
+    "groupedEdits": {
+      "value": [
+        "companion"
+      ],
+      "source": "caller"
+    },
+    "fileOperations": {
+      "value": [
+        "manual"
+      ],
+      "source": "default"
+    },
+    "companionBundle": {
+      "value": "per-unit",
+      "source": "default"
+    }
+  },
+  "suggestions": [
+    {
+      "title": "Suggestion for #105: tail (2 changes)",
+      "commitMessage": "Suggestion for #105: tail (2 changes)\n\nSuggested in a review of mike-north/doc-linter pull request 105 at commit bd76c7b51f895276df4d0c6f0418f5a4d24072a8.",
+      "changes": [
+        {
+          "operation": "edit",
+          "path": "docs/experiments/u8-forcepush/sample.md",
+          "text": "Line 1.\nLine 2.\nLine 3.\nLine 4.\nLine 5, reviewed.\nLine 6, reviewed.\nLine 7.\nLine 8.\nLine 9, tail.\nLine 10, tail.\nLine 11.\nLine 12.\nLine 13.\nLine 14.\nLine 15.\nLine 16.\nLine 17.\nLine 18.\nLine 19.\nLine 20.\n"
+        }
+      ],
+      "sections": [
+        {
+          "changeCount": 2,
+          "changeLines": "- Edited [docs/experiments/u8-forcepush/sample.md line 9 at bd76c7b](https://github.com/mike-north/doc-linter/blob/bd76c7b51f895276df4d0c6f0418f5a4d24072a8/docs/experiments/u8-forcepush/sample.md?plain=1#L9)\n- Edited [docs/experiments/u8-forcepush/sample.md line 10 at bd76c7b](https://github.com/mike-north/doc-linter/blob/bd76c7b51f895276df4d0c6f0418f5a4d24072a8/docs/experiments/u8-forcepush/sample.md?plain=1#L10)",
+          "items": "**Source:** [docs/experiments/u8-forcepush/sample.md line 9 at bd76c7b](https://github.com/mike-north/doc-linter/blob/bd76c7b51f895276df4d0c6f0418f5a4d24072a8/docs/experiments/u8-forcepush/sample.md?plain=1#L9)\n\n```\nLine 9.\n```\n\nName line 9 in the tail.\n\n<sub>— Release acceptance reviewer 1.0.0</sub>\n\n---\n\n**Source:** [docs/experiments/u8-forcepush/sample.md line 10 at bd76c7b](https://github.com/mike-north/doc-linter/blob/bd76c7b51f895276df4d0c6f0418f5a4d24072a8/docs/experiments/u8-forcepush/sample.md?plain=1#L10)\n\n```\nLine 10.\n```\n\nName line 10 in the tail; apply with line 9.\n\n<sub>— Release acceptance reviewer 1.0.0</sub>"
+        }
+      ],
+      "id": "87324e76-9889-4cd0-9d95-d13cb808ea05",
+      "branch": "suggestion-pr/105/87324e76-9889-4cd0-9d95-d13cb808ea05",
+      "body": "Suggested in a review of #105 at commit bd76c7b51f895276df4d0c6f0418f5a4d24072a8.\n\n**The reviewed commit is not part of the branch of #105:** the branch was rewritten after commit bd76c7b51f895276df4d0c6f0418f5a4d24072a8 (its head was d17de751d8cb4f72fa8558b9522c3f76f212e03c when this was proposed). GitHub shows this pull request's changes from an older merge base, so they also list changes of the reviewed commit itself. Projected onto that head before this pull request was created, merging it applies only its own changes, which are these:\n\n```diff\n--- a/docs/experiments/u8-forcepush/sample.md\n+++ b/docs/experiments/u8-forcepush/sample.md\n@@ -6,8 +6,8 @@\n Line 6, reviewed.\n Line 7.\n Line 8.\n-Line 9.\n-Line 10.\n+Line 9, tail.\n+Line 10, tail.\n Line 11.\n Line 12.\n Line 13.\n```\n\nMerging this pull request into `sarif-u8-forcepush-20261001` applies these 2 changes together:\n\n- Edited [docs/experiments/u8-forcepush/sample.md line 9 at bd76c7b](https://github.com/mike-north/doc-linter/blob/bd76c7b51f895276df4d0c6f0418f5a4d24072a8/docs/experiments/u8-forcepush/sample.md?plain=1#L9)\n- Edited [docs/experiments/u8-forcepush/sample.md line 10 at bd76c7b](https://github.com/mike-north/doc-linter/blob/bd76c7b51f895276df4d0c6f0418f5a4d24072a8/docs/experiments/u8-forcepush/sample.md?plain=1#L10)\n\n**How this suggestion is accepted:** it is a draft pull request into `sarif-u8-forcepush-20261001`, the branch of #105. A draft cannot be merged: someone with write access first marks it ready for review. The author of #105 then decides whether to merge it, and #105 carries the change to its base. Once #105 is merged or closed, this pull request can be closed.\n\n---\n\n**Source:** [docs/experiments/u8-forcepush/sample.md line 9 at bd76c7b](https://github.com/mike-north/doc-linter/blob/bd76c7b51f895276df4d0c6f0418f5a4d24072a8/docs/experiments/u8-forcepush/sample.md?plain=1#L9)\n\n```\nLine 9.\n```\n\nName line 9 in the tail.\n\n<sub>— Release acceptance reviewer 1.0.0</sub>\n\n---\n\n**Source:** [docs/experiments/u8-forcepush/sample.md line 10 at bd76c7b](https://github.com/mike-north/doc-linter/blob/bd76c7b51f895276df4d0c6f0418f5a4d24072a8/docs/experiments/u8-forcepush/sample.md?plain=1#L10)\n\n```\nLine 10.\n```\n\nName line 10 in the tail; apply with line 9.\n\n<sub>— Release acceptance reviewer 1.0.0</sub>\n\n<!-- suggestion-pr {\"version\":1,\"original\":{\"owner\":\"mike-north\",\"repo\":\"doc-linter\",\"pullNumber\":105},\"reviewedCommit\":\"bd76c7b51f895276df4d0c6f0418f5a4d24072a8\",\"id\":\"87324e76-9889-4cd0-9d95-d13cb808ea05\",\"batch\":\"32f7478d-39f9-4a09-aef9-ed284107b20b\"} -->"
+    }
+  ],
+  "review": {
+    "sections": [
+      {
+        "companionIndex": {
+          "existing": []
+        }
+      },
+      {
+        "companion": 0,
+        "section": 0
+      }
+    ],
+    "comments": [
+      {
+        "path": "docs/experiments/u8-forcepush/sample.md",
+        "side": "RIGHT",
+        "line": 3,
+        "body": "Line 3 is context the review keeps at the reviewed commit.\n\n<sub>— Release acceptance reviewer 1.0.0</sub>"
+      },
+      {
+        "path": "docs/experiments/u8-forcepush/sample.md",
+        "side": "RIGHT",
+        "line": 12,
+        "body": "Spell out line 12.\n\n<sub>— Release acceptance reviewer 1.0.0</sub>\n\n```suggestion\nLine twelve.\n```"
+      }
+    ]
+  },
+  "planFingerprint": "sha256:0177a152dc6040c5a8b675f0e096cecea56d2430fd164336f0a056444d9b5732"
+}

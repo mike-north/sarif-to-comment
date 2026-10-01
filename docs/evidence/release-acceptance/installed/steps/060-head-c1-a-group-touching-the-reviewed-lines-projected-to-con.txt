@@ -1,0 +1,213 @@
+# 060 head C1′: a group touching the reviewed lines projected to conflict, created with a warning
+feature: companion fidelity: conflicts
+
+$ GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/force-push-composition-J3fXEJ/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/force-push-composition-J3fXEJ/review.sarif --repo octo/widgets --pull 7 --commit c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1 --grouped-edits companion --state <tmp>/force-push-composition-J3fXEJ/state/review.json --format json
+exit status: 0
+
+checks:
+  PASS  the token never appears in stdout or stderr
+  PASS  exit 0, one companion-conflicts-at-head warning
+  PASS  GitHub's mergeable reported as observed: conflicting
+  PASS  the review stays pinned to the reviewed commit
+
+--- stdout
+{
+  "command": "publish",
+  "status": "published",
+  "review": {
+    "id": 5000,
+    "url": "https://github.com/octo/widgets/pull/7#pullrequestreview-5000"
+  },
+  "suggestions": [
+    {
+      "number": 101,
+      "url": "https://github.com/octo/widgets/pull/101",
+      "branch": "suggestion-pr/7/4ccc70ed-3c5d-4009-a177-5cc845887559",
+      "mergeable": "conflicting"
+    }
+  ],
+  "statePath": "<tmp>/force-push-composition-J3fXEJ/state/review.json",
+  "message": "## Draft review published\n\n**Published with 1 warning:** A suggestion pull request is projected to conflict with the pull request's head.\n\nCreated the draft [review 5000](https://github.com/octo/widgets/pull/7#pullrequestreview-5000) on octo/widgets#7 at commit `c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1`. It stays a draft until someone submits it on GitHub.\n\n**Warnings:**\n\n- `companion-conflicts-at-head` at `/runs/0/results/0`: Projected onto the head `a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1` of #7, merging the suggestion pull request for the group `reword` would conflict in `docs/sample.md`. It is created on the reviewed commit, as planned; GitHub shows the conflict to whoever merges it.\n\nSuggestion pull requests (drafts into `feature/retry`, labeled `suggestion-pr`, proposed on the reviewed commit and projected onto the head `a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1`):\n\n- [#101](https://github.com/octo/widgets/pull/101) from `suggestion-pr/7/4ccc70ed-3c5d-4009-a177-5cc845887559`: projected to conflict; GitHub reports it as conflicting.",
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "code": "companion-conflicts-at-head",
+      "title": "A suggestion pull request is projected to conflict with the pull request's head",
+      "message": "Projected onto the head `a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1` of #7, merging the suggestion pull request for the group `reword` would conflict in `docs/sample.md`. It is created on the reviewed commit, as planned; GitHub shows the conflict to whoever merges it.",
+      "location": {
+        "pointer": "/runs/0/results/0"
+      },
+      "remedies": [
+        "Review the pull request's current head again, and publish that review.",
+        "Or resolve the conflict when merging the suggestion pull request."
+      ]
+    }
+  ]
+}
+
+--- stderr
+
+--- input SARIF (as given to --sarif, before the command)
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Review bot",
+          "version": "1.0.0"
+        }
+      },
+      "columnKind": "utf16CodeUnits",
+      "versionControlProvenance": [
+        {
+          "repositoryUri": "https://github.com/octo/widgets",
+          "revisionId": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1"
+        }
+      ],
+      "artifacts": [
+        {
+          "location": {
+            "uri": "docs/new.md"
+          }
+        },
+        {
+          "location": {
+            "uri": "obsolete.txt"
+          }
+        }
+      ],
+      "results": [
+        {
+          "message": {
+            "text": "Say what line 6 means."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "docs/sample.md"
+                },
+                "region": {
+                  "startLine": 6
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "docs/sample.md"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 6
+                      },
+                      "insertedContent": {
+                        "text": "Line 6, suggested."
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "sarifToComment": {
+              "suggestionGroup": "reword"
+            }
+          }
+        },
+        {
+          "message": {
+            "text": "Line 10 too."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "docs/sample.md"
+                },
+                "region": {
+                  "startLine": 10
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "docs/sample.md"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 10
+                      },
+                      "insertedContent": {
+                        "text": "Line 10, suggested."
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "sarifToComment": {
+              "suggestionGroup": "reword"
+            }
+          }
+        },
+        {
+          "message": {
+            "text": "A general remark."
+          }
+        }
+      ]
+    }
+  ]
+}
+
+--- fake host after the command (writes so far, review requests, pull requests)
+{
+  "writesSoFar": [
+    "POST /repos/octo/widgets/git/blobs",
+    "POST /repos/octo/widgets/git/trees",
+    "POST /repos/octo/widgets/git/commits",
+    "POST /repos/octo/widgets/git/refs",
+    "POST /repos/octo/widgets/pulls",
+    "POST /repos/octo/widgets/issues/101/labels",
+    "POST /repos/octo/widgets/pulls/7/reviews"
+  ],
+  "reviews": [
+    {
+      "id": 5000,
+      "state": "PENDING",
+      "request": {
+        "commit_id": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+        "body": "**Companion pull requests of this review:**\n\n- [#101](https://github.com/octo/widgets/pull/101): `Suggestion for #7: reword (2 changes)` — created with this review\n\n---\n\n**Suggestion pull request:** [#101](https://github.com/octo/widgets/pull/101)\n\nMerging it into `feature/retry` applies these 2 changes together:\n\n- Edited [docs/sample.md line 6 at c1c1c1c](https://github.com/octo/widgets/blob/c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1/docs/sample.md?plain=1#L6)\n- Edited [docs/sample.md line 10 at c1c1c1c](https://github.com/octo/widgets/blob/c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1/docs/sample.md?plain=1#L10)\n\n**Source:** [docs/sample.md line 6 at c1c1c1c](https://github.com/octo/widgets/blob/c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1/docs/sample.md?plain=1#L6)\n\n```\nLine 6, reviewed.\n```\n\nSay what line 6 means.\n\n<sub>— Review bot 1.0.0</sub>\n\n---\n\n**Source:** [docs/sample.md line 10 at c1c1c1c](https://github.com/octo/widgets/blob/c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1/docs/sample.md?plain=1#L10)\n\n```\nLine 10.\n```\n\nLine 10 too.\n\n<sub>— Review bot 1.0.0</sub>\n\n---\n\nA general remark.\n\n<sub>— Review bot 1.0.0</sub>\n\n<!-- sarif-to-comment:review:5cfbc865-f9a1-4ce0-b672-2df5fd94239c -->",
+        "comments": []
+      }
+    }
+  ],
+  "pulls": [
+    {
+      "number": 101,
+      "title": "Suggestion for #7: reword (2 changes)",
+      "head": "suggestion-pr/7/4ccc70ed-3c5d-4009-a177-5cc845887559",
+      "base": "feature/retry",
+      "draft": true,
+      "state": "open",
+      "labels": [
+        "suggestion-pr"
+      ],
+      "body": "Suggested in a review of #7 at commit c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1.\n\n**The reviewed commit is not part of the branch of #7:** the branch was rewritten after commit c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1 (its head was a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1 when this was proposed). GitHub shows this pull request's changes from an older merge base, so they also list changes of the reviewed commit itself. Projected onto that head before this pull request was created, merging it conflicts in `docs/sample.md`; its own changes are these:\n\n```diff\n--- a/docs/sample.md\n+++ b/docs/sample.md\n@@ -3,11 +3,11 @@\n Line 3.\n Line 4.\n Line 5, reviewed.\n-Line 6, reviewed.\n+Line 6, suggested.\n Line 7.\n Line 8.\n Line 9.\n-Line 10.\n+Line 10, suggested.\n Line 11.\n Line 12.\n Line 13.\n```\n\nMerging this pull request into `feature/retry` applies these 2 changes together:\n\n- Edited [docs/sample.md line 6 at c1c1c1c](https://github.com/octo/widgets/blob/c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1/docs/sample.md?plain=1#L6)\n- Edited [docs/sample.md line 10 at c1c1c1c](https://github.com/octo/widgets/blob/c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1/docs/sample.md?plain=1#L10)\n\n**How this suggestion is accepted:** it is a draft pull request into `feature/retry`, the branch of #7. A draft cannot be merged: someone with write access first marks it ready for review. The author of #7 then decides whether to merge it, and #7 carries the change to its base. Once #7 is merged or closed, this pull request can be closed.\n\n---\n\n**Source:** [docs/sample.md line 6 at c1c1c1c](https://github.com/octo/widgets/blob/c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1/docs/sample.md?plain=1#L6)\n\n```\nLine 6, reviewed.\n```\n\nSay what line 6 means.\n\n<sub>— Review bot 1.0.0</sub>\n\n---\n\n**Source:** [docs/sample.md line 10 at c1c1c1c](https://github.com/octo/widgets/blob/c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1/docs/sample.md?plain=1#L10)\n\n```\nLine 10.\n```\n\nLine 10 too.\n\n<sub>— Review bot 1.0.0</sub>\n\n<!-- suggestion-pr {\"version\":1,\"original\":{\"owner\":\"octo\",\"repo\":\"widgets\",\"pullNumber\":7},\"reviewedCommit\":\"c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1\",\"id\":\"4ccc70ed-3c5d-4009-a177-5cc845887559\",\"batch\":\"0f69b4a7-704f-415a-8439-da4516e00c9c\"} -->"
+    }
+  ]
+}

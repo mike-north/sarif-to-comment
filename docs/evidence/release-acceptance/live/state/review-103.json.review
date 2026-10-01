@@ -1,0 +1,59 @@
+{
+  "format": "sarif-to-comment.publication-state",
+  "version": 1,
+  "phase": "completed",
+  "marker": "<!-- sarif-to-comment:review:41d28703-1c11-4c9c-b6ef-f0632232ea5b -->",
+  "destination": {
+    "owner": "mike-north",
+    "repo": "doc-linter",
+    "pullNumber": 103
+  },
+  "reviewedCommit": "58d916eb43f1a4ef96670632f97fd25737c75df2",
+  "inputFingerprint": "sha256:7c5e5873d299da79b9f9ead0f1043bd3fe40b22bebb002a6c2c6f5626410f3a3",
+  "authorId": 558005,
+  "request": {
+    "owner": "mike-north",
+    "repo": "doc-linter",
+    "pullNumber": 103,
+    "commitId": "58d916eb43f1a4ef96670632f97fd25737c75df2",
+    "body": "**Companion pull requests of this review:**\n\n- [#104](https://github.com/mike-north/doc-linter/pull/104): `Suggestion for #103: readme-pointer (2 changes)` — created with this review\n\n---\n\n**Suggestion group `batch-steps`:** apply these 2 suggestions together, in one commit: add each of them to one batch of suggestions on the pull request, then commit the batch. Nothing checks that they are applied together.\n\n- `docs/experiments/u8-acceptance/sample.md` line 5\n- `docs/experiments/u8-acceptance/sample.md` line 6\n\n---\n\n**Suggestion group `guide-move`:** apply these 3 changes together, by hand, in one commit: make every change below in a local copy of the pull request's branch, then commit them together. They are not offered as suggestions, and nothing checks that they are applied together.\n\n- `docs/experiments/u8-acceptance/guide.md`: new file\n- `docs/experiments/u8-acceptance/sample.md` line 8\n- `docs/experiments/u8-acceptance/obsolete.md`: file deletion\n\n---\n\n**Suggestion group `guide-move` — change 1 of 3**\n\n**Proposed new file:** `docs/experiments/u8-acceptance/guide.md`\n\n**File details:** 54 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644\n\n````\n# Guide\n\nThe steps now live here:\n\n```sh\nnpm test\n```\n````\n\n**Location:** line 1 of the proposed file\n\nMove the steps into a new guide.\n\n<sub>— Release acceptance reviewer 1.0.0</sub>\n\n---\n\n**Suggestion group `guide-move` — change 2 of 3**\n\n**Proposed edit, to make by hand:** replace [docs/experiments/u8-acceptance/sample.md line 8 at 58d916e](https://github.com/mike-north/doc-linter/blob/58d916eb43f1a4ef96670632f97fd25737c75df2/docs/experiments/u8-acceptance/sample.md?plain=1#L8) with:\n\n```\nLine 8: see [the guide](guide.md).\n```\n\n**Source:** [docs/experiments/u8-acceptance/sample.md line 8 at 58d916e](https://github.com/mike-north/doc-linter/blob/58d916eb43f1a4ef96670632f97fd25737c75df2/docs/experiments/u8-acceptance/sample.md?plain=1#L8)\n\n```\nLine 8.\n```\n\nPoint line 8 at the new guide.\n\n<sub>— Release acceptance reviewer 1.0.0</sub>\n\n---\n\n**Suggestion group `guide-move` — change 3 of 3**\n\n**Proposed file deletion:** [docs/experiments/u8-acceptance/obsolete.md at 58d916e](https://github.com/mike-north/doc-linter/blob/58d916eb43f1a4ef96670632f97fd25737c75df2/docs/experiments/u8-acceptance/obsolete.md)\n\nThe whole file is removed; this is not a proposal to empty it.\n\nThe obsolete page is replaced by the guide.\n\n<sub>— Release acceptance reviewer 1.0.0</sub>\n\n---\n\n**Suggestion pull request:** [#104](https://github.com/mike-north/doc-linter/pull/104)\n\nMerging it into `sarif-u8-acceptance-20261001-into-main` applies these 2 changes together:\n\n- Edited [README.md line 5 at 58d916e](https://github.com/mike-north/doc-linter/blob/58d916eb43f1a4ef96670632f97fd25737c75df2/README.md?plain=1#L5)\n- Edited [docs/experiments/u8-acceptance/sample.md line 10 at 58d916e](https://github.com/mike-north/doc-linter/blob/58d916eb43f1a4ef96670632f97fd25737c75df2/docs/experiments/u8-acceptance/sample.md?plain=1#L10)\n\n**Source:** [README.md line 5 at 58d916e](https://github.com/mike-north/doc-linter/blob/58d916eb43f1a4ef96670632f97fd25737c75df2/README.md?plain=1#L5)\n\n```\nWhat it does today:\n```\n\nSay what the README section covers.\n\n<sub>— Release acceptance reviewer 1.0.0</sub>\n\n---\n\n**Source:** [docs/experiments/u8-acceptance/sample.md line 10 at 58d916e](https://github.com/mike-north/doc-linter/blob/58d916eb43f1a4ef96670632f97fd25737c75df2/docs/experiments/u8-acceptance/sample.md?plain=1#L10)\n\n```\nLine 10.\n```\n\nLink line 10 from the README.\n\n<sub>— Release acceptance reviewer 1.0.0</sub>\n\n<!-- sarif-to-comment:review:41d28703-1c11-4c9c-b6ef-f0632232ea5b -->",
+    "comments": [
+      {
+        "path": "docs/experiments/u8-acceptance/sample.md",
+        "side": "RIGHT",
+        "line": 2,
+        "body": "Spell out the number on line 2.\n\n<sub>— Release acceptance reviewer 1.0.0</sub>\n\n```suggestion\nLine two.\n```"
+      },
+      {
+        "path": "docs/experiments/u8-acceptance/sample.md",
+        "side": "RIGHT",
+        "line": 3,
+        "body": "Spell out the number on line 3.\n\n<sub>— Release acceptance reviewer 1.0.0</sub>\n\n```suggestion\nLine three.\n```"
+      },
+      {
+        "path": "docs/experiments/u8-acceptance/sample.md",
+        "side": "RIGHT",
+        "line": 5,
+        "body": "Name line 5 as the first step.\n\n<sub>— Release acceptance reviewer 1.0.0</sub>\n\n**Suggestion group `batch-steps`:** apply this suggestion together with the group's other suggestions, listed in the review body.\n\n```suggestion\nLine 5, step one.\n```"
+      },
+      {
+        "path": "docs/experiments/u8-acceptance/sample.md",
+        "side": "RIGHT",
+        "line": 6,
+        "body": "Name line 6 as the second step; apply with line 5.\n\n<sub>— Release acceptance reviewer 1.0.0</sub>\n\n**Suggestion group `batch-steps`:** apply this suggestion together with the group's other suggestions, listed in the review body.\n\n```suggestion\nLine 6, step two.\n```"
+      },
+      {
+        "path": "docs/experiments/u8-acceptance/sample.md",
+        "side": "RIGHT",
+        "line": 12,
+        "body": "Line 12 is the last line; consider a closing sentence.\n\n<sub>— Release acceptance reviewer 1.0.0</sub>"
+      }
+    ]
+  },
+  "requestFingerprint": "sha256:d290c4f562aa1a2e67344afe4733e5460d238ef20a2ce146c23f7f46a3aa4d15",
+  "receipt": {
+    "reviewId": 5377519897,
+    "htmlUrl": "https://github.com/mike-north/doc-linter/pull/103#pullrequestreview-5377519897",
+    "via": "created"
+  }
+}

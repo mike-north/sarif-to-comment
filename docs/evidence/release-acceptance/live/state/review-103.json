@@ -1,0 +1,136 @@
+{
+  "format": "sarif-to-comment.companion-publication-state",
+  "version": 1,
+  "publication": "aa84931b-3490-4e92-b714-7ea65843c9fe",
+  "destination": {
+    "owner": "mike-north",
+    "repo": "doc-linter",
+    "pullNumber": 103
+  },
+  "reviewedCommit": "58d916eb43f1a4ef96670632f97fd25737c75df2",
+  "inputFingerprint": "sha256:7c5e5873d299da79b9f9ead0f1043bd3fe40b22bebb002a6c2c6f5626410f3a3",
+  "authorId": 558005,
+  "submit": false,
+  "headRef": "sarif-u8-acceptance-20261001-into-main",
+  "labels": [
+    "suggestion-pr"
+  ],
+  "ready": false,
+  "delivery": {
+    "edits": {
+      "value": [
+        "native"
+      ],
+      "source": "default"
+    },
+    "groupedEdits": {
+      "value": [
+        "native-batch",
+        "companion"
+      ],
+      "source": "caller"
+    },
+    "fileOperations": {
+      "value": [
+        "manual"
+      ],
+      "source": "default"
+    },
+    "companionBundle": {
+      "value": "per-unit",
+      "source": "default"
+    }
+  },
+  "suggestions": [
+    {
+      "title": "Suggestion for #103: readme-pointer (2 changes)",
+      "commitMessage": "Suggestion for #103: readme-pointer (2 changes)\n\nSuggested in a review of mike-north/doc-linter pull request 103 at commit 58d916eb43f1a4ef96670632f97fd25737c75df2.",
+      "changes": [
+        {
+          "operation": "edit",
+          "path": "README.md",
+          "text": "# doc-linter\n\nAn agent-assisted documentation assessment tool. Writers express editorial guidance through examples, and deterministic and model-assisted checks contribute evidence-backed findings.\n\nWhat it does today, in brief:\n\n- **`assess`** examines the complete revised ordinary Markdown files of a GitHub.com pull request at one captured head commit.\n  - It uses checks run by a pinned, verified Vale.\n  - A **direct** check reports findings, with exact proposed corrections where the rule states one.\n  - A **contextual** check collects candidates that a model judges only when you explicitly request one (`--judge-model`). Without a judge they stay unresolved.\n- **`review`** runs the same assessment and serves a local page (this machine only). There you select findings, edit comment wording and export only the selected feedback as a local file. Posting to GitHub belongs to a separate review-mapping tool that is not integrated.\n- **`examples`** runs each check's executable examples through the same implementation, so writer-maintained examples define and test a check's behavior.\n\nTwo demonstration checks ship: `spelling.recieve` (direct) and `phrasing.effort-minimizing` (contextual). Neither is adopted editorial policy.\n\nContracts and design: [first increment](docs/first-increment.md), [foundation design](docs/foundation-design.md), [judgment seam](docs/judgment-seam.md), [local review](docs/review-increment.md), [check authoring guide](docs/authoring-guide.md). Validation records are in [docs/validation/](docs/validation/).\n\nInstallation has been validated from a packed tarball and from a local Git source pinned to a commit, each into an empty directory. The private GitHub `npx` route has not been verified live yet.\n\n## Prerequisites\n\n- Node.js 22.12 or newer.\n- The GitHub CLI (`gh`), authenticated for github.com (`gh auth login`). doc-linter reads through your `gh` and never changes its authentication.\n- HTTPS access to GitHub release assets on first use. doc-linter downloads the pinned Vale 3.23.0 from its official release and verifies its SHA-256 digests before use. You do not need to install Vale separately.\n  - The verified tool is cached under `DOC_LINTER_CACHE_DIR`, or else `$XDG_CACHE_HOME/doc-linter`, or else the OS cache directory.\n  - The cache holds only the tool, never results.\n- Supported platforms: macOS and Linux on arm64 and x64. Other platforms fail with a clear message.\n\n## Installing from Git source\n\ndoc-linter is a single leaf package contained in this repository (`private` in `package.json`). It is not published to the npm registry, and there is no registry publication pipeline. It is installed from a Git commit, and npm builds it from source during installation. The repository commits no `dist/`, and no manual build step is needed.\n\n**Verified locally.** Installing from a `git+file://` URL pinned to a commit, into an empty directory, has been tested. After it, `--help`, `--version` and the shipped examples on the real pinned Vale all work, with no GitHub login ([record](docs/validation/source-install-validation.md)):\n\n```sh\nnpm install \"git+file:///path/to/doc-linter#<commit>\"\n./node_modules/.bin/doc-linter examples\n```\n\n**Pending live verification.** The private GitHub route has not yet been exercised against the real private repository, so treat this command as unverified:\n\n```sh\nnpx --yes \"github:mike-north/doc-linter#<commit>\" examples\n```\n\nPrerequisites for a Git-source installation:\n\n- **Node.js 22.12 or newer, with its bundled npm.** Verified with npm 11.18.\n- **`git` on `PATH`.** npm clones the repository with it.\n- **Read access to the repository for `git`,** for example an SSH key or an HTTPS credential helper. `gh auth login` alone is not claimed to be sufficient; whether it is depends on how Git credentials are configured, and this is not yet verified live.\n- **Lifecycle scripts enabled.** Do not use `--ignore-scripts` or `ignore-scripts=true`. npm builds the package with its `prepare` script, temporarily installing the build-only dev dependencies (TypeScript) inside its own clone. The installed package needs only its runtime dependencies.\n- **Network access.** You need access to the npm registry for dependencies and, on first use, to GitHub release assets for the pinned Vale.\n- **`gh`.** An authenticated `gh` is needed only for `assess`. `examples` does not use GitHub.\n\nA packed tarball (`npm pack`) contains the built output. It installs with `--ignore-scripts` and runs the same way.\n\n## Usage\n\n```sh\ndoc-linter assess https://github.com/<owner>/<repo>/pull/<number>          # readable output\ndoc-linter assess https://github.com/<owner>/<repo>/pull/<number> --json   # structured result\ndoc-linter examples                                    # run the packaged check examples\ndoc-linter examples path/to/examples.yaml              # run specific example files\n```\n\n### Reviewing and selecting feedback\n\n```sh\ndoc-linter review https://github.com/<owner>/<repo>/pull/<number> [--judge-model …] [--no-open]\n```\n\n`review` runs the same assessment as `assess`, then serves a small review page on this machine only (`127.0.0.1`, random port). The terminal prints a private URL, which is opened in your browser unless you give `--no-open`.\n\nOn the page you can:\n- read each changed document with its findings highlighted;\n- inspect acceptable and unresolved candidates, which cannot be selected;\n- select findings, starting from none;\n- edit the comment wording;\n- export only the selected feedback as a JSON file.\n\nThe export keeps the original finding evidence unchanged and records your wording separately. It is a local handoff file, not a GitHub review. Posting feedback to GitHub belongs to a separate review-mapping tool that is not integrated yet.\n\nThe session lives only while the command runs. Nothing is saved automatically, so export before pressing Ctrl+C.\n\n### Contextual judgment\n\nCandidate checks use Vale for recognition, followed by a contextual model judgment ([the judgment seam](docs/judgment-seam.md)). One ships: [`phrasing.effort-minimizing`](checks/effort-minimizing-phrasing/README.md). Its guidance and examples are a proposed demonstration awaiting writer review, not adopted editorial policy, and its judgment quality on real pages has not been established.\n\n- **Requesting a judge.** Request judgment explicitly with `--judge-model gpt-6-luna` or `--judge-model gpt-5.6-luna` on `assess`, `review` or `examples`. The effort is fixed at low. There is no default model, no fallback and no escalation, and an unknown model is a usage error (exit 2).\n- **What the judge receives.** Each check and document gets one model call with the complete document, the check's written guidance and every candidate.\n  - A confirmed candidate becomes a finding with a message and no automatic correction.\n  - If the host reports a model different from the one requested, the judgment is rejected.\n- **Model host.** The exactly pinned `@openai/codex` 0.157.1 is installed as a runtime dependency, even if you never request a judge. Its platform package takes about 330–390 MB unpacked on disk. It runs with:\n  - no action tools, user configuration or personal instructions;\n  - no telemetry;\n  - a private per-run home that links only to your existing login.\n- **Login prerequisite.** You need an existing **file-backed** Codex login (`codex login` with the default `cli_auth_credentials_store = \"file\"`) or `CODEX_API_KEY`.\n  - A keyring-only login is not supported.\n  - Without a supported login, the judgment run fails with exit 3 and says so.\n  - doc-linter never reads, copies, changes or switches your login.\n- **Without `--judge-model`.** Candidates are reported as unresolved (exit 4 for `assess`), and candidate examples cannot pass. Direct checks such as `spelling.recieve` are unaffected.\n- **Examples.** `doc-linter examples` with no files runs every packaged check's examples. Without `--judge-model` it therefore exits 1, because the candidate examples fail. To run only the direct spelling examples offline, name their file, for example `doc-linter examples node_modules/doc-linter/checks/spelling-recieve/examples.yaml`.\n\nThe assessment covers every changed `.md` or `.markdown` file in full, not only its changed lines. Each finding includes:\n\n- the file, line and column;\n- the rule and its message;\n- the exact quoted source text;\n- when the rule proposes one, an exact replacement. Replacements are never applied.\n\nEvery changed file is listed in coverage with one of these statuses:\n\n- **examined**\n- **deleted**\n- **out of scope**: not documentation.\n- **unsupported**: documentation in another format, such as MDX or Markdoc.\n- **unavailable**\n\nReviewed content is treated as data. doc-linter never clones or executes the reviewed repository, and it ignores any Vale configuration there, in your working directory, or in your home directory.\n\nIt also ignores Vale control comments inside reviewed documents, such as `<!-- vale off -->`, `<!-- vale Style = NO -->` and `<!-- vale Style.Rule = NO -->`. A document cannot switch its own checks off, and there is no writer-suppression feature yet. The check run records where directives were neutralized.\n\nFile names do not affect checking: `README.MD` is checked like `readme.md`, and paths that differ only in letter case or Unicode form are checked separately.\n\n### Exit codes (`assess`)\n\n| Code | Meaning |\n| --- | --- |\n| 0 | Complete, no findings |\n| 1 | Complete, findings present |\n| 2 | Usage error (arguments, non-github.com URL, invalid examples file) |\n| 3 | Execution failure (Node version, platform, `gh`/authentication, transport, pull request changed during reading, Vale failure, a requested judgment that failed or was rejected (including a missing Codex login), internal error) |\n| 4 | Incomplete: some applicable content was not examined or resolved (for example MDX files, unreadable files, alerts that could not be placed exactly). Any findings are still reported. |\n| 5 | No applicable documentation changed, so nothing was examined. This is not a clean result. |\n\nIf no check is available, both commands exit 3; running nothing is never a clean result.\n\n`examples` exits with these codes:\n\n| Code | Meaning |\n| --- | --- |\n| 0 | All examples pass |\n| 1 | Any mismatch |\n| 2 | Usage error, including an examples file with no examples |\n| 3 | A check cannot run, or there are no example suites to run |\n\n### Which rule does `examples` run?\n\n`examples` always runs a check's examples against the rule built into the command you are running, never against a rule stored next to the examples file. Each report names the rule configuration and guidance revision it used, on its `Rule:` line.\n\n- **An installed `doc-linter`** runs any examples file against its own packaged rule. Use this to see how a released rule behaves on your examples.\n- **To test a rule you are editing**, run your checkout's own command, as described in the next section.\n\n## Contributing a check or example\n\nEach check lives in its own directory under `checks/`. For example, [`checks/spelling-recieve/`](checks/spelling-recieve/README.md) contains:\n\n- `check.json`: the check's identity, its declared role (direct finding or candidate for judgment) and its scope;\n- `vale/`: the Vale rule and its configuration, which own detection and the proposed replacement;\n- `examples.yaml`: readable examples with the exact expected findings.\n\nA candidate check, such as [`checks/effort-minimizing-phrasing/`](checks/effort-minimizing-phrasing/README.md), also has `guidance.md`, the written guidance its judge receives.\n\nAgents helping a writer turn an editorial concern into a check follow [the check authoring guide](docs/authoring-guide.md).\n\nFrom the root of your doc-linter checkout, after `npm install`:\n\n1. Add or change examples first.\n2. Then change the rule if needed.\n3. Run the checkout's examples:\n\n```sh\nnpm run test:examples                                               # every check in this checkout (candidate examples fail without a judge)\nnpm run test:examples -- checks/spelling-recieve/examples.yaml     # one direct examples file, offline\nnpm run test:examples -- checks/effort-minimizing-phrasing/examples.yaml --judge-model gpt-6-luna   # candidate examples; real model calls\n```\n\nThe candidate command needs a supported Codex login (see \"Contextual judgment\"). It makes one model call per example that has candidates.\n\n`npm run test:examples` rebuilds this checkout (`npm run build`) and runs its own command (`node dist/cli/bin.js examples`), so the rules in your working copy are the ones exercised. The report's `Rule:` line shows a path inside your checkout.\n\nDo not use `npx doc-linter` here. The checkout does not install itself, so `npx` could run a different installed or downloaded package.\n\nA wrong expectation fails with a mismatch that names the line, the quoted text, and the expected and actual values.\n\n## Development\n\n```sh\nnpm install\nnpm run check        # strict type checking, then the pre-1.0 version guard\nnpm run check:version # the version guard alone (see \"Versioning\")\nnpm test             # all offline tests: unit (fakes), vale (real pinned Vale), package (packed tarball), host (pinned Codex host, loopback only)\nnpm run test:unit    # no network, no Vale, no model host\nnpm run test:vale    # downloads and verifies the pinned Vale on first run\nnpm run test:package # packs and installs from a tarball and from a disposable Git source; runs against a fake gh and an empty HOME\nnpm run test:host    # the real pinned Codex host against loopback servers with synthetic credentials; never a real model or login\nnpm run test:examples # builds this checkout and runs its check examples (see \"Contributing\")\nnpm run rehearse:review # builds and serves a SYNTHETIC review page for browser inspection (docs/review-increment.md)\nnpm run build        # removes dist/ and recompiles (also run by npm's prepare lifecycle)\nnpm run catalog:generate  # maintainer-only: regenerate the pinned host's judgment model catalog (its digest is checked at runtime)\n```\n\n**Live model runs are never part of `npm test`.** They use your existing login:\n- `npm run live:smoke` makes one trivial structured call.\n- `npm run live:evaluate` runs the bounded predeclared evaluation of the shipped candidate check ([instructions](docs/live-evaluation.md)).\n\n### Versioning\n\ndoc-linter stays within the 0.x range of [Semantic Versioning](https://semver.org/), so a 1.0.0 is never cut by accident.\n\n`npm run check:version` (also part of `npm run check`) passes only when the `package.json` version is a valid, canonically written SemVer version with major version 0.\n- **Accepted:** `0.0.0`, `0.1.0` or `0.99.99`, including pre-release and build metadata such as `0.2.0-rc.1+build.5`.\n- **Rejected:** `1.0.0`, `1.0.0-beta.1`, `2.x`, and any malformed, prefixed (`v0.1.0`), missing or non-string version.\n- **Tags:** with `--tag <tag>`, the tag must also be exactly `v` followed by that version.\n\nThe **Version guard** GitHub workflow (`.github/workflows/version-guard.yml`, check name **Pre-1.0 version guard**) runs this check on every pull request and on every pushed branch. On a pushed `v*` tag it also runs the tag check. It is read-only and publishes nothing.\n\n**Current limits:**\n- The workflow reports a failing check, but it blocks merges only once branch protection or a ruleset requires that check. No such repository setting is configured yet.\n- The guard checks versions and tags; it does not create them. There is no release or publication pipeline.\n- Moving to 1.0 would be a deliberate change to this guard.\n\n### Maintainer-only: re-pinning Vale\n\n```sh\nnpm run vale:pin -- 3.23.0   # re-derive pinned digests from the official release assets\n```\n\n`vale:pin` runs `scripts/pin-vale.ts` directly as TypeScript. It needs a Node version that runs TypeScript without a flag.\n\n- **Tested with Node 24.14.**\n- **Not supported on Node 22.12–22.17**, the lower end of the review runtime's supported range, because those versions do not run TypeScript by default. Use Node 24 for this maintainer task.\n- **The built `doc-linter` command** is plain JavaScript and has no such requirement.\n"
+        },
+        {
+          "operation": "edit",
+          "path": "docs/experiments/u8-acceptance/sample.md",
+          "text": "Line 1.\nLine 2.\nLine 3.\nLine 4.\nLine 5.\nLine 6.\nLine 7.\nLine 8.\nLine 9.\nLine 10, linked from the README.\nLine 11.\nLine 12.\n"
+        }
+      ],
+      "sections": [
+        {
+          "changeCount": 2,
+          "changeLines": "- Edited [README.md line 5 at 58d916e](https://github.com/mike-north/doc-linter/blob/58d916eb43f1a4ef96670632f97fd25737c75df2/README.md?plain=1#L5)\n- Edited [docs/experiments/u8-acceptance/sample.md line 10 at 58d916e](https://github.com/mike-north/doc-linter/blob/58d916eb43f1a4ef96670632f97fd25737c75df2/docs/experiments/u8-acceptance/sample.md?plain=1#L10)",
+          "items": "**Source:** [README.md line 5 at 58d916e](https://github.com/mike-north/doc-linter/blob/58d916eb43f1a4ef96670632f97fd25737c75df2/README.md?plain=1#L5)\n\n```\nWhat it does today:\n```\n\nSay what the README section covers.\n\n<sub>— Release acceptance reviewer 1.0.0</sub>\n\n---\n\n**Source:** [docs/experiments/u8-acceptance/sample.md line 10 at 58d916e](https://github.com/mike-north/doc-linter/blob/58d916eb43f1a4ef96670632f97fd25737c75df2/docs/experiments/u8-acceptance/sample.md?plain=1#L10)\n\n```\nLine 10.\n```\n\nLink line 10 from the README.\n\n<sub>— Release acceptance reviewer 1.0.0</sub>"
+        }
+      ],
+      "id": "ba6241f2-a68e-4810-9812-919cb089e19d",
+      "branch": "suggestion-pr/103/ba6241f2-a68e-4810-9812-919cb089e19d",
+      "body": "Suggested in a review of #103 at commit 58d916eb43f1a4ef96670632f97fd25737c75df2.\n\nMerging this pull request into `sarif-u8-acceptance-20261001-into-main` applies these 2 changes together:\n\n- Edited [README.md line 5 at 58d916e](https://github.com/mike-north/doc-linter/blob/58d916eb43f1a4ef96670632f97fd25737c75df2/README.md?plain=1#L5)\n- Edited [docs/experiments/u8-acceptance/sample.md line 10 at 58d916e](https://github.com/mike-north/doc-linter/blob/58d916eb43f1a4ef96670632f97fd25737c75df2/docs/experiments/u8-acceptance/sample.md?plain=1#L10)\n\n**How this suggestion is accepted:** it is a draft pull request into `sarif-u8-acceptance-20261001-into-main`, the branch of #103. A draft cannot be merged: someone with write access first marks it ready for review. The author of #103 then decides whether to merge it, and #103 carries the change to its base. Once #103 is merged or closed, this pull request can be closed.\n\n---\n\n**Source:** [README.md line 5 at 58d916e](https://github.com/mike-north/doc-linter/blob/58d916eb43f1a4ef96670632f97fd25737c75df2/README.md?plain=1#L5)\n\n```\nWhat it does today:\n```\n\nSay what the README section covers.\n\n<sub>— Release acceptance reviewer 1.0.0</sub>\n\n---\n\n**Source:** [docs/experiments/u8-acceptance/sample.md line 10 at 58d916e](https://github.com/mike-north/doc-linter/blob/58d916eb43f1a4ef96670632f97fd25737c75df2/docs/experiments/u8-acceptance/sample.md?plain=1#L10)\n\n```\nLine 10.\n```\n\nLink line 10 from the README.\n\n<sub>— Release acceptance reviewer 1.0.0</sub>\n\n<!-- suggestion-pr {\"version\":1,\"original\":{\"owner\":\"mike-north\",\"repo\":\"doc-linter\",\"pullNumber\":103},\"reviewedCommit\":\"58d916eb43f1a4ef96670632f97fd25737c75df2\",\"id\":\"ba6241f2-a68e-4810-9812-919cb089e19d\",\"batch\":\"aa84931b-3490-4e92-b714-7ea65843c9fe\"} -->"
+    }
+  ],
+  "review": {
+    "sections": [
+      {
+        "companionIndex": {
+          "existing": []
+        }
+      },
+      "**Suggestion group `batch-steps`:** apply these 2 suggestions together, in one commit: add each of them to one batch of suggestions on the pull request, then commit the batch. Nothing checks that they are applied together.\n\n- `docs/experiments/u8-acceptance/sample.md` line 5\n- `docs/experiments/u8-acceptance/sample.md` line 6",
+      "**Suggestion group `guide-move`:** apply these 3 changes together, by hand, in one commit: make every change below in a local copy of the pull request's branch, then commit them together. They are not offered as suggestions, and nothing checks that they are applied together.\n\n- `docs/experiments/u8-acceptance/guide.md`: new file\n- `docs/experiments/u8-acceptance/sample.md` line 8\n- `docs/experiments/u8-acceptance/obsolete.md`: file deletion\n\n---\n\n**Suggestion group `guide-move` — change 1 of 3**\n\n**Proposed new file:** `docs/experiments/u8-acceptance/guide.md`\n\n**File details:** 54 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644\n\n````\n# Guide\n\nThe steps now live here:\n\n```sh\nnpm test\n```\n````\n\n**Location:** line 1 of the proposed file\n\nMove the steps into a new guide.\n\n<sub>— Release acceptance reviewer 1.0.0</sub>\n\n---\n\n**Suggestion group `guide-move` — change 2 of 3**\n\n**Proposed edit, to make by hand:** replace [docs/experiments/u8-acceptance/sample.md line 8 at 58d916e](https://github.com/mike-north/doc-linter/blob/58d916eb43f1a4ef96670632f97fd25737c75df2/docs/experiments/u8-acceptance/sample.md?plain=1#L8) with:\n\n```\nLine 8: see [the guide](guide.md).\n```\n\n**Source:** [docs/experiments/u8-acceptance/sample.md line 8 at 58d916e](https://github.com/mike-north/doc-linter/blob/58d916eb43f1a4ef96670632f97fd25737c75df2/docs/experiments/u8-acceptance/sample.md?plain=1#L8)\n\n```\nLine 8.\n```\n\nPoint line 8 at the new guide.\n\n<sub>— Release acceptance reviewer 1.0.0</sub>\n\n---\n\n**Suggestion group `guide-move` — change 3 of 3**\n\n**Proposed file deletion:** [docs/experiments/u8-acceptance/obsolete.md at 58d916e](https://github.com/mike-north/doc-linter/blob/58d916eb43f1a4ef96670632f97fd25737c75df2/docs/experiments/u8-acceptance/obsolete.md)\n\nThe whole file is removed; this is not a proposal to empty it.\n\nThe obsolete page is replaced by the guide.\n\n<sub>— Release acceptance reviewer 1.0.0</sub>",
+      {
+        "companion": 0,
+        "section": 0
+      }
+    ],
+    "comments": [
+      {
+        "path": "docs/experiments/u8-acceptance/sample.md",
+        "side": "RIGHT",
+        "line": 2,
+        "body": "Spell out the number on line 2.\n\n<sub>— Release acceptance reviewer 1.0.0</sub>\n\n```suggestion\nLine two.\n```"
+      },
+      {
+        "path": "docs/experiments/u8-acceptance/sample.md",
+        "side": "RIGHT",
+        "line": 3,
+        "body": "Spell out the number on line 3.\n\n<sub>— Release acceptance reviewer 1.0.0</sub>\n\n```suggestion\nLine three.\n```"
+      },
+      {
+        "path": "docs/experiments/u8-acceptance/sample.md",
+        "side": "RIGHT",
+        "line": 5,
+        "body": "Name line 5 as the first step.\n\n<sub>— Release acceptance reviewer 1.0.0</sub>\n\n**Suggestion group `batch-steps`:** apply this suggestion together with the group's other suggestions, listed in the review body.\n\n```suggestion\nLine 5, step one.\n```"
+      },
+      {
+        "path": "docs/experiments/u8-acceptance/sample.md",
+        "side": "RIGHT",
+        "line": 6,
+        "body": "Name line 6 as the second step; apply with line 5.\n\n<sub>— Release acceptance reviewer 1.0.0</sub>\n\n**Suggestion group `batch-steps`:** apply this suggestion together with the group's other suggestions, listed in the review body.\n\n```suggestion\nLine 6, step two.\n```"
+      },
+      {
+        "path": "docs/experiments/u8-acceptance/sample.md",
+        "side": "RIGHT",
+        "line": 12,
+        "body": "Line 12 is the last line; consider a closing sentence.\n\n<sub>— Release acceptance reviewer 1.0.0</sub>"
+      }
+    ]
+  },
+  "warnings": [
+    {
+      "severity": "warning",
+      "code": "delivery-fallback",
+      "title": "A proposal is delivered by a later mechanism of its delivery list",
+      "message": "The group `readme-pointer` is delivered as `companion`. `groupedEdits` is `[native-batch, companion]`, set by the caller (`--grouped-edits`, `delivery.groupedEdits`), and the mechanisms listed before it are unavailable:\n\n- `native-batch`: The edit of `README.md` line 5: Lines 5-5 of README.md cannot carry a native suggestion (file-not-in-diff).",
+      "location": {
+        "pointer": "/runs/0/results/7"
+      },
+      "remedies": [
+        "Remove the fix.",
+        "To use an earlier mechanism, remove the obstacle the message names, then publish again.",
+        "To refuse rather than fall back, list only the mechanism you require."
+      ]
+    }
+  ],
+  "planFingerprint": "sha256:8ac0f3ab53019efad77d9c7751951ff11ed953b172229ac4969c8cf5097f8084"
+}

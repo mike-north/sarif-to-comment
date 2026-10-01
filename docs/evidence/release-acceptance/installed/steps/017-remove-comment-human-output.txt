@@ -1,0 +1,201 @@
+# 017 remove-comment human output
+feature: remove-comment
+
+$ sarif-to-comment remove-comment --sarif <tmp>/authoring-E1LlvV/grouped.sarif --finding /runs/0/results/3@d677490fc532d675 --color never
+exit status: 0
+
+checks:
+  PASS  exit 0 with a human sentence on stdout
+
+--- stdout
+Removed /runs/0/results/3 (tool "Review bot") and its 1 attached fix(es) from <tmp>/authoring-E1LlvV/grouped.sarif.
+Selectors from earlier inspections no longer apply; inspect the file again before another removal.
+
+--- stderr
+
+--- input SARIF (as given to --sarif, before the command)
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Review bot",
+          "version": "1.0.0"
+        }
+      },
+      "columnKind": "utf16CodeUnits",
+      "versionControlProvenance": [
+        {
+          "repositoryUri": "https://github.com/octo/widgets",
+          "revisionId": "feedfeedfeedfeedfeedfeedfeedfeedfeedfeed"
+        }
+      ],
+      "artifacts": [],
+      "results": [
+        {
+          "message": {
+            "text": "Fix the typo."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "README.md"
+                },
+                "region": {
+                  "startLine": 2
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "README.md"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 2
+                      },
+                      "insertedContent": {
+                        "text": "The widget client."
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "sarifToComment": {
+              "suggestionGroup": "readme-typos"
+            }
+          }
+        },
+        {
+          "message": {
+            "text": "Fix the spelling."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "README.md"
+                },
+                "region": {
+                  "startLine": 3
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "README.md"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 3
+                      },
+                      "insertedContent": {
+                        "text": "Receive updates."
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "sarifToComment": {
+              "suggestionGroup": "readme-typos"
+            }
+          }
+        },
+        {
+          "message": {
+            "text": "Use the American spelling."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "README.md"
+                },
+                "region": {
+                  "startLine": 4
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "README.md"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 4
+                      },
+                      "insertedContent": {
+                        "text": "License: MIT."
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "message": {
+            "text": "Retry once on timeout."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/client.ts"
+                },
+                "region": {
+                  "startLine": 2
+                }
+              }
+            }
+          ],
+          "fixes": [
+            {
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "src/client.ts"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 2
+                      },
+                      "insertedContent": {
+                        "text": "  const response = await request(id).catch(() => request(id));"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

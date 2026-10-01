@@ -1,0 +1,716 @@
+/**
+ * Release acceptance (U8b, part A): exercises every feature added since
+ * 0.2.1 through the INSTALLED package only — the `sarif-to-comment`
+ * executable linked in scratch/consumer and `import … from 'sarif-to-comment'`
+ * there — against the repository's fake GitHub hosts (test/fixtures), reached
+ * through test/fixtures/docs/fake-fetch-preload.mts, which replaces only
+ * `fetch`. Commands needing no host run without the preload.
+ *
+ * Every step records its command, exit status, full stdout/stderr and the
+ * checks made on them, under docs/evidence/release-acceptance/installed/.
+ * Expected values come from the contracts (docs/*-contract.md), not from
+ * earlier output.
+ *
+ * Run with TMPDIR=<worktree>/scratch/u8/tmp so every fake host lives in scratch.
+ */
+import { spawnSync } from 'node:child_process';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+
+import * as D from '../../test/support/delivery-world.mts';
+import * as RH from '../../test/fixtures/rewritten-history/world.mts';
+import * as HP from '../../test/fixtures/historical-placement/world.mts';
+import { FakeHttpGitHub } from '../../test/fixtures/composition/fake-http-github.mts';
+import type { IHttpRepository } from '../../test/fixtures/composition/fake-http-github.mts';
+import type { IStoredPull } from '../../test/fixtures/composition/fake-http-companion.mts';
+
+type Json = Record<string, unknown>;
+const WT = path.resolve(import.meta.dirname, '..', '..');
+const CONSUMER = path.join(WT, 'scratch', 'consumer');
+const BIN = path.join(CONSUMER, 'node_modules', '.bin', 'sarif-to-comment');
+const PRELOAD = path.join(WT, 'test', 'fixtures', 'docs', 'fake-fetch-preload.mts');
+const OUT = process.env['U8_OUT'] ?? path.join(WT, 'scratch', 'u8', 'installed-out');
+const TMP = fs.realpathSync(os.tmpdir());
+const INSTALLED_PKG = JSON.parse(fs.readFileSync(path.join(CONSUMER, 'node_modules', 'sarif-to-comment', 'package.json'), 'utf8')) as Json;
+
+if (!TMP.startsWith(path.join(WT, 'scratch'))) throw new Error(`run with TMPDIR inside scratch/ (got ${TMP})`);
+
+function redact(text: string): string {
+  return text
+    .split(TMP).join('<tmp>')
+    .split(CONSUMER).join('<consumer>')
+    .split(WT).join('<repo>')
+    .split(os.homedir()).join('~');
+}
+
+interface ICheck { readonly name: string; readonly pass: boolean; readonly detail?: string }
+interface IStep {
+  readonly id: string;
+  readonly feature: string;
+  readonly title: string;
+  readonly command: string;
+  readonly status: number | null;
+  readonly stdout: string;
+  readonly stderr: string;
+  readonly script?: string;
+  inputs?: string;
+  observed?: string;
+  readonly checks: ICheck[];
+  check(name: string, pass: boolean, detail?: unknown): boolean;
+  json(): Json;
+}
+const STEPS: IStep[] = [];
+const quote = (a: string): string => (/^[A-Za-z0-9_./:=@,+-]+$/.test(a) ? a : `'${a.replace(/'/g, `'\\''`)}'`);
+
+function makeStep(feature: string, title: string, command: string, status: number | null, stdout: string, stderr: string, tokens: readonly string[], script?: string): IStep {
+  const id = String(STEPS.length + 1).padStart(3, '0');
+  const step: IStep = {
+    id, feature, title, command, status, stdout, stderr, ...(script === undefined ? {} : { script }), checks: [],
+    check(name, pass, detail) {
+      this.checks.push({ name, pass, ...(pass || detail === undefined ? {} : { detail: redact(typeof detail === 'string' ? detail : JSON.stringify(detail)).slice(0, 2000) }) });
+      return pass;
+    },
+    json() {
+      return JSON.parse(this.stdout) as Json;
+    },
+  };
+  for (const t of tokens) step.check('the token never appears in stdout or stderr', !stdout.includes(t) && !stderr.includes(t));
+  STEPS.push(step);
+  return step;
+}
+
+interface IHostRef { readonly host: FakeHttpGitHub }
+interface ICliOptions { readonly world?: IHostRef | undefined; readonly token?: string | undefined; readonly env?: Record<string, string> | undefined; readonly cwd?: string | undefined }
+
+function cli(feature: string, title: string, args: readonly string[], o: ICliOptions = {}): IStep {
+  const hostEnv: Record<string, string> = o.world === undefined ? {} : {
+    GH_TOKEN: o.token ?? '', FAKE_HTTP_GITHUB_DIR: o.world.host.dir, NODE_OPTIONS: `--require=${PRELOAD}`,
+  };
+  const env: NodeJS.ProcessEnv = { PATH: process.env['PATH'], HOME: TMP, ...hostEnv, ...(o.env ?? {}) };
+  const sarifIndex = args.indexOf('--sarif');
+  const inputPath = sarifIndex >= 0 ? args[sarifIndex + 1] : undefined;
+  const inputs = inputPath !== undefined && fs.existsSync(inputPath) ? read(inputPath) : undefined;
+  const r = spawnSync(BIN, args, { cwd: o.cwd ?? CONSUMER, env, encoding: 'utf8', timeout: 180_000 });
+  const shownEnv = Object.entries({ ...hostEnv, ...(o.env ?? {}) }).map(([k, v]) => `${k}=${k === 'GH_TOKEN' ? '<fake-host-token>' : quote(v)}`);
+  const command = redact([...shownEnv, 'sarif-to-comment', ...args.map(quote)].join(' '));
+  const step = makeStep(feature, title, command, r.status, r.stdout, r.stderr, o.token === undefined ? [] : [o.token]);
+  if (inputs !== undefined) step.inputs = inputs;
+  if (o.world !== undefined) step.observed = observe(o.world.host);
+  return step;
+}
+
+/** What the fake host holds after a command: every review request and every pull request (for the record). */
+function observe(host: FakeHttpGitHub): string {
+  const writes = nonGetWrites(host);
+  const reviews = host.reviews().map((r) => ({ id: r.id, state: r.state, request: r.request }));
+  const pulls = host.pulls().map((p) => ({ number: p.number, title: p.title, head: p.head, base: p.base, draft: p.draft, state: p.state, labels: p.labels, body: p.body }));
+  return JSON.stringify({ writesSoFar: writes, reviews, pulls }, null, 2);
+}
+
+function lib(feature: string, title: string, name: string, source: string, o: ICliOptions = {}): IStep {
+  const file = path.join(CONSUMER, `u8-${name}.mjs`);
+  fs.writeFileSync(file, source);
+  const hostEnv: Record<string, string> = o.world === undefined ? {} : {
+    GH_TOKEN: o.token ?? '', FAKE_HTTP_GITHUB_DIR: o.world.host.dir, NODE_OPTIONS: `--require=${PRELOAD}`,
+  };
+  const env: NodeJS.ProcessEnv = { PATH: process.env['PATH'], HOME: TMP, ...hostEnv, ...(o.env ?? {}) };
+  const r = spawnSync(process.execPath, [file], { cwd: CONSUMER, env, encoding: 'utf8', timeout: 180_000 });
+  const shownEnv = Object.entries({ ...hostEnv, ...(o.env ?? {}) }).map(([k, v]) => `${k}=${k === 'GH_TOKEN' ? '<fake-host-token>' : quote(v.length > 200 ? `${v.slice(0, 60)}…(${String(v.length)} chars)` : v)}`);
+  const step = makeStep(feature, title, redact([...shownEnv, 'node', `<consumer>/u8-${name}.mjs`].join(' ')), r.status, r.stdout, r.stderr, o.token === undefined ? [] : [o.token], source);
+  if (o.world !== undefined) step.observed = observe(o.world.host);
+  return step;
+}
+
+const codes = (doc: Json): unknown[] => ((doc['diagnostics'] ?? []) as Json[]).map((d) => d['code']);
+const has = (s: string, part: string): boolean => s.includes(part);
+const read = (p: string): string => fs.readFileSync(p, 'utf8');
+const writeSarif = (dir: string, name: string, sarif: Json): string => {
+  const file = path.join(dir, name);
+  fs.writeFileSync(file, `${JSON.stringify(sarif, null, 2)}\n`);
+  return file;
+};
+const workDir = (label: string): string => fs.mkdtempSync(path.join(TMP, `${label}-`));
+const nonGetWrites = (host: FakeHttpGitHub): string[] => host.log().filter((r) => r.method !== 'GET' && !(r.method === 'POST' && r.path === '/graphql')).map((r) => `${r.method} ${r.path}`);
+
+const fileText = (host: FakeHttpGitHub, pull: IStoredPull | undefined, file: string): string | null => {
+  if (pull === undefined) return null;
+  const b = host.fileOnBranch(pull.head, file);
+  return b === null ? null : b.toString('utf8');
+};
+const dTarget = (w: D.IWorld, sarif: Json): string[] => D.target(w, sarif);
+const dToken = D.TOKEN;
+const opt = (w: D.IWorld): ICliOptions => ({ world: w, token: dToken });
+
+// ===========================================================================
+// 1. --version
+{
+  const s = cli('--version', 'version of the installed executable', ['--version']);
+  s.check('exit status 0', s.status === 0);
+  s.check(`prints the installed package.json version (${String(INSTALLED_PKG['version'])}) and nothing else`, s.stdout === `${String(INSTALLED_PKG['version'])}\n`, s.stdout);
+  s.check('stderr empty', s.stderr === '', s.stderr);
+  const h = cli('--version', '`publish --version` needs no token and makes no request', ['publish', '--version']);
+  h.check('exit 0 and the same version', h.status === 0 && h.stdout === `${String(INSTALLED_PKG['version'])}\n`, h.stdout + h.stderr);
+}
+
+// ===========================================================================
+// 2. Authoring: inspect selectors and groups, group-fixes / ungroup-fixes, remove-comment (no host)
+{
+  const dir = workDir('authoring');
+  const file = writeSarif(dir, 'review.sarif', D.document([D.TYPO(), D.SPELLING(), D.LICENSE(), D.RETRY(), D.NOTE(3)]));
+  const original = read(file);
+  const selectors = (f: string): string[] => {
+    const s = cli('inspect', `inspect ${path.basename(f)} for selectors (json)`, ['inspect', '--sarif', f, '--format', 'json']);
+    s.check('exit 0', s.status === 0);
+    const findings = (s.json()['view'] as Json)['findings'] as Json[];
+    s.check('every finding has a document-bound selector /runs/0/results/N@<16 hex>', findings.every((x) => /^\/runs\/0\/results\/\d+@[0-9a-f]{16}$/.test(String(x['selector']))), findings.map((x) => x['selector']));
+    return findings.map((x) => String(x['selector']));
+  };
+  const sel0 = selectors(file);
+  STEPS.at(-1)?.check('5 findings', sel0.length === 5);
+  const human = cli('inspect', 'inspect (human) shows a "Selector:" line per finding', ['inspect', '--sarif', file, '--color', 'never']);
+  human.check('exit 0', human.status === 0);
+  human.check('5 "Selector:" lines', (human.stdout.match(/^Selector: /gm) ?? []).length === 5, human.stdout);
+
+  const grouped = path.join(dir, 'grouped.sarif');
+  const g = cli('group-fixes', 'group two README fixes into a new file (--output)', ['group-fixes', '--sarif', file, '--finding', sel0[0] ?? '', '--finding', sel0[1] ?? '', '--group', 'readme-typos', '--output', grouped, '--format', 'json']);
+  g.check('exit 0, status grouped', g.status === 0 && g.json()['status'] === 'grouped', g.stdout);
+  g.check('--sarif is not changed when --output is given', read(file) === original);
+  const groupedDoc = JSON.parse(read(grouped)) as Json;
+  const results = (((groupedDoc['runs'] as Json[])[0] as Json)['results'] as Json[]);
+  const groupOf = (r: Json | undefined): unknown => ((r?.['properties'] as Json | undefined)?.['sarifToComment'] as Json | undefined)?.['suggestionGroup'];
+  g.check('results 0 and 1 carry properties.sarifToComment.suggestionGroup "readme-typos"; others none', groupOf(results[0]) === 'readme-typos' && groupOf(results[1]) === 'readme-typos' && results.slice(2).every((r) => groupOf(r) === undefined));
+
+  const ins = cli('inspect', 'inspect shows the suggestion group (json and human)', ['inspect', '--sarif', grouped, '--format', 'json']);
+  const f2 = (ins.json()['view'] as Json)['findings'] as Json[];
+  ins.check('findings 0 and 1 show the group, finding 2 does not', JSON.stringify(f2[0]).includes('readme-typos') && JSON.stringify(f2[1]).includes('readme-typos') && !JSON.stringify(f2[2]).includes('readme-typos'));
+  const insH = cli('inspect', 'inspect (human) of the grouped file', ['inspect', '--sarif', grouped, '--color', 'never']);
+  insH.check('the human view names the group', insH.status === 0 && has(insH.stdout, 'readme-typos'), insH.stdout);
+  const sel1 = f2.map((x) => String(x['selector']));
+
+  const ext = cli('group-fixes', 'extend the existing group in place with one more finding', ['group-fixes', '--sarif', grouped, '--finding', sel1[2] ?? '', '--group', 'readme-typos', '--format', 'json']);
+  ext.check('exit 0, grouped, extended: true', ext.status === 0 && ext.json()['status'] === 'grouped' && ext.json()['extended'] === true, ext.stdout);
+  const afterExtend = read(grouped);
+  const stale = cli('group-fixes', 'a selector from before the in-place change is stale (refused)', ['group-fixes', '--sarif', grouped, '--finding', sel1[3] ?? '', '--finding', sel1[4] ?? '', '--group', 'notes', '--format', 'json']);
+  stale.check('exit 2', stale.status === 2, stale.stdout);
+  stale.check('the file is unchanged', read(grouped) === afterExtend);
+  stale.check('diagnostic code reported', codes(stale.json()).length > 0, stale.stdout);
+  const sel2 = selectors(grouped);
+  const lone = cli('group-fixes', 'a new group of one change is refused', ['group-fixes', '--sarif', grouped, '--finding', sel2[3] ?? '', '--group', 'solo', '--format', 'json']);
+  lone.check('exit 2, nothing changed', lone.status === 2 && read(grouped) === afterExtend, lone.stdout);
+  const un = cli('ungroup-fixes', 'ungroup one finding in place', ['ungroup-fixes', '--sarif', grouped, '--finding', sel2[2] ?? '', '--format', 'json']);
+  un.check('exit 0', un.status === 0, un.stdout);
+  const ungroupedResults = ((((JSON.parse(read(grouped)) as Json)['runs'] as Json[])[0] as Json)['results'] as Json[]);
+  un.check('result 2 has no group; results 0 and 1 keep it', groupOf(ungroupedResults[2]) === undefined && groupOf(ungroupedResults[0]) === 'readme-typos' && groupOf(ungroupedResults[1]) === 'readme-typos');
+
+  const beforeRemove = read(grouped);
+  const rmStale = cli('remove-comment', 'remove-comment with a stale selector is refused', ['remove-comment', '--sarif', grouped, '--finding', sel2[4] ?? '', '--format', 'json']);
+  rmStale.check('exit 2, file unchanged', rmStale.status === 2 && read(grouped) === beforeRemove, rmStale.stdout);
+  const sel3 = selectors(grouped);
+  const rm = cli('remove-comment', 'remove the last finding with a fresh selector', ['remove-comment', '--sarif', grouped, '--finding', sel3[4] ?? '', '--format', 'json']);
+  rm.check('exit 0, status removed', rm.status === 0 && rm.json()['status'] === 'removed', rm.stdout);
+  const remaining = ((((JSON.parse(read(grouped)) as Json)['runs'] as Json[])[0] as Json)['results'] as Json[]);
+  rm.check('4 findings remain; the note finding is gone', remaining.length === 4 && !JSON.stringify(remaining).includes('Revise note 3.'));
+  const rmH = cli('remove-comment', 'remove-comment human output', ['remove-comment', '--sarif', grouped, '--finding', selectors(grouped)[3] ?? '', '--color', 'never']);
+  rmH.check('exit 0 with a human sentence on stdout', rmH.status === 0 && rmH.stdout.length > 0, rmH.stdout + rmH.stderr);
+
+  const sarifJson = JSON.stringify(D.document([D.TYPO(), D.SPELLING(), D.RETRY()]));
+  const l = lib('inspect / group-fixes / ungroup-fixes / remove-comment', 'library: inspectSarif, groupSarifFixes, ungroupSarifFixes (a lone member refused; the whole group restores the document), removeSarifComment in memory', 'authoring', String.raw`
+import assert from 'node:assert/strict';
+import { inspectSarif, groupSarifFixes, ungroupSarifFixes, removeSarifComment } from 'sarif-to-comment';
+const sarif = JSON.parse(process.env.SARIF);
+const inspected = inspectSarif(sarif);
+assert.equal(inspected.status, 'inspected');
+const [a, b, c] = inspected.view.findings.map((f) => f.selector);
+const grouped = groupSarifFixes(sarif, { findings: [a, b], group: 'lib-group' });
+assert.equal(grouped.status, 'grouped');
+assert.equal(grouped.changes, 2);
+const again = inspectSarif(grouped.sarif).view.findings.map((f) => f.selector);
+const lone = ungroupSarifFixes(grouped.sarif, { findings: [again[0]] });
+assert.equal(lone.status, 'refused');
+assert.match(lone.markdown, /^\*\*Cannot ungroup the fixes:\*\*/);
+const ungrouped = ungroupSarifFixes(grouped.sarif, { findings: [again[0], again[1]] });
+assert.equal(ungrouped.status, 'ungrouped');
+assert.deepEqual(ungrouped.sarif, sarif);
+const stale = removeSarifComment(grouped.sarif, c);
+assert.equal(stale.status, 'stale');
+const removed = removeSarifComment(grouped.sarif, again[2]);
+assert.equal(removed.status, 'removed');
+assert.equal(removed.sarif.runs[0].results.length, 2);
+process.stdout.write(JSON.stringify({ grouped: grouped.status, lone: lone.status, ungrouped: ungrouped.status, stale: stale.status, removed: removed.status }));
+`, { env: { SARIF: sarifJson } });
+  l.check('exit 0 (every in-script assertion held)', l.status === 0, l.stdout + l.stderr);
+}
+
+// ===========================================================================
+// 3. validate (with the pending-review check) and --submit
+{
+  const w = D.makeWorld();
+  const sarif = D.document([D.TYPO()]);
+  const v = cli('validate', 'validate: ready (human, --color never)', ['validate', ...dTarget(w, sarif), '--color', 'never'], opt(w));
+  v.check('exit 0', v.status === 0, v.stdout + v.stderr);
+  v.check('stdout starts "## Ready to publish"', v.stdout.startsWith('## Ready to publish'), v.stdout);
+  v.check('validate wrote nothing to the host', nonGetWrites(w.host).length === 0, nonGetWrites(w.host));
+  const p = cli('validate', 'publish a draft review (sets up the pending-review check)', ['publish', ...dTarget(w, sarif), '--state', w.statePath, '--format', 'json'], opt(w));
+  p.check('exit 0, published', p.status === 0 && p.json()['status'] === 'published', p.stdout);
+  const reviews = w.host.reviews();
+  p.check('one PENDING review with one inline native suggestion', reviews.length === 1 && reviews[0]?.state === 'PENDING' && reviews[0].request.comments.length === 1 && has(reviews[0].request.comments[0]?.body ?? '', '```suggestion\nThe widget client.\n```'), reviews.map((r) => r.request));
+  p.check('no event sent (a draft)', reviews[0]?.request.event === undefined);
+  const pending = cli('validate', 'validate after the draft: the pending review of this account is blocked', ['validate', ...dTarget(w, sarif), '--format', 'json'], opt(w));
+  pending.check('exit 2, blocked', pending.status === 2 && pending.json()['status'] === 'blocked', pending.stdout);
+  pending.check('the problem says the pull request already has a pending review', /already has a pending review/.test(pending.stdout), pending.stdout);
+  pending.check('nothing more was written', w.host.reviews().length === 1);
+
+  const ws = D.makeWorld();
+  const vs = cli('--submit', 'validate --submit: ready, as a submitted comment review', ['validate', ...dTarget(ws, sarif), '--submit', '--format', 'json'], opt(ws));
+  vs.check('exit 0, ready', vs.status === 0 && vs.json()['status'] === 'ready', vs.stdout);
+  const s = cli('--submit', 'publish --submit', ['publish', ...dTarget(ws, sarif), '--submit', '--state', ws.statePath, '--format', 'json'], opt(ws));
+  s.check('exit 0, published', s.status === 0 && s.json()['status'] === 'published', s.stdout);
+  const sr = ws.host.reviews();
+  s.check('the create request carries event COMMENT; the host stores it COMMENTED', sr.length === 1 && sr[0]?.request.event === 'COMMENT' && sr[0].state === 'COMMENTED', sr.map((r) => [r.request.event, r.state]));
+  const retry = cli('--submit', 'retry publish --submit with the same state: already published, nothing sent', ['publish', ...dTarget(ws, sarif), '--submit', '--state', ws.statePath, '--format', 'json'], opt(ws));
+  retry.check('exit 0 and still one review', retry.status === 0 && ws.host.reviews().length === 1, retry.stdout);
+  const mode = cli('--submit', 'retry the same state WITHOUT --submit: refused (mode bound to the state)', ['publish', ...dTarget(ws, sarif), '--state', ws.statePath, '--format', 'json'], opt(ws));
+  mode.check('non-zero exit and still one review', mode.status !== 0 && ws.host.reviews().length === 1, `${String(mode.status)} ${mode.stdout}`);
+  const after = cli('validate', 'validate after a SUBMITTED review: not blocked by the pending-review check', ['validate', ...dTarget(ws, sarif), '--format', 'json'], opt(ws));
+  after.check('exit 0, ready', after.status === 0 && after.json()['status'] === 'ready', after.stdout);
+}
+
+// ===========================================================================
+// 4. Whole-file proposals and alternatives (defaults)
+{
+  const w = D.makeWorld();
+  const sarif = D.document([
+    D.result({ text: 'Add a guide.', location: D.at('docs/guide.md', 1), operation: D.create(0) }),
+    D.result({ text: 'Remove the obsolete file.', location: D.at('obsolete.txt'), operation: D.remove(1) }),
+  ], [D.created('docs/guide.md', D.GUIDE), D.deleted('obsolete.txt')]);
+  const s = cli('whole-file proposals', 'publish a creation and a deletion under the defaults (fileOperations [manual])', ['publish', ...dTarget(w, sarif), '--state', w.statePath, '--format', 'json'], opt(w));
+  s.check('exit 0, published, no diagnostics', s.status === 0 && s.json()['status'] === 'published' && codes(s.json()).length === 0, s.stdout);
+  const r = w.host.reviews()[0];
+  const body = r?.request.body ?? '';
+  s.check('the review body proposes docs/guide.md with its exact content, and the deletion of obsolete.txt', has(body, 'docs/guide.md') && has(body, D.GUIDE.trimEnd()) && has(body, 'obsolete.txt'), body);
+  s.check('no inline comment, no suggestion block, no companion pull request', (r?.request.comments.length ?? -1) === 0 && !body.includes('```suggestion') && w.host.pulls().length === 0);
+
+  const wa = D.makeWorld();
+  const alt = D.document([D.result({ text: 'Two ways to spell it.', location: D.at('README.md', 4), fixes: [D.lineFix('README.md', 4, 'License: MIT.'), D.lineFix('README.md', 4, 'Licensed under MIT.')] })]);
+  const a = cli('alternatives', 'a result with two fixes: the first is the suggestion, the second listed', ['publish', ...dTarget(wa, alt), '--state', wa.statePath, '--format', 'json'], opt(wa));
+  a.check('exit 0, published', a.status === 0 && a.json()['status'] === 'published', a.stdout);
+  const c = wa.host.reviews()[0]?.request.comments[0]?.body ?? '';
+  a.check('the inline comment has the first fix as its native suggestion', c.endsWith('```suggestion\nLicense: MIT.\n```'), c);
+  a.check('the comment lists "Alternatives to consider:" with the second fix', has(c, 'Alternatives to consider:') && has(c, 'Licensed under MIT.'), c);
+}
+
+// ===========================================================================
+// 5. Delivery policy: presets, flags, strict block, fallback, configuration file, usage errors
+{
+  // Strict default list blocks an edit that cannot be native (exit 2), writing nothing.
+  const w0 = D.makeWorld();
+  const strict = cli('delivery: strict-list block', '`--edits native` (strict) with an edit outside the diff: blocked', ['publish', ...dTarget(w0, D.document([D.RETRY()])), '--edits', 'native', '--state', w0.statePath, '--format', 'json'], opt(w0));
+  strict.check('exit 2, blocked, delivery-unavailable', strict.status === 2 && strict.json()['status'] === 'blocked' && JSON.stringify(codes(strict.json())) === '["delivery-unavailable"]', strict.stdout);
+  strict.check('the obstacle sentence names the edit (file-not-in-diff)', has(strict.stdout, D.RETRY_NOT_INLINE), strict.stdout);
+  strict.check('no write and no state file', nonGetWrites(w0.host).length === 0 && !fs.existsSync(w0.statePath));
+  const wDef = D.makeWorld();
+  const def = cli('delivery: strict-list block', 'the defaults block the same edit (edits [native])', ['validate', ...dTarget(wDef, D.document([D.RETRY()])), '--format', 'json'], opt(wDef));
+  def.check('exit 2, delivery-unavailable', def.status === 2 && JSON.stringify(codes(def.json())) === '["delivery-unavailable"]', def.stdout);
+
+  // Announced fallback, which is also a review-body edit.
+  const w1 = D.makeWorld();
+  const fb = cli('delivery: announced fallback', '`--edits native,review-body`: the edit falls back to the review body, announced', ['publish', ...dTarget(w1, D.document([D.RETRY()])), '--edits', 'native,review-body', '--state', w1.statePath, '--format', 'json'], opt(w1));
+  fb.check('exit 0, published, one delivery-fallback warning', fb.status === 0 && fb.json()['status'] === 'published' && JSON.stringify(codes(fb.json())) === '["delivery-fallback"]', fb.stdout);
+  const fbBody = w1.host.reviews()[0]?.request.body ?? '';
+  fb.check('the body holds the manual edit section "**Proposed edit, to make by hand:**"', has(fbBody, '**Proposed edit, to make by hand:** replace [src/client.ts line 2 at feedfee]'), fbBody);
+  fb.check('no suggestion block anywhere', !fbBody.includes('```suggestion') && (w1.host.reviews()[0]?.request.comments.length ?? -1) === 0);
+  const fbRetry = cli('delivery: announced fallback', 'a retry with the same state reports the same warning', ['publish', ...dTarget(w1, D.document([D.RETRY()])), '--edits', 'native,review-body', '--state', w1.statePath, '--format', 'json'], opt(w1));
+  fbRetry.check('exit 0, same diagnostics, nothing sent', fbRetry.status === 0 && JSON.stringify(fbRetry.json()['diagnostics']) === JSON.stringify(fb.json()['diagnostics']) && w1.host.reviews().length === 1, fbRetry.stdout);
+
+  const w2 = D.makeWorld();
+  const rb = cli('review-body edits', '`--edits review-body`: an edit made by hand, no warning', ['publish', ...dTarget(w2, D.document([D.TYPO()])), '--edits', 'review-body', '--state', w2.statePath, '--format', 'json'], opt(w2));
+  rb.check('exit 0, no diagnostics', rb.status === 0 && codes(rb.json()).length === 0, rb.stdout);
+  const rbBody = w2.host.reviews()[0]?.request.body ?? '';
+  rb.check('body has the manual edit of README.md line 2 with its replacement, no suggestion', has(rbBody, '**Proposed edit, to make by hand:** replace [README.md line 2 at feedfee]') && has(rbBody, 'The widget client.') && !rbBody.includes('```suggestion'), rbBody);
+
+  // Preset original-pr
+  const w3 = D.makeWorld();
+  const op = D.document([D.TYPO(), D.RETRY(), D.NOTE(3, 'notes'), D.NOTE(5, 'notes')]);
+  const pre1 = cli('delivery: preset original-pr', '`--delivery original-pr`: native where possible, the rest by hand, never a companion', ['publish', ...dTarget(w3, op), '--delivery', 'original-pr', '--state', w3.statePath, '--format', 'json'], opt(w3));
+  pre1.check('exit 0, published', pre1.status === 0 && pre1.json()['status'] === 'published', pre1.stdout);
+  pre1.check('two delivery-fallback warnings (the edit and the group)', JSON.stringify(codes(pre1.json())) === '["delivery-fallback","delivery-fallback"]', codes(pre1.json()));
+  const r3 = w3.host.reviews()[0];
+  pre1.check('README line 2 is an inline native suggestion', r3?.request.comments.length === 1 && has(r3.request.comments[0]?.body ?? '', '```suggestion\nThe widget client.\n```'));
+  pre1.check('the group is a manual group section and the edit a manual edit', has(r3?.request.body ?? '', '**Suggestion group `notes`:** apply these 2 changes together, by hand, in one commit') && has(r3?.request.body ?? '', '**Proposed edit, to make by hand:**'), r3?.request.body);
+  pre1.check('no companion pull request', w3.host.pulls().length === 0);
+  const st3 = read(w3.statePath);
+  pre1.check('the recorded policy names the preset as its source (caller-preset)', has(st3, 'caller-preset'), st3.slice(0, 1500));
+
+  // Preset companion, per-unit then single
+  const w4 = D.makeWorld();
+  const cdoc = D.document([D.TYPO(), D.result({ text: 'Add a guide.', location: D.at('docs/guide.md', 1), operation: D.create(0) })], [D.created('docs/guide.md', D.GUIDE)]);
+  const pre2 = cli('delivery: preset companion', '`--delivery companion`: every proposal in its own companion (per-unit)', ['publish', ...dTarget(w4, cdoc), '--delivery', 'companion', '--state', w4.statePath, '--format', 'json'], opt(w4));
+  pre2.check('exit 0, published', pre2.status === 0 && pre2.json()['status'] === 'published', pre2.stdout);
+  const pulls4 = w4.host.pulls();
+  pre2.check('two draft suggestion pull requests into feature/retry, labeled suggestion-pr', pulls4.length === 2 && pulls4.every((p) => p.draft && p.base === D.HEAD_REF && p.labels.includes('suggestion-pr') && p.head.startsWith('suggestion-pr/7/')), pulls4.map((p) => [p.number, p.title, p.head, p.base, p.labels]));
+  pre2.check('no inline comment', (w4.host.reviews()[0]?.request.comments.length ?? -1) === 0);
+  const w5 = D.makeWorld();
+  const pre3 = cli('delivery: --companion-bundle', '`--delivery companion --companion-bundle single`: one companion holding both', ['publish', ...dTarget(w5, cdoc), '--delivery', 'companion', '--companion-bundle', 'single', '--state', w5.statePath, '--format', 'json'], opt(w5));
+  pre3.check('exit 0 and exactly one suggestion pull request', pre3.status === 0 && w5.host.pulls().length === 1, pre3.stdout);
+  pre3.check('it holds both files', fileText(w5.host, w5.host.pulls()[0], 'docs/guide.md') === D.GUIDE && (fileText(w5.host, w5.host.pulls()[0], 'README.md') ?? '').includes('The widget client.'));
+
+  // Specific flags
+  const w6 = D.makeWorld();
+  const e = cli('delivery: --edits', '`--edits companion`: one edit as a companion', ['publish', ...dTarget(w6, D.document([D.TYPO()])), '--edits', 'companion', '--state', w6.statePath, '--format', 'json'], opt(w6));
+  e.check('exit 0, one companion, its branch changes README line 2', e.status === 0 && w6.host.pulls().length === 1 && (fileText(w6.host, w6.host.pulls()[0], 'README.md') ?? '').includes('The widget client.'), e.stdout);
+  const w7 = D.makeWorld();
+  const ge = cli('delivery: --grouped-edits', '`--grouped-edits companion`: a group as one companion', ['publish', ...dTarget(w7, D.document([D.TYPO('g'), D.SPELLING('g')])), '--grouped-edits', 'companion', '--state', w7.statePath, '--format', 'json'], opt(w7));
+  ge.check('exit 0, exactly one companion titled for group g', ge.status === 0 && w7.host.pulls().length === 1 && has(w7.host.pulls()[0]?.title ?? '', 'g'), w7.host.pulls().map((p) => p.title));
+  const w8 = D.makeWorld();
+  const fo = cli('delivery: --file-operations', '`--file-operations companion`: a creation as a companion', ['publish', ...dTarget(w8, D.document([D.result({ text: 'Add a guide.', location: D.at('docs/guide.md', 1), operation: D.create(0) })], [D.created('docs/guide.md', D.GUIDE)])), '--file-operations', 'companion', '--state', w8.statePath, '--format', 'json'], opt(w8));
+  fo.check('exit 0, one companion creating docs/guide.md with the exact content', fo.status === 0 && w8.host.pulls().length === 1 && fileText(w8.host, w8.host.pulls()[0], 'docs/guide.md') === D.GUIDE, fo.stdout);
+  const wl = D.makeWorld();
+  const unused = cli('delivery: companion options', '`--pr-labels team-a` with no companion planned: companion-options-unused note', ['publish', ...dTarget(wl, D.document([D.TYPO()])), '--pr-labels', 'team-a', '--state', wl.statePath, '--format', 'json'], opt(wl));
+  unused.check('exit 0 with one companion-options-unused note', unused.status === 0 && JSON.stringify(codes(unused.json())) === '["companion-options-unused"]', unused.stdout);
+
+  // Configuration file on the default branch
+  const wc = D.makeWorld(D.repository({ configuration: '{ "delivery": { "edits": ["companion"] } }\n' }));
+  const cfg = cli('delivery: configuration file', '`.github/sarif-to-comment.json` sets edits [companion]', ['publish', ...dTarget(wc, D.document([D.TYPO()])), '--state', wc.statePath, '--format', 'json'], opt(wc));
+  cfg.check('exit 0 and the edit is a companion (from the configuration)', cfg.status === 0 && wc.host.pulls().length === 1, cfg.stdout);
+  cfg.check('the recorded policy names the configuration as the source of edits', has(read(wc.statePath), '"configuration"'), read(wc.statePath).slice(0, 1500));
+  const wc2 = D.makeWorld(D.repository({ configuration: '{ "delivery": { "edits": ["companion"] } }\n' }));
+  const cfgOver = cli('delivery: configuration file', 'a caller flag (`--edits native`) overrides the configuration', ['publish', ...dTarget(wc2, D.document([D.TYPO()])), '--edits', 'native', '--state', wc2.statePath, '--format', 'json'], opt(wc2));
+  cfgOver.check('exit 0, no companion, one inline suggestion', cfgOver.status === 0 && wc2.host.pulls().length === 0 && wc2.host.reviews()[0]?.request.comments.length === 1, cfgOver.stdout);
+  const wc3 = D.makeWorld(D.repository({ configuration: '{ "delivery": { "edits": ["native", "native"] } }\n' }));
+  const cfgBad = cli('delivery: configuration file', 'an invalid configuration blocks with delivery-configuration-invalid', ['validate', ...dTarget(wc3, D.document([D.TYPO()])), '--format', 'json'], opt(wc3));
+  const badMsg = '`.github/sarif-to-comment.json` on the default branch `main` cannot be used: `/delivery/edits/1` repeats `native`.';
+  cfgBad.check('exit 2, blocked', cfgBad.status === 2 && cfgBad.json()['status'] === 'blocked', cfgBad.stdout);
+  cfgBad.check(`exactly the contract message (§11.4): ${badMsg}`, JSON.stringify(((cfgBad.json()['diagnostics'] as Json[]) ?? []).map((d) => [d['code'], d['message']])) === JSON.stringify([['delivery-configuration-invalid', badMsg]]), cfgBad.json()['diagnostics']);
+
+  // Caller usage errors
+  const wu = D.makeWorld();
+  const u1 = cli('delivery: usage errors', 'an empty list entry is a usage error', ['validate', ...dTarget(wu, D.document([D.TYPO()])), '--edits', 'native,,review-body', '--format', 'json'], opt(wu));
+  u1.check('exit 1, usage-error, no request', u1.status === 1 && u1.json()['status'] === 'usage-error' && wu.host.log().length === 0, u1.stdout);
+  const u2 = cli('delivery: usage errors', 'an unknown preset is a usage error', ['validate', ...dTarget(wu, D.document([D.TYPO()])), '--delivery', 'everything', '--format', 'json'], opt(wu));
+  u2.check('exit 1, usage-error', u2.status === 1 && u2.json()['status'] === 'usage-error', u2.stdout);
+  const u3 = cli('delivery: usage errors', 'the retired --allow-suggestion-prs is unknown', ['validate', ...dTarget(wu, D.document([D.TYPO()])), '--allow-suggestion-prs'], opt(wu));
+  u3.check('exit 1, "unknown option --allow-suggestion-prs"', u3.status === 1 && has(u3.stderr, 'unknown option --allow-suggestion-prs'), u3.stderr);
+
+  // Library delivery option
+  const wlib = D.makeWorld();
+  const ld = lib('delivery: library', 'library: delivery preset original-pr reports the fallback; a repeated mechanism is a TypeError', 'delivery', String.raw`
+import assert from 'node:assert/strict';
+import { validateSarifReview, publishSarifReview } from 'sarif-to-comment';
+const input = { sarif: JSON.parse(process.env.SARIF), destination: { owner: 'octo', repo: 'widgets', pullNumber: 7 }, reviewedCommit: process.env.REVIEW_COMMIT, token: process.env.GH_TOKEN };
+await assert.rejects(validateSarifReview({ ...input, options: { delivery: { edits: ['native', 'native'] } } }), TypeError);
+const assessed = await validateSarifReview({ ...input, options: { delivery: { preset: 'original-pr' } } });
+assert.equal(assessed.status, 'ready');
+const outcome = await publishSarifReview({ ...input, statePath: process.env.REVIEW_STATE, options: { delivery: { preset: 'original-pr' } } });
+assert.equal(outcome.status, 'published');
+assert.deepEqual(outcome.diagnostics.map((d) => d.code), ['delivery-fallback']);
+process.stdout.write(JSON.stringify({ assessed: assessed.status, published: outcome.status, codes: outcome.diagnostics.map((d) => d.code) }));
+`, { world: wlib, token: dToken, env: { SARIF: JSON.stringify(D.document([D.RETRY()])), REVIEW_COMMIT: D.HEAD, REVIEW_STATE: wlib.statePath } });
+  ld.check('exit 0 (every in-script assertion held)', ld.status === 0, ld.stdout + ld.stderr);
+}
+
+// ===========================================================================
+// 6. native-batch, manual-group, mixed groups
+{
+  const w = D.makeWorld();
+  const s = cli('native-batch', 'an explicit group of three README edits under the defaults (native-batch)', ['publish', ...dTarget(w, D.document([D.TYPO('g'), D.SPELLING('g'), D.LICENSE('g')])), '--state', w.statePath, '--format', 'json'], opt(w));
+  s.check('exit 0, published, no diagnostics', s.status === 0 && codes(s.json()).length === 0, s.stdout);
+  const r = w.host.reviews()[0];
+  const note = '**Suggestion group `g`:** apply this suggestion together with the group\'s other suggestions, listed in the review body.';
+  s.check('three inline comments, each with the group note and a native suggestion block', r?.request.comments.length === 3 && r.request.comments.every((c) => has(c.body, note) && has(c.body, '```suggestion\n')), r?.request.comments.map((c) => c.body));
+  s.check('the body has the guidance "apply these 3 suggestions together, in one commit"', has(r?.request.body ?? '', '**Suggestion group `g`:** apply these 3 suggestions together, in one commit'), r?.request.body);
+  const w2 = D.makeWorld();
+  const multi = D.document([D.result({ text: 'Fix both lines.', location: D.at('README.md', 2), fixes: [D.linesFix('README.md', { 2: 'The widget client.', 3: 'Receive updates.' })] })]);
+  const m = cli('native-batch', 'one fix with two changes under the defaults: a native batch labelled "Fix with 2 changes"', ['publish', ...dTarget(w2, multi), '--state', w2.statePath, '--format', 'json'], opt(w2));
+  m.check('exit 0, two inline suggestions and the "Fix with 2 changes" guidance', m.status === 0 && w2.host.reviews()[0]?.request.comments.length === 2 && has(w2.host.reviews()[0]?.request.body ?? '', '**Fix with 2 changes:** apply these 2 suggestions together, in one commit'), w2.host.reviews()[0]?.request.body);
+
+  const w3 = D.makeWorld();
+  const mg = D.document([D.RETRY('m'), D.NOTE(3, 'm')]);
+  const blocked = cli('manual-group', 'a group that cannot be native, under the defaults: blocked (manual-group is never a default)', ['validate', ...dTarget(w3, mg), '--format', 'json'], opt(w3));
+  blocked.check('exit 2, delivery-unavailable', blocked.status === 2 && JSON.stringify(codes(blocked.json())) === '["delivery-unavailable"]', blocked.stdout);
+  const manual = cli('manual-group', '`--grouped-edits manual-group`: the group by hand in the review body', ['publish', ...dTarget(w3, mg), '--grouped-edits', 'manual-group', '--state', w3.statePath, '--format', 'json'], opt(w3));
+  manual.check('exit 0, no diagnostics', manual.status === 0 && codes(manual.json()).length === 0, manual.stdout);
+  const mb = w3.host.reviews()[0]?.request.body ?? '';
+  manual.check('guidance "apply these 2 changes together, by hand, in one commit" and two change labels', has(mb, '**Suggestion group `m`:** apply these 2 changes together, by hand, in one commit') && has(mb, '**Suggestion group `m` — change 1 of 2**') && has(mb, '**Suggestion group `m` — change 2 of 2**'), mb);
+  manual.check('no suggestion block, no inline comment', !mb.includes('```suggestion') && (w3.host.reviews()[0]?.request.comments.length ?? -1) === 0);
+
+  const w4 = D.makeWorld();
+  const mixed = D.document([
+    D.result({ text: 'Add a guide.', group: 'mix', location: D.at('docs/guide.md', 1), operation: D.create(0) }),
+    D.NOTE(5, 'mix'),
+    D.result({ text: 'Remove the obsolete file.', group: 'mix', location: D.at('obsolete.txt'), operation: D.remove(1) }),
+  ], [D.created('docs/guide.md', D.GUIDE), D.deleted('obsolete.txt')]);
+  const mx = cli('mixed groups', 'a group with a creation, an edit and a deletion under the defaults: the mixed manual group', ['publish', ...dTarget(w4, mixed), '--state', w4.statePath, '--format', 'json'], opt(w4));
+  mx.check('exit 0, no diagnostics', mx.status === 0 && codes(mx.json()).length === 0, mx.stdout);
+  const xb = w4.host.reviews()[0]?.request.body ?? '';
+  mx.check('guidance for 3 changes by hand, the new file content, the edit and the deletion', has(xb, '**Suggestion group `mix`:** apply these 3 changes together, by hand, in one commit') && has(xb, D.GUIDE.trimEnd()) && has(xb, 'Note 5, revised.') && has(xb, 'obsolete.txt'), xb);
+  const w5 = D.makeWorld();
+  const mxc = cli('mixed groups', 'the same mixed group with `--file-operations companion`: one companion holding all three', ['publish', ...dTarget(w5, mixed), '--file-operations', 'companion', '--state', w5.statePath, '--format', 'json'], opt(w5));
+  const p5 = w5.host.pulls()[0];
+  mxc.check('exit 0, one companion; guide created, note 5 revised, obsolete.txt absent', mxc.status === 0 && w5.host.pulls().length === 1 && fileText(w5.host, p5, 'docs/guide.md') === D.GUIDE && (fileText(w5.host, p5, 'notes.txt') ?? '').includes('Note 5, revised.') && fileText(w5.host, p5, 'obsolete.txt') === null, mxc.stdout);
+}
+
+// ===========================================================================
+// 7. Historical placement and association (R13.1, R17)
+{
+  const sarif = HP.document([
+    HP.finding('Line 2 context.', HP.SAMPLE, 2),
+    HP.finding('Reword line 6.', HP.SAMPLE, 6, { fixes: [HP.lineFix(HP.SAMPLE, 6, 'Line 06: suggested.')] }),
+  ]);
+  const flags = (w: HP.IWorld, commit: string): string[] => ['--sarif', writeSarif(w.root, 'review.sarif', sarif), '--repo', `${HP.OWNER}/${HP.REPO}`, '--pull', String(HP.PULL), '--commit', commit];
+  const w = HP.makeWorld('discarded');
+  const v = cli('historical placement', 'validate at a commit a force-push discarded: ready, no association note', ['validate', ...flags(w, HP.DISCARDED_R), '--format', 'json'], { world: w, token: HP.TOKEN });
+  v.check('exit 0, ready, no diagnostics', v.status === 0 && v.json()['status'] === 'ready' && codes(v.json()).length === 0, v.stdout);
+  const p = cli('historical placement', 'publish at the discarded commit', ['publish', ...flags(w, HP.DISCARDED_R), '--state', w.statePath, '--format', 'json'], { world: w, token: HP.TOKEN });
+  const r = w.host.reviews()[0];
+  p.check('exit 0, published', p.status === 0 && p.json()['status'] === 'published', p.stdout);
+  p.check('the review is pinned to the discarded commit (commit_id R, not the head)', r?.request.commit_id === HP.DISCARDED_R);
+  p.check('two inline comments on RIGHT lines 2 and 6; line 6 carries the native suggestion', JSON.stringify(r?.request.comments.map((c) => [c.path, c.side, c.line])) === JSON.stringify([[HP.SAMPLE, 'RIGHT', 2], [HP.SAMPLE, 'RIGHT', 6]]) && (r?.request.comments[1]?.body ?? '').endsWith('```suggestion\nLine 06: suggested.\n```'), r?.request.comments);
+  const wu = HP.makeWorld('discarded');
+  const u = cli('historical placement: unrelated commit blocked', 'publish at a commit outside the pull request: blocked', ['publish', ...flags(wu, HP.UNRELATED), '--state', wu.statePath, '--format', 'json'], { world: wu, token: HP.TOKEN });
+  u.check('exit 2, blocked, reviewed-commit-not-in-pull-request', u.status === 2 && u.json()['status'] === 'blocked' && JSON.stringify(codes(u.json())) === '["reviewed-commit-not-in-pull-request"]', u.stdout);
+  u.check('nothing written, no state file', nonGetWrites(wu.host).length === 0 && !fs.existsSync(wu.statePath), nonGetWrites(wu.host));
+  const wa = HP.makeWorld('ancestor');
+  const a = cli('historical placement', 'validate at an ancestor of the head: ready', ['validate', ...flags(wa, HP.ANCESTOR_R), '--format', 'json'], { world: wa, token: HP.TOKEN });
+  a.check('exit 0, ready', a.status === 0 && a.json()['status'] === 'ready', a.stdout);
+}
+
+// ===========================================================================
+// 8. Companion fidelity verdicts after a rewritten history
+{
+  const flags = (w: RH.IWorld, parts: Parameters<typeof RH.documentWith>[0]): string[] => ['--sarif', writeSarif(w.root, 'review.sarif', RH.documentWith(parts)), '--repo', `${RH.OWNER}/${RH.REPO}`, '--pull', String(RH.PULL), '--commit', RH.REVIEWED];
+  const wu = RH.makeWorld(RH.DROPPED);
+  const un = cli('companion fidelity: unfaithful', 'head D (dropped the reviewed change): `--file-operations companion` deletion projected unfaithful, blocked', ['publish', ...flags(wu, ['delete', 'remark']), '--file-operations', 'companion', '--state', wu.statePath, '--format', 'json'], { world: wu, token: RH.TOKEN });
+  un.check('exit 2, delivery-unavailable', un.status === 2 && JSON.stringify(codes(un.json())) === '["delivery-unavailable"]', un.stdout);
+  un.check('the obstacle says merging would bring back content the head no longer has', has(un.stdout, 'would bring back content the head no longer has'), un.stdout);
+  un.check('nothing created', wu.host.pulls().length === 0 && wu.host.reviews().length === 0);
+  const wf = RH.makeWorld(RH.AMENDED);
+  const fa = cli('companion fidelity: faithful', 'head C1′ (amended): a creation projected faithful, created with no warning', ['publish', ...flags(wf, ['create', 'remark']), '--file-operations', 'companion', '--state', wf.statePath, '--format', 'json'], { world: wf, token: RH.TOKEN });
+  fa.check('exit 0, published, no diagnostics, one companion', fa.status === 0 && codes(fa.json()).length === 0 && wf.host.pulls().length === 1, fa.stdout);
+  fa.check('the proposal commit\'s parent is the reviewed commit (never re-applied)', JSON.stringify(RH.proposalCommit(wf, wf.host.pulls()[0]?.head ?? '').parents) === JSON.stringify([RH.REVIEWED]));
+  fa.check('the plan is version 3 and records a faithful projection onto the head', (() => { const plan = JSON.parse(read(wf.statePath)) as Json; const proj = plan['projection'] as Json | undefined; return plan['version'] === 3 && proj?.['head'] === RH.AMENDED && JSON.stringify(proj['suggestions']) === '[{"verdict":"faithful","conflicts":[]}]'; })(), read(wf.statePath).slice(0, 2000));
+  const wc = RH.makeWorld(RH.AMENDED, { companion: { mergeable: { '101': { value: false } } } });
+  const co = cli('companion fidelity: conflicts', 'head C1′: a group touching the reviewed lines projected to conflict, created with a warning', ['publish', ...flags(wc, ['reword', 'remark']), '--grouped-edits', 'companion', '--state', wc.statePath, '--format', 'json'], { world: wc, token: RH.TOKEN });
+  co.check('exit 0, one companion-conflicts-at-head warning', co.status === 0 && JSON.stringify(codes(co.json())) === '["companion-conflicts-at-head"]', co.stdout);
+  co.check('GitHub\'s mergeable reported as observed: conflicting', JSON.stringify(co.json()['suggestions']).includes('"mergeable":"conflicting"'), co.json()['suggestions']);
+  co.check('the review stays pinned to the reviewed commit', wc.host.reviews()[0]?.request.commit_id === RH.REVIEWED);
+}
+
+// ===========================================================================
+// 9. The companion index and --existing-companion
+{
+  const earlier = (number: number, original = D.PULL): IStoredPull => {
+    const id = `earlier-${String(number)}`;
+    const marker = `<!-- suggestion-pr {"version":1,"original":{"owner":"${D.OWNER}","repo":"${D.REPO}","pullNumber":${String(original)}},"reviewedCommit":"${D.BASE}","id":"${id}","batch":"earlier"} -->`;
+    return { number, title: 'Suggestion for #7: edit notes.txt', body: `Suggested in a review of #${String(original)}.\n\n${marker}`, head: `suggestion-pr/${String(original)}/${id}`, base: D.HEAD_REF, draft: false, state: 'open', merged: false, labels: ['suggestion-pr'], authorId: 9001 };
+  };
+  const sarif = D.document([D.result({ text: 'Add a guide.', operation: D.create(0) })], [D.created('docs/guide.md', D.GUIDE)]);
+  const w = D.makeWorld();
+  w.host.seedPulls([earlier(97), earlier(98, 8)]);
+  const refused = cli('--existing-companion', '`--existing-companion 98` whose marker names #8: blocked', ['validate', ...dTarget(w, sarif), '--file-operations', 'companion', '--existing-companion', '98', '--format', 'json'], opt(w));
+  refused.check('exit 2, companion-not-reusable with the contract message', refused.status === 2 && JSON.stringify(((refused.json()['diagnostics'] as Json[]) ?? []).map((d) => [d['code'], d['message']])) === JSON.stringify([['companion-not-reusable', '#98 cannot be listed as an existing companion of #7: its suggestion marker names #8, not #7.']]), refused.stdout);
+  const pub = cli('companion index', 'publish creating one companion and reusing #97: the body begins with the index', ['publish', ...dTarget(w, sarif), '--file-operations', 'companion', '--existing-companion', '97', '--state', w.statePath, '--format', 'json'], opt(w));
+  pub.check('exit 0, one companion-reused note', pub.status === 0 && JSON.stringify(codes(pub.json())) === '["companion-reused"]', pub.stdout);
+  const created = w.host.pulls().filter((p) => p.number !== 97 && p.number !== 98);
+  const n = created[0]?.number ?? 0;
+  const index = ['**Companion pull requests of this review:**', '', `- [#${String(n)}](${D.pullUrl(n)}): \`Suggestion for #7: create docs/guide.md\` — created with this review`, `- [#97](${D.pullUrl(97)}): \`Suggestion for #7: edit notes.txt\` — reused; it was open when this review was prepared`].join('\n');
+  pub.check('exactly one created; the review body begins with the index (contract §2.13.3)', created.length === 1 && (w.host.reviews()[0]?.request.body ?? '').startsWith(`${index}\n\n---\n\n**Suggestion pull request:** [#${String(n)}]`), w.host.reviews()[0]?.request.body);
+  pub.check('#97 was not changed', JSON.stringify(w.host.pulls().find((p) => p.number === 97)) === JSON.stringify(earlier(97)));
+  const retry = cli('companion index', 'a retry reports the same note and sends nothing', ['publish', ...dTarget(w, sarif), '--file-operations', 'companion', '--existing-companion', '97', '--state', w.statePath, '--format', 'json'], opt(w));
+  retry.check('exit 0, same diagnostics, one review', retry.status === 0 && JSON.stringify(retry.json()['diagnostics']) === JSON.stringify(pub.json()['diagnostics']) && w.host.reviews().length === 1, retry.stdout);
+  const wo = D.makeWorld();
+  wo.host.seedPulls([earlier(97)]);
+  const only = cli('--existing-companion', 'defaults (no companion created) listing #97: the index alone', ['publish', ...dTarget(wo, D.document([D.TYPO()])), '--existing-companion', '97', '--state', wo.statePath, '--format', 'json'], opt(wo));
+  only.check('exit 0; body begins with the index listing #97 as reused; no companion-options-unused', only.status === 0 && (wo.host.reviews()[0]?.request.body ?? '').startsWith(`**Companion pull requests of this review:**\n\n- [#97](${D.pullUrl(97)})`) && !codes(only.json()).includes('companion-options-unused'), [only.stdout, wo.host.reviews()[0]?.request.body]);
+}
+
+// ===========================================================================
+// 10. Presentation callbacks through the library
+{
+  const w = D.makeWorld();
+  const refusedWorld = D.makeWorld();
+  const sarif = D.document([D.result({ text: 'Add a guide.', location: D.at('docs/guide.md', 1), operation: D.create(0) })], [D.created('docs/guide.md', D.GUIDE)]);
+  const source = String.raw`
+import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
+import { publishSarifReview, validateSarifReview } from 'sarif-to-comment';
+const tick = String.fromCharCode(96);
+const presentation = {
+  finding: (c) => c.message + ' (' + c.attribution + ')',
+  lifecycleNote: (c) => '**Accepting:** a ' + (c.ready ? 'ready' : 'draft') + ' proposal into ' + tick + c.headRef + tick + ' for #' + c.pullNumber + '.',
+  companionIndex: (c) => c.companions.map((x) => '* ' + x.link + ' (' + x.origin + ')').join('\n'),
+};
+const input = { sarif: JSON.parse(process.env.SARIF), destination: { owner: 'octo', repo: 'widgets', pullNumber: 7 }, reviewedCommit: process.env.REVIEW_COMMIT, token: process.env.GH_TOKEN };
+const options = { delivery: { fileOperations: ['companion'] }, presentation };
+const assessed = await validateSarifReview({ ...input, options });
+assert.equal(assessed.status, 'ready', assessed.markdown);
+const outcome = await publishSarifReview({ ...input, statePath: process.env.REVIEW_STATE, options });
+assert.equal(outcome.status, 'published', outcome.markdown);
+process.stdout.write(JSON.stringify({ assessed: assessed.status, published: outcome.status, suggestions: outcome.suggestions.length }));
+`;
+  const s = lib('presentation callbacks', 'library: finding, lifecycleNote and companionIndex callbacks shape the companion and the review', 'presentation', source, { world: w, token: dToken, env: { SARIF: JSON.stringify(sarif), REVIEW_COMMIT: D.HEAD, REVIEW_STATE: w.statePath } });
+  s.check('exit 0 (in-script assertions held)', s.status === 0, s.stdout + s.stderr);
+  const pull = w.host.pulls()[0];
+  s.check('the companion description carries the custom lifecycle note and finding, and still ends with its marker', has(pull?.body ?? '', '**Accepting:** a draft proposal into `feature/retry` for #7.') && has(pull?.body ?? '', 'Add a guide. (Review bot 1.0.0)') && RH.SUGGESTION_MARKER.test(pull?.body ?? ''), pull?.body);
+  const n = pull?.number ?? 0;
+  s.check('the review body begins with the custom index', (w.host.reviews()[0]?.request.body ?? '').startsWith(`* [#${String(n)}](${D.pullUrl(n)}) (created)\n\n---\n\n`), w.host.reviews()[0]?.request.body);
+  const refused = lib('presentation callbacks', 'library: a lifecycleNote leaving an HTML comment open is refused with a TypeError before any write', 'presentation-refused', String.raw`
+import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
+import { publishSarifReview } from 'sarif-to-comment';
+const input = { sarif: JSON.parse(process.env.SARIF), destination: { owner: 'octo', repo: 'widgets', pullNumber: 7 }, reviewedCommit: process.env.REVIEW_COMMIT, token: process.env.GH_TOKEN, statePath: process.env.REVIEW_STATE };
+await assert.rejects(
+  publishSarifReview({ ...input, options: { delivery: { fileOperations: ['companion'] }, presentation: { lifecycleNote: () => 'Accept it.\n\n<!--' } } }),
+  (error) => error instanceof TypeError && /options\.presentation\.lifecycleNote returned Markdown that leaves an HTML <!-- construct open/.test(error.message),
+);
+assert.equal(existsSync(process.env.REVIEW_STATE), false);
+process.stdout.write('refused');
+`, { world: refusedWorld, token: dToken, env: { SARIF: JSON.stringify(sarif), REVIEW_COMMIT: D.HEAD, REVIEW_STATE: refusedWorld.statePath } });
+  refused.check('exit 0 (TypeError asserted, no state file)', refused.status === 0 && refused.stdout === 'refused', refused.stdout + refused.stderr);
+  refused.check('nothing written to the host', nonGetWrites(refusedWorld.host).length === 0, nonGetWrites(refusedWorld.host));
+}
+
+// ===========================================================================
+// 11. close-suggestion-prs
+{
+  const TOKEN = 'ghp_U8_CLEANUP_installed_0123456789';
+  const OWNER = 'octo';
+  const REPO = 'cleanup-uat';
+  const HEAD = 'feedfeedfeedfeedfeedfeedfeedfeedfeedfeed';
+  const LABEL = 'uat-suggestion';
+  const idOf = (n: number): string => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+  const suggestion = (n: number, original: number, authorId = 4242): IStoredPull => ({
+    number: n, title: `Suggestion for #${String(original)}`, head: `suggestion-pr/${String(original)}/${idOf(n)}`, base: `feature-${String(original)}`,
+    body: `Suggested in a review of #${String(original)} at commit ${HEAD}.\n\n<!-- suggestion-pr {"version":1,"original":{"owner":"${OWNER}","repo":"${REPO}","pullNumber":${String(original)}},"reviewedCommit":"${HEAD}","id":"${idOf(n)}","batch":"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"} -->`,
+    draft: true, state: 'open', merged: false, labels: [LABEL], authorId,
+  });
+  const ordinary = (n: number): IStoredPull => ({ number: n, title: `Fix ${String(n)}`, body: 'Fixes a bug.', head: `fix/${String(n)}`, base: 'main', draft: false, state: 'open', merged: false, labels: ['bug'], authorId: 99 });
+  const orig = (n: number, state: 'open' | 'closed'): IStoredPull => ({ number: n, title: `Original ${String(n)}`, body: '', head: `feature-${String(n)}`, base: 'main', draft: false, state, merged: false, labels: [], authorId: 1 });
+  const root = workDir('cleanup');
+  const repository: IHttpRepository = {
+    destination: { owner: OWNER, repo: REPO, pullNumber: 1 }, commits: { base: HEAD, head: HEAD },
+    snapshots: { [HEAD]: { 'README.md': ['# Cleanup\n'], '.github/suggestion-prs.json': [`{ "label": "${LABEL}" }\n`] } }, pullFiles: [], labels: [LABEL],
+  };
+  FakeHttpGitHub.create(path.join(root, 'host'), {}, repository);
+  const host = new FakeHttpGitHub(path.join(root, 'host'), TOKEN);
+  host.seedPulls([orig(36, 'open'), orig(37, 'closed'), suggestion(38, 36), suggestion(39, 36), suggestion(40, 37), suggestion(41, 37, 99), ...Array.from({ length: 25 }, (_, i) => ordinary(100 + i))]);
+  const o: ICliOptions = { world: { host }, token: TOKEN };
+  const base = ['close-suggestion-prs', '--repo', `${OWNER}/${REPO}`];
+  const states = (): string => JSON.stringify(Object.fromEntries(host.pulls().filter((p) => p.number < 100).map((p) => [p.number, p.state])));
+  const before = states();
+  const res = (doc: Json): unknown => ((doc['suggestions'] ?? []) as Json[]).map((s) => [s['number'], s['result']]);
+  const dry = cli('close-suggestion-prs', '--dry-run: reads and verifies, closes nothing', [...base, '--dry-run', '--format', 'json'], o);
+  dry.check('exit 0, complete, owner me', dry.status === 0 && dry.json()['status'] === 'complete' && dry.json()['owner'] === 'me', dry.stdout);
+  dry.check('38, 39 left open (original open); 40 would close; 41 other-owner', JSON.stringify(res(dry.json())) === JSON.stringify([[38, 'left-open'], [39, 'left-open'], [40, 'would-close'], [41, 'other-owner']]), res(dry.json()));
+  dry.check('no pull request changed', states() === before && host.log().every((r) => r.method !== 'PATCH'));
+  const all = cli('close-suggestion-prs', '--owner all --dry-run: 41 would close too', [...base, '--owner', 'all', '--dry-run', '--format', 'json'], o);
+  all.check('exit 0; 40 and 41 would close', all.status === 0 && JSON.stringify(res(all.json())) === JSON.stringify([[38, 'left-open'], [39, 'left-open'], [40, 'would-close'], [41, 'would-close']]), res(all.json()));
+  const lim = cli('close-suggestion-prs', '--max-candidates 2: more candidates than the limit, nothing checked', [...base, '--max-candidates', '2', '--format', 'json'], o);
+  lim.check('exit 1, too-many-candidates, nothing closed', lim.status === 1 && lim.json()['status'] === 'too-many-candidates' && states() === before, lim.stdout);
+  const u1 = cli('close-suggestion-prs', 'usage error: --max-candidates with --original', [...base, '--original', '37', '--max-candidates', '10', '--format', 'json'], o);
+  u1.check('exit 1, usage-error', u1.status === 1 && u1.json()['status'] === 'usage-error', u1.stdout);
+  const reqs = host.log().length;
+  const u2 = cli('close-suggestion-prs', 'usage error: --force without --label', [...base, '--force', '--format', 'json'], o);
+  u2.check('exit 1, usage-error "--force requires --label (only a --label sweep stops early)", no request', u2.status === 1 && u2.json()['message'] === '--force requires --label (only a --label sweep stops early)' && host.log().length === reqs, u2.stdout);
+  const wrong = cli('close-suggestion-prs', '--label bug: the label does not mark suggestion pull requests (early exit)', [...base, '--label', 'bug', '--format', 'json'], o);
+  wrong.check('exit 2, label-not-suggestion-prs', wrong.status === 2 && wrong.json()['status'] === 'label-not-suggestion-prs', wrong.stdout);
+  const forced = cli('close-suggestion-prs', '--label bug --force --max-candidates 10: --force lifts only the early exit; the limit still applies', [...base, '--label', 'bug', '--force', '--max-candidates', '10', '--format', 'json'], o);
+  forced.check('exit 1, too-many-candidates', forced.status === 1 && forced.json()['status'] === 'too-many-candidates', forced.stdout);
+  const real = cli('close-suggestion-prs', 'cleanup (no --dry-run): closes only this account\'s suggestion of the closed original', [...base, '--format', 'json'], o);
+  real.check('exit 0; 40 closed, 41 other-owner left open', real.status === 0 && JSON.stringify(res(real.json())) === JSON.stringify([[38, 'left-open'], [39, 'left-open'], [40, 'closed'], [41, 'other-owner']]), res(real.json()));
+  real.check('exactly one PATCH (the close), and no branch deleted', host.log().filter((r) => r.method === 'PATCH').length === 1 && host.log().every((r) => r.method !== 'DELETE'));
+  const tgt = cli('close-suggestion-prs', '--original 37: targeted discovery', [...base, '--original', '37', '--dry-run', '--format', 'json'], o);
+  tgt.check('exit 0; 40 already-closed, 41 other-owner', tgt.status === 0 && JSON.stringify(res(tgt.json())) === JSON.stringify([[40, 'already-closed'], [41, 'other-owner']]), res(tgt.json()));
+  const human = cli('close-suggestion-prs', 'human output of a dry run', [...base, '--dry-run', '--color', 'never'], o);
+  human.check('exit 0; Markdown on stdout says closing never deletes a branch', human.status === 0 && has(human.stdout, 'Closing never deletes a branch'), human.stdout);
+  const toon = cli('every --format', 'close-suggestion-prs --format toon', [...base, '--dry-run', '--format', 'toon'], o);
+  toon.check('exit 0, TOON (not JSON) naming the status', toon.status === 0 && !toon.stdout.trimStart().startsWith('{') && has(toon.stdout, 'status: complete'), toon.stdout);
+  const l = lib('close-suggestion-prs', 'library: closeSuggestionPullRequests dry run; option misuse is refused', 'cleanup', String.raw`
+import assert from 'node:assert/strict';
+import { closeSuggestionPullRequests } from 'sarif-to-comment';
+const input = { repository: { owner: 'octo', repo: 'cleanup-uat' }, token: process.env.GH_TOKEN };
+const dry = await closeSuggestionPullRequests({ ...input, dryRun: true });
+assert.equal(dry.status, 'complete');
+assert.deepEqual(dry.suggestions.map((s) => [s.number, s.result]), [[38, 'left-open'], [39, 'left-open'], [41, 'other-owner']]);
+await assert.rejects(closeSuggestionPullRequests({ ...input, force: true }), /force applies only to a label sweep, so it requires label/);
+await assert.rejects(closeSuggestionPullRequests({ ...input, originalPullNumber: 37, maxCandidates: 10 }), TypeError);
+process.stdout.write(JSON.stringify(dry.counts));
+`, o);
+  l.check('exit 0 (in-script assertions held)', l.status === 0, l.stdout + l.stderr);
+}
+
+// ===========================================================================
+// 12. Every --format: human with and without colour, json, toon
+{
+  const w = D.makeWorld();
+  const args = ['validate', ...dTarget(w, D.document([D.RETRY()])), '--edits', 'native,review-body'];
+  const never = cli('every --format', 'human, --color never', [...args, '--color', 'never'], opt(w));
+  never.check('exit 0; stdout Markdown with the warning headline', never.status === 0 && never.stdout.startsWith('## Ready to publish\n\n**Ready to publish with 1 warning:** A proposal is delivered by a later mechanism of its delivery list.\n'), never.stdout);
+  never.check('stderr: the uncoloured diagnostics block, no ANSI escapes', never.stderr.startsWith('▲ warning  A proposal is delivered by a later mechanism of its delivery list  [delivery-fallback]\n') && !never.stderr.includes('\u001b['), never.stderr);
+  const always = cli('every --format', 'human, --color always', [...args, '--color', 'always'], opt(w));
+  always.check('exit 0; stderr has ANSI colour escapes; stdout identical to --color never', always.status === 0 && always.stderr.includes('\u001b[') && always.stdout === never.stdout, JSON.stringify(always.stderr.slice(0, 300)));
+  const auto = cli('every --format', 'human, --color auto (not a terminal)', args, opt(w));
+  auto.check('no escapes when stderr is not a terminal', auto.status === 0 && !auto.stderr.includes('\u001b['), JSON.stringify(auto.stderr.slice(0, 200)));
+  const forced = cli('every --format', 'human, --color auto with FORCE_COLOR=1', args, { ...opt(w), env: { FORCE_COLOR: '1' } });
+  forced.check('FORCE_COLOR colours it', forced.status === 0 && forced.stderr.includes('\u001b['), JSON.stringify(forced.stderr.slice(0, 200)));
+  const noColor = cli('every --format', 'human, --color always with NO_COLOR=1 (the flag decides first)', [...args, '--color', 'always'], { ...opt(w), env: { NO_COLOR: '1' } });
+  noColor.check('--color always wins over NO_COLOR: escapes present (diagnostics.md colour precedence)', noColor.status === 0 && noColor.stderr.includes('\u001b['), JSON.stringify(noColor.stderr.slice(0, 200)));
+  const noColorAuto = cli('every --format', 'human, --color auto with NO_COLOR=1 and FORCE_COLOR=1 (FORCE_COLOR wins, as in Node)', args, { ...opt(w), env: { NO_COLOR: '1', FORCE_COLOR: '1' } });
+  noColorAuto.check('FORCE_COLOR overrides NO_COLOR: escapes present', noColorAuto.status === 0 && noColorAuto.stderr.includes('\u001b['), JSON.stringify(noColorAuto.stderr.slice(0, 200)));
+  const plainNoColor = cli('every --format', 'human, --color auto with NO_COLOR=1 only', args, { ...opt(w), env: { NO_COLOR: '1' } });
+  plainNoColor.check('no escapes', plainNoColor.status === 0 && !plainNoColor.stderr.includes('\u001b['), JSON.stringify(plainNoColor.stderr.slice(0, 200)));
+  const jsonColour = cli('every --format', '--format json --color always: JSON never contains colour', [...args, '--format', 'json', '--color', 'always'], opt(w));
+  jsonColour.check('exit 0, no escapes on stdout or stderr', jsonColour.status === 0 && !jsonColour.stdout.includes('\u001b[') && !jsonColour.stderr.includes('\u001b['), jsonColour.stdout.slice(0, 200));
+  const json = cli('every --format', '--format json', [...args, '--format', 'json'], opt(w));
+  json.check('exit 0; one JSON document: command validate, status ready, delivery-fallback warning', json.status === 0 && json.json()['command'] === 'validate' && json.json()['status'] === 'ready' && JSON.stringify(codes(json.json())) === '["delivery-fallback"]', json.stdout);
+  json.check('stderr empty in json format', json.stderr === '', json.stderr);
+  const toon = cli('every --format', '--format toon', [...args, '--format', 'toon'], opt(w));
+  toon.check('exit 0; not JSON; stderr empty', toon.status === 0 && !toon.stdout.trimStart().startsWith('{') && toon.stderr === '', toon.stdout.slice(0, 300));
+  const decode = lib('every --format', 'decode the TOON output with the installed @toon-format/toon and compare it with the JSON output', 'toon-decode', String.raw`
+import assert from 'node:assert/strict';
+import { decode } from '@toon-format/toon';
+assert.deepEqual(decode(process.env.TOON), JSON.parse(process.env.JSON_DOC));
+process.stdout.write('equal');
+`, { env: { TOON: toon.stdout, JSON_DOC: json.stdout } });
+  decode.check('TOON decodes to exactly the JSON document', decode.status === 0 && decode.stdout === 'equal', decode.stdout + decode.stderr);
+  const dir = workDir('formats');
+  const f = writeSarif(dir, 'r.sarif', D.document([D.TYPO('g'), D.SPELLING('g')]));
+  for (const fmt of ['human', 'json', 'toon']) {
+    const s = cli('every --format', `inspect --format ${fmt}`, ['inspect', '--sarif', f, '--format', fmt, '--color', 'never']);
+    s.check('exit 0 and the group appears', s.status === 0 && has(s.stdout, 'g'), s.stdout.slice(0, 200));
+  }
+  const usage = cli('every --format', 'a usage error in json format is still one JSON document on stdout', ['inspect', '--format', 'json']);
+  usage.check('exit 1, usage-error document', usage.status === 1 && usage.json()['status'] === 'usage-error', usage.stdout);
+}
+
+// ===========================================================================
+// Write the evidence
+fs.mkdirSync(path.join(OUT, 'steps'), { recursive: true });
+const slug = (t: string): string => t.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
+const summary = STEPS.map((s) => {
+  const file = `steps/${s.id}-${slug(s.title)}.txt`;
+  const text = [
+    `# ${s.id} ${s.title}`,
+    `feature: ${s.feature}`,
+    '',
+    `$ ${s.command}`,
+    `exit status: ${String(s.status)}`,
+    '',
+    'checks:',
+    ...s.checks.map((c) => `  ${c.pass ? 'PASS' : 'FAIL'}  ${c.name}${c.detail === undefined ? '' : `\n        ${c.detail}`}`),
+    ...(s.script === undefined ? [] : ['', '--- script', redact(s.script).trim()]),
+    '',
+    '--- stdout',
+    redact(s.stdout),
+    '--- stderr',
+    redact(s.stderr),
+    ...(s.inputs === undefined ? [] : ['--- input SARIF (as given to --sarif, before the command)', redact(s.inputs)]),
+    ...(s.observed === undefined ? [] : ['--- fake host after the command (writes so far, review requests, pull requests)', redact(s.observed)]),
+  ].join('\n');
+  fs.writeFileSync(path.join(OUT, file), `${text.trimEnd()}\n`);
+  return { id: s.id, feature: s.feature, title: s.title, command: s.command, exit: s.status, pass: s.checks.every((c) => c.pass), checks: s.checks.map((c) => ({ name: c.name, pass: c.pass })), file };
+});
+fs.writeFileSync(path.join(OUT, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`);
+const failed = summary.filter((s) => !s.pass);
+process.stdout.write(`${String(summary.length)} steps, ${String(summary.reduce((n, s) => n + s.checks.length, 0))} checks; failed steps: ${String(failed.length)}\n`);
+for (const s of failed) process.stdout.write(`FAIL ${s.id} ${s.title}: ${s.checks.filter((c) => !c.pass).map((c) => c.name).join('; ')}\n`);

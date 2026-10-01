@@ -1,0 +1,31 @@
+{
+  "command": "validate",
+  "status": "blocked",
+  "problems": [
+    {
+      "message": "Commit 58d916eb43f1a4ef96670632f97fd25737c75df2 is not part of mike-north/doc-linter#105: it is not the pull request's head d17de751d8cb4f72fa8558b9522c3f76f212e03c or an ancestor of it, and no force-push of the pull request's branch replaced a head that contains it. GitHub would accept a review at that commit, so nothing was prepared or written.",
+      "severity": "error",
+      "code": "reviewed-commit-not-in-pull-request",
+      "title": "The reviewed commit does not belong to the pull request",
+      "subject": "mike-north/doc-linter#105",
+      "remedies": [
+        "Check the reviewed commit: review a commit of this pull request.",
+        "Check the pull request number."
+      ]
+    }
+  ],
+  "message": "## Review blocked\n\nNothing was published and no publication state was written.\n\n**Review blocked:** 1 problem must be resolved before publication; nothing was published.\n\n- `reviewed-commit-not-in-pull-request`: Commit 58d916eb43f1a4ef96670632f97fd25737c75df2 is not part of mike-north/doc-linter#105: it is not the pull request's head d17de751d8cb4f72fa8558b9522c3f76f212e03c or an ancestor of it, and no force-push of the pull request's branch replaced a head that contains it. GitHub would accept a review at that commit, so nothing was prepared or written.",
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "reviewed-commit-not-in-pull-request",
+      "title": "The reviewed commit does not belong to the pull request",
+      "message": "Commit 58d916eb43f1a4ef96670632f97fd25737c75df2 is not part of mike-north/doc-linter#105: it is not the pull request's head d17de751d8cb4f72fa8558b9522c3f76f212e03c or an ancestor of it, and no force-push of the pull request's branch replaced a head that contains it. GitHub would accept a review at that commit, so nothing was prepared or written.",
+      "subject": "mike-north/doc-linter#105",
+      "remedies": [
+        "Check the reviewed commit: review a commit of this pull request.",
+        "Check the pull request number."
+      ]
+    }
+  ]
+}

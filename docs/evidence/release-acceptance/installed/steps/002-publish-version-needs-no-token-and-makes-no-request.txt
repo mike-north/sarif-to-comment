@@ -1,0 +1,13 @@
+# 002 `publish --version` needs no token and makes no request
+feature: --version
+
+$ sarif-to-comment publish --version
+exit status: 0
+
+checks:
+  PASS  exit 0 and the same version
+
+--- stdout
+0.2.1
+
+--- stderr

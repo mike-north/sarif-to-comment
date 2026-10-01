@@ -1,0 +1,44 @@
+# 047 library: delivery preset original-pr reports the fallback; a repeated mechanism is a TypeError
+feature: delivery: library
+
+$ GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-FiUpJO/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts SARIF='{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"Review…(653 chars)' REVIEW_COMMIT=feedfeedfeedfeedfeedfeedfeedfeedfeedfeed REVIEW_STATE=<tmp>/delivery-composition-FiUpJO/state/review.json node <consumer>/u8-delivery.mjs
+exit status: 0
+
+checks:
+  PASS  the token never appears in stdout or stderr
+  PASS  exit 0 (every in-script assertion held)
+
+--- script
+import assert from 'node:assert/strict';
+import { validateSarifReview, publishSarifReview } from 'sarif-to-comment';
+const input = { sarif: JSON.parse(process.env.SARIF), destination: { owner: 'octo', repo: 'widgets', pullNumber: 7 }, reviewedCommit: process.env.REVIEW_COMMIT, token: process.env.GH_TOKEN };
+await assert.rejects(validateSarifReview({ ...input, options: { delivery: { edits: ['native', 'native'] } } }), TypeError);
+const assessed = await validateSarifReview({ ...input, options: { delivery: { preset: 'original-pr' } } });
+assert.equal(assessed.status, 'ready');
+const outcome = await publishSarifReview({ ...input, statePath: process.env.REVIEW_STATE, options: { delivery: { preset: 'original-pr' } } });
+assert.equal(outcome.status, 'published');
+assert.deepEqual(outcome.diagnostics.map((d) => d.code), ['delivery-fallback']);
+process.stdout.write(JSON.stringify({ assessed: assessed.status, published: outcome.status, codes: outcome.diagnostics.map((d) => d.code) }));
+
+--- stdout
+{"assessed":"ready","published":"published","codes":["delivery-fallback"]}
+--- stderr
+
+--- fake host after the command (writes so far, review requests, pull requests)
+{
+  "writesSoFar": [
+    "POST /repos/octo/widgets/pulls/7/reviews"
+  ],
+  "reviews": [
+    {
+      "id": 5000,
+      "state": "PENDING",
+      "request": {
+        "commit_id": "feedfeedfeedfeedfeedfeedfeedfeedfeedfeed",
+        "body": "**Proposed edit, to make by hand:** replace [src/client.ts line 2 at feedfee](https://github.com/octo/widgets/blob/feedfeedfeedfeedfeedfeedfeedfeedfeedfeed/src/client.ts?plain=1#L2) with:\n\n```\n  const response = await request(id).catch(() => request(id));\n```\n\n**Source:** [src/client.ts line 2 at feedfee](https://github.com/octo/widgets/blob/feedfeedfeedfeedfeedfeedfeedfeedfeedfeed/src/client.ts?plain=1#L2)\n\n```\n  const response = await request(id);\n```\n\nRetry once on timeout.\n\n<sub>— Review bot 1.0.0</sub>\n\n<!-- sarif-to-comment:review:e167be33-fe83-41d2-8bd2-94ab6e728d95 -->",
+        "comments": []
+      }
+    }
+  ],
+  "pulls": []
+}

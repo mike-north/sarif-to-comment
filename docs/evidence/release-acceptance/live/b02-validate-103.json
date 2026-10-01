@@ -1,0 +1,21 @@
+{
+  "command": "validate",
+  "status": "ready",
+  "message": "## Ready to publish\n\n**Ready to publish with 1 warning:** A proposal is delivered by a later mechanism of its delivery list.\n\nThe complete document can be published faithfully to mike-north/doc-linter#103 at commit `58d916eb43f1a4ef96670632f97fd25737c75df2`.\n\nPublication would also create 1 draft suggestion pull request into `sarif-u8-acceptance-20261001-into-main`, labeled `suggestion-pr`.\n\n**Review prepared:** 5 inline comment(s) and 3 general section(s) for commit `58d916eb43f1a4ef96670632f97fd25737c75df2`.\n\n**Warnings:**\n\n- `delivery-fallback` at `/runs/0/results/7`: The group `readme-pointer` is delivered as `companion`. `groupedEdits` is `[native-batch, companion]`, set by the caller (`--grouped-edits`, `delivery.groupedEdits`), and the mechanisms listed before it are unavailable:\n\n- `native-batch`: The edit of `README.md` line 5: Lines 5-5 of README.md cannot carry a native suggestion (file-not-in-diff).\n\nNothing was published and no publication state was written.\n\nNo pending review of this account was found on the pull request. This is not an approval: publication repeats every check against the pull request as it is then. GitHub can still refuse the review, for example if this account starts a pending review on the pull request before publication.",
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "code": "delivery-fallback",
+      "title": "A proposal is delivered by a later mechanism of its delivery list",
+      "message": "The group `readme-pointer` is delivered as `companion`. `groupedEdits` is `[native-batch, companion]`, set by the caller (`--grouped-edits`, `delivery.groupedEdits`), and the mechanisms listed before it are unavailable:\n\n- `native-batch`: The edit of `README.md` line 5: Lines 5-5 of README.md cannot carry a native suggestion (file-not-in-diff).",
+      "location": {
+        "pointer": "/runs/0/results/7"
+      },
+      "remedies": [
+        "Remove the fix.",
+        "To use an earlier mechanism, remove the obstacle the message names, then publish again.",
+        "To refuse rather than fall back, list only the mechanism you require."
+      ]
+    }
+  ]
+}

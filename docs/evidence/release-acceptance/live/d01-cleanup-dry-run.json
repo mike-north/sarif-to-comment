@@ -1,0 +1,200 @@
+{
+  "command": "close-suggestion-prs",
+  "status": "complete",
+  "dryRun": true,
+  "owner": "me",
+  "originals": [
+    {
+      "number": 56,
+      "state": "open"
+    },
+    {
+      "number": 60,
+      "state": "open"
+    },
+    {
+      "number": 61,
+      "state": "open"
+    },
+    {
+      "number": 62,
+      "state": "open"
+    },
+    {
+      "number": 63,
+      "state": "open"
+    },
+    {
+      "number": 64,
+      "state": "open"
+    },
+    {
+      "number": 75,
+      "state": "open"
+    },
+    {
+      "number": 82,
+      "state": "open"
+    },
+    {
+      "number": 83,
+      "state": "open"
+    },
+    {
+      "number": 84,
+      "state": "open"
+    },
+    {
+      "number": 96,
+      "state": "open"
+    },
+    {
+      "number": 100,
+      "state": "open"
+    },
+    {
+      "number": 103,
+      "state": "open"
+    },
+    {
+      "number": 105,
+      "state": "open"
+    }
+  ],
+  "suggestions": [
+    {
+      "number": 58,
+      "url": "https://github.com/mike-north/doc-linter/pull/58",
+      "original": 56,
+      "result": "left-open"
+    },
+    {
+      "number": 65,
+      "url": "https://github.com/mike-north/doc-linter/pull/65",
+      "original": 61,
+      "result": "left-open"
+    },
+    {
+      "number": 66,
+      "url": "https://github.com/mike-north/doc-linter/pull/66",
+      "original": 61,
+      "result": "left-open"
+    },
+    {
+      "number": 67,
+      "url": "https://github.com/mike-north/doc-linter/pull/67",
+      "original": 61,
+      "result": "left-open"
+    },
+    {
+      "number": 68,
+      "url": "https://github.com/mike-north/doc-linter/pull/68",
+      "original": 62,
+      "result": "left-open"
+    },
+    {
+      "number": 69,
+      "url": "https://github.com/mike-north/doc-linter/pull/69",
+      "original": 62,
+      "result": "left-open"
+    },
+    {
+      "number": 70,
+      "url": "https://github.com/mike-north/doc-linter/pull/70",
+      "original": 62,
+      "result": "left-open"
+    },
+    {
+      "number": 71,
+      "url": "https://github.com/mike-north/doc-linter/pull/71",
+      "original": 64,
+      "result": "left-open"
+    },
+    {
+      "number": 72,
+      "url": "https://github.com/mike-north/doc-linter/pull/72",
+      "original": 60,
+      "result": "left-open"
+    },
+    {
+      "number": 73,
+      "url": "https://github.com/mike-north/doc-linter/pull/73",
+      "original": 63,
+      "result": "left-open"
+    },
+    {
+      "number": 78,
+      "url": "https://github.com/mike-north/doc-linter/pull/78",
+      "original": 75,
+      "result": "left-open"
+    },
+    {
+      "number": 86,
+      "url": "https://github.com/mike-north/doc-linter/pull/86",
+      "original": 82,
+      "result": "left-open"
+    },
+    {
+      "number": 87,
+      "url": "https://github.com/mike-north/doc-linter/pull/87",
+      "original": 82,
+      "result": "left-open"
+    },
+    {
+      "number": 88,
+      "url": "https://github.com/mike-north/doc-linter/pull/88",
+      "original": 82,
+      "result": "left-open"
+    },
+    {
+      "number": 89,
+      "url": "https://github.com/mike-north/doc-linter/pull/89",
+      "original": 82,
+      "result": "left-open"
+    },
+    {
+      "number": 90,
+      "url": "https://github.com/mike-north/doc-linter/pull/90",
+      "original": 83,
+      "result": "left-open"
+    },
+    {
+      "number": 91,
+      "url": "https://github.com/mike-north/doc-linter/pull/91",
+      "original": 84,
+      "result": "left-open"
+    },
+    {
+      "number": 97,
+      "url": "https://github.com/mike-north/doc-linter/pull/97",
+      "original": 96,
+      "result": "left-open"
+    },
+    {
+      "number": 101,
+      "url": "https://github.com/mike-north/doc-linter/pull/101",
+      "original": 100,
+      "result": "left-open"
+    },
+    {
+      "number": 104,
+      "url": "https://github.com/mike-north/doc-linter/pull/104",
+      "original": 103,
+      "result": "left-open"
+    },
+    {
+      "number": 106,
+      "url": "https://github.com/mike-north/doc-linter/pull/106",
+      "original": 105,
+      "result": "left-open"
+    }
+  ],
+  "counts": {
+    "candidates": 22,
+    "checked": 21,
+    "labeled": 21,
+    "conforming": 21
+  },
+  "message": "## Suggestion pull request cleanup: dry run\n\nChecked the open pull requests on `suggestion-pr/` branches in mike-north/doc-linter; the suggestion label is `suggestion-pr` (the default suggestion label). Only suggestion pull requests opened by this account are closed.\n\nPull requests checked: 21 (21 labeled, 21 conforming).\n\nOriginal pull requests:\n\n- #56: open\n- #60: open\n- #61: open\n- #62: open\n- #63: open\n- #64: open\n- #75: open\n- #82: open\n- #83: open\n- #84: open\n- #96: open\n- #100: open\n- #103: open\n- #105: open\n\nSuggestion pull requests:\n\n- #58 (for #56): left open, because the original is still open\n- #65 (for #61): left open, because the original is still open\n- #66 (for #61): left open, because the original is still open\n- #67 (for #61): left open, because the original is still open\n- #68 (for #62): left open, because the original is still open\n- #69 (for #62): left open, because the original is still open\n- #70 (for #62): left open, because the original is still open\n- #71 (for #64): left open, because the original is still open\n- #72 (for #60): left open, because the original is still open\n- #73 (for #63): left open, because the original is still open\n- #78 (for #75): left open, because the original is still open\n- #86 (for #82): left open, because the original is still open\n- #87 (for #82): left open, because the original is still open\n- #88 (for #82): left open, because the original is still open\n- #89 (for #82): left open, because the original is still open\n- #90 (for #83): left open, because the original is still open\n- #91 (for #84): left open, because the original is still open\n- #97 (for #96): left open, because the original is still open\n- #101 (for #100): left open, because the original is still open\n- #104 (for #103): left open, because the original is still open\n- #106 (for #105): left open, because the original is still open\n\nThis was a dry run: nothing was closed.\n\nClosing never deletes a branch: each proposal branch is left in place.",
+  "diagnostics": []
+}
