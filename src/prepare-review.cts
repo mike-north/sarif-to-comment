@@ -4409,16 +4409,25 @@ async function composeReviewBody(
   numbers: readonly number[],
   target: ISuggestionContext,
   presentation: CapturedPresentation | undefined,
+  comments: readonly PreparedComment[] = [],
 ): Promise<string> {
   const customized = presentation !== undefined && (presentation.companionIndex !== undefined || presentation.companionReference !== undefined);
   if (!customized) return renderReviewBody(suggestions, numbers, target);
   await loadMarkdownParser();
   const body = renderReviewBody(suggestions, numbers, target, presentation);
-  const problem = composedProblem(`${body}\n\n${SAMPLE_REVIEW_MARKER}`, { marker: SAMPLE_REVIEW_MARKER });
-  if (problem !== null) {
-    throw new TypeError(`Invalid presentation: the review body composed with options.presentation.companionIndex and companionReference ${problem}. `
-      + 'A presentation callback may change how an element reads, never what is published or how it is identified.');
+  const refuse = (problem: string): TypeError => new TypeError(`Invalid presentation: the review body composed with options.presentation.companionIndex `
+    + `and companionReference ${problem}. A presentation callback may change how an element reads, never what is published or how it is identified.`);
+  // The limits preparation checked with the placeholder numbers, again: a
+  // callback may answer the real numbers differently (PRODUCT_LIMITS, which
+  // publication always applies).
+  const { maxCommentBodyChars, maxPayloadBytes } = PRODUCT_LIMITS;
+  if (body.length > maxCommentBodyChars) {
+    throw refuse(`is ${String(body.length)} characters; the limit is ${String(maxCommentBodyChars)}, and nothing is truncated`);
   }
+  const bytes = Buffer.byteLength(JSON.stringify({ body, comments }), 'utf8');
+  if (bytes > maxPayloadBytes) throw refuse(`makes the complete review ${String(bytes)} bytes; the limit is ${String(maxPayloadBytes)}, and nothing is truncated`);
+  const problem = composedProblem(`${body}\n\n${SAMPLE_REVIEW_MARKER}`, { marker: SAMPLE_REVIEW_MARKER });
+  if (problem !== null) throw refuse(problem);
   return body;
 }
 

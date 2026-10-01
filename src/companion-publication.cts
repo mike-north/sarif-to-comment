@@ -1179,7 +1179,9 @@ async function review(publication: Publication, pulls: readonly { readonly numbe
     // Composed only when no earlier call recorded the review: with the real
     // numbers and this call's companion callbacks. A refused callback result
     // rejects here, before the review's record exists or anything is sent.
-    const body = await composeReviewBody({ companions: plan.suggestions, sections: plan.review.sections }, pulls.map((p) => p.number), target, publication.presentation);
+    const body = await composeReviewBody(
+      { companions: plan.suggestions, sections: plan.review.sections }, pulls.map((p) => p.number), target, publication.presentation, plan.review.comments,
+    );
     result = await publishPreparedReview({ ...identity, preparedReview: { body, comments: plan.review.comments } });
   }
   const suggestions = plan.suggestions.map((s, i) => {

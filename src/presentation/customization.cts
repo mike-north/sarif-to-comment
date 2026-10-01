@@ -67,7 +67,7 @@
  * @see https://github.github.com/gfm/#raw-html
  */
 
-import { addedConstruct, fenceProblem, linksIn, shownOccurrences, unbalancedHtml } from './markdown-tree.cjs';
+import { addedConstruct, fenceProblem, imagesIn, linksIn, outsideCode, shownOccurrences, unbalancedHtml } from './markdown-tree.cjs';
 import type { IOccurrence } from './markdown-tree.cjs';
 
 // ---------------------------------------------------------------------------
@@ -597,7 +597,8 @@ function markdownProblem(name: PresentationComponent, result: string, context: I
   }
   const html = unbalancedHtml(result);
   if (html !== null) return `leaves ${html} open, which could hide what follows, including a suggestion block or marker`;
-  if (MARKER_TEXT.test(result)) return 'contains text that reads as a publication or suggestion marker, which only the core writes';
+  // Code shows marker-like text literally (an index title is a code span), so only text outside code counts.
+  if (MARKER_TEXT.test(outsideCode(result))) return 'contains text that reads as a publication or suggestion marker, which only the core writes';
   const invisible = addedInvisible(result, context);
   if (invisible !== undefined) {
     return `contains ${invisible}, an invisible character, outside the content it presents, where it could make a link or text read as something it is not`;
@@ -625,6 +626,11 @@ function markdownProblem(name: PresentationComponent, result: string, context: I
     const foreign = linksIn(result).find((link) => !allowed.has(link.url));
     if (foreign !== undefined) {
       return `adds a link to ${JSON.stringify(foreign.url)}, which is none of the links it presents; it may link only its companion pull requests and the content it presents`;
+    }
+    const presentedImages = new Set(imagesIn(context.markdown));
+    const image = imagesIn(result).find((source) => !presentedImages.has(source));
+    if (image !== undefined) {
+      return `adds an image (${JSON.stringify(image)}), which GitHub fetches from elsewhere and whose alt text could read as a companion; it may show only the images of the content it presents`;
     }
   }
   if (INLINE_COMPONENTS.has(name) && /[\r\n]/.test(result)) return 'spans more than one line, but this component is inline';
@@ -671,11 +677,13 @@ function sharedFragment(required: readonly string[], occurrences: readonly (read
 }
 
 /**
- * Link text as a reader reads it: Unicode-normalized (NFC), every run of
- * whitespace (a no-break space included) one space, the ends trimmed.
+ * Link text as a reader reads it: Unicode-normalized for compatibility
+ * (NFKC, so a fullwidth `＃` or digit reads as `#` or that digit), every run
+ * of whitespace (a no-break space included) one space, the ends trimmed. A
+ * look-alike that differs visibly (the letter O for zero) stays different.
  */
 function readText(text: string): string {
-  return text.normalize('NFC').replace(/\s+/gu, ' ').trim();
+  return text.normalize('NFKC').replace(/\s+/gu, ' ').trim();
 }
 
 /**
