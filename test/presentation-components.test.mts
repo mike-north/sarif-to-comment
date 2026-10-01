@@ -363,6 +363,56 @@ describe('the projection section of a companion\'s description (companion contra
     const text = renderCompanionProjection({ head: 'H', verdict: 'faithful', conflicts: [], files: [{ path: 'f', hunks: [{ oldStart: 0, oldLines: 0, newStart: 1, newLines: 1, lines }] }] }, target);
     assert.ok(text.endsWith('\n\n`````diff\n--- a/f\n+++ b/f\n@@ -0,0 +1 @@\n+````\n`````'), text);
   });
+
+  // §2.11 and delivery policy §8.10: a code block does not show these characters as themselves, so the diff writes each as a visible escape.
+  const NOTE = 'In this diff, each `{U+XXXX}` stands for the character with that code point, written visibly; this pull request\'s commit has the exact bytes.';
+
+  test('regression: a character a code block does not show is written as a visible escape, and a note says so; the diff never carries it raw', () => {
+    const lines = [
+      { text: ' a\u00A0b', noNewline: false },          // U+00A0, which renders as a space
+      { text: '-c\u200Bd', noNewline: false },          // a zero-width space (Cf)
+      { text: '+c\u200Dd\u202E', noNewline: false },    // a zero-width joiner and a bidirectional override (Cf)
+      { text: '+\u00ADe\u2028f\uFEFF', noNewline: false }, // a soft hyphen (Cf), a line separator, a byte-order mark (Cf)
+      { text: '+g\u0007h\u007Fi\u0085', noNewline: false }, // a C0 control, DEL and a C1 control
+      { text: '+bare\rcr\r', noNewline: false },        // a carriage return inside the line is shown; the one ending it is not
+    ];
+    const text = renderCompanionProjection({ head: 'H', verdict: 'faithful', conflicts: [], files: [{ path: 'f', hunks: [{ oldStart: 1, oldLines: 2, newStart: 1, newLines: 5, lines }] }] }, target);
+    assert.equal(text, `${LEAD}applies only its own changes, which are these:\n\n${[
+      '```diff', '--- a/f', '+++ b/f', '@@ -1,2 +1,5 @@',
+      ' a{U+00A0}b',
+      '-c{U+200B}d',
+      '+c{U+200D}d{U+202E}',
+      '+{U+00AD}e{U+2028}f{U+FEFF}',
+      '+g{U+0007}h{U+007F}i{U+0085}',
+      '+bare{U+000D}cr',
+      '```',
+    ].join('\n')}\n\n${NOTE}`);
+    assert.doesNotMatch(text, /[\p{Cf}\u00A0\u0000-\u0008\u000B-\u001F\u007F-\u009F\u2028\u2029]/u, 'no unshown character reaches the description');
+  });
+
+  test('a zero-width joiner inside an emoji sequence is escaped too: the diff shows content, not a title', () => {
+    const lines = [{ text: '+\u{1F469}\u200D\u{1F4BB}', noNewline: false }];
+    const text = renderCompanionProjection({ head: 'H', verdict: 'faithful', conflicts: [], files: [{ path: 'f', hunks: [{ oldStart: 0, oldLines: 0, newStart: 1, newLines: 1, lines }] }] }, target);
+    assert.ok(text.endsWith('\n+\u{1F469}{U+200D}\u{1F4BB}\n```\n\n' + NOTE), text);
+  });
+
+  test('literal text that reads as an escape has its brace escaped, so every `{U+XXXX}` in the diff stands for one character', () => {
+    const lines = [{ text: '+{U+0041} {U+1F600} {u+0041} {U+41} {x}', noNewline: false }];
+    const text = renderCompanionProjection({ head: 'H', verdict: 'faithful', conflicts: [], files: [{ path: 'f', hunks: [{ oldStart: 0, oldLines: 0, newStart: 1, newLines: 1, lines }] }] }, target);
+    assert.ok(text.endsWith('\n+{U+007B}U+0041} {U+007B}U+1F600} {u+0041} {U+41} {x}\n```\n\n' + NOTE), text);
+  });
+
+  test('a path in the diff\'s file headers is escaped by the same rule', () => {
+    const lines = [{ text: '+x', noNewline: false }];
+    const text = renderCompanionProjection({ head: 'H', verdict: 'faithful', conflicts: [], files: [{ path: 'a\u200Bb.md', hunks: [{ oldStart: 0, oldLines: 0, newStart: 1, newLines: 1, lines }] }] }, target);
+    assert.ok(text.endsWith('\n--- a/a{U+200B}b.md\n+++ b/a{U+200B}b.md\n@@ -0,0 +1 @@\n+x\n```\n\n' + NOTE), text);
+  });
+
+  test('a diff with nothing to escape has no note; tabs and trailing spaces are shown as themselves', () => {
+    const lines = [{ text: '+\tindented  ', noNewline: false }];
+    const text = renderCompanionProjection({ head: 'H', verdict: 'faithful', conflicts: [], files: [{ path: 'f', hunks: [{ oldStart: 0, oldLines: 0, newStart: 1, newLines: 1, lines }] }] }, target);
+    assert.ok(text.endsWith('\n+\tindented  \n```'), text);
+  });
 });
 
 describe('a native batch (delivery policy §8.8)', () => {
