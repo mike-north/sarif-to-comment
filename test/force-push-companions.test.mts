@@ -433,6 +433,75 @@ describe('a rewritten history: every suggestion stays on the reviewed commit and
   });
 });
 
+describe('merge attributes, a deletion applied again, and a head that already has a suggestion (§2.5.1)', () => {
+  /** The snapshots with `.gitattributes` holding `attributes` at the base, the reviewed commit and the amended head. */
+  const withAttributes = (attributes: string): typeof SNAPSHOTS => Object.fromEntries(Object.entries(SNAPSHOTS).map(([commit, files]) => [
+    commit, [BASE, REVIEWED, AMENDED].includes(commit) ? { ...files, '.gitattributes': [attributes] } : files,
+  ]));
+
+  test('regression: a `merge=union` driver on the conflicting file cannot be projected: a strict group is blocked naming it, and nothing is written', async () => {
+    const world = makeWorld(AMENDED, {}, { snapshots: withAttributes('*.md merge=union\n') });
+    const outcome = await publishWith(world, documentWith(['reword', 'remark']));
+    assert.equal(status(outcome), 'blocked', markdown(outcome));
+    const [diagnostic] = asArray(outcome['diagnostics']).map((d) => asRecord(d));
+    assert.ok(diagnostic);
+    assert.equal(diagnostic['code'], 'delivery-unavailable');
+    assert.ok(String(diagnostic['message']).endsWith(
+      `- \`companion\`: The history of #7 was rewritten after the reviewed commit, and whether merging its suggestion pull request into the head \`${AMENDED}\` `
+      + 'would apply exactly its own changes cannot be projected: a merge attribute (`merge=union`) applies to `docs/sample.md`; its merge cannot be projected.',
+    ), String(diagnostic['message']));
+    assert.deepEqual(writes(world), []);
+  });
+
+  test('the text merge named in `.gitattributes` projects as without it: the group is created, projected to conflict', async () => {
+    const world = makeWorld(AMENDED, { companion: { mergeable: { '101': { value: false } } } }, { snapshots: withAttributes('*.md merge=text\n') });
+    const outcome = await publishWith(world, documentWith(['reword', 'remark']));
+    assert.equal(status(outcome), 'published', markdown(outcome));
+    assert.deepEqual(outcome['diagnostics'], [conflictWarning(AMENDED, 'the group `reword`', ['docs/sample.md'])]);
+  });
+
+  test('a deletion the rewrite dropped would be applied again: the group is blocked, naming the file the head would lose', async () => {
+    // The reviewed commit deleted legacy.txt; the amended head kept it, so a
+    // merge over the base would delete it again.
+    const snapshots = { ...SNAPSHOTS, [BASE]: { ...SNAPSHOTS[BASE], 'legacy.txt': ['old\n'] }, [AMENDED]: { ...SNAPSHOTS[AMENDED], 'legacy.txt': ['old\n'] } };
+    const world = makeWorld(AMENDED, {}, { snapshots });
+    const outcome = await publishWith(world, documentWith(['reword', 'remark']));
+    assert.equal(status(outcome), 'blocked', markdown(outcome));
+    const [diagnostic] = asArray(outcome['diagnostics']).map((d) => asRecord(d));
+    assert.ok(diagnostic);
+    assert.ok(String(diagnostic['message']).endsWith(
+      `- \`companion\`: The history of #7 was rewritten after the reviewed commit, and projected onto its head \`${AMENDED}\`, merging its suggestion pull request `
+      + 'would not apply exactly its own changes: `legacy.txt` would be removed from the head.',
+    ), String(diagnostic['message']));
+    assert.deepEqual(writes(world), []);
+  });
+
+  test('a head that already has the suggestion\'s changes: created, and its description says merging it changes nothing', async () => {
+    const already = sample({ ...REVIEWED_LINES, 6: 'Line 6, suggested.', 10: 'Line 10, suggested.', 15: 'Line 15, later.' });
+    const world = makeWorld(AMENDED, {}, { snapshots: { ...SNAPSHOTS, [AMENDED]: { ...SNAPSHOTS[AMENDED], 'docs/sample.md': already } } });
+    const outcome = await publishWith(world, documentWith(['reword', 'remark']));
+    assert.equal(status(outcome), 'published', markdown(outcome));
+    const [pull, ...rest] = world.host.pulls();
+    assert.ok(pull && rest.length === 0);
+    const lead = `**The reviewed commit is not part of the branch of #7:** the branch was rewritten after commit ${REVIEWED} (its head was ${AMENDED} when this was proposed). `
+      + 'GitHub shows this pull request\'s changes from an older merge base, so they also list changes of the reviewed commit itself. '
+      + 'Projected onto that head before this pull request was created, merging it changes nothing, because the head already has its own changes, which are these:';
+    assert.equal(pull.body, pullBody(REWORD, idsOf(pull), [lead, '', '```diff', ...REWORD_DIFF, '```']));
+    assert.deepEqual(outcome['diagnostics'], []);
+  });
+
+  test('validate says so for a head that already has the suggestion\'s changes, and writes nothing', async () => {
+    const already = sample({ ...REVIEWED_LINES, 6: 'Line 6, suggested.', 10: 'Line 10, suggested.', 15: 'Line 15, later.' });
+    const world = makeWorld(AMENDED, {}, { snapshots: { ...SNAPSHOTS, [AMENDED]: { ...SNAPSHOTS[AMENDED], 'docs/sample.md': already } } });
+    const outcome = await validateWith(world, documentWith(['reword', 'remark']));
+    assert.ok(markdown(outcome).includes(
+      `The history of #7 was rewritten after the reviewed commit, so it is proposed on that commit and was projected onto the head \`${AMENDED}\`: `
+      + 'merging it changes nothing, because the head already has its own changes.',
+    ), markdown(outcome));
+    assert.deepEqual(writes(world), []);
+  });
+});
+
 describe('a single bundle after a rewritten history (delivery policy §9)', () => {
   test('the bundle as planned is projected: one suggestion pull request, its projection section once, and the warning names the bundle', async () => {
     const world = makeWorld(AMENDED);

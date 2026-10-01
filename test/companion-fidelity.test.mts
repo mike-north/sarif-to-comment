@@ -18,17 +18,23 @@
  * | E2       | unfaithful: added would-lose| unfaithful: added loses its change                 |
  * | E3       | conflict at other           | unfaithful: dropped would come back (beside it)    |
  * | E4       | unfaithful: f (mode)        | unfaithful: f brings back content                  |
- * | E5       | target undefined at b       | unfaithful: a brings back content; b not expressible|
+ * | E5       | target undefined at b       | unfaithful: a would be removed; b not expressible  |
  * | E6       | faithful (renames off)      | unfaithful: directory-rename trigger d/ (a limit)  |
- * | E7       | target undefined (x)        | unfaithful: x, x/y come back; x/z file and directory|
+ * | E7       | target undefined (x)        | unfaithful: x removed, x/y comes back; x/z file and directory|
  * | E8       | faithful (two merge bases)  | faithful, from either merge base                   |
  * | E9       | unfaithful: sub would-restore| unfaithful: sub brings back content               |
  * | S1, S2   | faithful                    | faithful                                           |
  * | S3, S6   | unfaithful: f               | unfaithful: f brings back content                  |
  * | S4, S4b, S5 | conflict at f            | conflicts: f                                       |
  *
+ * The merge-attribute scenarios reproduce a `git merge-tree` result too:
+ * with `f merge=union` at every commit, the reviewer's case below merges
+ * cleanly and brings back the reviewed commit's line 10, where the same
+ * history without the attribute conflicts.
+ *
  * @see docs/companion-suggestion-pr-contract.md
  * @see https://git-scm.com/docs/git-merge-tree
+ * @see https://git-scm.com/docs/gitattributes#_performing_a_three_way_merge
  */
 
 import * as assert from 'node:assert/strict';
@@ -151,7 +157,7 @@ describe('E1–E9: what a blob- or ancestry-level rule gets wrong', () => {
   test('E5: a rename the rewrite dropped: the old name would go and the edited new name cannot be expressed at the head', async () => {
     const w = world({ [COMMIT.M]: { a: 'a\n' }, [COMMIT.R]: { b: 'a\n' }, [COMMIT.H]: { a: 'a\n', other: 'h\n' } });
     assert.deepEqual(await project(w, [edit('b', 'a\nprop\n')]), {
-      verdict: 'unfaithful', reasons: [{ path: 'a', reason: 'restores' }, { path: 'b', reason: 'not-expressible' }], limits: [],
+      verdict: 'unfaithful', reasons: [{ path: 'a', reason: 'removes' }, { path: 'b', reason: 'not-expressible' }], limits: [],
     });
   });
 
@@ -167,11 +173,11 @@ describe('E1–E9: what a blob- or ancestry-level rule gets wrong', () => {
     assert.deepEqual(await project(w, [create('d/new', 'new\n')]), { verdict: 'unfaithful', reasons: [], limits: [{ kind: 'directory-rename', directory: 'd' }] });
   });
 
-  test('E7: the pull request turned a file into a directory; the head kept the file: content comes back, and x/z would be a file under a file', async () => {
+  test('E7: the pull request turned a file into a directory; the head kept the file: x would be removed, x/y comes back, and x/z would be a file under a file', async () => {
     const w = world({ [COMMIT.M]: { x: 'x\n' }, [COMMIT.R]: { 'x/y': 'y\n' }, [COMMIT.H]: { x: 'x\n', other: 'h\n' } });
     assert.deepEqual(await project(w, [create('x/z', 'z\n')]), {
       verdict: 'unfaithful',
-      reasons: [{ path: 'x', reason: 'restores' }, { path: 'x/y', reason: 'restores' }, { path: 'x/z', reason: 'file-and-directory' }],
+      reasons: [{ path: 'x', reason: 'removes' }, { path: 'x/y', reason: 'restores' }, { path: 'x/z', reason: 'file-and-directory' }],
       limits: [],
     });
   });
@@ -269,7 +275,164 @@ describe('restoration around a conflict is not hidden by the conflict', () => {
   });
 });
 
+describe('what the merge would change at the head', () => {
+  test('a deletion the rewrite dropped would be applied again: the head\'s file would be removed', async () => {
+    // The pull request deleted f; the rewrite kept it. Merging over M deletes
+    // f again, which is not the suggestion's own change.
+    const w = world({ [COMMIT.M]: { f: 'f\n', g: 'g\n' }, [COMMIT.R]: { g: 'g\n' }, [COMMIT.H]: { f: 'f\n', g: 'g\n', h: 'h\n' } });
+    assert.deepEqual(await project(w, [edit('g', 'G\n')]), { verdict: 'unfaithful', reasons: [{ path: 'f', reason: 'removes' }], limits: [] });
+  });
+
+  test('a head that already has the suggestion\'s changes: faithful, and the merge changes nothing', async () => {
+    const w = world({ [COMMIT.M]: { f: 'a\n' }, [COMMIT.R]: { f: 'b\n' }, [COMMIT.H]: { f: 'b\nc\n', other: 'h\n' } });
+    assert.deepEqual(await project(w, [edit('f', 'b\nc\n')]), { verdict: 'faithful', headUnchanged: true });
+  });
+
+  test('a head that has only some of the suggestion\'s changes: faithful, and the merge changes the head', async () => {
+    const w = world({ [COMMIT.M]: { f: 'a\n', g: 'g\n' }, [COMMIT.R]: { f: 'b\n', g: 'g\n' }, [COMMIT.H]: { f: 'b\nc\n', g: 'g\n' } });
+    assert.deepEqual(await project(w, [edit('f', 'b\nc\n'), edit('g', 'G\n')]), FAITHFUL);
+  });
+});
+
+/** The reviewer's case: R changed lines 10 and 11 (the rewrite dropped that), H changed line 10, and the proposal keeps R's line 10 and edits line 11. */
+function reviewersCase(attributes: Readonly<Record<string, Content>> = {}, headAttributes = attributes): { readonly w: IWorld; readonly change: ProjectedChange } {
+  const w = world({
+    [COMMIT.M]: { f: lines(), ...attributes },
+    [COMMIT.R]: { f: lines({ 10: 'line 10 R', 11: 'line 11 R' }), ...attributes },
+    [COMMIT.H]: { f: lines({ 10: 'line 10 H' }), ...headAttributes },
+  });
+  return { w, change: edit('f', lines({ 10: 'line 10 R', 11: 'line 11 prop' })) };
+}
+
+const mergeAttribute = (path: string, attribute: string): CompanionProjection => ({ verdict: 'unfaithful', reasons: [], limits: [{ kind: 'merge-attribute', path, attribute }] });
+
+describe('merge attributes: a driver other than the text merge is a limit', () => {
+  test('regression: `merge=union` would turn the conflict into a clean merge that brings back line 10, so it cannot be projected', async () => {
+    const { w, change } = reviewersCase({ '.gitattributes': 'f merge=union\n' });
+    assert.deepEqual(await project(w, [change]), mergeAttribute('f', 'merge=union'));
+  });
+
+  test('the same history without attributes, or with the text merge named, conflicts', async () => {
+    for (const attributes of [{}, { '.gitattributes': 'f merge=text\n' }, { '.gitattributes': 'f merge\n' }, { '.gitattributes': '* merge=union\nf !merge\n' }]) {
+      const { w, change } = reviewersCase(attributes);
+      assert.deepEqual(await project(w, [change]), conflicts('f'), JSON.stringify(attributes));
+    }
+  });
+
+  test('`-merge` and the `binary` macro are other drivers, named as written', async () => {
+    assert.deepEqual(await project(reviewersCase({ '.gitattributes': 'f -merge\n' }).w, [reviewersCase().change]), mergeAttribute('f', '-merge'));
+    assert.deepEqual(await project(reviewersCase({ '.gitattributes': 'f binary\n' }).w, [reviewersCase().change]), mergeAttribute('f', 'binary'));
+  });
+
+  test('a driver applies to a file merged line by line even where that merge is clean', async () => {
+    const w = world({
+      [COMMIT.M]: { f: 'a\n1\n2\n3\n4\ny\n', '.gitattributes': '*.txt -diff\nf merge=union\n' },
+      [COMMIT.R]: { f: 'b\n1\n2\n3\n4\ny\n', '.gitattributes': '*.txt -diff\nf merge=union\n' },
+      [COMMIT.H]: { f: 'b\n1\n2\n3\n4\ny\n', other: 'h\n', '.gitattributes': '*.txt -diff\nf merge=union\n' },
+    });
+    assert.deepEqual(await project(w, [edit('f', 'b\n1\n2\n3\n4\nz\n')]), mergeAttribute('f', 'merge=union'));
+  });
+
+  test('a driver on a file no line merge involves is never consulted, and the attributes file is not read', async () => {
+    const attributes = { '.gitattributes': '* merge=union\n' };
+    const w = world({ [COMMIT.M]: { f: 'f\n', g: 'g\n', ...attributes }, [COMMIT.R]: { f: 'F\n', g: 'g\n', ...attributes }, [COMMIT.H]: { f: 'F\n', g: 'g\n', h: 'h\n', ...attributes } });
+    assert.deepEqual(await project(w, [edit('g', 'G\n')]), FAITHFUL);
+    assert.deepEqual(w.blobReads, []);
+  });
+
+  test('patterns are matched relative to the attributes file that holds them', async () => {
+    const at = (path: string, attributes: Readonly<Record<string, Content>>): { readonly w: IWorld; readonly change: ProjectedChange } => {
+      const w = world({
+        [COMMIT.M]: { [path]: lines(), ...attributes },
+        [COMMIT.R]: { [path]: lines({ 10: 'line 10 R', 11: 'line 11 R' }), ...attributes },
+        [COMMIT.H]: { [path]: lines({ 10: 'line 10 H' }), ...attributes },
+      });
+      return { w, change: edit(path, lines({ 10: 'line 10 R', 11: 'line 11 prop' })) };
+    };
+    const cases: readonly [string, Readonly<Record<string, Content>>, CompanionProjection][] = [
+      ['d/f', { 'd/.gitattributes': '/f merge=union\n' }, mergeAttribute('d/f', 'merge=union')],
+      ['d/f', { '.gitattributes': '/f merge=union\n' }, conflicts('d/f')],
+      ['docs/a.md', { '.gitattributes': '*.md merge=union\n' }, mergeAttribute('docs/a.md', 'merge=union')],
+      ['docs/x/a', { '.gitattributes': 'docs/** merge=union\n' }, mergeAttribute('docs/x/a', 'merge=union')],
+      ['a/b/f', { '.gitattributes': '**/f merge=union\n' }, mergeAttribute('a/b/f', 'merge=union')],
+      ['d/f', { '.gitattributes': 'd/ merge=union\n' }, conflicts('d/f')],
+      ['d/f', { '.gitattributes': '!f merge=union\n' }, conflicts('d/f')],
+      ['d/f', { '.gitattributes': '* merge=union\n', 'd/.gitattributes': '* merge=text\n' }, conflicts('d/f')],
+      ['d/f', { '.gitattributes': '* merge=text\n', 'd/.gitattributes': 'f merge=union\n' }, mergeAttribute('d/f', 'merge=union')],
+      ['d/f', { '.gitattributes': '[attr]keep merge=union\n', 'd/.gitattributes': 'f keep\n' }, mergeAttribute('d/f', 'keep')],
+    ];
+    for (const [path, attributes, expected] of cases) {
+      const { w, change } = at(path, attributes);
+      assert.deepEqual(await project(w, [change]), expected, `${path} with ${JSON.stringify(attributes)}`);
+    }
+  });
+
+  test('each attributes file is read once, however many paths need it', async () => {
+    const attributes = { '.gitattributes': '* merge=text\n' };
+    const w = world({
+      [COMMIT.M]: { f: lines(), g: lines(), ...attributes },
+      [COMMIT.R]: { f: lines({ 10: 'line 10 R' }), g: lines({ 10: 'line 10 R' }), ...attributes },
+      [COMMIT.H]: { f: lines({ 10: 'line 10 H' }), g: lines({ 10: 'line 10 H' }), ...attributes },
+    });
+    assert.deepEqual(await project(w, [edit('f', lines({ 10: 'line 10 P' })), edit('g', lines({ 10: 'line 10 P' }))]), conflicts('f', 'g'));
+    const oid = w.trees.get(COMMIT.H)?.get('.gitattributes')?.oid;
+    assert.equal(w.blobReads.filter((read) => read === oid).length, 1);
+  });
+
+  test('an attributes file on the way that is not a regular file, or is listed without its size, cannot be read: stated once', async () => {
+    const link: Content = { mode: '120000', text: 'elsewhere' };
+    const { w, change } = reviewersCase({ '.gitattributes': link });
+    assert.deepEqual(await project(w, [change]), { verdict: 'unfaithful', reasons: [], limits: [{ kind: 'attributes-unreadable', path: '.gitattributes' }] });
+
+    const unsized = reviewersCase({ '.gitattributes': 'f merge=text\n' });
+    for (const tree of unsized.w.trees.values()) {
+      const entry = tree.get('.gitattributes');
+      if (entry !== undefined) tree.set('.gitattributes', { mode: entry.mode, oid: entry.oid });
+    }
+    assert.deepEqual(await project(unsized.w, [unsized.change]), { verdict: 'unfaithful', reasons: [], limits: [{ kind: 'size-unknown', path: '.gitattributes' }] });
+  });
+});
+
+describe('attributes files that differ between the commits', () => {
+  test('one the head added that could assign a merge driver is a limit, beside the driver it assigns', async () => {
+    const { w, change } = reviewersCase({}, { '.gitattributes': 'f merge=union\n' });
+    assert.deepEqual(await project(w, [change]), {
+      verdict: 'unfaithful', reasons: [], limits: [{ kind: 'attributes-changed', path: '.gitattributes' }, { kind: 'merge-attribute', path: 'f', attribute: 'merge=union' }],
+    });
+  });
+
+  test('one that sets no merge attribute in any version is safe', async () => {
+    const { w, change } = reviewersCase({ '.gitattributes': '*.png -diff\n' }, { '.gitattributes': '*.png -diff\n*.sh text eol=lf\n' });
+    assert.deepEqual(await project(w, [change]), conflicts('f'));
+  });
+
+  test('one that uses a macro the root file defines to set a merge driver is a limit, even off the merged paths\' way', async () => {
+    const w = world({
+      [COMMIT.M]: { '.gitattributes': '[attr]keep merge=union\n', g: 'g\n' },
+      [COMMIT.R]: { '.gitattributes': '[attr]keep merge=union\n', g: 'g\n' },
+      [COMMIT.H]: { '.gitattributes': '[attr]keep merge=union\n', 'd/.gitattributes': 'x keep\n', g: 'g\n' },
+    });
+    assert.deepEqual(await project(w, [edit('g', 'G\n')]), { verdict: 'unfaithful', reasons: [], limits: [{ kind: 'attributes-changed', path: 'd/.gitattributes' }] });
+  });
+
+  test('a proposal that changes an attributes file to set a merge driver is a limit', async () => {
+    const w = world({ [COMMIT.M]: { '.gitattributes': '*.png -diff\n' }, [COMMIT.R]: { '.gitattributes': '*.png -diff\n' }, [COMMIT.H]: { '.gitattributes': '*.png -diff\n', h: 'h\n' } });
+    assert.deepEqual(await project(w, [edit('.gitattributes', '*.png -diff\n*.md merge=union\n')]), {
+      verdict: 'unfaithful', reasons: [], limits: [{ kind: 'attributes-changed', path: '.gitattributes' }],
+    });
+  });
+});
+
 describe('limits: what the projection cannot decide, and says so', () => {
+  test('a file that would have to be merged but is listed without its size is never read', async () => {
+    const w = world({ [COMMIT.M]: { f: lines() }, [COMMIT.R]: { f: lines() }, [COMMIT.H]: { f: lines({ 1: 'line 1 H' }) } });
+    const entry = w.trees.get(COMMIT.H)?.get('f');
+    assert.ok(entry !== undefined);
+    w.trees.get(COMMIT.H)?.set('f', { mode: entry.mode, oid: entry.oid });
+    assert.deepEqual(await project(w, [edit('f', lines({ 20: 'prop' }))]), { verdict: 'unfaithful', reasons: [], limits: [{ kind: 'size-unknown', path: 'f' }] });
+    assert.deepEqual(w.blobReads, []);
+  });
+
   test('a truncated tree listing: nothing else is read, and the commit is named', async () => {
     const w = world({ [COMMIT.M]: { f: 'a\n' }, [COMMIT.R]: { f: 'b\n' }, [COMMIT.H]: { f: 'c\n' } });
     w.truncated = new Set([COMMIT.H]);

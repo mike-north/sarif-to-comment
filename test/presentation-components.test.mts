@@ -341,6 +341,13 @@ describe('the projection section of a companion\'s description (companion contra
     assert.equal(renderCompanionProjection({ head: 'H', verdict: 'faithful', conflicts: [], files: [] }, target), `${LEAD}applies only its own changes, which are listed below.`);
   });
 
+  test('faithful where the head already has its own changes: merging it changes nothing', () => {
+    assert.equal(renderCompanionProjection({ head: 'H', verdict: 'faithful', alreadyAtHead: true, conflicts: [], files: [{ path: 'f.md', hunks: [hunk] }] }, target),
+      `${LEAD}changes nothing, because the head already has its own changes, which are these:\n\n\`\`\`diff\n--- a/f.md\n+++ b/f.md\n@@ -2,3 +2,3 @@\n b\n-c\n+C\n d\n\`\`\``);
+    assert.equal(renderCompanionProjection({ head: 'H', verdict: 'faithful', alreadyAtHead: true, conflicts: [], files: [] }, target),
+      `${LEAD}changes nothing, because the head already has its own changes, which are listed below.`);
+  });
+
   test('a range of one line has no count, a line without a final newline is marked, and a carriage return before a newline is not shown', () => {
     const lines = [{ text: '-x\r', noNewline: false }, { text: '+y', noNewline: true }];
     assert.equal(renderCompanionProjection({ head: 'H', verdict: 'faithful', conflicts: [], files: [{ path: 'f', hunks: [{ oldStart: 4, oldLines: 1, newStart: 4, newLines: 1, lines }] }] }, target),
