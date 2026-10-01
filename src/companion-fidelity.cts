@@ -237,16 +237,16 @@ class Projection {
   }
 
   /**
-   * The text of a `.gitattributes` entry, or the limit that prevents
+   * The bytes of a `.gitattributes` entry, or the limit that prevents
    * reading it: not a regular file, no listed size, or over the read limit.
    */
-  async attributesText(path: string, entry: IProjectedEntry): Promise<{ readonly text: string } | { readonly limit: ProjectionLimit }> {
+  async attributesBytes(path: string, entry: IProjectedEntry): Promise<{ readonly bytes: Uint8Array } | { readonly limit: ProjectionLimit }> {
     if (kindOf(entry) !== 'file') return { limit: { kind: 'attributes-unreadable', path } };
     if (!this.#local.has(entry.oid)) {
       if (entry.size === undefined) return { limit: { kind: 'size-unknown', path } };
       if (entry.size > this.#basis.maxBlobBytes) return { limit: { kind: 'too-large', path } };
     }
-    return { text: Buffer.from(await this.bytes(entry)).toString('utf8') };
+    return { bytes: await this.bytes(entry) };
   }
 
   /** The head's attributes files read so far, by directory ('' for the root). */
@@ -265,8 +265,8 @@ class Projection {
       if (entry === undefined) continue;
       let known = this.#headAttributes.get(dir);
       if (known === undefined) {
-        const read = await this.attributesText(filePath, entry);
-        known = 'limit' in read ? read.limit : parseAttributes(read.text);
+        const read = await this.attributesBytes(filePath, entry);
+        known = 'limit' in read ? read.limit : parseAttributes(read.bytes);
         this.#headAttributes.set(dir, known);
       }
       if ('kind' in known) return { limit: known };
@@ -358,8 +358,8 @@ export async function projectCompanion(basis: IProjectionBasis, changes: readonl
   if (changedAttributes.length > 0) {
     const parsed = async (path: string, entry: IProjectedEntry | null): Promise<IAttributesFile | null | 'unreadable'> => {
       if (entry === null) return null;
-      const read = await projection.attributesText(path, entry);
-      return 'limit' in read ? 'unreadable' : parseAttributes(read.text);
+      const read = await projection.attributesBytes(path, entry);
+      return 'limit' in read ? 'unreadable' : parseAttributes(read.bytes);
     };
     const rootMacros: IAttributesFile['macros'][] = [];
     let rootUnreadable = false;
