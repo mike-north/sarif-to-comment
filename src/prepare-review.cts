@@ -20,10 +20,13 @@
  *     reviewedCommit: string,  // full 40-hex; the review's commit and the
  *                              // default source revision
  *     diff: { baseCommit, headCommit, files },  // placement diff contract for
- *                              // the pull request's current diff. Inline
- *                              // anchors exist only when headCommit equals
- *                              // reviewedCommit; an earlier reviewedCommit
- *                              // yields exact historical general feedback.
+ *                              // the reviewed diff (docs/specification.md
+ *                              // R13.1): from the pull request's diff base
+ *                              // to reviewedCommit, so headCommit must equal
+ *                              // reviewedCommit. Whether reviewedCommit is
+ *                              // still the pull request's head does not
+ *                              // matter here: inline anchors and native
+ *                              // suggestions follow the reviewed diff.
  *     sourceRootUri?: string,  // absolute file: URI of the repository root in
  *                              // the producer's filesystem, ending in "/";
  *                              // read-only path interpretation only
@@ -1413,6 +1416,9 @@ function validateCallerInput(input: unknown): asserts input is IPrepareReviewInp
   const diff = context['diff'];
   if (!isPlainObject(diff) || !isFullCommit(diff['baseCommit']) || !isFullCommit(diff['headCommit']) || !Array.isArray(diff['files'])) {
     fail('`context.diff` must name full base and head commits and list its files.');
+  }
+  if (diff['headCommit'] !== context['reviewedCommit']) {
+    fail('`context.diff` must be the reviewed diff: its head commit must be `context.reviewedCommit`.');
   }
   const sourceRootUri = context['sourceRootUri'];
   if (sourceRootUri !== undefined) {

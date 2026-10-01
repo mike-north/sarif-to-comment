@@ -367,6 +367,7 @@ class OperationalFailures {
       listReviews: this.observeCall(client.listReviews),
       ...(client.readSuggestionTarget === undefined ? {} : { readSuggestionTarget: this.observeCall(client.readSuggestionTarget) }),
       ...(client.compareCommits === undefined ? {} : { compareCommits: this.observeCall(client.compareCommits) }),
+      ...(client.listHeadRefForcePushes === undefined ? {} : { listHeadRefForcePushes: this.observeCall(client.listHeadRefForcePushes) }),
       ...(client.findLabel === undefined ? {} : { findLabel: this.observeCall(client.findLabel) }),
       ...(client.readDefaultBranchFile === undefined ? {} : { readDefaultBranchFile: this.observeCall(client.readDefaultBranchFile) }),
     };

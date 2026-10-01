@@ -41,8 +41,16 @@
  *   "Invalid <spec.operation> input: ".
  *
  * prepareForDestination(captured, client) -> Promise<ready | blocked>
- *   One fetchContext and verifyContext; then, unless the caller's settings
- *   decide every one (docs/delivery-policy-contract.md §11.1), the
+ *   One fetchContext and verifyContext (the context must be for exactly this
+ *   pull request and reviewed commit; its diff is the reviewed diff ending at
+ *   that commit, docs/specification.md R13.1, which preparation checks); then
+ *   the reviewed commit's association with the pull request
+ *   (src/reviewed-commit-association.cts, R17): a commit outside it is
+ *   blocked alone, before anything else is read or prepared, with
+ *   `reviewed-commit-not-in-pull-request`, and an undecided lookup adds the
+ *   note `reviewed-commit-association-unknown` to the outcome's warnings;
+ *   then, unless the caller's settings decide every one
+ *   (docs/delivery-policy-contract.md §11.1), the
  *   repository's delivery configuration `.github/sarif-to-comment.json`,
  *   read once from the default branch through readDefaultBranchFile (an
  *   invalid file blocks, a failed read is operational); the policy resolved
@@ -74,7 +82,7 @@
 
 import * as util from 'node:util';
 
-import type { CommitComparison, IDefaultBranchFile, IFetchContextRequest, IPullRequestDestination, ISuggestionTarget } from './github.cjs';
+import type { CommitComparison, IDefaultBranchFile, IFetchContextRequest, IHeadRefForcePushes, IPullRequestDestination, ISuggestionTarget } from './github.cjs';
 import {
   DELIVERY_CONFIGURATION_PATH,
   deliveryConfigurationDiagnostics,
@@ -85,7 +93,9 @@ import {
   validateDeliveryPolicyLayer,
 } from './delivery-policy.cjs';
 import type { ICompanionOptions, IDeliveryPolicyLayer, IDeliveryPolicyProblem, IResolvedDeliveryPolicy } from './delivery-policy.cjs';
-import { blockedBy, codeSpan, prepareReview } from './prepare-review.cjs';
+import { blockedBy, codeSpan, prepareReview, withoutWarnings } from './prepare-review.cjs';
+import { renderWarningsList } from './presentation/warnings-list.cjs';
+import { associateReviewedCommit, associationDiagnostic } from './reviewed-commit-association.cjs';
 import { capturePresentation } from './presentation/customization.cjs';
 import type { CapturedPresentation } from './presentation/customization.cjs';
 import type { IBlockedOutcome, IReadyOutcome } from './prepare-review.cjs';
@@ -182,10 +192,19 @@ export interface IContextClient {
   ) => Promise<{ readonly context: unknown; readonly readSource: unknown; readonly fileExists?: unknown; readonly readEntry?: unknown }>;
   /** Read only when a unit's `companion` availability is asked; a client without it cannot publish them. */
   readonly readSuggestionTarget?: ((request: IPullRequestDestination) => Promise<ISuggestionTarget>) | undefined;
-  /** Read only when a companion is asked for and the head is not the reviewed commit: their ancestry. */
+  /**
+   * Read when the head is not the reviewed commit: whether the reviewed commit
+   * belongs to the pull request (docs/specification.md R17), and, when a
+   * companion is asked for, their ancestry.
+   */
   readonly compareCommits?:
     | ((request: { readonly owner: string; readonly repo: string; readonly base: string; readonly head: string }) => Promise<CommitComparison>)
     | undefined;
+  /**
+   * Read only when the reviewed commit is neither the head nor an ancestor of
+   * it: the heads force-pushes replaced (docs/specification.md R17).
+   */
+  readonly listHeadRefForcePushes?: ((request: IPullRequestDestination) => Promise<IHeadRefForcePushes>) | undefined;
   /** Read only when a ready review needs suggestion pull requests. */
   readonly findLabel?: ((request: { readonly owner: string; readonly repo: string; readonly name: string }) => Promise<string | null>) | undefined;
   /**
@@ -577,7 +596,9 @@ export class ReviewContextMismatchError extends Error {}
 /**
  * Refuses a context that is not for exactly the requested pull request and
  * reviewed commit. The review is never retargeted to another pull request or
- * to the pull request's current head.
+ * to the pull request's current head. (That its diff is the reviewed diff,
+ * ending at the reviewed commit, is the client's contract, which preparation
+ * checks at its caller boundary.)
  */
 function verifyContext(context: unknown, captured: ICapturedReview): asserts context is IPlainObject {
   const { owner, repo, pullNumber } = captured.destination;
@@ -594,6 +615,15 @@ function verifyContext(context: unknown, captured: ICapturedReview): asserts con
       `GitHub returned review context for reviewed commit ${templateText(context['reviewedCommit'])}, not the requested reviewed commit ${captured.reviewedCommit}. A review is never retargeted to another commit.`,
     );
   }
+}
+
+/** The pull request's current head a verified context names, which must be a full commit. */
+function pullHeadOf(context: IPlainObject, captured: ICapturedReview): string {
+  const head = context['pullHead'];
+  if (typeof head !== 'string' || !COMMIT_PATTERN.test(head)) {
+    throw new Error(`GitHub returned review context for ${destinationLabel(captured)} without the pull request's full head commit.`);
+  }
+  return head;
 }
 
 /**
@@ -616,6 +646,33 @@ export async function prepareForDestination(captured: ICapturedReview, client: I
   };
   const { context, readSource, fileExists, readEntry } = await client.fetchContext(contextRequest);
   verifyContext(context, captured);
+  // The reviewed commit must belong to the pull request before anything is
+  // prepared (docs/specification.md R17): a commit outside it blocks alone,
+  // and an undecided lookup becomes a note on whatever preparation answers.
+  const association = { destination: captured.destination, reviewedCommit: captured.reviewedCommit, head: pullHeadOf(context, captured) };
+  const diagnostic = associationDiagnostic(await associateReviewedCommit(association, client), association);
+  if (diagnostic?.severity === 'error') return blockedBy([diagnostic], []);
+  const outcome = await prepareVerified(captured, client, { context, readSource, fileExists, readEntry });
+  return diagnostic === undefined ? outcome : withPreparationNote(outcome, diagnostic);
+}
+
+/**
+ * An outcome with one more preparation note: a block keeps its problems, and
+ * a ready preparation's Markdown ends with the extended warnings list, as if
+ * preparation had found the note itself.
+ */
+function withPreparationNote(outcome: DestinationOutcome, note: IDiagnostic): DestinationOutcome {
+  if (outcome.status === 'blocked') return blockedBy(outcome.diagnostics, [...outcome.warnings, note]);
+  const warnings = [...outcome.warnings, note];
+  return { ...outcome, warnings, markdown: `${withoutWarnings(outcome)}\n\n${renderWarningsList(warnings)}` };
+}
+
+/** Prepares the whole review against a context verified for this pull request and reviewed commit. */
+async function prepareVerified(
+  captured: ICapturedReview,
+  client: IContextClient,
+  { context, readSource, fileExists, readEntry }: { readonly context: IPlainObject; readonly readSource: unknown; readonly fileExists?: unknown; readonly readEntry?: unknown },
+): Promise<DestinationOutcome> {
 
   const configuration = await readConfigurationLayer(captured, client);
   if (configuration.status === 'invalid') return blockedBy(configuration.diagnostics, []);

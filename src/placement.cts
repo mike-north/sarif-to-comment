@@ -27,8 +27,10 @@
  *     range: { startLine: number, endLine: number }, // inclusive, 1-based, absolute in source
  *     diff: {
  *       baseCommit: string, // verified commit whose text is the patch's old side
- *                           // (for a GitHub pull request, the merge base)
- *       headCommit: string, // reviewed commit whose text is the patch's new side
+ *                           // (for a GitHub pull request, its diff base)
+ *       headCommit: string, // reviewed commit whose text is the patch's new side:
+ *                           // the reviewed diff (docs/specification.md R13.1),
+ *                           // whether or not it is the pull request's head
  *       files: Array<{ path: string, previousPath?: string, patch?: string }>,
  *     },
  *   }
@@ -53,7 +55,9 @@
  * Reasons:
  *   general     outside-diff-hunks          range not wholly inside one hunk on its side
  *               file-not-in-diff            file unchanged by the diff
- *               source-commit-not-diff-side source commit is neither diff side (historical or later)
+ *               source-commit-not-diff-side source commit is neither diff side (a provenance
+ *                                           revision other than the reviewed commit
+ *                                           and the diff base)
  *               no-single-side-anchor       base range mixes deletions and context, or is
  *                                           interrupted by other diff rows
  *   unsupported rename-unsupported          file renamed by the diff

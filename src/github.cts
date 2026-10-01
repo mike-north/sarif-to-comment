@@ -124,25 +124,39 @@
  *                  oldSourceCommit? }) -> { context, readSource, fileExists,
  *                                           readEntry }
  *
- *   Requests, in order: GET pull; every GET pull files page; GET pull again
- *   (its head must equal the first, else 'head-race'); then, only when no
- *   oldSourceCommit is given, GET compare/{base.sha}...{pull head} for a
- *   merge-base CANDIDATE. The reviewed commit may differ from the pull head
- *   (a historical review); the actual current pull diff is always returned.
+ *   The returned diff is the REVIEWED DIFF (docs/specification.md R13.1):
+ *   from the diff base B to the reviewed commit R. B is the caller's
+ *   oldSourceCommit or, without one, the merge base GET
+ *   compare/{base.sha}...{pull head} names; it is only a candidate until
+ *   readSource verifies each old-side read.
+ *   Requests, in order, when R is the pull head: GET pull; every GET pull
+ *   files page; GET pull again (its head must equal the first, else
+ *   'head-race'); the merge-base comparison unless oldSourceCommit is given.
+ *   The reviewed diff is then the pull request's own diff.
+ *   When R is not the pull head: GET pull; the merge-base comparison unless
+ *   oldSourceCommit is given; GET compare/{B}...{R}, whose files are the
+ *   reviewed diff when its status is `ahead` or `identical`. Otherwise
+ *   (`behind`, `diverged`) GitHub measured from the merge base of B and R,
+ *   so GET compare/{R}...{B} lists the files the base side changed: they are
+ *   listed without a patch ('base-changed'), every other file keeps its
+ *   patch (its two-dot patch, since its base-side text did not change), and
+ *   a base-side list of 300 files (GitHub's most per comparison) withholds
+ *   every patch. A first comparison of 300 files is 'files-incomplete'. The
+ *   pull files are not read.
  *
  *   context: {
  *     owner, repo, pullNumber, reviewedCommit,
- *     pullHead,          // pinned pull head observed twice
+ *     pullHead,          // pull head (observed twice when it is R)
  *     currentBaseTip,    // base.sha; informational, never provenance
- *     diff: { baseCommit, headCommit: pullHead, files },
- *     fileDiagnostics: [{ path, reason: 'patch-omitted'|'patch-inconsistent' }],
+ *     diff: { baseCommit, headCommit: reviewedCommit, files },
+ *     fileDiagnostics: [{ path, reason: 'patch-omitted'|'patch-inconsistent'
+ *                         |'base-changed' }],
  *   }
  *   files: [{ path, previousPath?, patch? }] in host order. A patch is dropped
- *   (with a diagnostic) when omitted or when its +/- counts disagree with the
- *   entry's additions/deletions (truncated). changed_files must equal the
- *   listed count and be at most maxPullFiles; filenames must be unique.
- *   baseCommit is the caller's oldSourceCommit or the compare merge base; it is
- *   only a candidate until readSource verifies each old-side read.
+ *   (with a diagnostic) when withheld, omitted, or when its +/- counts
+ *   disagree with the entry's additions/deletions (truncated). From the pull
+ *   files, changed_files must equal the listed count and be at most
+ *   maxPullFiles; filenames must be unique in every listing.
  *
  *   fileExists(commit, path) -> boolean
  *     The same tree walk as readSource, with the same path and commit
@@ -187,10 +201,11 @@
  *     decode as fatal UTF-8 (a leading BOM is preserved). 'blob-integrity'
  *     covers any commit, tree or blob answer whose identity, size or hash
  *     disagrees with what was requested.
- *     A read at diff.baseCommit is verified against the pinned pull head: the
- *     file's authoritative patch reverse-applied to the head file must
- *     reproduce the candidate's file exactly (absence included); an unchanged
- *     file must be identical at both commits. Renamed files refuse under either
+ *     A read at diff.baseCommit is verified against the reviewed commit: the
+ *     file's authoritative patch in the reviewed diff, reverse-applied to its
+ *     file at the reviewed commit, must reproduce the candidate's file exactly
+ *     (absence included); a file the reviewed diff does not change must be
+ *     identical at both commits. Renamed files refuse under either
  *     name ('rename-unsupported'), files without a usable patch refuse
  *     ('patch-unavailable'), a changed file missing where its patch says it
  *     exists is 'source-inconsistent', and any other disagreement —
@@ -320,6 +335,17 @@
  *     open or closed and a boolean merged that is false while open;
  *     headRepository is null when the head repository was deleted. Anything
  *     else is 'malformed-response', never a guess.
+ *   listHeadRefForcePushes({ owner, repo, pullNumber })
+ *       -> { beforeCommits: (string | null)[], complete }
+ *     Every page of a GraphQL query of the pull request's timelineItems
+ *     restricted to HEAD_REF_FORCE_PUSHED_EVENT (variables { owner, repo,
+ *     number, after }), selecting filteredCount, pageInfo and each event's
+ *     __typename and beforeCommit { oid }: the heads force-pushes replaced,
+ *     in timeline order, null where an event names none
+ *     (docs/specification.md R17). complete is false when fewer events were
+ *     listed than filteredCount, or past maxPages pages; a missing or
+ *     repeated cursor is 'pagination', and an item that is not such an event
+ *     or an oid that is not a full commit is 'malformed-response'.
  *   listCrossReferencingPullRequests({ owner, repo, pullNumber })
  *       -> [{ number, htmlUrl, body, headRef, headRepository, author, labels,
  *             repository, state: 'open' | 'closed' | 'merged' }]
@@ -410,7 +436,14 @@ export interface IGitHubErrorOptions {
 export type ReviewSide = 'LEFT' | 'RIGHT';
 
 /** Why a changed file's patch was dropped from the review context. */
-export type FileDiagnosticReason = 'patch-omitted' | 'patch-inconsistent';
+/**
+ * Why a changed file of the reviewed diff carries no patch: GitHub omitted it,
+ * its line counts disagree with the entry's (truncated), or the pull request's
+ * base side changed the file since its merge base with a reviewed commit that
+ * is not the head, so GitHub's comparison offers no patch of the two-dot
+ * reviewed diff for it (docs/specification.md R13.1).
+ */
+export type FileDiagnosticReason = 'patch-omitted' | 'patch-inconsistent' | 'base-changed';
 
 /** The HTTP methods this adapter ever sends (PATCH only to close a pull request). */
 type HttpMethod = 'GET' | 'POST' | 'PATCH';
@@ -580,11 +613,14 @@ export interface IFileDiagnostic {
 }
 
 /**
- * The pull request's current diff. `baseCommit` is the caller's
- * oldSourceCommit, or the host's merge base; `headCommit` is the host's pull
- * head. Host-supplied commits passed the adapter's full-commit check on
- * their string form (see hasFullShaForm) and are passed on as received, so
- * they are typed as unknown; the consumer validates them again.
+ * The reviewed diff (docs/specification.md R13.1): from the pull request's
+ * diff base to the reviewed commit. `baseCommit` is the caller's
+ * oldSourceCommit, or the host's merge base of the pull request's base commit
+ * and head; `headCommit` is always the reviewed commit, so the diff is the
+ * pull request's own diff exactly when the reviewed commit is its head.
+ * Host-supplied commits passed the adapter's full-commit check on their
+ * string form (see hasFullShaForm) and are passed on as received, so they are
+ * typed as unknown; the consumer validates them again.
  */
 export interface IReviewDiff {
   readonly baseCommit: unknown;
@@ -631,6 +667,19 @@ export type ReadEntry = (commit: string, path: string) => Promise<PathEntry>;
 
 /** GitHub's comparison of two commits: `ahead` means the base is an ancestor of the head. */
 export type CommitComparison = 'identical' | 'ahead' | 'behind' | 'diverged';
+
+/**
+ * The heads a force-push replaced on a pull request's branch: the
+ * `beforeCommit` of each `HeadRefForcePushedEvent` of its timeline, oldest
+ * first, null where GitHub names none. `complete` is false when the events
+ * could not all be listed (fewer than the timeline's `filteredCount`, or more
+ * pages than the page limit), so the list may miss replaced heads
+ * (docs/specification.md R17).
+ */
+export interface IHeadRefForcePushes {
+  readonly beforeCommits: readonly (string | null)[];
+  readonly complete: boolean;
+}
 
 /** The review context and the snapshot readers bound to it. */
 export interface IFetchedContext {
@@ -796,6 +845,7 @@ export interface IGitHubClient {
   readonly readSuggestionTarget: (request: IPullRequestDestination) => Promise<ISuggestionTarget>;
   readonly findLabel: (request: { readonly owner: string; readonly repo: string; readonly name: string }) => Promise<string | null>;
   readonly compareCommits: (request: { readonly owner: string; readonly repo: string; readonly base: string; readonly head: string }) => Promise<CommitComparison>;
+  readonly listHeadRefForcePushes: (request: IPullRequestDestination) => Promise<IHeadRefForcePushes>;
   readonly readDefaultBranchFile: (request: {
     readonly owner: string;
     readonly repo: string;
@@ -945,6 +995,13 @@ const THREADS_PER_PAGE = 100;
 /** Page size requested from the GraphQL timelineItems connection (its maximum). */
 const TIMELINE_PER_PAGE = 100;
 
+/**
+ * The most changed files GitHub lists for one comparison. A comparison that
+ * lists this many may have left files out, so its list is never taken as
+ * complete.
+ */
+const COMPARISON_FILE_LIMIT = 300;
+
 /** Labels read with each listed pull request (the connection's maximum); more are read through REST. */
 const SOURCE_LABELS = 100;
 
@@ -1076,6 +1133,30 @@ const CROSS_REFERENCES_QUERY = gql`query ($owner: String!, $repo: String!, $numb
                 ${LISTED_PULL_FIELDS}
               }
             }
+          }
+        }
+      }
+    }
+  }
+}`;
+
+/**
+ * The heads force-pushes replaced on a pull request's branch: its timeline's
+ * HeadRefForcePushedEvent items, each with the commit it replaced. With
+ * `itemTypes` set, `filteredCount` counts the matching events while
+ * `totalCount` still counts the whole timeline (docs/evidence/realignment/
+ * e0-readme.md), so the count of events is `filteredCount`.
+ */
+const HEAD_REF_FORCE_PUSHES_QUERY = gql`query ($owner: String!, $repo: String!, $number: Int!, $after: String) {
+  repository(owner: $owner, name: $repo) {
+    pullRequest(number: $number) {
+      timelineItems(first: ${String(TIMELINE_PER_PAGE)}, after: $after, itemTypes: [HEAD_REF_FORCE_PUSHED_EVENT]) {
+        filteredCount
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          __typename
+          ... on HeadRefForcePushedEvent {
+            beforeCommit { oid }
           }
         }
       }
@@ -2078,23 +2159,24 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
     const { owner, repo, pullNumber } = destination;
 
     const first = await readPull(owner, repo, pullNumber);
-    const entries = await readPullFiles(owner, repo, pullNumber, first.changedFiles);
-    const second = await readPull(owner, repo, pullNumber);
-    if (second.head !== first.head) {
-      throw new GitHubError('head-race', 'The pull request head moved while its files were read; no consistent diff exists.');
-    }
     const head = first.head;
-
+    // The reviewed diff (docs/specification.md R13.1). At the head it is the
+    // pull request's own diff, read from its file list between two reads of
+    // the pull request; otherwise it comes from comparisons, and the file
+    // list is not read.
+    let entries: readonly IPullFileEntry[];
     let baseCommit: unknown = oldSourceCommit;
-    if (baseCommit === undefined) {
-      const { body } = await restGet(
-        `${API_ORIGIN}${repoPath(owner, repo)}/compare/${String(first.base)}...${String(head)}`,
-        'merge-base comparison',
-      );
-      baseCommit = optionalMember(body, 'merge_base_commit', 'sha');
-      if (!hasFullShaForm(baseCommit)) {
-        throw new GitHubError('malformed-response', 'The comparison names no full merge-base commit.');
+    let withheld: ReadonlySet<string> = new Set();
+    if (head === reviewedCommit) {
+      entries = await readPullFiles(owner, repo, pullNumber, first.changedFiles);
+      const second = await readPull(owner, repo, pullNumber);
+      if (second.head !== first.head) {
+        throw new GitHubError('head-race', 'The pull request head moved while its files were read; no consistent diff exists.');
       }
+      baseCommit ??= await mergeBaseOf(owner, repo, first.base, head);
+    } else {
+      baseCommit ??= await mergeBaseOf(owner, repo, first.base, head);
+      ({ entries, withheld } = await readReviewedComparison(owner, repo, baseCommit, reviewedCommit));
     }
 
     const files: IPullFile[] = [];
@@ -2104,7 +2186,9 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
       const file: { path: string; previousPath?: string; patch?: string } = { path: entry.filename };
       if (entry.previous_filename !== undefined) file.previousPath = entry.previous_filename;
       let patch: string | undefined;
-      if (entry.patch === undefined) {
+      if (withheld.has(entry.filename) || (entry.previous_filename !== undefined && withheld.has(entry.previous_filename))) {
+        fileDiagnostics.push({ path: entry.filename, reason: 'base-changed' });
+      } else if (entry.patch === undefined) {
         fileDiagnostics.push({ path: entry.filename, reason: 'patch-omitted' });
       } else {
         const counts = patchCounts(entry.patch);
@@ -2127,8 +2211,9 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
     }
 
     /**
-     * Old-side text at the candidate, accepted only when the pinned head file
-     * and the file's authoritative patch reproduce it exactly.
+     * Old-side text at the candidate, accepted only when the reviewed
+     * commit's file and the file's authoritative patch in the reviewed diff
+     * reproduce it exactly.
      */
     async function readVerifiedBase(filePath: string): Promise<string | null> {
       if (renamedPaths.has(filePath)) {
@@ -2136,8 +2221,8 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
       }
       const change = changes.get(filePath);
       if (change === undefined) {
-        const [headText, baseText] = [await readBlob(owner, repo, head, filePath), await readBlob(owner, repo, baseCommit, filePath)];
-        if (headText !== baseText) {
+        const [newText, baseText] = [await readBlob(owner, repo, reviewedCommit, filePath), await readBlob(owner, repo, baseCommit, filePath)];
+        if (newText !== baseText) {
           throw new GitHubError('old-source-unverified', redact(`${filePath} is unchanged by the diff but differs at the candidate base.`));
         }
         return baseText;
@@ -2145,10 +2230,10 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
       if (change.patch === undefined) {
         throw new GitHubError('patch-unavailable', redact(`${filePath} has no usable patch to verify its old side.`));
       }
-      const headText = await readBlob(owner, repo, head, filePath);
+      const headText = await readBlob(owner, repo, reviewedCommit, filePath);
       const deletesFile = /^@@ -\d+(?:,\d+)? \+0,0 @@/.test(change.patch);
       if ((headText === null) !== deletesFile) {
-        throw new GitHubError('source-inconsistent', redact(`${filePath} existence at the pull head disagrees with its patch.`));
+        throw new GitHubError('source-inconsistent', redact(`${filePath} existence at the reviewed commit disagrees with its patch.`));
       }
       const old = reverseApplyPatch(headText, change.patch, redact(filePath));
       const baseText = await readBlob(owner, repo, baseCommit, filePath);
@@ -2191,10 +2276,95 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
       reviewedCommit,
       pullHead: head,
       currentBaseTip: first.base,
-      diff: { baseCommit, headCommit: head, files },
+      diff: { baseCommit, headCommit: reviewedCommit, files },
       fileDiagnostics,
     };
     return { context, readSource, fileExists, readEntry };
+  }
+
+  /**
+   * The merge base of the pull request's base commit and its head, as
+   * GitHub's comparison names it: the base of the pull request's diff.
+   */
+  async function mergeBaseOf(owner: string, repo: string, base: unknown, head: unknown): Promise<unknown> {
+    const { body } = await restGet(`${API_ORIGIN}${repoPath(owner, repo)}/compare/${String(base)}...${String(head)}`, 'merge-base comparison');
+    const mergeBase = optionalMember(body, 'merge_base_commit', 'sha');
+    if (!hasFullShaForm(mergeBase)) {
+      throw new GitHubError('malformed-response', 'The comparison names no full merge-base commit.');
+    }
+    return mergeBase;
+  }
+
+  /**
+   * The changed files one comparison lists, complete and unique. A list as
+   * long as GitHub's limit for one comparison may have left files out, so it
+   * is `files-incomplete` unless the caller can do without completeness.
+   */
+  function comparisonFiles(body: unknown, what: string): { readonly entries: readonly IPullFileEntry[]; readonly mayBeIncomplete: boolean } {
+    const listed = optionalMember(body, 'files');
+    if (!isList(listed)) throw new GitHubError('malformed-response', `The ${what} lists no files.`);
+    const entries: IPullFileEntry[] = [];
+    const seen = new Set<string>();
+    for (const entry of listed) {
+      if (!isPullFileEntry(entry)) throw new GitHubError('malformed-response', `A file entry of the ${what} lacks its fields.`);
+      if (seen.has(entry.filename)) throw new GitHubError('duplicate-file', redact(`The ${what} lists ${entry.filename} more than once.`));
+      seen.add(entry.filename);
+      entries.push(entry);
+    }
+    return { entries, mayBeIncomplete: entries.length >= COMPARISON_FILE_LIMIT };
+  }
+
+  /**
+   * The reviewed diff of a reviewed commit that is not the head
+   * (docs/specification.md R13.1): GET compare/{base}...{reviewed}. When the
+   * base is an ancestor of the reviewed commit (`ahead`, or `identical`), its
+   * files are the two-dot diff. Otherwise GitHub's comparison measures from
+   * their merge base, so GET compare/{reviewed}...{base} lists the files the
+   * base side changed since then: those are withheld (listed without a
+   * patch), and every other file's patch is its two-dot patch. A base-side
+   * list that may be incomplete withholds every file.
+   */
+  async function readReviewedComparison(
+    owner: string,
+    repo: string,
+    base: unknown,
+    reviewed: string,
+  ): Promise<{ readonly entries: readonly IPullFileEntry[]; readonly withheld: ReadonlySet<string> }> {
+    const what = 'reviewed-diff comparison';
+    const { body } = await restGet(`${API_ORIGIN}${repoPath(owner, repo)}/compare/${String(base)}...${reviewed}`, what);
+    const status = optionalMember(body, 'status');
+    if (!isCommitComparison(status)) throw new GitHubError('malformed-response', `The ${what} has no known status.`);
+    const reviewedSide = comparisonFiles(body, what);
+    if (reviewedSide.mayBeIncomplete) {
+      throw new GitHubError(
+        'files-incomplete',
+        `The reviewed diff lists ${String(reviewedSide.entries.length)} files, GitHub's most for one comparison, so it may be incomplete.`,
+      );
+    }
+    if (status === 'ahead' || status === 'identical') return { entries: reviewedSide.entries, withheld: new Set() };
+
+    const baseSideWhat = 'base-side comparison';
+    const { body: baseBody } = await restGet(`${API_ORIGIN}${repoPath(owner, repo)}/compare/${reviewed}...${String(base)}`, baseSideWhat);
+    const baseSide = comparisonFiles(baseBody, baseSideWhat);
+    const entries = [...reviewedSide.entries];
+    const listed = new Set(entries.map((e) => e.filename));
+    // A file only the base side changed is in the two-dot diff too, listed
+    // here without a patch under each name it has on either side (a base-side
+    // rename runs the other way in the reviewed diff, so it is not recorded).
+    for (const entry of baseSide.entries) {
+      for (const filename of [entry.filename, entry.previous_filename]) {
+        if (filename === undefined || listed.has(filename)) continue;
+        entries.push({ filename, additions: 0, deletions: 0 });
+        listed.add(filename);
+      }
+    }
+    const withheld = new Set<string>();
+    const changedOnBaseSide = baseSide.mayBeIncomplete ? entries : baseSide.entries;
+    for (const entry of changedOnBaseSide) {
+      withheld.add(entry.filename);
+      if (entry.previous_filename !== undefined) withheld.add(entry.previous_filename);
+    }
+    return { entries, withheld };
   }
 
   // ---------------------------------------------------------------------------
@@ -2746,6 +2916,53 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
     }
   }
 
+  async function listHeadRefForcePushes({
+    owner: ownerInput,
+    repo: repoInput,
+    pullNumber: pullNumberInput,
+  }: Unchecked<'owner' | 'repo' | 'pullNumber'> = {}): Promise<IHeadRefForcePushes> {
+    const destination = { owner: ownerInput, repo: repoInput, pullNumber: pullNumberInput };
+    requireDestination(destination);
+    const { owner, repo, pullNumber } = destination;
+    const what = 'force-push query';
+    const beforeCommits: (string | null)[] = [];
+    const seen = new Set<string>();
+    let filteredCount: number | undefined;
+    let after: string | null = null;
+    for (let pages = 1; ; pages += 1) {
+      // Past the page limit the events are not all listed: an incomplete answer, not an error.
+      if (pages > limits.maxPages) return { beforeCommits, complete: false };
+      const body = await graphqlData(HEAD_REF_FORCE_PUSHES_QUERY, { owner, repo, number: pullNumber, after }, what);
+      const items = optionalMember(body, 'data', 'repository', 'pullRequest', 'timelineItems');
+      if (!isPlainObject(items) || !isList(items['nodes']) || !isPlainObject(items['pageInfo']) || !isSafeInteger(items['filteredCount']) || items['filteredCount'] < 0) {
+        throw new GitHubError('malformed-response', 'The force-push query returned no timeline connection with a count.');
+      }
+      filteredCount = items['filteredCount'];
+      for (const node of items['nodes']) {
+        if (!isPlainObject(node) || node['__typename'] !== 'HeadRefForcePushedEvent') {
+          throw new GitHubError('malformed-response', 'The force-push query returned an item that is not a force-push event.');
+        }
+        const before = node['beforeCommit'];
+        if (before === null) {
+          beforeCommits.push(null);
+          continue;
+        }
+        const oid = optionalMember(before, 'oid');
+        if (typeof oid !== 'string' || !FULL_SHA.test(oid)) {
+          throw new GitHubError('malformed-response', 'A force-push event names its earlier head without a full commit id.');
+        }
+        beforeCommits.push(oid);
+      }
+      const { hasNextPage, endCursor } = items['pageInfo'];
+      if (hasNextPage === false) return { beforeCommits, complete: beforeCommits.length === filteredCount };
+      if (hasNextPage !== true || typeof endCursor !== 'string' || endCursor === '' || seen.has(endCursor)) {
+        throw new GitHubError('pagination', 'The force-push pagination is missing or repeats a cursor.');
+      }
+      seen.add(endCursor);
+      after = endCursor;
+    }
+  }
+
   /** Whether a refused answer is a rate limit (primary or secondary) rather than a permission refusal. */
   function isRateLimit(response: IFetchResponse, explanation: string): boolean {
     if (response.status === 429) return true;
@@ -2784,6 +3001,7 @@ export function createGitHubClient(options: ICreateGitHubClientOptions): IGitHub
     readSuggestionTarget,
     findLabel,
     compareCommits,
+    listHeadRefForcePushes,
     readDefaultBranchFile,
     createProposalCommit,
     getBranch,
