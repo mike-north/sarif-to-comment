@@ -47,6 +47,7 @@ describe('Markdown primitives', () => {
     assert.equal(codeSpan('a.js'), '`a.js`');
     assert.equal(codeSpan('a`b'), '``a`b``');
     assert.equal(codeSpan('`x``'), '``` `x`` ```');
+    assert.equal(codeSpan('a\nb\r\nc\rd'), '`a b c d`', 'line breaks become spaces, as a code span renders them');
   });
 
   test('a fence is at least three backticks and one longer than the longest run inside', () => {

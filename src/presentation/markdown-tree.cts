@@ -71,9 +71,25 @@ export async function loadMarkdownParser(): Promise<void> {
   parser = (markdown) => fromMarkdown(markdown, { extensions: [gfm()], mdastExtensions: [gfmFromMarkdown()] });
 }
 
+/** How many recent parses each cache keeps: the checks of one text reuse its tree. */
+const CACHED_PARSES = 16;
+
+/** Recent parses, by Markdown, oldest first (a small cache: entries are never mutated). */
+const parses = new Map<string, Root>();
+
+/**
+ * The parse of `markdown`. The checks of one text — fences, raw HTML,
+ * structure, required fragments — read the same tree, so recent parses are
+ * reused rather than repeated.
+ */
 function parse(markdown: string): Root {
   if (parser === undefined) throw new Error('Internal error: the Markdown parser is not loaded; await loadMarkdownParser() first.');
-  return parser(markdown);
+  const cached = parses.get(markdown);
+  if (cached !== undefined) return cached;
+  const root = parser(markdown);
+  parses.set(markdown, root);
+  if (parses.size > CACHED_PARSES) parses.delete(parses.keys().next().value ?? '');
+  return root;
 }
 
 /** A node of a parse with its source span (`end` exclusive) and its ancestors, outermost first. */
@@ -104,18 +120,25 @@ function placedNodes(root: Root): IPlacedNode[] {
 const PROBE = 'sarif-to-comment-probe';
 
 /**
- * What, if anything, would swallow content that follows the Markdown after a
- * blank line: the outermost node (other than the root) that contains the
- * probe, unless the probe is its own top-level paragraph.
+ * The parse of the Markdown followed by a blank line and the probe — the
+ * boundary the tool always puts after it — and what, if anything, would
+ * swallow that content: the outermost node (other than the root) that
+ * contains the probe, unless the probe is its own top-level paragraph. For
+ * the Markdown's own part, the tree reads exactly as the Markdown's alone,
+ * so the raw-HTML and structure checks reuse it.
  */
-function swallower(markdown: string): Nodes | null {
+function probed(markdown: string): { readonly root: Root; readonly swallower: Nodes | null } {
   const probeAt = markdown.length + 2;
   const root = parse(`${markdown}\n\n${PROBE}`);
   const containing = root.children.find((child) => (child.position?.start.offset ?? 0) <= probeAt && probeAt < (child.position?.end.offset ?? 0));
-  if (containing === undefined) return null;
-  const [only] = containing.type === 'paragraph' ? containing.children : [];
-  if (containing.type === 'paragraph' && containing.children.length === 1 && only?.type === 'text' && only.value === PROBE) return null;
-  return containing;
+  const [only] = containing?.type === 'paragraph' ? containing.children : [];
+  const clear = containing === undefined
+    || (containing.type === 'paragraph' && containing.children.length === 1 && only?.type === 'text' && only.value === PROBE);
+  return { root, swallower: clear ? null : containing };
+}
+
+function swallower(markdown: string): Nodes | null {
+  return probed(markdown).swallower;
 }
 
 /**
@@ -177,8 +200,15 @@ interface IHtmlConstruct {
   readonly href?: string;
 }
 
+/**
+ * How a comment that cmark-gfm (CommonMark 0.29) may not read as one is read:
+ * as the comment CommonMark 0.31 makes it, or as the text 0.29 makes of its
+ * `<!--`, with the tags it seems to enclose as raw HTML.
+ */
+type AmbiguousCommentReading = 'comment' | 'text';
+
 /** The constructs of one html node's text, in order, up to the first unterminated one. */
-function constructsOf(value: string, offset: number): IHtmlConstruct[] {
+function constructsOf(value: string, offset: number, ambiguous: AmbiguousCommentReading): IHtmlConstruct[] {
   const constructs: IHtmlConstruct[] = [];
   const opener = /<!--|<\?|<!\[CDATA\[|<![A-Za-z]|<(\/?)([A-Za-z][A-Za-z0-9-]*)/g;
   for (let match = opener.exec(value); match; match = opener.exec(value)) {
@@ -192,10 +222,10 @@ function constructsOf(value: string, offset: number): IHtmlConstruct[] {
       // GitHub's cmark-gfm follows CommonMark 0.29, under which `<!-->`,
       // `<!--->` and a comment containing `--` or ending in `-` are not
       // comments: the `<!--` is text, and the tags it seems to enclose are
-      // raw HTML. Read such a comment both ways: its tags count.
+      // raw HTML. Read as text, the tags inside such a comment count.
       const inner = kind === 'comment' && at !== -1 ? value.slice(match.index + 4, Math.max(at, match.index + 4)) : '';
-      const ambiguous = kind === 'comment' && at !== -1 && (at < match.index + 4 || inner.startsWith('>') || inner.startsWith('->') || inner.includes('--') || inner.endsWith('-'));
-      if (ambiguous) {
+      const unclear = kind === 'comment' && at !== -1 && (at < match.index + 4 || inner.startsWith('>') || inner.startsWith('->') || inner.includes('--') || inner.endsWith('-'));
+      if (unclear && ambiguous === 'text') {
         opener.lastIndex = match.index + text.length;
         continue;
       }
@@ -252,16 +282,17 @@ interface IElementWalk {
 }
 
 /**
- * The element balance of a tree's raw HTML, in document order. Only void
- * elements close themselves: as in HTML, a trailing `/>` on any other start
- * tag (`<details/>`) is ignored, and the element stays open.
+ * The element balance of a tree's raw HTML, in document order, reading
+ * ambiguous comments one way. Only void elements close themselves: as in
+ * HTML, a trailing `/>` on any other start tag (`<details/>`) is ignored,
+ * and the element stays open.
  */
-function elementWalk(root: Root): IElementWalk {
+function elementWalkAs(root: Root, ambiguous: AmbiguousCommentReading): IElementWalk {
   const stack: { readonly name: string; readonly start: number; readonly hides: boolean; readonly href: string | undefined }[] = [];
   const hidden: IElementSpan[] = [];
   const anchors: (IElementSpan & { readonly href: string | undefined })[] = [];
   for (const { node, start } of htmlNodes(root)) {
-    for (const construct of constructsOf(node.value, start)) {
+    for (const construct of constructsOf(node.value, start, ambiguous)) {
       if (!construct.terminated) {
         return {
           problem: construct.kind === 'tag' ? `a <${construct.closing === true ? '/' : ''}${construct.name ?? ''}> tag` : `an HTML ${OPENERS[construct.kind]} construct`,
@@ -284,6 +315,22 @@ function elementWalk(root: Root): IElementWalk {
   return { problem: open === undefined ? null : `a <${open.name}> element`, hidden, anchors };
 }
 
+/**
+ * The element balance read both ways — ambiguous comments as text (0.29)
+ * and as comments (0.31) — so a tag that only one reading closes or hides
+ * still counts: the first imbalance either reading finds, and every hiding
+ * element and `<a>` either reading records.
+ */
+function elementWalk(root: Root): IElementWalk {
+  const asText = elementWalkAs(root, 'text');
+  const asComment = elementWalkAs(root, 'comment');
+  return {
+    problem: asText.problem ?? asComment.problem,
+    hidden: [...asText.hidden, ...asComment.hidden],
+    anchors: [...asText.anchors, ...asComment.anchors],
+  };
+}
+
 /** The opener a refusal names for each non-tag construct. */
 const OPENERS: Readonly<Record<Exclude<IHtmlConstruct['kind'], 'tag'>, string>> = {
   comment: '<!--', instruction: '<?', cdata: '<![CDATA[', declaration: '<!',
@@ -300,13 +347,14 @@ const OPENERS: Readonly<Record<Exclude<IHtmlConstruct['kind'], 'tag'>, string>> 
  * or swallow what follows when rendered.
  */
 export function unbalancedHtml(markdown: string): string | null {
-  const node = swallower(markdown);
+  const { root, swallower: node } = probed(markdown);
   if (node !== null && node.type === 'html') {
     const kind = /^<(!--|\?|!\[CDATA\[|!)/.exec(node.value)?.[1];
     if (kind !== undefined) return `an HTML <${kind} construct`;
     return `a <${(/^<([A-Za-z][A-Za-z0-9-]*)/.exec(node.value)?.[1] ?? '').toLowerCase()}> element`;
   }
-  return elementWalk(parse(markdown)).problem;
+  // The probed tree reads the Markdown's own part exactly as its own parse.
+  return elementWalk(root).problem;
 }
 
 // ---------------------------------------------------------------------------
@@ -456,16 +504,18 @@ export interface IComposedExpectation {
  *   - end with its marker as its own final html node.
  */
 export function composedProblem(text: string, expected: IComposedExpectation): string | null {
+  // One parse serves every check: the probed tree, whose last block is the
+  // probe paragraph when nothing swallows it.
   const html = unbalancedHtml(text);
   if (html !== null) return `leaves ${html} open`;
-  if (swallower(text) !== null) return 'leaves a code fence open';
+  const { root, swallower: node } = probed(text);
+  if (node !== null) return 'leaves a code fence open';
   const { suggestionBlock, marker } = expected;
-  const root = parse(text);
   const suggestions = placedNodes(root).filter((placed) => placed.node.type === 'code' && /^suggestion/i.test(placed.node.lang ?? '')).length;
   if (suggestions !== (suggestionBlock === undefined ? 0 : 1)) {
     return `has ${String(suggestions)} suggestion block${suggestions === 1 ? '' : 's'}, not the ${suggestionBlock === undefined ? 'none' : 'one'} the core built`;
   }
-  const blocks = root.children;
+  const blocks = root.children.slice(0, -1);
   const last = blocks[blocks.length - 1];
   const sourceOf = (node: Nodes | undefined): string | undefined =>
     node?.position?.start.offset === undefined || node.position.end.offset === undefined ? undefined : text.slice(node.position.start.offset, node.position.end.offset);

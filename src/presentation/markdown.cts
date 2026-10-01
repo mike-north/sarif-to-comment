@@ -76,8 +76,14 @@ export function fenced(text: string): string {
   return `${fence}\n${text}\n${fence}`;
 }
 
-/** A CommonMark code span whose delimiter is longer than any backtick run inside. */
-export function codeSpan(text: string): string {
+/**
+ * A CommonMark code span whose delimiter is longer than any backtick run
+ * inside. Line breaks become spaces, as a code span renders them anyway, so
+ * a value with line breaks (a rule id, a ref name) can never end the
+ * paragraph the span is in and start a block of its own.
+ */
+export function codeSpan(value: string): string {
+  const text = value.replace(/\r\n|\r|\n/g, ' ');
   const fence = '`'.repeat(longestRun(text, '`') + 1);
   const pad = text.startsWith('`') || text.endsWith('`') ? ' ' : '';
   return `${fence}${pad}${text}${pad}${fence}`;

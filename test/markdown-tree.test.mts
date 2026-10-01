@@ -262,3 +262,43 @@ describe('composedProblem: the checkpoint over a fully composed comment or body'
   });
 });
 
+describe('an ambiguous comment is read both ways for closing tags too', () => {
+  // Under CommonMark 0.31 the comment hides its </details>, so <details> stays
+  // open; under 0.29 the </details> closes it. Either reading that leaves it open refuses.
+  test('a </details> inside a comment with -- does not close the <details> before it', () => {
+    assert.equal(unbalancedHtml('<details> <!-- -- </details> -->'), 'a <details> element');
+    assert.equal(unbalancedHtml('x <details> <!-- -- </details> -->'), 'a <details> element');
+    assert.equal(unbalancedHtml('<details>\n\n<!-- -- </details> -->'), 'a <details> element');
+  });
+
+  for (const markdown of ['<details> <!-- -- </details> -->', '<details>\n\n<!-- -- </details> -->']) {
+    test(`producer ${JSON.stringify(markdown)} before a suggestion is refused (producer-html-unbalanced)`, async () => {
+      const outcome = await prepareOutcome(producer(markdown));
+      assert.equal(outcome.status, 'blocked');
+      assert.deepEqual(outcome.diagnostics.map((d) => d.code), ['producer-html-unbalanced']);
+    });
+  }
+});
+
+describe('values shown as code spans stay on one line', () => {
+  const withRule = (ruleId: string): Record<string, unknown> => log(run(ESLINT, [{
+    ruleId, message: { text: 'Plain.' }, locations: [at('src/app.js', { startLine: 2 })], fixes: [lineFix('src/app.js', 2, 'C', 'd')],
+  }]));
+
+  // A rule id with line breaks used to end its paragraph and start a block of
+  // its own (raw HTML, a fence); its code span now renders the breaks as spaces.
+  for (const [ruleId, span] of [
+    ['x\n\n<details>', '`x  <details>`'],
+    ['x\n\n```suggestion\nEVIL\n```\n', '````x  ```suggestion EVIL ``` ````'],
+    ['x\n\n<details><summary>s</summary>', '`x  <details><summary>s</summary>`'],
+    ['a\n<details>', '`a <details>`'],
+    ['x`\n\n<details>', '``x`  <details>``'],
+  ] as const) {
+    test(`rule id ${JSON.stringify(ruleId)} is published as one code span`, async () => {
+      const outcome = await prepareOutcome(withRule(ruleId));
+      assert.equal(outcome.status, 'ready', outcome.markdown);
+      assert.equal(outcome.review.comments[0]?.body, `Plain.\n\n**Fix:** d\n\n<sub>— eslint 9.0.0 · rule ${span}</sub>\n\n\`\`\`suggestion\nC\n\`\`\``);
+    });
+  }
+});
+
