@@ -68,6 +68,33 @@ export interface IAddStagedChangesInput {
 }
 
 // @public
+export interface IAlternativePresentation {
+    readonly changes: string;
+    readonly description?: string;
+    readonly markdown: string;
+    readonly number: number;
+}
+
+// @public
+export interface IAlternativesPresentationContext extends IPresentationContext {
+    readonly alternatives: readonly IAlternativePresentation[];
+}
+
+// @public
+export interface IAttributionComponent {
+    readonly name: string;
+    readonly version?: string;
+}
+
+// @public
+export interface IAttributionPresentationContext extends IPresentationContext {
+    readonly component?: IAttributionComponent;
+    readonly ruleId?: string;
+    readonly tool: string;
+    readonly version?: string;
+}
+
+// @public
 export interface IBlockedAssessment {
     readonly diagnostics: readonly IDiagnostic[];
     readonly markdown: string;
@@ -146,6 +173,36 @@ export interface IFailedStagedChangesOutcome {
     readonly markdown: string;
     readonly problems: readonly IProblem[];
     readonly status: 'failed';
+}
+
+// @public
+export interface IFileAdditionPresentationContext extends IPresentationContext {
+    readonly byteLength: number;
+    readonly content: string | undefined;
+    readonly details: string;
+    readonly fileMode: '100644' | '100755';
+    readonly findings: string;
+    readonly path: string;
+}
+
+// @public
+export interface IFileDeletionPresentationContext extends IPresentationContext {
+    readonly commit: string;
+    readonly findings: string;
+    readonly path: string;
+    readonly url: string;
+}
+
+// @public
+export interface IFindingPresentationContext extends IPresentationContext {
+    readonly alternatives?: string;
+    readonly attribution: string;
+    readonly baselineState?: string;
+    readonly fixDescription?: string;
+    readonly kind?: string;
+    readonly level?: string;
+    readonly locationMessage?: string;
+    readonly message: string;
 }
 
 // @public
@@ -338,6 +395,13 @@ export interface IInvalidSarifOutcome {
 }
 
 // @public
+export interface ILifecycleNotePresentationContext extends IPresentationContext {
+    readonly headRef: string;
+    readonly pullNumber: number;
+    readonly ready: boolean;
+}
+
+// @public
 export interface INewSarifRun {
     readonly source?: ISarifSourceBinding | undefined;
     readonly toolName: string;
@@ -355,6 +419,12 @@ export interface IOriginalPullRequest {
     readonly number: number;
     readonly reason?: string;
     readonly state: OriginalPullRequestState;
+}
+
+// @public
+export interface IPresentationContext {
+    readonly markdown: string;
+    readonly required: readonly string[];
 }
 
 // @public
@@ -404,6 +474,7 @@ export interface IPublishSarifReviewOptions {
     readonly allowSuggestionPullRequests?: boolean | undefined;
     readonly ignoreApprovalHold?: boolean | undefined;
     readonly markSuggestionPullRequestsReady?: boolean | undefined;
+    readonly presentation?: IReviewPresentation | undefined;
     readonly pullRequestLabels?: readonly string[] | undefined;
     readonly submit?: boolean | undefined;
 }
@@ -454,6 +525,16 @@ export interface IRemovedSarifCommentOutcome {
     readonly finding: IRemovedFinding;
     readonly sarif: ISarifLog;
     readonly status: 'removed';
+}
+
+// @public
+export interface IReviewPresentation {
+    readonly alternatives?: ((context: IAlternativesPresentationContext) => string) | undefined;
+    readonly attribution?: ((context: IAttributionPresentationContext) => string) | undefined;
+    readonly fileAddition?: ((context: IFileAdditionPresentationContext) => string) | undefined;
+    readonly fileDeletion?: ((context: IFileDeletionPresentationContext) => string) | undefined;
+    readonly finding?: ((context: IFindingPresentationContext) => string) | undefined;
+    readonly lifecycleNote?: ((context: ILifecycleNotePresentationContext) => string) | undefined;
 }
 
 // @public

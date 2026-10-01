@@ -1781,13 +1781,23 @@ describe('regression: a failed analysis is never presented as a complete review 
 describe('regression: producer HTML can never hide later content', () => {
   const md = (markdown: string, locations?: readonly unknown[]) => ({ message: { text: 'x', markdown }, ...(locations ? { locations } : {}) });
 
-  test('an unterminated HTML comment in the body blocks instead of hiding the next finding', async () => {
+  // CommonMark reads an unterminated `<!--` inside a paragraph as text, which
+  // GitHub escapes: it cannot hide what follows, so it is published as written.
+  // At the start of a line it opens an HTML block that runs to the end of the
+  // input, which would hide everything after it, so it blocks.
+  test('an unterminated HTML comment in a paragraph is text and hides nothing after it', async () => {
     const { outcome } = await prepare(sarifLog([md('First finding <!-- unterminated'), result('Second finding: SQL injection')]));
+    assertReady(outcome);
+    assert.match(outcome.review.body, /^First finding <!-- unterminated\n\n<sub>— T<\/sub>\n\n---\n\nSecond finding: SQL injection/);
+  });
+
+  test('an unterminated HTML comment block in the body blocks instead of hiding the next finding', async () => {
+    const { outcome } = await prepare(sarifLog([md('First finding\n\n<!-- unterminated'), result('Second finding: SQL injection')]));
     assertBlocked(outcome, [['producer-html-unbalanced', '/runs/0/results/0']]);
   });
 
-  test('an unterminated comment before a validated suggestion blocks', async () => {
-    const { outcome } = await prepare(sarifLog([{ message: { text: 'x', markdown: 'Please apply <!--' },
+  test('an unterminated comment block before a validated suggestion blocks', async () => {
+    const { outcome } = await prepare(sarifLog([{ message: { text: 'x', markdown: 'Please apply\n<!--' },
       locations: at('src/app.js', { startLine: 3 }), fixes: [limit20()] }]));
     assertBlocked(outcome, [['producer-html-unbalanced', '/runs/0/results/0']]);
   });

@@ -13,9 +13,10 @@
  * alternatives (owner decision on issue #30). Before this change the whole
  * review was refused.
  *
- * The expected comment is written by hand from the rendering grammar in
- * src/prepare-review.cts and the fixture bytes below.
+ * The expected comment is written by hand from
+ * docs/review-presentation-contract.md §2–§4 and the fixture bytes below.
  *
+ * @see ../docs/review-presentation-contract.md
  * @see https://github.com/mike-north/sarif-to-comment/issues/30
  * @see https://docs.github.com/en/rest/pulls/reviews#create-a-review-for-a-pull-request
  * @see https://github.github.com/gfm/#fenced-code-blocks

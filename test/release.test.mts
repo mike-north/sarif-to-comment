@@ -327,7 +327,7 @@ describe('the packed tarball is exactly the distribution boundary', () => {
     'a missing vendored schema': (p) => (p.files = p.files.filter((f) => f.path !== 'vendor/sarif-schema-2.1.0.json')),
     'a different version': (p) => (p.version = '0.0.9'),
   };
-  test('the boundary admits exactly the flat built runtime, the rolled-up declarations, vendor and docs', () => {
+  test('the boundary admits exactly the built runtime (with its presentation components), the rolled-up declarations, vendor and docs', () => {
     for (const file of [
       'package.json',
       'README.md',
@@ -336,6 +336,7 @@ describe('the packed tarball is exactly the distribution boundary', () => {
       'dist/index.cjs',
       'dist/sarif-to-comment.cjs',
       'dist/publish-sarif-review.cjs',
+      'dist/presentation/finding.cjs',
       'dist/sarif-to-comment.d.ts',
       'vendor/sarif-schema-2.1.0.json',
       'docs/getting-started.md',
@@ -349,6 +350,8 @@ describe('the packed tarball is exactly the distribution boundary', () => {
       'src/index.cjs',
       'src/index.cts',
       'dist/internal/x.cjs',
+      'dist/presentation/nested/x.cjs',
+      'dist/presentation/finding.d.cts',
       'dist/index.d.cts',
       'dist/index.d.ts',
       'dist/index.cjs.map',

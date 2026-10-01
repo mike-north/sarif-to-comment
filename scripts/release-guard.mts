@@ -170,12 +170,13 @@ const NON_RUNTIME_OUTPUTS: readonly string[] = ['dist/public-api.cjs', 'dist/pub
 
 /**
  * Whether a packed path is inside the distribution boundary: the built
- * runtime (flat dist/*.cjs, including the executable), the rolled-up public
+ * runtime (dist/*.cjs, including the executable, and the presentation
+ * components in dist/presentation/*.cjs), the rolled-up public
  * declarations, vendored schema, README, CHANGELOG, an optional LICENSE, the
  * getting-started guide, the diagnostics catalog (docs/diagnostics.md) and
  * the JSON Schema of the diagnostic shape it documents
  * (docs/diagnostic.v1.schema.json), and the generated API reference.
- * Sources, nested build directories, per-module declarations, source maps,
+ * Sources, any other nested build directory, per-module declarations, source maps,
  * build info, the build-freshness manifest and every other docs/ file are
  * outside it.
  *
@@ -189,7 +190,7 @@ export function isDistributable(file: string): boolean {
     file === 'README.md' ||
     file === 'CHANGELOG.md' ||
     /^LICENSE(\.md|\.txt)?$/.test(file) ||
-    (/^dist\/[^/]+\.cjs$/.test(file) && !NON_RUNTIME_OUTPUTS.includes(file)) ||
+    (/^dist\/(?:presentation\/)?[^/]+\.cjs$/.test(file) && !NON_RUNTIME_OUTPUTS.includes(file)) ||
     file === 'dist/sarif-to-comment.d.ts' ||
     /^vendor\/[^/]+$/.test(file) ||
     file === 'docs/getting-started.md' ||

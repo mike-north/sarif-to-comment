@@ -214,6 +214,50 @@ Input to [addStagedChangesToSarif()](./sarif-to-comment.addstagedchangestosarif.
 </td></tr>
 <tr><td>
 
+[IAlternativePresentation](./sarif-to-comment.ialternativepresentation.md)
+
+
+</td><td>
+
+One alternative fix listed with a finding.
+
+
+</td></tr>
+<tr><td>
+
+[IAlternativesPresentationContext](./sarif-to-comment.ialternativespresentationcontext.md)
+
+
+</td><td>
+
+The further fixes of one finding, listed as alternatives to consider. Nothing is applied; each only shows the changes it would make.
+
+
+</td></tr>
+<tr><td>
+
+[IAttributionComponent](./sarif-to-comment.iattributioncomponent.md)
+
+
+</td><td>
+
+The SARIF tool extension that defines a finding's rule, as an attribution names it.
+
+
+</td></tr>
+<tr><td>
+
+[IAttributionPresentationContext](./sarif-to-comment.iattributionpresentationcontext.md)
+
+
+</td><td>
+
+The producer attribution of one finding: who produced it according to the SARIF document — the tool, the extension defining its rule, and the rule. This is never the GitHub account that publishes the review.
+
+
+</td></tr>
+<tr><td>
+
 [IBlockedAssessment](./sarif-to-comment.iblockedassessment.md)
 
 
@@ -308,6 +352,39 @@ Where a diagnostic is. At least one field is present.
 </td><td>
 
 A staged change cannot be represented faithfully (for example a mode change, a binary file, a conflict, or a supplied fix that disagrees with the staged content). Nothing was produced; the problems say what would let a rerun succeed.
+
+
+</td></tr>
+<tr><td>
+
+[IFileAdditionPresentationContext](./sarif-to-comment.ifileadditionpresentationcontext.md)
+
+
+</td><td>
+
+A proposal to add a new file, shown in the review body with the findings that carry it.
+
+
+</td></tr>
+<tr><td>
+
+[IFileDeletionPresentationContext](./sarif-to-comment.ifiledeletionpresentationcontext.md)
+
+
+</td><td>
+
+A proposal to delete a whole file that exists at the reviewed commit, shown in the review body with the findings that carry it.
+
+
+</td></tr>
+<tr><td>
+
+[IFindingPresentationContext](./sarif-to-comment.ifindingpresentationcontext.md)
+
+
+</td><td>
+
+One finding: its classification, explanation, location message, fix description, alternatives and attribution.
 
 
 </td></tr>
@@ -522,6 +599,17 @@ The input is not schema-valid SARIF 2.1.0, or cannot take the requested change. 
 </td></tr>
 <tr><td>
 
+[ILifecycleNotePresentationContext](./sarif-to-comment.ilifecyclenotepresentationcontext.md)
+
+
+</td><td>
+
+The note in every suggestion pull request's description that explains how it is accepted and when it can be closed.
+
+
+</td></tr>
+<tr><td>
+
 [INewSarifRun](./sarif-to-comment.inewsarifrun.md)
 
 
@@ -539,6 +627,17 @@ Adds the finding to a new run with its own tool identity, so that feedback added
 </td><td>
 
 An original pull request cleanup resolved.
+
+
+</td></tr>
+<tr><td>
+
+[IPresentationContext](./sarif-to-comment.ipresentationcontext.md)
+
+
+</td><td>
+
+What every presentation callback receives besides its component's data.
 
 
 </td></tr>
@@ -671,6 +770,17 @@ The finding [removeSarifComment()](./sarif-to-comment.removesarifcomment.md) rem
 </td><td>
 
 The finding and its attached fixes were removed from a new copy of the document.
+
+
+</td></tr>
+<tr><td>
+
+[IReviewPresentation](./sarif-to-comment.ireviewpresentation.md)
+
+
+</td><td>
+
+Functions that return the Markdown of named review presentation components, for library callers who want a different look. Each is optional; a component left out keeps its built-in presentation.
 
 
 </td></tr>

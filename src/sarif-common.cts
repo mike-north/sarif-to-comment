@@ -27,6 +27,7 @@ import type { ErrorObject, SchemaObject, ValidateFunction } from 'ajv';
 
 import { createProblem, diagnosticOf } from './diagnostics.cjs';
 import type { IDiagnostic, IProblem } from './diagnostics.cjs';
+import { GITHUB_HOST } from './github-urls.cjs';
 
 /**
  * The vendored SARIF 2.1.0 schema. JSON data, so it is `unknown` until
@@ -299,9 +300,6 @@ export const REPO_PATTERN = /^[A-Za-z0-9._-]+$/;
 
 /** Nesting bound for captured JSON, so hostile depth fails as input, not a stack overflow. */
 const MAX_JSON_DEPTH = 512;
-
-/** GitHub web host used for repository identity. */
-const GITHUB_HOST = 'github.com';
 
 /** Control and invisible formatting characters a suggestion group name may not contain (the publisher's rule). */
 const INVISIBLE_IN_GROUP = /[\u0000-\u001F\u007F-\u009F\uFEFF\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069\u2028\u2029]/;

@@ -94,6 +94,19 @@ export type {
 } from './close-suggestion-pull-requests.cjs';
 
 export type {
+  IReviewPresentation,
+  IPresentationContext,
+  IFindingPresentationContext,
+  IAttributionPresentationContext,
+  IAttributionComponent,
+  IAlternativesPresentationContext,
+  IAlternativePresentation,
+  IFileAdditionPresentationContext,
+  IFileDeletionPresentationContext,
+  ILifecycleNotePresentationContext,
+} from './presentation/customization.cjs';
+
+export type {
   ISarifLog,
   IProblem,
   IInvalidSarifOutcome,

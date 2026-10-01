@@ -1,0 +1,129 @@
+# Review presentation: contract
+
+Implemented behavior, written down September 30, 2026, from the rendering that the review presentation components produce. Not yet presented to the owner for acceptance. It describes the built-in presentation of the review elements that no other contract specifies: a finding, its attribution, its alternatives, the body section that quotes a finding's source, and the warnings list of an outcome report. Whole-file additions and deletions are specified by the [file-operation contract](file-operation-publication-contract.md) §2, and suggestion pull requests, their lifecycle note and the review's reference to them by the [companion contract](companion-suggestion-pr-contract.md) §2.11.
+
+**Sources.** [D60](design-decisions.md#d60-use-reusable-markdown-components-for-a-rich-github-review-experience--owner-selected-presentation-direction) (components with clear semantic purposes, systematic links, customization that cannot drop provenance or identity); [D45](design-decisions.md#d45-model-diagnostics-once-and-render-them-per-audience--owner-decision) (diagnostics rendered per audience); [issue #30](https://github.com/mike-north/sarif-to-comment/issues/30) (alternative fixes); [issue #42](https://github.com/mike-north/sarif-to-comment/issues/42) (warnings on every call); [Diagnostics](diagnostics.md).
+
+## 1. Components
+
+Each element with its own meaning is one component, in `src/presentation/`. A component decides only how its element reads. Preparation decides what is published and where, and composes the components.
+
+| Component | What it presents | Specified in |
+| --- | --- | --- |
+| Finding | One SARIF result as a reader meets it: the producer's stated classification, its explanation, its location message, its fix description, its alternatives and its attribution. | §2 |
+| Attribution | Who produced the finding according to the SARIF document: the tool, the extension that defines its rule, and the rule. It is never the GitHub account that publishes the review, and no contributor identity is inferred. | §3 |
+| Alternatives | The finding's further fixes, in the producer's order, each with the exact whole-line changes it would make. None is applied, chosen, grouped or unioned. | §4 |
+| Finding section | A finding in the review body with its source association: an exact-revision link and, for lines, a literal quote. | §5 |
+| File addition, file deletion | A proposed new file, or the removal of a whole file, with the findings that carry it. | [File-operation contract](file-operation-publication-contract.md) §2 |
+| Companion reference, companion description, lifecycle note | A suggestion pull request as the review links it, its own body, and how it is accepted. | [Companion contract](companion-suggestion-pr-contract.md) §2.11 |
+| Warnings list | The diagnostics an outcome report lists. This is for the caller and is never posted to GitHub. | §6 |
+
+Links to GitHub (pull requests, reviews, review comments, blob permalinks, commits and comparisons) come from one builder, `src/github-urls.cts`, with one host and one percent-encoding.
+
+## 2. Finding
+
+```
+[ STATUS "\n\n" ] MESSAGE [ "\n\n**At this location:** " LOCATION ] [ "\n\n**Fix:** " FIX ] [ "\n\n" ALTERNATIVES ] "\n\n<sub>— " ATTRIBUTION "</sub>"
+```
+
+- `STATUS` lists the classification the producer stated, in this order, joined by ` · `: `**Level:** LEVEL` (SARIF 3.27.10, or the rule's default level), `**Kind:** KIND` (3.27.9), `**Baseline:** STATE` (3.27.24). It is absent when none is stated.
+- `MESSAGE`, `LOCATION` (the message of the result's one location) and `FIX` (the description of its first fix) are Markdown: the producer's `markdown`, or its `text` escaped so it renders literally, with plain-text `@mentions` shown as code spans.
+- `ALTERNATIVES` is §4, present only when the result has further fixes.
+- Findings that share an inline comment or a body section are joined by `\n\n---\n\n`. A comment carrying a native suggestion ends with `` "\n\n```suggestion\n" PAYLOAD "```" ``, after all its findings.
+
+## 3. Attribution
+
+```
+TOOL [ " " VERSION ] [ " · " EXTENSION [ " " EXTENSION-VERSION ] ] [ " · rule " RULE ]
+```
+
+`TOOL` is the run's `tool.driver.name`, and `VERSION` its `version`, else its `semanticVersion`. `EXTENSION` is the tool extension that defines the result's rule (`result.rule.toolComponent`), named only when it is not the driver. `RULE` is the rule id as a code span. Names and versions are shown literally. The attribution is one line.
+
+## 4. Alternatives
+
+```
+"**Alternatives to consider:**" { "\n\n" "(" N ") " [ DESCRIPTION "\n\n" ] CHANGES }        (N = 1, 2, …)
+```
+
+`CHANGES` states the exact whole-line changes of reviewed files:
+
+- One change: ``Replace LINES [of `PATH`] with[ (CRLF line endings)]:`` then a blank line and `BLOCK`, or ``Delete LINES [of `PATH`].``. The path is named only when it differs from the first fix's file.
+- Several: `Changes K files together:` or `Makes K changes together:`, then for each change a blank line and ``` `PATH` — replace LINES with[ (CRLF line endings)]: ``` with its `BLOCK`, or ``` `PATH` — delete LINES. ```.
+- `LINES` is `line N` or `lines N-M` of the reviewed file.
+- `BLOCK` is a fenced code block of the replacement lines, with LF line breaks and without the final terminator. Its fence is one backtick longer than the longest backtick run inside, and at least three.
+
+## 5. Finding section
+
+A finding published in the review body rather than inline keeps its source association:
+
+```
+[ "**Source:** [" PATH [ " " LINES ] " at " SHORT "](" PERMALINK ")\n\n" [ FENCE "\n" SOURCE "\n" FENCE "\n\n" ] ] FINDING
+```
+
+`PERMALINK` is `https://github.com/OWNER/REPO/blob/COMMIT/PATH`, with `#LA` or `#LA-LB` for lines. Each path segment is percent-encoded, including `(`, `)`, `!`, `'` and `*`. `SHORT` is the commit's first seven characters. A whole-file location has no lines and no quote. `SOURCE` is the located lines' exact text, in a fence longer than any backtick run inside. Body sections are joined by `\n\n---\n\n`.
+
+## 6. Warnings list
+
+Outcome reports (the library's `markdown`, and the CLI's JSON and TOON `message`) list diagnostics one per line:
+
+```
+"- `" CODE "`" [ " at `" POINTER "`" ] ": " MESSAGE
+```
+
+A report with warnings ends with them:
+
+```
+"**Warnings:**\n\n" LINE { "\n" LINE }
+```
+
+A prepared review's report begins `**Review prepared:** C inline comment(s) and S general section(s) for commit `COMMIT`.` A published outcome does not repeat that summary. It states its warnings in a headline under its heading and ends with this list, on its first call and on every later call for the same state path ([Diagnostics](diagnostics.md), "Headline" and "Warnings on every call for a publication").
+
+## 7. Customization
+
+A library caller may replace the Markdown of the finding, attribution, alternatives, file addition, file deletion and lifecycle note components with callbacks (`options.presentation`; README, "Customizing how the review reads"). The core keeps everything this contract and the two contracts it cites make independent of presentation:
+
+- placement, the finding section's source link and quote, and the location line of a finding in a proposed file;
+- native suggestion blocks, exactly as validated;
+- the review's publication marker and each suggestion pull request's structured marker;
+- the size limits.
+
+Each callback's context lists `required` fragments that its result must show as itself. These are the exact proposed content and file details, a deletion's permalink, a finding's attribution and alternatives, the producers' names, and the findings a proposal carries. The checks below refuse a result before anything is written. The companion reference is not customizable yet.
+
+**Parser basis.** Producer Markdown and callback results are read with a conformant CommonMark 0.31 + GFM parser: micromark with its GFM extension, through `mdast-util-from-markdown` and `mdast-util-gfm`. The parser decides what is code, text, raw HTML, a link, an image or a definition. Two checks remain hand-written, because a Markdown parser does not answer them:
+
+- the balance of the elements that raw HTML opens and closes;
+- a deliberately broad refusal of any line that could open a `suggestion` fence.
+
+**Composed-text checkpoint.** Once every inline comment, suggestion pull request description and the review body is fully composed, and the review is within its size limits, the core reads each whole text again, with or without callbacks. The review body is checked before its pull request numbers and publication marker exist, so it is read with the largest pull request number and a sample marker. A description is read with a sample of its structured marker. The text must leave no raw HTML open and swallow nothing after it. It must contain exactly the native suggestion block the core built: one `suggestion` code block, intact, as the comment's last block. A suggestion line inside code the core shows literally, such as a proposed file's content, is code and does not count. Its marker must be its own final node. This is the backstop for every seam between pieces of Markdown. When the body fails, its sections are read to locate the culprit.
+
+- A problem that the same text, composed with the built-in presentation, does not have comes from a callback, and rejects with the presentation `TypeError`. An attribution callback returning `eslint\` is an example: it is clean on its own, but its trailing backslash escapes the `<` of the `</sub>` around it.
+- Any other problem comes from producer content. It is reported as `producer-html-unbalanced` or `producer-fence-unclosed` at the finding whose own Markdown shows it, or else at the first finding the text presents.
+
+Producer content combined with a callback's layout is blamed according to whether the built-in layout composes it cleanly:
+
+- A finding callback that places a producer message `    <details>` after a label of its own is refused as the callback's. At the start of a line that message is indented code. The built-in layout, which starts the message on its own line, is clean.
+- A producer fix description `    <details>` is refused as the producer's even when a callback places it safely at the start of a line, because the built-in layout places it after `**Fix:** `, where it leaves `<details>` open.
+
+Producer Markdown that the finding places after a label on the same line (`**At this location:** `, `**Fix:** `, an alternative's `(1) `) is also checked after that label, at its own finding or fix. An indented or fenced line reads differently in the middle of a line than at its start.
+
+**What follows must stay outside.** The tool always puts a blank line and further content after producer or caller Markdown. The Markdown is refused when that content would come out inside it, in either of these cases:
+
+- a fenced code block, or an HTML block such as a comment, `<pre>` or `<script>`, runs to the end of the input;
+- the raw HTML the parser finds leaves a tag unterminated or an element unclosed.
+
+Values the core shows as code spans (a rule id, a branch name) have their line breaks rendered as spaces, as a code span would, so they can never end their paragraph and start a block of their own. Text and code never count as raw HTML. An unterminated `<!--` inside a paragraph, for example, is text, which GitHub escapes. As in HTML, only void elements (`<br>`, `<img>`, `<hr>` and the like) close themselves. A trailing `/>` on any other start tag, as in `<details/>`, leaves the element open.
+
+**Pass-through by node.** A callback may add no raw HTML (`html` nodes) and no link reference definitions (`definition` nodes) of its own. Such a node is accepted only when its exact source text is also such a node in that component's built-in Markdown. This lets content the producer wrote pass through unchanged, but never extended. A definition or comment that the callback lengthens, or that it re-labels across lines, counts as added.
+
+**Shown as itself.** Both the result and the fragment are parsed, and they must agree at some occurrence of the fragment:
+
+- every node of the result that lies within the occurrence is one of the fragment's own nodes, of the same type and at the same place;
+- every node that contains the occurrence shows its content. That means a paragraph, heading, block quote, list, table, emphasis or the like. It may also be a text node, when the fragment alone is plain text, or a link whose text holds the occurrence;
+- code, inline code, raw HTML, an image, a definition or any other node conceals the occurrence when it contains it;
+- no element that hides its content reaches into the occurrence. Such an element is one GitHub does not display (`<template>`, `<script>`, `<textarea>` and the like), or one with a `hidden` or `style` attribute.
+
+**Permalinks.** A fragment that is a URL, such as a deletion's permalink, may also be exactly the destination of an inline link. It may not be an image's source, since an image does not link to the file. It also may not be the text of a link whose destination is somewhere else, or sit inside a raw-HTML `<a>` (passed through from the presented content) whose `href` is somewhere else. Either would spoof the association.
+
+**Math.** GitHub renders `$…$` and `$$…$$` as TeX, where `\phantom{}` and similar commands hide text. The parser does not model math. Producer math is accepted: a producer's Markdown is its own to present. The `$` rule applies only to a callback's required fragments. Such a fragment does not count as shown when the paragraph, heading or table cell containing part of it has an unescaped `$` outside the fragment and outside code. This is deliberately broad within that scope. GitHub's math rendering has not been live-checked.
+
+**Known limit.** GitHub renders with cmark-gfm. For some raw-HTML edge cases, cmark-gfm follows the HTML comment rules of CommonMark 0.29 rather than 0.31. Under 0.29, `<!-->`, `<!--->` and a comment containing `--` or ending in `-` are not comments. Where these differ, the checks follow micromark, except that such a comment is read both ways. Element balance is walked once with the comment as a comment and once with its `<!--` as text. Either walk that leaves something open refuses. So `<!-- a -- <details> -->` is refused, and so is `<details> <!-- -- </details> -->`, whose `</details>` only one reading sees. `<!-- TODO -- fix -->` is accepted. The remaining divergence is recorded for a live check against GitHub; it has not been checked yet.

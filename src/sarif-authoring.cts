@@ -37,6 +37,7 @@
 
 
 import { documentDigest, parseFindingSelector } from './finding-selectors.cjs';
+import { repositoryUrl } from './github-urls.cjs';
 import {
   COMMIT_PATTERN, OWNER_PATTERN, REPO_PATTERN, captureJson, validateSarif, isPlainObject,
   isNormalizedRepositoryPath, encodeRepositoryPath, packageVersion,
@@ -369,7 +370,7 @@ function newRun({ name, version }: ISarifToolIdentity, source: ISarifSourceBindi
   return {
     tool: { driver },
     columnKind: COLUMN_KIND,
-    ...(source ? { versionControlProvenance: [{ repositoryUri: `https://github.com/${source.owner}/${source.repo}`, revisionId: source.commit }] } : {}),
+    ...(source ? { versionControlProvenance: [{ repositoryUri: repositoryUrl(source), revisionId: source.commit }] } : {}),
     results: [],
   };
 }

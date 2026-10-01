@@ -79,6 +79,13 @@
  *                                     // body and for the review body
  *     maxPayloadBytes?: number,       // default 1,000,000 bytes of UTF-8 JSON
  *                                     // of { body, comments }
+ *     presentation?: { finding?, attribution?, alternatives?, fileAddition?,
+ *       fileDeletion?, lifecycleNote? } // caller callbacks returning the
+ *                                     // Markdown of named components; each
+ *                                     // result is checked by the core
+ *                                     // (src/presentation/customization.cts),
+ *                                     // and a refused one rejects with
+ *                                     // TypeError
  *   }
  *   The defaults are conservative product limits, not verified host maxima.
  *   Exceeding one blocks; nothing is truncated or split.
@@ -96,7 +103,7 @@
  *       (the preparedReview shape accepted by publication)
  *     evidence: Evidence[],   // one per SARIF result, in SARIF order
  *     warnings: Diagnostic[], markdown: string,
- *     suggestions?: { companions, sections } }  // only when suggestion pull
+ *     suggestions?: { companions, sections, lifecycleNote } }  // only when suggestion pull
  *       // requests are created: each companion's exact changes (re-applied
  *       // onto the rewritten head when there is one), title, commit message and rendered
  *       // parts, and the body's sections (text, or a companion index
@@ -245,7 +252,18 @@
  *   blocks (`suggestion-group-pr-unavailable`), since nothing else keeps its
  *   changes together.
  *
- * Rendering:
+ * Rendering. Each element is a presentation component in src/presentation/
+ * (finding and finding section, attribution, alternatives, file addition,
+ * file deletion, companion reference, companion description, lifecycle
+ * note), with links from src/github-urls.cts; this module decides what is
+ * published and where, and composes them. The contract for the built-in
+ * presentation is docs/review-presentation-contract.md (with
+ * docs/file-operation-publication-contract.md §2 and
+ * docs/companion-suggestion-pr-contract.md §2.11); the summary below is a
+ * reading aid, and the contract governs where they differ. (The reports about
+ * a review — its outcome Markdown — list diagnostics through
+ * src/presentation/warnings-list.cts.) Producer Markdown is checked with the
+ * parser-based reader of src/presentation/markdown-tree.cts.
  *   item      = message [ "\n\n**Fix:** " fix description ]
  *               [ "\n\n**Alternatives to consider:**" { "\n\n" alternative } ]
  *               "\n\n<sub>— " attribution "</sub>"
@@ -283,11 +301,31 @@ import type { SchemaObject, ValidateFunction } from 'ajv';
 import type AjvDraft04Module = require('ajv-draft-04');
 import type AjvFormatsModule = require('ajv-formats');
 import type { IReviewContext, PathEntry, ProposalChange } from './github.cjs';
+import { blobUrl, pullRequestUrl } from './github-urls.cjs';
 import { classifyPlacement } from './placement.cjs';
 import type { IPlacementSourceRange, PlacementAnchorSide } from './placement.cjs';
 import { applyReplacement as productionApplyReplacement } from './replacements.cjs';
 import { formatSuggestionMarker } from './suggestion-marker.cjs';
-import { isSuggestionGroupName } from './sarif-common.cjs';
+import { isSuggestionGroupName, namesRepository } from './sarif-common.cjs';
+import { renderAlternative, renderAlternativeChanges, renderAlternatives } from './presentation/alternatives.cjs';
+import type { IAlternative } from './presentation/alternatives.cjs';
+import { renderAttribution } from './presentation/attribution.cjs';
+import type { IProducerAttribution, IProducerComponent } from './presentation/attribution.cjs';
+import { renderCompanionChange } from './presentation/companion-changes.cjs';
+import { renderCompanionDescription } from './presentation/companion-description.cjs';
+import { renderCompanionReference } from './presentation/companion-reference.cjs';
+import { present, presentationOptionProblem } from './presentation/customization.cjs';
+import type { CapturedPresentation } from './presentation/customization.cjs';
+import { fileDetails, proposedContentBlock, renderFileAddition, renderProposedFileFinding } from './presentation/file-addition.cjs';
+import type { ProposedFileMode } from './presentation/file-addition.cjs';
+import { renderFileDeletion } from './presentation/file-deletion.cjs';
+import { renderFinding, renderFindingSection } from './presentation/finding.cjs';
+import type { QuotedSource } from './presentation/finding.cjs';
+import { renderLifecycleNote } from './presentation/lifecycle-note.cjs';
+import { SEPARATOR, codeSpan, escapePlain, escapePlainInline, lineSpan } from './presentation/markdown.cjs';
+import { composedProblem, fenceProblem, loadMarkdownParser, unbalancedHtml } from './presentation/markdown-tree.cjs';
+import type { IComposedExpectation } from './presentation/markdown-tree.cjs';
+import { renderDiagnosticLine, renderWarningsList } from './presentation/warnings-list.cjs';
 import { createDiagnostic } from './diagnostics.cjs';
 import type { DiagnosticCode, IDiagnostic } from './diagnostics.cjs';
 import type {
@@ -557,6 +595,13 @@ interface IPrepareReviewOptions {
   readonly maxCommentBodyChars?: number | undefined;
   readonly maxPayloadBytes?: number | undefined;
   readonly suggestionPullRequests?: ISuggestionPullRequestsOption | undefined;
+  /**
+   * The caller's presentation callbacks (src/presentation/customization.cts):
+   * each replaces the Markdown of one named component, and the core refuses
+   * a result that drops required content or could disturb a suggestion block
+   * or marker. Omitted components keep their built-in presentation.
+   */
+  readonly presentation?: CapturedPresentation | undefined;
 }
 
 /** The caller input once validateCallerInput accepted it (see the module documentation). */
@@ -596,6 +641,7 @@ interface IEffectiveOptions {
   readonly maxPayloadBytes: number | undefined;
   readonly ignoreApprovalHold: boolean | undefined;
   readonly suggestionPullRequests?: ISuggestionPullRequestsOption | undefined;
+  readonly presentation?: CapturedPresentation | undefined;
 }
 
 /** A diagnostic before it is recorded: `[code, message]`. */
@@ -651,18 +697,10 @@ type PreparedPlacement =
   | { readonly treatment: 'general'; readonly source: EvidenceSource };
 
 /** A tool component beside the driver: an extension that defines the rule. */
-interface IComponentIdentity {
-  readonly name: string;
-  readonly version?: string;
-}
+type IComponentIdentity = IProducerComponent;
 
-/** Who produced a finding: tool, optional version, defining extension and rule. */
-export interface IAttribution {
-  readonly tool: string;
-  readonly version?: string;
-  readonly component?: IComponentIdentity;
-  readonly ruleId?: string;
-}
+/** Who produced a finding: tool, optional version, defining extension and rule (src/presentation/attribution.cts). */
+export type IAttribution = IProducerAttribution;
 
 /** The producer's explicit classification of a result; only stated fields are present. */
 interface IClassification {
@@ -676,9 +714,6 @@ type DeclaredApproval = 'hold' | 'ready';
 
 /** A result's approval as recorded in evidence. */
 export type EvidenceApproval = 'none' | 'declared-ready' | 'hold-overridden';
-
-/** The Git modes a proposed new file may have. */
-type ProposedFileMode = '100644' | '100755';
 
 /**
  * A validated whole-file proposal (docs/file-operation-publication-contract.md):
@@ -869,6 +904,12 @@ export interface IPreparedSuggestions {
    * companion whose section is rendered once its pull request exists.
    */
   readonly sections: readonly (string | number)[];
+  /**
+   * The lifecycle note every suggestion pull request's body carries, as
+   * presented (built in, or the caller's lifecycleNote callback) during
+   * preparation, so publication never calls a presentation callback.
+   */
+  readonly lifecycleNote: string;
 }
 
 /** A complete review, ready for publication. */
@@ -924,6 +965,8 @@ interface IPreparationState {
   /** Present exactly when suggestions may have to be re-applied onto a rewritten head. */
   readonly readEntry: ((commit: string, path: string) => Promise<PathEntry>) | null;
   readonly sourceRoot: ParsedReference | null;
+  /** Renders prepared findings and proposals, with the caller's presentation callbacks. */
+  readonly renderer: ReviewRenderer;
 }
 
 /** One entry of proposedFileChanges: its operation name and every field as written. */
@@ -1011,6 +1054,8 @@ interface IUnitAssembly {
   /** The whole-file proposals presented in the body because they fell back (issue #37), named when the body is too large. */
   readonly proposals: readonly IRenderedProposal[];
   readonly suggestions?: IPreparedSuggestions;
+  /** The composed texts the checkpoint reads once the limits pass; none for a blocked assembly. */
+  readonly composed: readonly IComposedUnit[];
 }
 
 /** Whether one suggestion pull request is created (re-applied onto a head, with that head's edited files) or not. */
@@ -1073,6 +1118,15 @@ type SuggestionKey = readonly [path: string, startLine: number, endLine: number,
 
 /** Conservative product limits on one prepared review; not claims about host maxima. */
 const PRODUCT_LIMITS: Readonly<IProductLimits> = Object.freeze({ maxComments: 100, maxCommentBodyChars: 60000, maxPayloadBytes: 1000000 });
+
+/**
+ * The labels the finding component puts before producer Markdown on the same
+ * line (docs/review-presentation-contract.md §2, §4); the producer checks
+ * read such Markdown after its label, as composed.
+ */
+const LOCATION_LABEL = '**At this location:** ';
+const FIX_LABEL = '**Fix:** ';
+const ALTERNATIVE_LABEL = '(1) ';
 
 /** A full, canonical Git object name; abbreviations are never prefix-matched. */
 const FULL_COMMIT = /^[0-9a-f]{40}$/;
@@ -1162,21 +1216,6 @@ const DEFAULT_NEWLINE_SEQUENCES: readonly string[] = ['\r\n', '\n'];
 const EXTERNAL_PROPERTIES_MESSAGE = 'The log keeps SARIF content in external properties, which this profile does not load; '
   + 'publishing without it could lose findings or their meaning. Inline the content into the log.';
 
-/** Separator between rendered items and between general body sections. */
-const SEPARATOR = '\n\n---\n\n';
-
-/**
- * A GitHub-style @mention in plain text: a user or org/team handle not
- * preceded by a word character (so email addresses are excluded).
- */
-const MENTION = /(?<![A-Za-z0-9_`])(@[A-Za-z0-9][A-Za-z0-9-]*(?:\/[A-Za-z0-9][A-Za-z0-9._-]*)?)/;
-
-/** Characters that CommonMark/GFM may interpret anywhere in a line of plain text. */
-const INLINE_MARKDOWN = /[\\`*_[\]<>#!|~{}&]/g;
-
-/** GitHub web host for exact-revision permalinks and repository identity. */
-const GITHUB_HOST = 'github.com';
-
 /**
  * A CommonJS module as `require()` returns it when the package exposes its
  * main value directly and also as `default`: either may be the one to use.
@@ -1227,6 +1266,9 @@ function sarifValidator(): ValidateFunction<ISarifLogView> {
  */
 async function prepareReview(input: unknown, internals: IPrepareReviewInternals | null = {}): Promise<PrepareReviewOutcome> {
   validateCallerInput(input);
+  // Producer Markdown and presentation callbacks are checked with the
+  // CommonMark + GFM parser, an ES module loaded once here.
+  await loadMarkdownParser();
   const { sarif, context, readSource } = input;
   const options: IEffectiveOptions = { ...PRODUCT_LIMITS, ignoreApprovalHold: false, ...(input.options || {}) };
   const report = new Report();
@@ -1250,6 +1292,7 @@ async function prepareReview(input: unknown, internals: IPrepareReviewInternals 
     fileExists: existenceCheck(input.fileExists === undefined ? undefined : cachedReader(input.fileExists), cachedSource),
     readEntry: input.readEntry === undefined ? null : entryReader(cachedReader(input.readEntry)),
     sourceRoot: context.sourceRootUri === undefined ? null : parseBaseUri(context.sourceRootUri),
+    renderer: new ReviewRenderer(context, options.presentation ?? {}),
   };
 
   if (Array.isArray(sarif.inlineExternalProperties) && sarif.inlineExternalProperties.length > 0) {
@@ -1281,6 +1324,9 @@ async function prepareReview(input: unknown, internals: IPrepareReviewInternals 
     if (report.errors.length > 0) return blocked(report);
     enforceLimits(units.review, units.proposals, state);
     if (report.errors.length > 0) return blocked(report);
+    // The composed-text checkpoint reads only a review within its limits.
+    checkComposed(units.composed, state);
+    if (report.errors.length > 0) return blocked(report);
     return {
       status: 'ready',
       review: units.review,
@@ -1294,6 +1340,8 @@ async function prepareReview(input: unknown, internals: IPrepareReviewInternals 
   const assembled = assemble(items, state);
   if (report.errors.length > 0) return blocked(report);
   enforceLimits(assembled.review, assembled.proposals, state);
+  if (report.errors.length > 0) return blocked(report);
+  checkComposed(assembled.composed, state);
   if (report.errors.length > 0) return blocked(report);
 
   return {
@@ -1359,6 +1407,9 @@ function validateCallerInput(input: unknown): asserts input is IPrepareReviewInp
     if (resolve !== undefined && typeof resolve !== 'function') {
       fail('`options.suggestionPullRequests.resolveRewrittenHead` must be a function () => Promise<commit | undefined>.');
     }
+    const presentation = options['presentation'];
+    const presentationProblem = presentation === undefined ? null : presentationOptionProblem(presentation);
+    if (presentationProblem !== null) fail(`options.presentation${presentationProblem}.`);
   }
 }
 
@@ -1479,23 +1530,12 @@ function blockedBy(diagnostics: readonly IDiagnostic[], warnings: readonly IDiag
   return blocked(report);
 }
 
-function diagnosticLine(d: IDiagnostic): string {
-  const pointer = d.location?.pointer;
-  return `- ${codeSpan(d.code)}${pointer === undefined ? '' : ` at ${codeSpan(pointer)}`}: ${d.message}`;
-}
-
-/** The warnings section a prepared review's Markdown ends with; empty without warnings. */
-function warningsSection(warnings: readonly IDiagnostic[]): string {
-  return warnings.length === 0 ? '' : `\n\n${listWarnings(warnings)}`;
-}
-
 /**
- * Preparation's warnings as the Markdown list a report states them in, each
- * with its code, pointer and message, under `**Warnings:**`. Publication's
- * outcomes end with it, on every call for a publication (issue #42).
+ * The warnings section a prepared review's Markdown ends with
+ * (src/presentation/warnings-list.cts); empty without warnings.
  */
-export function listWarnings(warnings: readonly IDiagnostic[]): string {
-  return `**Warnings:**\n\n${warnings.map(diagnosticLine).join('\n')}`;
+function warningsSection(warnings: readonly IDiagnostic[]): string {
+  return warnings.length === 0 ? '' : `\n\n${renderWarningsList(warnings)}`;
 }
 
 function warningsMarkdown(report: Report): string {
@@ -1516,7 +1556,7 @@ export function withoutWarnings(prepared: { readonly markdown: string; readonly 
 function blockedMarkdown(report: Report): string {
   const count = report.errors.length;
   return `**Review blocked:** ${String(count)} problem${count === 1 ? '' : 's'} must be resolved before publication; `
-    + `nothing was published.\n\n${report.errors.map(diagnosticLine).join('\n')}${warningsMarkdown(report)}`;
+    + `nothing was published.\n\n${report.errors.map(renderDiagnosticLine).join('\n')}${warningsMarkdown(report)}`;
 }
 
 function readyMarkdown(review: IPreparedReview, sections: number, report: Report): string {
@@ -1630,22 +1670,6 @@ function versionOf(driver: ISarifComponent): string | undefined {
   return driver.version !== undefined ? driver.version : driver.semanticVersion;
 }
 
-/** Whether a provenance repositoryUri names this GitHub repository (https, http, ssh or git forms). */
-function namesRepository(uri: string, context: IPreparationContext): boolean {
-  let url: URL;
-  try {
-    url = new URL(uri);
-  } catch {
-    return false;
-  }
-  if (!['https:', 'http:', 'ssh:', 'git:'].includes(url.protocol) || url.hostname.toLowerCase() !== GITHUB_HOST) return false;
-  const parts = url.pathname.replace(/\/+$/, '').replace(/\.git$/, '').split('/').filter(Boolean);
-  const [owner, repo] = parts;
-  return parts.length === 2 && owner !== undefined && repo !== undefined
-    && owner.toLowerCase() === context.owner.toLowerCase()
-    && repo.toLowerCase() === context.repo.toLowerCase();
-}
-
 /**
  * Validates an owned property namespace. Returns the declared approval
  * ('hold' | 'ready' | undefined) and proposed operations; records
@@ -1752,7 +1776,7 @@ async function prepareResult(
   const message = resolveMessage(result.message, rule, component || runInfo.driver, pointer, state);
   const [onlyLocation] = locations;
   const locationMessage = locations.length === 1 && onlyLocation !== undefined && onlyLocation.message !== undefined
-    ? resolveMessage(onlyLocation.message, rule, component || runInfo.driver, pointer, state).markdown : undefined;
+    ? resolveMessage(onlyLocation.message, rule, component || runInfo.driver, pointer, state, LOCATION_LABEL).markdown : undefined;
   const classification = classifyResult(result, rule);
   const reference: ISarifReportingDescriptorReference = result.rule || {};
   const ruleId = result.ruleId !== undefined ? result.ruleId : reference.id !== undefined ? reference.id : rule && rule.id;
@@ -1943,6 +1967,10 @@ function componentIdentity(component: ISarifComponent): IComponentIdentity {
  * Resolves a SARIF message to Markdown: markdown verbatim, text escaped to
  * render literally, or message.id through the rule's messageStrings and then
  * the defining component's globalMessageStrings with {n} arguments (SARIF 3.11).
+ * The producer Markdown checks read it alone and, for a message the review
+ * places after a label on the same line, also after `placedAfter` (for
+ * example `**Fix:** `), as it is composed: an indented or fenced line reads
+ * differently in the middle of a line than at its start.
  */
 function resolveMessage(
   message: ISarifMessage,
@@ -1950,6 +1978,7 @@ function resolveMessage(
   component: ISarifComponent,
   pointer: string,
   state: IPreparationState,
+  placedAfter = '',
 ): IRenderedMessage {
   let template: ISarifMessage | ISarifMessageString = message;
   let name = 'The message';
@@ -1985,116 +2014,43 @@ function resolveMessage(
     return { markdown: '' };
   }
   const markdown = useMarkdown ? substituted.text : escapePlain(substituted.text);
-  const fenceProblem = producerFenceProblem(markdown) || producerHtmlProblem(markdown);
-  if (fenceProblem) {
-    state.report.error(fenceProblem[0], pointer, fenceProblem[1]);
+  const markupProblem = producerFenceProblem(markdown) || producerHtmlProblem(markdown)
+    || (placedAfter === '' ? null : producerFenceProblem(`${placedAfter}${markdown}`) || producerHtmlProblem(`${placedAfter}${markdown}`));
+  if (markupProblem) {
+    state.report.error(markupProblem[0], pointer, markupProblem[1]);
     return { markdown: '' };
   }
   return { markdown };
 }
 
-/** HTML elements that never take a closing tag. */
-const VOID_ELEMENTS: ReadonlySet<string> = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr']);
-
 /**
- * A conservative, hand-written raw-HTML profile for producer Markdown (not an
- * HTML parser). Outside fenced code and code spans, every comment, processing
- * instruction, CDATA section, declaration and tag must be terminated, and
- * non-void elements must be closed in order within the same producer string.
- * Anything left open could hide later findings, attribution or a validated
- * suggestion when rendered, so it blocks. Backslash-escaped `<` is literal.
+ * Producer Markdown that leaves raw HTML open (src/presentation/markdown.cts,
+ * unbalancedHtml): anything left open could hide later findings, attribution
+ * or a validated suggestion when rendered, so it blocks.
  */
 function producerHtmlProblem(markdown: string): Problem | null {
-  const unbalanced = (what: string): Problem => ['producer-html-unbalanced',
+  const what = unbalancedHtml(markdown);
+  return what === null ? null : ['producer-html-unbalanced',
     `Producer Markdown leaves ${what} open, which could hide the attribution, later findings or a suggestion that follows.`];
-  const text = markdownOutsideCode(markdown);
-  const stack: string[] = [];
-  const token = /<!--|<\?|<!\[CDATA\[|<![A-Za-z]|<(\/?)([A-Za-z][A-Za-z0-9-]*)(?=[\s/>])/g;
-  for (let match = token.exec(text); match; match = token.exec(text)) {
-    let backslashes = 0;
-    for (let i = match.index - 1; i >= 0 && text[i] === '\\'; i -= 1) backslashes += 1;
-    if (backslashes % 2 === 1) continue;
-    // Groups 1 and 2 participate only in the tag alternative.
-    const [opener, slash, name] = match;
-    const terminator = opener === '<!--' ? '-->' : opener === '<?' ? '?>' : opener === '<![CDATA[' ? ']]>' : '>';
-    const end = text.indexOf(terminator, match.index + opener.length);
-    if (end === -1) return unbalanced(name ? `a <${String(slash)}${name}> tag` : `an HTML ${opener} construct`);
-    token.lastIndex = end + terminator.length;
-    if (!name) continue;
-    const element = name.toLowerCase();
-    if (slash) {
-      if (stack.pop() !== element) return unbalanced(`an unmatched </${element}> tag`);
-    } else if (!VOID_ELEMENTS.has(element) && !text.slice(match.index, end).endsWith('/')) {
-      stack.push(element);
-    }
-  }
-  return stack.length > 0 ? unbalanced(`a <${String(stack[stack.length - 1])}> element`) : null;
 }
 
 /**
- * Producer Markdown with fenced code blocks and code spans blanked out, since
- * their contents are literal. Fence recognition matches producerFenceProblem.
- */
-function markdownOutsideCode(markdown: string): string {
-  const kept: string[] = [];
-  let open: string | null = null;
-  for (const line of markdown.split(/\r\n|\n|\r/)) {
-    let core = line;
-    for (let previous: string | undefined; previous !== core;) {
-      previous = core;
-      core = core.replace(/^[ \t]*(?:>[ \t]?|[-*+][ \t]+|\d{1,9}[.)][ \t]+)/, '');
-    }
-    const fence = /^[ \t]*(`{3,}|~{3,})(.*)$/.exec(core);
-    if (fence) {
-      const marker = groupOf(fence, 1);
-      const rest = groupOf(fence, 2);
-      if (open) {
-        if (marker[0] === open[0] && marker.length >= open.length && rest.trim() === '') open = null;
-      } else if (!(marker[0] === '`' && rest.includes('`'))) {
-        open = marker;
-      }
-      continue;
-    }
-    if (!open) kept.push(line);
-  }
-  return kept.join('\n').replace(/(?<!`)(`+)(?!`)[\s\S]*?(?<!`)\1(?!`)/g, ' ');
-}
-
-/**
- * A conservative, hand-written fence profile for producer Markdown (not a
- * complete Markdown parser). Only a validated SARIF fix may create a native
- * suggestion, so any line that could open a `suggestion` fence — after
- * blockquote markers, list markers and indentation, with backticks or tildes
- * of any length and any fence state — blocks. Fences must also be balanced
- * (a closing fence uses the opening character, is at least as long and has
- * no info string); an unclosed fence would swallow the attribution and any
- * generated suggestion that follows.
+ * Producer Markdown that could open a native suggestion block or leaves a
+ * fence open (src/presentation/markdown.cts, fenceProblem). Only a validated
+ * SARIF fix may create a native suggestion; an unclosed fence would swallow
+ * the attribution and any generated suggestion that follows.
  */
 function producerFenceProblem(markdown: string): Problem | null {
-  let open: string | null = null;
-  for (const line of markdown.split(/\r\n|\n|\r/)) {
-    let core = line;
-    for (let previous: string | undefined; previous !== core;) {
-      previous = core;
-      core = core.replace(/^[ \t]*(?:>[ \t]?|[-*+][ \t]+|\d{1,9}[.)][ \t]+)/, '');
-    }
-    const fence = /^[ \t]*(`{3,}|~{3,})(.*)$/.exec(core);
-    if (!fence) continue;
-    const marker = groupOf(fence, 1);
-    const rest = groupOf(fence, 2);
-    const info = rest.trim();
-    if (/^suggestion/i.test(info)) {
+  switch (fenceProblem(markdown)) {
+    case 'suggestion-fence':
       return ['producer-suggestion-fence',
         'Producer Markdown opens a suggestion block; only a validated SARIF fix may create a native suggestion.'];
-    }
-    if (open) {
-      if (marker[0] === open[0] && marker.length >= open.length && info === '') open = null;
-    } else if (!(marker[0] === '`' && rest.includes('`'))) {
-      open = marker;
-    }
+    case 'unclosed-fence':
+      return ['producer-fence-unclosed',
+        'Producer Markdown leaves a code fence open, which would swallow the attribution and any suggestion that follows.'];
+    case null:
+      return null;
   }
-  return open ? ['producer-fence-unclosed',
-    'Producer Markdown leaves a code fence open, which would swallow the attribution and any suggestion that follows.'] : null;
 }
 
 /** SARIF 3.11.5 placeholder substitution: {n} arguments, {{ and }} literal braces. */
@@ -2538,7 +2494,7 @@ async function applyResultFix(
   const source = await readLocatedSource(change.artifactLocation, pointer, runInfo, state);
   if (!source) return null;
 
-  const description = fix.description ? resolveMessage(fix.description, undefined, runInfo.driver, pointer, state).markdown : undefined;
+  const description = fix.description ? resolveMessage(fix.description, undefined, runInfo.driver, pointer, state, FIX_LABEL).markdown : undefined;
   const edit = applyExactly(source.text, replacement, runInfo, state);
   if (edit.problem) return fail(edit.problem[0], edit.problem[1]);
   return { source, edit: edit.edit, description };
@@ -2692,7 +2648,7 @@ async function prepareFixEdits(
     entry.replacements.push(...change.replacements);
     byFile.set(source.path, entry);
   }
-  const description = fix.description ? resolveMessage(fix.description, undefined, runInfo.driver, pointer, state).markdown : undefined;
+  const description = fix.description ? resolveMessage(fix.description, undefined, runInfo.driver, pointer, state, FIX_LABEL).markdown : undefined;
 
   const edits: IPreparedEdit[] = [];
   for (const { source, replacements: onFile } of byFile.values()) {
@@ -2889,7 +2845,7 @@ async function prepareAlternative(
       crlf: text.includes('\r\n'),
     });
   }
-  const description = fix.description ? resolveMessage(fix.description, undefined, runInfo.driver, at, state).markdown : undefined;
+  const description = fix.description ? resolveMessage(fix.description, undefined, runInfo.driver, at, state, ALTERNATIVE_LABEL).markdown : undefined;
   return { fix: index, parts, description };
 }
 
@@ -3025,6 +2981,7 @@ function assemble(
   readonly commentItems: ICommentEntry[];
   readonly sectionCount: number;
   readonly proposals: readonly IRenderedProposal[];
+  readonly composed: readonly IComposedUnit[];
 } {
   const { context, report } = state;
   const commentItems: ICommentEntry[] = [];
@@ -3106,24 +3063,30 @@ function assemble(
     }
   }
 
+  const { renderer } = state;
   const rendered = sections.map((section) => (section.kind === 'item'
-    ? renderSection(section.item, context)
-    : renderProposalSection(section.operation, section.items, context)));
+    ? renderer.section(section.item)
+    : renderer.proposal(section.operation, section.items)));
   const proposals = sections.flatMap((section, i): IRenderedProposal[] => (section.kind === 'operation'
     ? [{ path: section.operation.path, characters: itemAt(rendered, i).length }] : []));
 
   // Each comment's body follows its coordinates, once every item it presents is known.
-  const comments: PreparedComment[] = commentItems.map((entry) => {
-    const body = entry.items.map(renderItem).join(SEPARATOR);
-    return {
-      ...entry.coordinates,
-      body: entry.suggestion
-        ? `${body}\n\n\`\`\`suggestion\n${entry.suggestion.payload}\`\`\``
-        : body,
-    };
-  });
+  const comments: PreparedComment[] = commentItems.map((entry) => ({ ...entry.coordinates, body: composeComment(entry, renderer) }));
+  const body = rendered.join(SEPARATOR);
+  const sectionUnits = sections.map((section, i): IComposedUnit => ({
+    what: `body section ${String(i + 1)}`,
+    text: itemAt(rendered, i),
+    expected: {},
+    items: section.kind === 'item' ? [section.item] : section.items,
+    compose: (r) => (section.kind === 'item' ? r.section(section.item) : r.proposal(section.operation, section.items)),
+  }));
+  const composed = [
+    ...commentItems.map((entry, i) => commentUnit(entry, itemAt(comments, i).body, i)),
+    ...bodyUnits(body, sectionUnits, (r) => sectionUnits.map((unit) => unit.compose(r)).join(SEPARATOR)),
+  ];
   return {
-    review: { commitId: context.reviewedCommit, body: rendered.join(SEPARATOR), comments },
+    composed,
+    review: { commitId: context.reviewedCommit, body, comments },
     evidence,
     commentItems,
     sectionCount: sections.length,
@@ -3190,8 +3153,7 @@ function changeDescription(change: UnitChange): string {
     return `The ${change.operation.operation === 'create' ? 'creation' : 'deletion'} of ${codeSpan(change.operation.path)}`;
   }
   const { path: filePath, startLine, endLine } = change.edit;
-  const lines = startLine === endLine ? `line ${String(startLine)}` : `lines ${String(startLine)}-${String(endLine)}`;
-  return `The replacement of ${codeSpan(filePath)} ${lines}`;
+  return `The replacement of ${codeSpan(filePath)} ${lineSpan(startLine, endLine)}`;
 }
 
 /**
@@ -3290,7 +3252,7 @@ class ChangeRegistry {
  * first finding carrying one of its changes.
  */
 async function assembleWithSuggestions(items: readonly IPreparedItem[], state: IPreparationState): Promise<IUnitAssembly> {
-  const { context, report, options } = state;
+  const { context, report, options, renderer } = state;
   const enabled = options.suggestionPullRequests;
   const registry = new ChangeRegistry(report);
   const commentItems: ICommentEntry[] = [];
@@ -3388,11 +3350,8 @@ async function assembleWithSuggestions(items: readonly IPreparedItem[], state: I
         + 'Remove the group, and the change is published on its own.');
     }
   }
-  const comments: PreparedComment[] = commentItems.map((entry) => {
-    const body = entry.items.map(renderItem).join(SEPARATOR);
-    return { ...entry.coordinates, body: entry.suggestion ? `${body}\n\n\`\`\`suggestion\n${entry.suggestion.payload}\`\`\`` : body };
-  });
-  const blockedAssembly: IUnitAssembly = { review: { commitId: context.reviewedCommit, body: '', comments }, evidence, sectionCount: sections.length, proposals: [] };
+  const comments: PreparedComment[] = commentItems.map((entry) => ({ ...entry.coordinates, body: composeComment(entry, renderer) }));
+  const blockedAssembly: IUnitAssembly = { review: { commitId: context.reviewedCommit, body: '', comments }, evidence, sectionCount: sections.length, proposals: [], composed: [] };
   if (enabled === undefined) return blockedAssembly;
 
   // Ancestry is resolved only now that suggestion units exist (§2.8), even
@@ -3413,6 +3372,11 @@ async function assembleWithSuggestions(items: readonly IPreparedItem[], state: I
   const obstacles: Obstacle[][] = [];
   const companionsByUnit = new Map<number, IPreparedCompanion>();
   const sizingMarker = formatSuggestionMarker({ ...target, id: SIZING_UUID, batch: SIZING_UUID });
+  /** The lifecycle note every suggestion pull request carries, presented once, when the first is prepared. */
+  let lifecycleNote: string | undefined;
+  /** How each unit's companion is prepared with a given renderer, for the composed-text checkpoint. */
+  const companionWith = new Map<number, (r: ReviewRenderer) => IPreparedCompanion>();
+  const companionUnits: IComposedUnit[] = [];
   const { maxCommentBodyChars } = options;
   for (const [i, unit] of units.entries()) {
     const found: Obstacle[] = unavailable.map((reason): Obstacle => ({ kind: 'target', reason }));
@@ -3428,10 +3392,24 @@ async function assembleWithSuggestions(items: readonly IPreparedItem[], state: I
       if (bytes > MAX_SUGGESTION_FILE_BYTES) found.push({ kind: 'file-size', path: change.operation.path, bytes });
     }
     if (found.length === 0) {
-      const companion = prepareCompanion(unit, target, context, headTexts);
-      const characters = renderSuggestionPullBody(companion, sizingMarker, target).length;
-      if (maxCommentBodyChars !== undefined && characters > maxCommentBodyChars) found.push({ kind: 'description-size', characters, limit: maxCommentBodyChars });
-      else companionsByUnit.set(i, companion);
+      const companion = prepareCompanion(unit, target, renderer, headTexts);
+      lifecycleNote ??= renderer.lifecycleNote(target);
+      const description = renderSuggestionPullBody(companion, sizingMarker, target, lifecycleNote);
+      const characters = description.length;
+      if (maxCommentBodyChars !== undefined && characters > maxCommentBodyChars) {
+        found.push({ kind: 'description-size', characters, limit: maxCommentBodyChars });
+      } else {
+        companionsByUnit.set(i, companion);
+        const prepare = (r: ReviewRenderer): IPreparedCompanion => prepareCompanion(unit, target, r, headTexts);
+        companionWith.set(i, prepare);
+        companionUnits.push({
+          what: `the description of the suggestion pull request for unit ${String(i + 1)}`,
+          text: description,
+          expected: { marker: sizingMarker },
+          items: unit.items,
+          compose: (r) => renderSuggestionPullBody(prepare(r), sizingMarker, target, r.lifecycleNote(target)),
+        });
+      }
     }
     obstacles.push(found);
   }
@@ -3476,12 +3454,12 @@ async function assembleWithSuggestions(items: readonly IPreparedItem[], state: I
   const fallbackSections = new Map<number, string>();
   const proposals: IRenderedProposal[] = [];
   for (const [i, operation] of fallbacks) {
-    const section = renderProposalSection(operation, itemAt(units, i).items, context);
+    const section = renderer.proposal(operation, itemAt(units, i).items);
     fallbackSections.set(i, section);
     proposals.push({ path: operation.path, characters: section.length });
   }
   const parts = sections.map((section): string | number => {
-    if (section.kind === 'item') return renderSection(section.item, context);
+    if (section.kind === 'item') return renderer.section(section.item);
     const part = companionOf.get(section.unit) ?? fallbackSections.get(section.unit);
     if (part === undefined) throw new Error(`Internal error: suggestion unit ${String(section.unit)} is neither created nor presented as a proposal.`);
     return part;
@@ -3493,13 +3471,44 @@ async function assembleWithSuggestions(items: readonly IPreparedItem[], state: I
     const index = companionOf.get(suggestionPullRequest);
     return index === undefined ? rest : { ...rest, suggestionPullRequest: index };
   });
+  // The composed-text checkpoint (see checkComposed): every comment, every
+  // section, every suggestion pull request's description and the body.
+  const largest = { number: LARGEST_PULL_NUMBER, url: pullRequestUrl(target, LARGEST_PULL_NUMBER) };
+  const sectionWith = (section: UnitSection, r: ReviewRenderer, own: boolean): string => {
+    if (section.kind === 'item') return r.section(section.item);
+    const unit = itemAt(units, section.unit);
+    const prepare = companionWith.get(section.unit);
+    if (prepare !== undefined) return renderCompanionReference(own ? itemAt(companions, companionOf.get(section.unit) ?? -1) : prepare(r), largest, target);
+    const operation = fallbacks.get(section.unit);
+    if (operation === undefined) throw new Error(`Internal error: suggestion unit ${String(section.unit)} is neither created nor presented as a proposal.`);
+    return r.proposal(operation, unit.items);
+  };
+  const sectionItems = (section: UnitSection): readonly IPreparedItem[] => (section.kind === 'item' ? [section.item] : itemAt(units, section.unit).items);
+  const composedBody = (r: ReviewRenderer): string => sections.map((section) => sectionWith(section, r, false)).join(SEPARATOR);
+  // Sections are read only to locate the culprit when the body fails.
+  const sectionUnits = sections.map((section, i): IComposedUnit => ({
+    what: `body section ${String(i + 1)}`,
+    get text(): string { return sectionWith(section, renderer, true); },
+    expected: {},
+    items: sectionItems(section),
+    compose: (r) => sectionWith(section, r, false),
+  }));
+  const composedFor = (body: string): IComposedUnit[] => [
+    ...commentItems.map((entry, i) => commentUnit(entry, itemAt(comments, i).body, i)),
+    ...companionUnits,
+    ...bodyUnits(body, sectionUnits, composedBody),
+  ];
   if (companions.length === 0) {
     const body = parts.map(String).join(SEPARATOR);
-    return { review: { commitId: context.reviewedCommit, body, comments }, evidence: renumbered, sectionCount: sections.length, proposals };
+    return { review: { commitId: context.reviewedCommit, body, comments }, evidence: renumbered, sectionCount: sections.length, proposals, composed: composedFor(body) };
   }
-  const suggestions: IPreparedSuggestions = { companions, sections: parts };
+  // A created companion always had its lifecycle note presented when it was prepared.
+  if (lifecycleNote === undefined) throw new Error('Internal error: a suggestion pull request was prepared without its lifecycle note.');
+  const suggestions: IPreparedSuggestions = { companions, sections: parts, lifecycleNote };
+  const body = renderReviewBody(suggestions, companions.map(() => LARGEST_PULL_NUMBER), target);
   return {
-    review: { commitId: context.reviewedCommit, body: renderReviewBody(suggestions, companions.map(() => LARGEST_PULL_NUMBER), target), comments },
+    composed: composedFor(body),
+    review: { commitId: context.reviewedCommit, body, comments },
     evidence: renumbered,
     sectionCount: sections.length,
     proposals,
@@ -3700,7 +3709,7 @@ function sourceLines(text: string): string[] {
 function prepareCompanion(
   unit: ISuggestionUnit,
   target: ISuggestionContext,
-  context: IPreparationContext,
+  renderer: ReviewRenderer,
   headTexts: ReadonlyMap<string, string>,
 ): IPreparedCompanion {
   const changes = [...unit.changes.values()];
@@ -3728,8 +3737,8 @@ function prepareCompanion(
       + `${target.reappliedOnto === undefined ? '' : `, and re-applied onto commit ${target.reappliedOnto} after the pull request's history was rewritten`}.`,
     changes: commitChanges,
     changeCount: count,
-    changeLines: changes.map((change) => changeLine(change, context)).join('\n'),
-    items: unit.items.map((item) => renderSuggestionItem(item, context)).join(SEPARATOR),
+    changeLines: changes.map((change) => renderer.changeLine(change)).join('\n'),
+    items: unit.items.map((item) => renderer.suggestionItem(item)).join(SEPARATOR),
   };
 }
 
@@ -3746,82 +3755,29 @@ function combineEdits(sourceText: string, fileEdits: readonly IPreparedEdit[]): 
   return lines.join('');
 }
 
-/** One line of a suggestion's change list (contract §2.11). */
-function changeLine(change: UnitChange, context: IPreparationContext): string {
-  if (change.kind === 'edit') {
-    const { edit } = change;
-    const lines = edit.startLine === edit.endLine ? `line ${String(edit.startLine)}` : `lines ${String(edit.startLine)}-${String(edit.endLine)}`;
-    return `- Edited [${escapePlainInline(edit.path)} ${lines} at ${edit.source.commit.slice(0, 7)}](${permalink(context, edit.source)})`;
-  }
-  const { operation } = change;
-  if (operation.operation === 'create') return `- New file ${codeSpan(operation.path)}: ${fileFacts(operation.text, operation.fileMode)}`;
-  const source: IWholeFileSource = { commit: operation.commit, path: operation.path };
-  return `- Deleted file [${escapePlainInline(operation.path)} at ${operation.commit.slice(0, 7)}](${permalink(context, source)}): the whole file is removed`;
-}
-
-/** A finding in a suggestion's section: its lines of a proposed file, or its quoted reviewed source. */
-function renderSuggestionItem(item: IPreparedItem, context: IPreparationContext): string {
-  const lines = item.proposedLines;
-  if (!lines) return renderSection(item, context);
-  const named = lines.startLine === lines.endLine ? `line ${String(lines.startLine)}` : `lines ${String(lines.startLine)}-${String(lines.endLine)}`;
-  return `**Location:** ${named} of the proposed file\n\n${renderItem(item)}`;
-}
-
-/** "Merging … into HEAD applies this change:" or "… these N changes together:". */
-function mergeSentence(companion: IPreparedCompanion, subject: string, headRef: string): string {
-  const what = companion.changeCount === 1 ? 'this change' : `these ${String(companion.changeCount)} changes together`;
-  return `Merging ${subject} into ${codeSpan(headRef)} applies ${what}:`;
-}
-
-/**
- * The paragraph that says a suggestion was re-applied onto a rewritten head
- * (contract §2.11), naming what it was rewritten after: "that commit" in the
- * suggestion's own body, whose first line names it, "the reviewed commit" in
- * the review. Empty when it was not re-applied.
- */
-function reappliedParagraph(target: ISuggestionContext, after: string): string {
-  if (target.reappliedOnto === undefined) return '';
-  const pull = `#${String(target.pullNumber)}`;
-  return `The history of ${pull} was rewritten after ${after}, so this change is re-applied onto commit ${target.reappliedOnto}, `
-    + `the head of ${pull} when it was proposed, where everything it changes is still exactly as reviewed.\n\n`;
-}
-
-/** A suggestion pull request's section of the review body, once its number is known. */
-function renderSuggestionSection(companion: IPreparedCompanion, number: number, target: ISuggestionContext): string {
-  const link = `https://${GITHUB_HOST}/${encodeLinkSegment(target.owner)}/${encodeLinkSegment(target.repo)}/pull/${String(number)}`;
-  return `**Suggestion pull request:** [#${String(number)}](${link})\n\n${reappliedParagraph(target, 'the reviewed commit')}`
-    + `${mergeSentence(companion, 'it', target.headRef)}\n\n${companion.changeLines}\n\n${companion.items}`;
-}
-
 /**
  * The review body: its sections in order, each suggestion's section rendered
- * with its pull request number (`numbers[i]` for companion i).
+ * with its pull request number (`numbers[i]` for companion i) as the
+ * companion-reference component (src/presentation/companion-reference.cts).
  */
-function renderReviewBody(suggestions: IPreparedSuggestions, numbers: readonly number[], target: ISuggestionContext): string {
+function renderReviewBody(suggestions: Pick<IPreparedSuggestions, 'companions' | 'sections'>, numbers: readonly number[], target: ISuggestionContext): string {
   return suggestions.sections
-    .map((part) => (typeof part === 'string' ? part : renderSuggestionSection(itemAt(suggestions.companions, part), itemAt(numbers, part), target)))
+    .map((part) => {
+      if (typeof part === 'string') return part;
+      const number = itemAt(numbers, part);
+      return renderCompanionReference(itemAt(suggestions.companions, part), { number, url: pullRequestUrl(target, number) }, target);
+    })
     .join(SEPARATOR);
 }
 
 /**
- * The brief lifecycle note every suggestion pull request body carries
- * (docs/companion-suggestion-pr-contract.md §2.11; docs/suggestion-pr-convention.md §8):
- * how a draft becomes mergeable, who decides, and when it can be closed.
+ * A suggestion pull request's body, ending with its structured marker line
+ * (src/presentation/companion-description.cts), carrying the lifecycle note
+ * every suggestion pull request carries, as presented during preparation
+ * (IPreparedSuggestions.lifecycleNote).
  */
-function lifecycleNote(target: ISuggestionContext): string {
-  const pull = `#${String(target.pullNumber)}`;
-  const branch = codeSpan(target.headRef);
-  const accepted = target.ready
-    ? `it is a pull request into ${branch}, the branch of ${pull}. The author of ${pull} decides whether to merge it`
-    : `it is a draft pull request into ${branch}, the branch of ${pull}. A draft cannot be merged: someone with write access first marks it ready for review. The author of ${pull} then decides whether to merge it`;
-  return `**How this suggestion is accepted:** ${accepted}, and ${pull} carries the change to its base. Once ${pull} is merged or closed, this pull request can be closed.`;
-}
-
-/** A suggestion pull request's body, ending with its structured marker line. */
-function renderSuggestionPullBody(companion: IPreparedCompanion, marker: string, target: ISuggestionContext): string {
-  return `Suggested in a review of #${String(target.pullNumber)} at commit ${target.reviewedCommit}.`
-    + `\n\n${reappliedParagraph(target, 'that commit')}${mergeSentence(companion, 'this pull request', target.headRef)}\n\n${companion.changeLines}\n\n${lifecycleNote(target)}`
-    + `${SEPARATOR}${companion.items}\n\n${marker}`;
+function renderSuggestionPullBody(companion: IPreparedCompanion, marker: string, target: ISuggestionContext, lifecycleNote: string): string {
+  return renderCompanionDescription(companion, target, lifecycleNote, marker);
 }
 
 /** The identity of a proposal: equal proposals share one section (R8). */
@@ -3894,202 +3850,276 @@ function enforceLimits(review: IPreparedReview, proposals: readonly IRenderedPro
 }
 
 // ---------------------------------------------------------------------------
-// Rendering
+// The composed-text checkpoint
 
-function renderItem(item: IPreparedItem): string {
-  const c: IClassification = item.classification || {};
-  const stated: readonly (readonly [label: string, value: string | undefined])[] = [['Level', c.level], ['Kind', c.kind], ['Baseline', c.baselineState]];
-  const status = stated
-    .filter((entry): entry is readonly [string, string] => entry[1] !== undefined).map(([label, value]) => `**${label}:** ${value}`).join(' · ');
-  const location = item.locationMessage === undefined ? '' : `\n\n**At this location:** ${item.locationMessage}`;
-  const fix = item.fixDescription === undefined ? '' : `\n\n**Fix:** ${item.fixDescription}`;
-  const primaryPath = item.suggestion ? item.suggestion.path : singlePath(item.edits);
-  const alternatives = item.alternatives.length === 0 ? ''
-    : `\n\n**Alternatives to consider:**${item.alternatives.map((a, i) => `\n\n${renderAlternative(a, i + 1, primaryPath)}`).join('')}`;
-  return `${status === '' ? '' : `${status}\n\n`}${item.message}${location}${fix}${alternatives}\n\n<sub>— ${renderAttribution(item.attribution)}</sub>`;
+/**
+ * A marker of the form publication appends to the review body
+ * (src/publication.cts, MARKER_PATTERN), with a fixed id: the checkpoint
+ * reads the body as it will be sent.
+ */
+const SAMPLE_REVIEW_MARKER = `<!-- sarif-to-comment:review:${SIZING_UUID} -->`;
+
+/**
+ * One fully composed text the checkpoint reads: what it is (for messages),
+ * its text, what the core built it to end with, the findings it presents,
+ * and how to compose it again with a given renderer (to tell whether a
+ * problem comes from presentation callbacks or from producer content).
+ */
+interface IComposedUnit {
+  readonly what: string;
+  readonly text: string;
+  readonly expected: IComposedExpectation;
+  readonly items: readonly IPreparedItem[];
+  readonly compose: (renderer: ReviewRenderer) => string;
+  /** The parts (the body's sections) read, only when this text fails, to locate the culprit. */
+  readonly parts?: readonly IComposedUnit[];
+}
+
+/** The native suggestion block the core appends to a suggestion comment. */
+function suggestionBlock(payload: string): string {
+  return `\`\`\`suggestion\n${payload}\`\`\``;
+}
+
+/** An inline comment: its findings, then, for a suggestion, its native suggestion block. */
+function composeComment(entry: ICommentEntry, renderer: ReviewRenderer): string {
+  const body = entry.items.map((item) => renderer.finding(item)).join(SEPARATOR);
+  return entry.suggestion ? `${body}\n\n${suggestionBlock(entry.suggestion.payload)}` : body;
+}
+
+function commentUnit(entry: ICommentEntry, text: string, index: number): IComposedUnit {
+  return {
+    what: `inline comment ${String(index + 1)}`,
+    text,
+    expected: entry.suggestion ? { suggestionBlock: suggestionBlock(entry.suggestion.payload) } : {},
+    items: entry.items,
+    compose: (r) => composeComment(entry, r),
+  };
 }
 
 /**
- * One listed alternative (see the module's rendering grammar): its number,
- * its description, and its whole-line changes of reviewed files. A one-part
- * alternative names its file only when it is not the first fix's; each part
- * of a several-part alternative is labelled with its file.
+ * The review body as it will be sent, with a sample publication marker after
+ * it (the body is checked before its pull request numbers and marker exist);
+ * none when the body is empty. Its sections locate a failure.
  */
-function renderAlternative(alternative: IPreparedAlternative, number: number, primaryPath: string | undefined): string {
-  const { parts, description } = alternative;
-  const lead = `(${String(number)}) ${description === undefined ? '' : `${description}\n\n`}`;
-  const [only] = parts;
-  if (parts.length === 1 && only !== undefined) {
-    const lines = partLines(only);
-    const where = only.path === primaryPath ? lines : `${lines} of ${codeSpan(only.path)}`;
-    return `${lead}${only.replacementText === '' ? `Delete ${where}.` : `Replace ${where} with${partBlock(only)}`}`;
-  }
-  const files = new Set(parts.map((p) => p.path)).size;
-  const heading = files > 1 ? `Changes ${String(files)} files together:` : `Makes ${String(parts.length)} changes together:`;
-  const labelled = parts.map((p) => `${codeSpan(p.path)} — ${p.replacementText === '' ? `delete ${partLines(p)}.` : `replace ${partLines(p)} with${partBlock(p)}`}`);
-  return `${lead}${heading}${labelled.map((part) => `\n\n${part}`).join('')}`;
-}
-
-/** "line N" or "lines N-M" of a part's reviewed file. */
-function partLines(part: IAlternativePart): string {
-  return part.startLine === part.endLine ? `line ${String(part.startLine)}` : `lines ${String(part.startLine)}-${String(part.endLine)}`;
-}
-
-/** The end of "replace … with": the stated line-ending style, if CRLF, and the fenced lines. */
-function partBlock(part: IAlternativePart): string {
-  return `${part.crlf ? ' (CRLF line endings)' : ''}:\n\n${fenced(part.shownText)}`;
-}
-
-function renderAttribution({ tool, version, component, ruleId }: IAttribution): string {
-  const named = (name: string, v: string | undefined): string => `${escapePlainInline(name)}${v === undefined ? '' : ` ${escapePlainInline(v)}`}`;
-  return `${named(tool, version)}${component === undefined ? '' : ` · ${named(component.name, component.version)}`}`
-    + (ruleId === undefined ? '' : ` · rule ${codeSpan(ruleId)}`);
-}
-
-/** A general body section: exact-revision link and literal source quote when the finding has a location. */
-function renderSection(item: IPreparedItem, context: IPreparationContext): string {
-  const source = item.placement && item.placement.source;
-  if (!source) return renderItem(item);
-  const short = source.commit.slice(0, 7);
-  const link = permalink(context, source);
-  if (source.startLine === undefined) {
-    return `**Source:** [${escapePlainInline(source.path)} at ${short}](${link})\n\n${renderItem(item)}`;
-  }
-  const lines = source.startLine === source.endLine ? `line ${String(source.startLine)}` : `lines ${String(source.startLine)}-${String(source.endLine)}`;
-  return `**Source:** [${escapePlainInline(source.path)} ${lines} at ${short}](${link})\n\n${fenced(source.text)}\n\n${renderItem(item)}`;
+function bodyUnits(body: string, sections: readonly IComposedUnit[], compose: (r: ReviewRenderer) => string): IComposedUnit[] {
+  if (body === '') return [];
+  return [{
+    what: 'the review body',
+    text: `${body}\n\n${SAMPLE_REVIEW_MARKER}`,
+    expected: { marker: SAMPLE_REVIEW_MARKER },
+    items: sections.flatMap((section) => section.items),
+    compose: (r) => `${compose(r)}\n\n${SAMPLE_REVIEW_MARKER}`,
+    parts: sections,
+  }];
 }
 
 /**
- * A whole-file proposal's body section (contract §2): the proposal once,
- * then each finding carrying it. A creation shows its content in a fence
- * longer than any backtick run inside, with details that, together with the
- * block, determine its exact bytes; a deletion links the file at the reviewed
- * commit and never shows or narrows it.
+ * The backstop for every seam between pieces of Markdown: each inline
+ * comment, body section, suggestion pull request description and the review
+ * body is read again, fully composed, and must leave no raw HTML open,
+ * swallow nothing, keep exactly its native suggestion block intact as built,
+ * and end with its marker as its own final node
+ * (src/presentation/markdown-tree.cts, composedProblem). It runs with or
+ * without presentation callbacks. A problem that the same text composed with
+ * the built-in presentation does not have comes from a callback, and rejects
+ * with the presentation TypeError; any other is producer content's, and is
+ * reported as `producer-html-unbalanced` or `producer-fence-unclosed` at the
+ * finding whose own Markdown shows it, or else the first the text presents.
  */
-function renderProposalSection(operation: PreparedFileOperation, items: readonly IPreparedItem[], context: IPreparationContext): string {
-  if (operation.operation === 'delete') {
-    const source: IWholeFileSource = { commit: operation.commit, path: operation.path };
-    return `**Proposed file deletion:** [${escapePlainInline(operation.path)} at ${operation.commit.slice(0, 7)}](${permalink(context, source)})\n\n`
-      + `The whole file is removed; this is not a proposal to empty it.\n\n${items.map((item) => renderSection(item, context)).join(SEPARATOR)}`;
-  }
-  const { text, fileMode } = operation;
-  const hasBom = text.startsWith(BOM);
-  const body = hasBom ? text.slice(BOM.length) : text;
-  const finalTerminator = body.endsWith('\r\n') ? '\r\n' : body.endsWith('\n') ? '\n' : '';
-  const displayed = body.slice(0, body.length - finalTerminator.length);
-  const block = body === '' ? '' : `\n\n${fenced(displayed)}`;
-  const rendered = items.map((item) => {
-    const lines = item.proposedLines;
-    if (!lines) return renderItem(item);
-    const named = lines.startLine === lines.endLine ? `line ${String(lines.startLine)}` : `lines ${String(lines.startLine)}-${String(lines.endLine)}`;
-    return `**Location:** ${named} of the proposed file\n\n${renderItem(item)}`;
-  });
-  return `**Proposed new file:** ${codeSpan(operation.path)}\n\n**File details:** ${fileFacts(text, fileMode)}${block}\n\n${rendered.join(SEPARATOR)}`;
-}
-
-/**
- * The details of a proposed new file that, with its displayed content,
- * determine its exact bytes (docs/file-operation-publication-contract.md §2).
- */
-function fileFacts(text: string, fileMode: ProposedFileMode): string {
-  const bytes = Buffer.byteLength(text, 'utf8');
-  const hasBom = text.startsWith(BOM);
-  const body = hasBom ? text.slice(BOM.length) : text;
-  const finalTerminator = body.endsWith('\r\n') ? '\r\n' : body.endsWith('\n') ? '\n' : '';
-  const facts: string[] = [];
-  if (bytes === 0) {
-    facts.push('empty file (0 bytes)');
-  } else {
-    facts.push(`${String(bytes)} byte${bytes === 1 ? '' : 's'} of UTF-8 text`);
-    if (hasBom) facts.push('begins with a byte-order mark');
-    if (body === '') {
-      facts.push('no content after the byte-order mark');
-    } else {
-      facts.push(body.includes('\r\n') ? 'CRLF line endings' : body.includes('\n') ? 'LF line endings' : 'no line breaks');
-      facts.push(finalTerminator === '' ? 'no newline at end of file' : 'ends with a newline');
+function checkComposed(units: readonly IComposedUnit[], state: IPreparationState): void {
+  let builtIn: ReviewRenderer | undefined;
+  const builtInRenderer = (): ReviewRenderer => (builtIn ??= state.renderer.customized ? new ReviewRenderer(state.context, {}) : state.renderer);
+  const reported = new Set<string>();
+  for (const whole of units) {
+    const wholeProblem = composedProblem(whole.text, whole.expected);
+    if (wholeProblem === null) continue;
+    // A failing body is narrowed to its first failing section, when one fails alone.
+    let unit = whole;
+    let problem = wholeProblem;
+    for (const part of whole.parts ?? []) {
+      const partProblem = composedProblem(part.text, part.expected);
+      if (partProblem !== null) {
+        unit = part;
+        problem = partProblem;
+        break;
+      }
     }
+    if (state.renderer.customized && composedProblem(unit.compose(builtInRenderer()), unit.expected) === null) {
+      throw new TypeError(`Invalid presentation: options.presentation returned Markdown that, composed into ${unit.what}, ${problem}, `
+        + 'which would hide or swallow what the core places after it (findings, a suggestion block or a marker). '
+        + 'A presentation callback may change how an element reads, never what is published or how it is identified.');
+    }
+    const culprit = unit.items.find((item) => composedProblem(builtInRenderer().finding(item), {}) !== null) ?? unit.items[0];
+    const code: DiagnosticCode = problem.startsWith('leaves a code fence') || problem.includes('suggestion') || problem.includes('marker')
+      ? 'producer-fence-unclosed' : 'producer-html-unbalanced';
+    const key = `${code} ${culprit?.pointer ?? ''}`;
+    if (reported.has(key)) continue;
+    reported.add(key);
+    state.report.error(code, culprit?.pointer,
+      `Composed into ${unit.what}, the producer Markdown ${problem}, which would hide or swallow the attribution, later findings, a suggestion block or a marker that follows.`);
   }
-  facts.push(fileMode === '100755' ? 'mode 100755 (executable)' : 'mode 100644');
-  return facts.join(' · ');
 }
+
+// ---------------------------------------------------------------------------
+// Rendering: prepared findings and proposals through the presentation
+// components (src/presentation). Preparation decides what is published and
+// where; the components decide only how each element reads.
 
 /**
- * One URL path segment for a Markdown link destination: encodeURIComponent
- * leaves ( ) ! ' * unencoded, and an unbalanced parenthesis would end the
- * destination early, so those are percent-encoded too (RFC 3986 permits it).
+ * Renders prepared findings and proposals for one review: each element
+ * through its presentation component, or through the caller's callback for
+ * that component, which `present` checks (src/presentation/customization.cts).
+ * The renderer composes what the core owns — a finding section's source link
+ * and quote, the location line of a finding in a proposed file, separators —
+ * around the presented elements; suggestion blocks and markers are appended
+ * later still, by assembly and publication.
  */
-function encodeLinkSegment(segment: string): string {
-  return encodeURIComponent(segment).replace(/[()!'*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+class ReviewRenderer {
+  readonly #context: IPreparationContext;
+  readonly #presentation: CapturedPresentation;
+
+  constructor(context: IPreparationContext, presentation: CapturedPresentation) {
+    this.#context = context;
+    this.#presentation = presentation;
+  }
+
+  /** Whether any presentation callback is in use (otherwise everything is built in). */
+  get customized(): boolean {
+    return Object.values(this.#presentation).some((callback) => callback !== undefined);
+  }
+
+  /** A prepared finding, with its alternatives and attribution. */
+  finding(item: IPreparedItem): string {
+    const primaryPath = item.suggestion ? item.suggestion.path : singlePath(item.edits);
+    const attribution = this.#attribution(item.attribution);
+    const alternatives = this.#alternatives(item.alternatives, primaryPath);
+    const c: IClassification = item.classification || {};
+    return present('finding', this.#presentation.finding, {
+      ...(c.level === undefined ? {} : { level: c.level }),
+      ...(c.kind === undefined ? {} : { kind: c.kind }),
+      ...(c.baselineState === undefined ? {} : { baselineState: c.baselineState }),
+      message: item.message,
+      ...(item.locationMessage === undefined ? {} : { locationMessage: item.locationMessage }),
+      ...(item.fixDescription === undefined ? {} : { fixDescription: item.fixDescription }),
+      ...(alternatives === undefined ? {} : { alternatives }),
+      attribution,
+      markdown: renderFinding({
+        classification: item.classification,
+        message: item.message,
+        locationMessage: item.locationMessage,
+        fixDescription: item.fixDescription,
+        alternatives,
+        attribution,
+      }),
+      required: alternatives === undefined ? [attribution] : [attribution, alternatives],
+    });
+  }
+
+  /** A general body section: exact-revision link and literal source quote when the finding has a location. */
+  section(item: IPreparedItem): string {
+    const source = item.placement && item.placement.source;
+    return renderFindingSection(this.finding(item), source ? quotedSource(this.#context, source) : undefined);
+  }
+
+  /** A finding in a suggestion's section: its lines of a proposed file, or its quoted reviewed source. */
+  suggestionItem(item: IPreparedItem): string {
+    return item.proposedLines ? renderProposedFileFinding(item.proposedLines, this.finding(item)) : this.section(item);
+  }
+
+  /**
+   * A whole-file proposal's body section (contract §2): the proposal once,
+   * then each finding carrying it — after its lines of the proposed file for
+   * a creation, or as a section with its quoted reviewed source for a deletion.
+   */
+  proposal(operation: PreparedFileOperation, items: readonly IPreparedItem[]): string {
+    if (operation.operation === 'delete') {
+      const url = permalink(this.#context, { commit: operation.commit, path: operation.path });
+      const findings = items.map((item) => this.section(item)).join(SEPARATOR);
+      const deletion = { path: operation.path, commit: operation.commit, url };
+      return present('fileDeletion', this.#presentation.fileDeletion, {
+        ...deletion, findings, markdown: renderFileDeletion(deletion, findings), required: [url, findings],
+      });
+    }
+    const findings = items.map((item) => renderProposedFileFinding(item.proposedLines, this.finding(item))).join(SEPARATOR);
+    const details = fileDetails(operation.text, operation.fileMode);
+    const content = proposedContentBlock(operation.text);
+    return present('fileAddition', this.#presentation.fileAddition, {
+      path: operation.path,
+      fileMode: operation.fileMode,
+      byteLength: Buffer.byteLength(operation.text, 'utf8'),
+      details,
+      content,
+      findings,
+      markdown: renderFileAddition(operation, findings),
+      required: [codeSpan(operation.path), details, ...(content === undefined ? [] : [content]), findings],
+    });
+  }
+
+  /** One line of a suggestion pull request's change list (contract §2.11). */
+  changeLine(change: UnitChange): string {
+    if (change.kind === 'edit') {
+      const { edit } = change;
+      return renderCompanionChange({
+        kind: 'edit', path: edit.path, startLine: edit.startLine, endLine: edit.endLine, commit: edit.source.commit, url: permalink(this.#context, edit.source),
+      });
+    }
+    const { operation } = change;
+    if (operation.operation === 'create') return renderCompanionChange({ kind: 'create', path: operation.path, text: operation.text, fileMode: operation.fileMode });
+    const url = permalink(this.#context, { commit: operation.commit, path: operation.path });
+    return renderCompanionChange({ kind: 'delete', path: operation.path, commit: operation.commit, url });
+  }
+
+  /** The lifecycle note of a suggestion pull request into `target`'s head branch. */
+  lifecycleNote(target: ISuggestionContext): string {
+    return present('lifecycleNote', this.#presentation.lifecycleNote, {
+      pullNumber: target.pullNumber, headRef: target.headRef, ready: target.ready, markdown: renderLifecycleNote(target), required: [],
+    });
+  }
+
+  /** A finding's producer attribution; the producers' names are required provenance. */
+  #attribution(attribution: IAttribution): string {
+    const { tool, version, component, ruleId } = attribution;
+    return present('attribution', this.#presentation.attribution, {
+      tool,
+      ...(version === undefined ? {} : { version }),
+      ...(component === undefined ? {} : { component }),
+      ...(ruleId === undefined ? {} : { ruleId }),
+      markdown: renderAttribution(attribution),
+      required: [escapePlainInline(tool), ...(component === undefined ? [] : [escapePlainInline(component.name)])],
+    });
+  }
+
+  /** A finding's alternatives, or undefined when it has none; each alternative's exact changes are required. */
+  #alternatives(prepared: readonly IPreparedAlternative[], primaryPath: string | undefined): string | undefined {
+    const alternatives = prepared.map(alternativeOf);
+    const markdown = renderAlternatives(alternatives, primaryPath);
+    if (markdown === undefined) return undefined;
+    const listed = alternatives.map((alternative, i) => ({
+      number: i + 1,
+      ...(alternative.description === undefined ? {} : { description: alternative.description }),
+      changes: renderAlternativeChanges(alternative, primaryPath),
+      markdown: renderAlternative(alternative, i + 1, primaryPath),
+    }));
+    return present('alternatives', this.#presentation.alternatives, { alternatives: listed, markdown, required: listed.map((a) => a.changes) });
+  }
 }
 
-/** GitHub permalink to an exact revision, path and optional line range. */
+/** A prepared alternative as the alternatives component lists it. */
+function alternativeOf(alternative: IPreparedAlternative): IAlternative {
+  return { description: alternative.description, changes: alternative.parts };
+}
+
+/** A finding's own location as a finding section quotes it, with its permalink. */
+function quotedSource(context: IPreparationContext, source: EvidenceSource): QuotedSource {
+  const url = permalink(context, source);
+  return source.startLine === undefined
+    ? { path: source.path, commit: source.commit, url }
+    : { path: source.path, commit: source.commit, url, lines: { startLine: source.startLine, endLine: source.endLine, text: source.text } };
+}
+
+/** GitHub permalink to an exact revision, path and optional line range (src/github-urls.cts). */
 function permalink(context: IPreparationContext, source: EvidenceSource): string {
-  const encodedPath = source.path.split('/').map(encodeLinkSegment).join('/');
-  const base = `https://${GITHUB_HOST}/${encodeLinkSegment(context.owner)}/${encodeLinkSegment(context.repo)}/blob/${source.commit}/${encodedPath}`;
-  if (source.startLine === undefined) return base;
-  return `${base}#L${String(source.startLine)}${source.endLine !== source.startLine ? `-L${String(source.endLine)}` : ''}`;
-}
-
-/**
- * Plain text rendered literally: Markdown-significant characters are
- * backslash-escaped, line-start block markers neutralized, line breaks kept
- * as hard breaks and blank-line paragraph breaks kept.
- */
-function escapePlain(text: string): string {
-  return text.replace(/\r\n/g, '\n').replace(/^\n+|\n+$/g, '').split(/\n[ \t]*\n+/)
-    .map((paragraph) => paragraph.split('\n').map(escapeLine).join('\\\n'))
-    .join('\n\n');
-}
-
-/**
- * Plain text embedded within a rendered line (never at a line start), so only
- * inline Markdown syntax needs escaping.
- */
-function escapePlainInline(text: unknown): string {
-  return escapeInline(String(text).replace(/\r?\n/g, ' '));
-}
-
-function escapeLine(line: string): string {
-  return escapeInline(line)
-    .replace(/^(\s*)([-+=])/, '$1\\$2')
-    .replace(/^(\s*\d+)([.)])/, '$1\\$2');
-}
-
-/**
- * Escapes inline Markdown syntax in plain text and renders plain-text
- * @mentions as code spans: the characters stay exact, but plain text never
- * turns into a notification when a person later submits the draft. (Host
- * mention handling inside code spans is not live-verified.)
- */
-function escapeInline(text: string): string {
-  return text.split(MENTION).map((part, i) => (i % 2 === 1 ? codeSpan(part) : part.replace(INLINE_MARKDOWN, '\\$&'))).join('');
-}
-
-/**
- * A fenced code block showing `text` literally: its backtick fence is one
- * longer than the longest backtick run inside, and never shorter than three,
- * so no line of the text can close it (GFM §4.5).
- */
-function fenced(text: string): string {
-  const fence = '`'.repeat(Math.max(3, longestRun(text, '`') + 1));
-  return `${fence}\n${text}\n${fence}`;
-}
-
-/** A CommonMark code span whose delimiter is longer than any backtick run inside. */
-function codeSpan(text: string): string {
-  const fence = '`'.repeat(longestRun(text, '`') + 1);
-  const pad = text.startsWith('`') || text.endsWith('`') ? ' ' : '';
-  return `${fence}${pad}${text}${pad}${fence}`;
-}
-
-function longestRun(text: string, character: string): number {
-  let longest = 0;
-  let current = 0;
-  for (const c of text) {
-    current = c === character ? current + 1 : 0;
-    longest = Math.max(longest, current);
-  }
-  return longest;
+  return blobUrl(context, source.commit, source.path, source.startLine === undefined ? undefined : { startLine: source.startLine, endLine: source.endLine });
 }
 
 // ---------------------------------------------------------------------------

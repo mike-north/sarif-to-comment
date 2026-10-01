@@ -77,6 +77,7 @@ const outcome = await publishSarifReview({
   // oldSourceCommit: '<full SHA>',                  // optional: see "Old-side source"
   // options: { ignoreApprovalHold: true },          // optional: see "Approval hold"
   // options: { submit: true },                      // optional: see "Draft or submitted review"
+  // options: { presentation: { finding: (c) => … } }, // optional: see "Customizing how the review reads"
 });
 
 console.log(outcome.markdown); // always a human-readable explanation
@@ -265,6 +266,53 @@ By default the review is a **draft** (pending): only your account sees it until 
 - The mode is part of the publication's identity. The state file records it; a retry with the same state path must use the same mode, and the other mode is refused before any request. State files written by earlier versions are drafts.
 - Retries work the same way: a lost response is confirmed by finding the submitted review by its hidden marker, and it is never sent twice. A submitted publication is confirmed only when GitHub reports that review as submitted (`COMMENTED`).
 - The published explanation starts with `## Review submitted` instead of `## Draft review published`. Outcomes and exit statuses are unchanged.
+
+## Customizing how the review reads (library)
+
+Library callers can replace the Markdown of named review elements with their own functions, in `options.presentation` of `publishSarifReview` and `validateSarifReview`. Each function receives the element's data, its built-in Markdown (`markdown`) and the fragments your result must keep (`required`), and returns Markdown. Elements you leave out keep the built-in presentation.
+
+| Component | What it presents |
+| --- | --- |
+| `finding` | One finding: its level, kind and baseline, explanation, location message, fix description, alternatives and attribution. |
+| `attribution` | Who produced a finding, from the SARIF: the tool, the extension defining its rule, and the rule. It is never the GitHub account that publishes the review. One line. |
+| `alternatives` | A finding's further fixes, listed for consideration and never applied. |
+| `fileAddition` | A proposed new file in the review body, with its findings. |
+| `fileDeletion` | A proposed file deletion in the review body, with its findings. |
+| `lifecycleNote` | How a suggestion pull request is accepted, in its description. |
+
+```js
+const outcome = await publishSarifReview({
+  // …the same input as above…
+  options: {
+    presentation: {
+      attribution: (c) => `reported by ${c.required.join(' / ')}`,
+      finding: (c) => [c.level && `**${c.level.toUpperCase()}**`, c.message, c.alternatives, `<sub>${c.attribution}</sub>`]
+        .filter(Boolean).join('\n\n'),
+      fileAddition: (c) => c.markdown.replace('**Proposed new file:**', '### New file'),
+    },
+  },
+});
+```
+
+A callback changes how an element reads, never what is published, where, or how it is identified. Whatever it returns:
+
+- the tool still places findings: an inline comment, or a body section with the source link and quoted lines;
+- native suggestion blocks are added after the findings exactly as validated;
+- the review's hidden publication marker and each suggestion pull request's structured marker are added last;
+- the size limits count your Markdown, and nothing is truncated.
+
+Results are read with a conformant CommonMark + GFM parser (`micromark`, as remark uses), so what counts as code, text, raw HTML or a link is what CommonMark says it is. A result is refused with a `TypeError`, before anything is written, when it:
+
+- is not a non-blank string;
+- omits one of its `required` fragments: the exact proposed content and file details, a deletion's permalink, a finding's attribution and alternatives, the producers' names, and the findings a proposal carries;
+- could open a `suggestion` block, or leaves a code fence or raw HTML (such as `<!--` or `<details>`) open, which would swallow or hide what follows;
+- contains text that reads as a publication or suggestion marker;
+- adds raw HTML (any tag or comment) or a link reference definition of its own; one whose exact text the built-in Markdown already contains, such as the `<sub>` around an attribution or a producer's own comment, may pass through;
+- hides a `required` fragment: each must be shown as itself, not inside raw HTML, a code span or block it does not open itself, an image, a definition, an element GitHub does not display, or GitHub math (`$…$`). A permalink may be a link's destination, but not an image's source, the text of a link to somewhere else, or inside an `<a>` whose `href` is somewhere else;
+- spans several lines, for `attribution`;
+- once composed into its comment, body or suggestion pull request description, leaves something open there that the built-in presentation does not, or disturbs a suggestion block or marker. Every composed text is checked this way, with or without callbacks.
+
+The context your callback receives is a deeply frozen copy. An exception your callback throws propagates unchanged. Callbacks are not part of the publication identity: a retry with the same state path never re-renders what an earlier call already planned or sent. The review body's section linking each suggestion pull request is not customizable yet, and there is no command-line equivalent; repository-level templates are not supported.
 
 ## One pending review per account
 

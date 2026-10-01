@@ -39,8 +39,15 @@
  *                                              // identity (never inferred)
  *               allowSuggestionPullRequests?: boolean,     // suggestion pull
  *               pullRequestLabels?: string[],              // requests (docs/
- *               markSuggestionPullRequestsReady?: boolean } // companion-
+ *               markSuggestionPullRequestsReady?: boolean, // companion-
  *                                              // suggestion-pr-contract.md §2.2)
+ *               presentation?: { finding?, attribution?, alternatives?,
+ *                 fileAddition?, fileDeletion?, lifecycleNote? } }
+ *                                              // Markdown callbacks of named
+ *                                              // presentation components
+ *                                              // (src/presentation/
+ *                                              // customization.cts); not part
+ *                                              // of the publication identity
  *
  * Outcome — the consumer contract is `status`, human-readable `markdown`, the
  * listed identifiers and `diagnostics` (D45): every outcome lists its errors,
@@ -109,7 +116,8 @@ import { continueCompanionPublication, hasCompanionPlan, startCompanionPublicati
 import type { BaseCheck, CompanionOutcome, ICompanionTransport, IEstablished } from './companion-publication.cjs';
 import { createGitHubClient as defaultCreateGitHubClient } from './github.cjs';
 import type { ICreateGitHubClientOptions } from './github.cjs';
-import { listWarnings } from './prepare-review.cjs';
+import type { IReviewPresentation } from './presentation/customization.cjs';
+import { renderWarningsList } from './presentation/warnings-list.cjs';
 import { publishPreparedReview, recoverPublication } from './publication.cjs';
 import {
   blockedReviewMarkdown,
@@ -203,6 +211,18 @@ export interface IPublishSarifReviewOptions {
    * Part of the publication identity.
    */
   readonly markSuggestionPullRequestsReady?: boolean | undefined;
+  /**
+   * Your own Markdown for named review elements: a finding, its attribution
+   * and alternatives, a proposed new file or file deletion, and a suggestion
+   * pull request's lifecycle note. Each callback receives the element's data,
+   * its built-in Markdown and the fragments your result must keep; omitted
+   * elements keep the built-in presentation. See {@link IReviewPresentation}
+   * for what the tool keeps regardless (markers, suggestion blocks, exact
+   * proposed content, provenance, size limits) and when a result is refused.
+   * Not part of the publication identity, and not available on the command
+   * line.
+   */
+  readonly presentation?: IReviewPresentation | undefined;
 }
 
 /**
@@ -539,7 +559,7 @@ type DeliveredReview = Pick<PublishedResult, 'via' | 'receiptPersisted'> & { rea
  * lines; none without warnings. The same on every call for a publication.
  */
 function warningsMarkdown(warnings: readonly IDiagnostic[]): string[] {
-  return warnings.length === 0 ? [] : ['', listWarnings(warnings)];
+  return warnings.length === 0 ? [] : ['', renderWarningsList(warnings)];
 }
 
 function publishedMarkdown(
