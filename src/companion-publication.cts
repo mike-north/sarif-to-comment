@@ -26,7 +26,8 @@
  * proposal of one suggestion) and inline comments, and preparation's
  * warnings and notes when there are any (`warnings`, a non-empty list of
  * diagnostics that are not errors, in either version; issue #42), bound by a
- * fingerprint over all of it.
+ * fingerprint over all of it. `delivery` is required in every plan version:
+ * no plan without it was ever released, so there is none to continue.
  * Version 2 adds `reappliedOnto`: the commit every proposal is based on
  * instead of the reviewed commit, because the pull request's history was
  * rewritten (docs/companion-suggestion-pr-contract.md §2.5.1); its markers
