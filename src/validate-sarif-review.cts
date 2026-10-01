@@ -36,10 +36,13 @@
  *   an unknown field), captured and validated identically; a TypeError
  *   rejects before any request.
  *
- * With suggestion pull requests enabled (docs/companion-suggestion-pr-contract.md
- * §2.8), the preflight's repository and label reads apply unchanged, and a
- * ready assessment says how many draft suggestion pull requests publication
- * would create, into which branch and with which label.
+ * The delivery policy (docs/delivery-policy-contract.md) is resolved and
+ * followed exactly as publication follows it, including the repository's
+ * delivery configuration. When the plan has companion pull requests
+ * (docs/companion-suggestion-pr-contract.md §2.8), the preflight's
+ * repository and label reads apply unchanged, and a ready assessment says
+ * how many suggestion pull requests publication would create, into which
+ * branch and with which labels.
  *
  * Outcome (status, Markdown and the diagnostics are the contract, D45):
  *   { status: 'ready', markdown, diagnostics }      // preparation's warnings

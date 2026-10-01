@@ -37,7 +37,7 @@ Description
 </th></tr></thead>
 <tbody><tr><td>
 
-[allowSuggestionPullRequests?](./sarif-to-comment.ipublishsarifreviewoptions.allowsuggestionpullrequests.md)
+[delivery?](./sarif-to-comment.ipublishsarifreviewoptions.delivery.md)
 
 
 </td><td>
@@ -47,12 +47,12 @@ Description
 
 </td><td>
 
-boolean \| undefined
+[IDeliveryOptions](./sarif-to-comment.ideliveryoptions.md)
 
 
 </td><td>
 
-_(Optional)_ Allow suggestion pull requests: whole-file creations and deletions, a fix with several changes, and explicitly grouped changes (`properties.sarifToComment.suggestionGroup`<!-- -->, written by[groupSarifFixes()](./sarif-to-comment.groupsariffixes.md)<!-- -->) are proposed as pull requests into the pull request's head branch, which the review links. They follow the tool-neutral suggestion pull request convention and carry the repository's canonical label: the `label` of `.github/suggestion-prs.json` on the default branch, otherwise `suggestion-pr`<!-- -->. Omitted or `false`<!-- -->: disabled; creations and deletions are shown in the review body, and a grouped document or a fix with several changes is refused, naming this option. Small edits stay native suggestions either way. Part of the publication identity.
+_(Optional)_ Which mechanism delivers each proposed change: a native suggestion, the review body, or a companion (suggestion) pull request into the pull request's head branch. Each setting is an ordered list; the first listed mechanism that can deliver a proposal does, and a later one is used only as an announced fallback (a `delivery-fallback` warning). When none can, nothing is published (`blocked`<!-- -->, with a `delivery-unavailable` error). Settings you give win over the repository's `.github/sarif-to-comment.json` on its default branch, which wins over the defaults (edits`['native']`<!-- -->, grouped edits `['native-batch']`<!-- -->, file operations`['manual']`<!-- -->, bundle `'per-unit'`<!-- -->), which never create a companion pull request. Part of the publication identity. See [IDeliveryOptions](./sarif-to-comment.ideliveryoptions.md)<!-- -->.
 
 
 </td></tr>
@@ -94,7 +94,7 @@ boolean \| undefined
 
 </td><td>
 
-_(Optional)_ Create suggestion pull requests ready for review instead of as drafts (the default). A draft cannot be merged until someone with write access marks it ready. Allowed only with `allowSuggestionPullRequests: true`<!-- -->. Part of the publication identity.
+_(Optional)_ Create companion pull requests ready for review instead of as drafts (the default). A draft cannot be merged until someone with write access marks it ready. With no companion planned, it has no effect and a`companion-options-unused` note says so. Part of the publication identity.
 
 
 </td></tr>
@@ -136,7 +136,7 @@ readonly string\[\] \| undefined
 
 </td><td>
 
-_(Optional)_ Extra labels every suggestion pull request carries in addition to the canonical label, for example a team or campaign tag. Deduplicated case-insensitively, so listing the canonical label is harmless. Each must already exist (a missing one blocks the review; labels are never created) and be 1-50 characters without commas, control or invisible formatting characters or surrounding whitespace. Allowed only with`allowSuggestionPullRequests: true`<!-- -->. Part of the publication identity.
+_(Optional)_ Extra labels every companion pull request carries in addition to the canonical label (the `label` of `.github/suggestion-prs.json` on the default branch, otherwise `suggestion-pr`<!-- -->), for example a team or campaign tag. Deduplicated case-insensitively, so listing the canonical label is harmless. Each must already exist (a missing one blocks the review; labels are never created) and be 1-50 characters without commas, control or invisible formatting characters or surrounding whitespace. With no companion planned, it has no effect and a`companion-options-unused` note says so. Part of the publication identity.
 
 
 </td></tr>

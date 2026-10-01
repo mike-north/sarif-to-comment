@@ -4,7 +4,7 @@
 
 ## IPublishSarifReviewOptions.pullRequestLabels property
 
-Extra labels every suggestion pull request carries in addition to the canonical label, for example a team or campaign tag. Deduplicated case-insensitively, so listing the canonical label is harmless. Each must already exist (a missing one blocks the review; labels are never created) and be 1-50 characters without commas, control or invisible formatting characters or surrounding whitespace. Allowed only with`allowSuggestionPullRequests: true`<!-- -->. Part of the publication identity.
+Extra labels every companion pull request carries in addition to the canonical label (the `label` of `.github/suggestion-prs.json` on the default branch, otherwise `suggestion-pr`<!-- -->), for example a team or campaign tag. Deduplicated case-insensitively, so listing the canonical label is harmless. Each must already exist (a missing one blocks the review; labels are never created) and be 1-50 characters without commas, control or invisible formatting characters or surrounding whitespace. With no companion planned, it has no effect and a`companion-options-unused` note says so. Part of the publication identity.
 
 **Signature:**
 

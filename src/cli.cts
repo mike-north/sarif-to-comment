@@ -19,8 +19,10 @@
  *   validate            readiness, without publishing    validateSarifReview
  *   publish             create the GitHub review         publishSarifReview
  *                       (a draft; --submit: submitted;
- *                       --allow-suggestion-prs: with
- *                       suggestion pull requests)
+ *                       --delivery, --edits, --grouped-edits,
+ *                       --file-operations, --companion-bundle:
+ *                       the delivery policy, docs/delivery-policy-
+ *                       contract.md §12)
  *   close-suggestion-prs close suggestion pull requests  closeSuggestionPullRequests
  *                       whose original ended
  *                       (docs/suggestion-cleanup-contract.md)
@@ -82,6 +84,8 @@ import type { IStagedChangesReceipt } from './staged-changes.cjs';
 import { validateSarifReviewReported } from './validate-sarif-review.cjs';
 import { createDiagnostic, orderDiagnostics } from './diagnostics.cjs';
 import type { IDiagnostic } from './diagnostics.cjs';
+import { validateDeliveryPolicyLayer } from './delivery-policy.cjs';
+import type { IDeliveryPolicyLayer } from './delivery-policy.cjs';
 import { PLAIN_STYLE, loadColorStyle, renderDiagnostics, shouldUseColor } from './diagnostic-rendering.cjs';
 import type { ColorChoice } from './diagnostic-rendering.cjs';
 import type { IValidateSarifReviewInternals } from './validate-sarif-review.cjs';
@@ -170,21 +174,31 @@ const REVIEW_POLICY_OPTIONS = md`  --source-root ABSOLUTE_FILE_URI
                                  comment review, instead of a draft. Never
                                  approves or requests changes. Retry a
                                  publication with the mode it started with.
-  --allow-suggestion-prs         Allow suggestion pull requests: propose
-                                 whole-file creations and deletions, fixes with
-                                 several changes, and changes grouped with
-                                 group-fixes, as pull requests into the pull
-                                 request's head branch, linked from the review.
-                                 They carry the repository's suggestion label
-                                 (suggestion-pr, or the label in
-                                 .github/suggestion-prs.json on the default
-                                 branch), which must already exist.
-  --pr-labels A,B,C              Extra existing labels for suggestion pull
-                                 requests, comma-separated. Needs
-                                 --allow-suggestion-prs.
-  --mark-suggestion-prs-ready    Create suggestion pull requests ready for
-                                 review instead of as drafts. Needs
-                                 --allow-suggestion-prs.
+  --delivery original-pr|companion
+                                 A delivery preset: keep every proposal on the
+                                 pull request (original-pr), or send every
+                                 proposal to companion pull requests
+                                 (companion). The flags below override it.
+  --edits LIST                   How an edit in no group is delivered: an
+                                 ordered, comma-separated list of native,
+                                 review-body and companion. The first listed
+                                 mechanism that can deliver it does; a later one
+                                 is a fallback, with a warning. Default: native.
+  --grouped-edits LIST           How a group of edits, or a fix with several
+                                 changes, is delivered, always whole: a list of
+                                 native-batch, companion and manual-group.
+                                 Default: native-batch.
+  --file-operations LIST         How a whole-file creation or deletion, and any
+                                 group containing one, is delivered: a list of
+                                 manual and companion. Default: manual.
+  --companion-bundle per-unit|single
+                                 One companion pull request per proposal
+                                 (per-unit, the default), or one holding them
+                                 all (single).
+  --pr-labels A,B,C              Extra existing labels for companion pull
+                                 requests, comma-separated.
+  --mark-suggestion-prs-ready    Create companion pull requests ready for review
+                                 instead of as drafts.
 `;
 
 const PUBLISH_OPTIONS = md`  --sarif FILE                   SARIF 2.1.0 JSON file to publish.
@@ -195,6 +209,16 @@ ${REVIEW_POLICY_OPTIONS}`;
 
 const VALIDATE_OPTIONS = md`  --sarif FILE                   SARIF 2.1.0 JSON file to check.
 ${REVIEW_TARGET_OPTIONS}${REVIEW_POLICY_OPTIONS}`;
+
+/** How the delivery flags combine with the repository's configuration (docs/delivery-policy-contract.md §7, §10). */
+const DELIVERY_NOTE = md`Delivery: each proposed change is delivered by the first mechanism its list
+names that can deliver it. Flags override the repository's
+.github/sarif-to-comment.json on the default branch, which overrides the
+defaults; the defaults never create a companion pull request. When no listed
+mechanism can deliver a proposal, nothing is published. review-body and
+manual-group, and manual for a group with a whole-file operation, are not yet
+supported by this version.
+`;
 
 const CREDENTIALS = md`Credentials (validate, publish and close-suggestion-prs only):
   GH_TOKEN, or else GITHUB_TOKEN: a GitHub personal access token or user token.
@@ -235,8 +259,10 @@ Usage:
   sarif-to-comment --sarif FILE --repo OWNER/REPO --pull N --commit FULLSHA
                    --state ABSOLUTE_FILE [--source-root ABSOLUTE_FILE_URI]
                    [--old-source-commit FULLSHA] [--ignore-approval-hold]
-                   [--submit] [--allow-suggestion-prs [--pr-labels A,B,C]
-                   [--mark-suggestion-prs-ready]]
+                   [--submit] [--delivery PRESET] [--edits LIST]
+                   [--grouped-edits LIST] [--file-operations LIST]
+                   [--companion-bundle BUNDLE] [--pr-labels A,B,C]
+                   [--mark-suggestion-prs-ready]
   sarif-to-comment [COMMAND] --help
   sarif-to-comment --version
 
@@ -384,9 +410,10 @@ each finding gets the same properties.sarifToComment.suggestionGroup. A NAME
 already in use extends that group, so a single finding may be added; groups are
 never joined. A finding's change is its primary (first) fix, or its proposed
 whole-file operation; further fixes are alternatives and are never grouped.
-Publishing with --allow-suggestion-prs proposes the group as one suggestion pull
-request; without it, publication refuses the group and never splits it. A single
-fix with several changes is already accepted whole and needs no group.
+Publication delivers the group whole, by --grouped-edits (or --file-operations,
+when it creates or deletes a whole file): as one native batch or one companion
+pull request, never split; when no listed mechanism can, it refuses the group. A
+single fix with several changes is already accepted whole and needs no group.
 
 Take each SELECTOR from inspect: "Selector:" under each finding, or "selector"
 in JSON. Selectors belong to the file exactly as inspected, so inspect again
@@ -512,8 +539,10 @@ Usage:
                             --commit FULLSHA [--source-root ABSOLUTE_FILE_URI]
                             [--old-source-commit FULLSHA]
                             [--ignore-approval-hold] [--submit]
-                            [--allow-suggestion-prs [--pr-labels A,B,C]
-                            [--mark-suggestion-prs-ready]]
+                            [--delivery PRESET] [--edits LIST]
+                            [--grouped-edits LIST] [--file-operations LIST]
+                            [--companion-bundle BUNDLE] [--pr-labels A,B,C]
+                            [--mark-suggestion-prs-ready]
                             [--format human|json|toon]
 
 Runs every check publish runs, reading the pull request and its source from
@@ -524,6 +553,7 @@ draft or submitted, while it exists. A ready result is not an approval: publish
 repeats every check against the pull request as it is then. Validation takes no
 publication state file and reserves no publication.
 
+${DELIVERY_NOTE}
 Options:
 ${VALIDATE_OPTIONS}${FORMAT_OPTION}
 ${CREDENTIALS}
@@ -543,13 +573,16 @@ Usage:
                            [--source-root ABSOLUTE_FILE_URI]
                            [--old-source-commit FULLSHA]
                            [--ignore-approval-hold] [--submit]
-                           [--allow-suggestion-prs [--pr-labels A,B,C]
-                           [--mark-suggestion-prs-ready]]
+                           [--delivery PRESET] [--edits LIST]
+                           [--grouped-edits LIST] [--file-operations LIST]
+                           [--companion-bundle BUNDLE] [--pr-labels A,B,C]
+                           [--mark-suggestion-prs-ready]
                            [--format human|json|toon]
 
 The same operation as the original form without a command. The review is a draft
 unless --submit is given.
 
+${DELIVERY_NOTE}
 Options:
 ${PUBLISH_OPTIONS}${FORMAT_OPTION}
 ${CREDENTIALS}
@@ -570,18 +603,18 @@ Usage:
                                         [--owner me|all] [--label NAME]
                                         [--dry-run] [--format human|json|toon]
 
-Closes open suggestion pull requests (made by publish --allow-suggestion-prs, or
-by any tool following the suggestion pull request convention) whose original
-pull request has merged or closed. They are found by their suggestion-pr/
-branches and recognized by the marker in their description, never by their
-title. They must carry the repository's suggestion label: suggestion-pr, or the
-label in .github/suggestion-prs.json on the default branch; an invalid file
-stops the command. By default only suggestion pull requests opened by the
-account of the token are closed. A suggestion is closed only after its original
-has been read and found merged or closed and the suggestion itself has been read
-again; an original that cannot be read is never treated as ended. Everything is
-read before anything is closed. Closing never deletes a branch, and nothing else
-is changed. Running it again is safe.
+Closes open suggestion pull requests (made by publish with a delivery list that
+names companion, or by any tool following the suggestion pull request
+convention) whose original pull request has merged or closed. They are found by
+their suggestion-pr/ branches and recognized by the marker in their description,
+never by their title. They must carry the repository's suggestion label:
+suggestion-pr, or the label in .github/suggestion-prs.json on the default
+branch; an invalid file stops the command. By default only suggestion pull
+requests opened by the account of the token are closed. A suggestion is closed
+only after its original has been read and found merged or closed and the
+suggestion itself has been read again; an original that cannot be read is never
+treated as ended. Everything is read before anything is closed. Closing never
+deletes a branch, and nothing else is changed. Running it again is safe.
 
 A sweep first counts its candidates in one request. A --label sweep whose first
 20 pull requests show no suggestion marker and no suggestion-pr/ branch stops
@@ -1364,7 +1397,7 @@ function groupFixes(argv: readonly string[], { cwd }: IHandlerContext): IOutcome
           return written === undefined ? `${verb} in ${file} ${where}` : `${verb} ${where} Wrote ${written}; ${file} was not changed.`;
         },
         members: outcome.findings.map((f) => `  ${f.ref} (tool "${f.tool}"): ${plural(f.changes, 'change')}`),
-        notes: ['Publishing with --allow-suggestion-prs proposes the group as one suggestion pull request; without it, publication refuses the group.'],
+        notes: ['Publication delivers the group whole, by its delivery list (--grouped-edits, or --file-operations when it creates or deletes a whole file), or refuses it.'],
       },
     };
   });
@@ -1708,8 +1741,11 @@ async function addStagedChanges(argv: readonly string[], { cwd }: IHandlerContex
 
 /** The review options publish and validate share: everything but --state. */
 const REVIEW_SPEC = {
-  values: ['--sarif', '--repo', '--pull', '--commit', '--source-root', '--old-source-commit', '--pr-labels'],
-  booleans: ['--ignore-approval-hold', '--submit', '--allow-suggestion-prs', '--mark-suggestion-prs-ready'],
+  values: [
+    '--sarif', '--repo', '--pull', '--commit', '--source-root', '--old-source-commit', '--pr-labels',
+    '--delivery', '--edits', '--grouped-edits', '--file-operations', '--companion-bundle',
+  ],
+  booleans: ['--ignore-approval-hold', '--submit', '--mark-suggestion-prs-ready'],
   required: ['--sarif', '--repo', '--pull', '--commit'],
 } as const satisfies IOptionSpec;
 
@@ -1728,7 +1764,7 @@ interface IReviewRequestInput {
   readonly options?: {
     readonly ignoreApprovalHold?: true;
     readonly submit?: true;
-    readonly allowSuggestionPullRequests?: true;
+    readonly delivery?: IDeliveryPolicyLayer;
     readonly pullRequestLabels?: readonly string[];
     readonly markSuggestionPullRequestsReady?: true;
   };
@@ -1754,15 +1790,13 @@ function reviewRequestInput({ values, flags }: IParsedOptions): IReviewRequestIn
   const reviewedCommit = commitValue(requiredValue(values, '--commit'), '--commit');
   const oldSourceCommit = commitFlag(values, '--old-source-commit');
   const sourceRootUri = sourceRootFlag(values);
-  const allow = flags.has('--allow-suggestion-prs');
   const labels = values.get('--pr-labels');
-  if (labels !== undefined && !allow) throw new UsageError('--pr-labels requires --allow-suggestion-prs');
   const ready = flags.has('--mark-suggestion-prs-ready');
-  if (ready && !allow) throw new UsageError('--mark-suggestion-prs-ready requires --allow-suggestion-prs');
+  const delivery = deliveryFlags(values);
   const options = {
     ...(flags.has('--ignore-approval-hold') ? { ignoreApprovalHold: true as const } : {}),
     ...(flags.has('--submit') ? { submit: true as const } : {}),
-    ...(allow ? { allowSuggestionPullRequests: true as const } : {}),
+    ...(delivery === undefined ? {} : { delivery }),
     ...(labels === undefined ? {} : { pullRequestLabels: labelListFlag(labels) }),
     ...(ready ? { markSuggestionPullRequestsReady: true as const } : {}),
   };
@@ -1773,6 +1807,46 @@ function reviewRequestInput({ values, flags }: IParsedOptions): IReviewRequestIn
     ...(sourceRootUri === undefined ? {} : { sourceRootUri }),
     ...(Object.keys(options).length === 0 ? {} : { options }),
   };
+}
+
+/** The delivery flags and the member of the library's `delivery` option each sets (docs/delivery-policy-contract.md §12). */
+const DELIVERY_FLAGS: readonly (readonly [flag: string, member: 'preset' | 'edits' | 'groupedEdits' | 'fileOperations' | 'companionBundle', list: boolean])[] = [
+  ['--delivery', 'preset', false],
+  ['--edits', 'edits', true],
+  ['--grouped-edits', 'groupedEdits', true],
+  ['--file-operations', 'fileOperations', true],
+  ['--companion-bundle', 'companionBundle', false],
+];
+
+/**
+ * The caller's delivery settings from the delivery flags, as the library's
+ * `delivery` option (docs/delivery-policy-contract.md §12), or undefined
+ * when none is given. A list is comma-separated, with the spaces around each
+ * entry trimmed; an empty entry, a value outside the flag's vocabulary or a
+ * repeated mechanism is a usage error naming the flag, refused before
+ * anything is read.
+ */
+function deliveryFlags(values: ReadonlyMap<string, string>): IDeliveryPolicyLayer | undefined {
+  const given: Record<string, unknown> = {};
+  for (const [flag, member, list] of DELIVERY_FLAGS) {
+    const value = values.get(flag);
+    if (value === undefined) continue;
+    if (!list) {
+      given[member] = value;
+      continue;
+    }
+    const entries = value.split(',').map((entry) => entry.trim());
+    if (entries.some((entry) => entry === '')) throw new UsageError(`${flag} must be a comma-separated list of mechanisms, without empty entries`);
+    given[member] = entries;
+  }
+  if (Object.keys(given).length === 0) return undefined;
+  const validation = validateDeliveryPolicyLayer(given);
+  if (validation.status === 'valid') return validation.layer;
+  const [problem] = validation.problems;
+  if (problem === undefined) throw new Error('Internal error: invalid delivery flags name no problem.');
+  const [, member = '', index] = problem.pointer.split('/');
+  const flag = DELIVERY_FLAGS.find(([, name]) => name === member)?.[0] ?? '--delivery';
+  throw new UsageError(index === undefined ? `${flag} ${problem.detail}` : `${flag} entry ${String(Number(index) + 1)} ${problem.detail}`);
 }
 
 /**

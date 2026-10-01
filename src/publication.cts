@@ -76,6 +76,9 @@
  *   preparedReview:   { body: string, comments: Comment[] }
  *     Comment: { path, side: 'LEFT'|'RIGHT', line, startSide?, startLine?, body }
  *     (start fields together or not at all; omitted for single-line comments)
+ *   delivery?:        the resolved delivery policy in its recorded form
+ *                     (docs/delivery-policy-contract.md §13): recorded in the
+ *                     intent, which is then version 3
  *   warnings?:        Diagnostic[]  // preparation's warnings and notes
  *                     (docs/diagnostic.v1.schema.json, never errors); they
  *                     belong to the publication (issue #42): recorded in the
@@ -140,16 +143,21 @@
  *   unchanged.
  *
  * State record (JSON, created mode 0600, never contains credentials):
- *   { format: 'sarif-to-comment.publication-state', version: 1 | 2,
+ *   { format: 'sarif-to-comment.publication-state', version: 1 | 2 | 3,
  *     phase: 'sending' | 'completed' | 'rejected', marker, destination,
  *     reviewedCommit, inputFingerprint, authorId, request, requestFingerprint,
- *     warnings?: Diagnostic[],
+ *     delivery?: the resolved delivery policy, warnings?: Diagnostic[],
  *     receipt?: { reviewId, htmlUrl, via: 'created'|'recovered' },
  *     rejection?: { status, message } }
  *   Version 2 is version 1 plus `warnings` (issue #42): present exactly in
  *   version 2, a non-empty list of diagnostics that are not errors, written
- *   with the intent and kept by every later phase. A publication without
- *   warnings writes version 1, byte for byte what earlier versions wrote.
+ *   with the intent and kept by every later phase. Version 3 is version 1
+ *   plus `delivery`, the resolved delivery policy the publication was
+ *   planned under (docs/delivery-policy-contract.md §13), and `warnings` when
+ *   there are any; it is written whenever the caller gives a policy, as
+ *   publishSarifReview always does. A publication without either writes
+ *   version 1, byte for byte what earlier versions wrote. Versions 1 and 2
+ *   remain readable, so a 0.2.x record is continued unchanged.
  *   `request` has an `event` key exactly for a submitted publication, and its
  *   only value is 'COMMENT'; a request without it is a draft's, so every
  *   record written before submitted publication existed reads as a draft.
@@ -169,6 +177,8 @@ import * as crypto from 'node:crypto';
 import * as nodeFs from 'node:fs';
 import * as path from 'node:path';
 
+import { deliveryRecordProblem, isResolvedDeliveryPolicy } from './delivery-policy.cjs';
+import type { IResolvedDeliveryPolicy } from './delivery-policy.cjs';
 import { diagnosticProblem } from './diagnostics.cjs';
 import type { IDiagnostic } from './public-types.cjs';
 
@@ -320,8 +330,8 @@ interface IRejection {
 /** Fields every state record carries, whatever its phase. */
 interface IStateRecordBase {
   readonly format: typeof STATE_FORMAT;
-  /** 1, or 2 exactly when `warnings` is present. */
-  readonly version: typeof STATE_VERSION | typeof WARNED_STATE_VERSION;
+  /** 1; 2 exactly when `warnings` is present without `delivery`; 3 exactly when `delivery` is present. */
+  readonly version: typeof STATE_VERSION | typeof WARNED_STATE_VERSION | typeof DELIVERY_STATE_VERSION;
   readonly marker: string;
   readonly destination: IPublicationDestination;
   readonly reviewedCommit: string;
@@ -329,8 +339,10 @@ interface IStateRecordBase {
   readonly authorId: number;
   readonly request: ICreateReviewRequest;
   readonly requestFingerprint: string;
-  /** Preparation's warnings (version 2 only): reported by every outcome for this state path. */
+  /** Preparation's warnings (versions 2 and 3): reported by every outcome for this state path. */
   readonly warnings?: readonly IDiagnostic[];
+  /** The resolved delivery policy (version 3 only), recorded when the publication was planned. */
+  readonly delivery?: IResolvedDeliveryPolicy;
 }
 
 /** An intent record: sending may have begun; only investigation may follow. */
@@ -505,8 +517,10 @@ const STATE_FORMAT = 'sarif-to-comment.publication-state';
 const STATE_VERSION = 1;
 
 // The companion plan (companion-publication.cts) numbers its versions independently: its version 2 means re-applied suggestions.
-/** The record version that adds preparation's `warnings` (issue #42); any other version is corrupt state. */
+/** The record version that adds preparation's `warnings` (issue #42). */
 const WARNED_STATE_VERSION = 2;
+/** The record version that adds the resolved delivery policy, and `warnings` when there are any; any other version is corrupt state. */
+const DELIVERY_STATE_VERSION = 3;
 
 /** Owner-only permissions for state files: they hold review content, not credentials. */
 const STATE_FILE_MODE = 0o600;
@@ -871,9 +885,11 @@ function recordProblem(record: unknown): string | null {
   if (!isPlainObject(record)) return 'record is not a JSON object';
   if (record['format'] !== STATE_FORMAT) return 'unknown record format';
   const version = record['version'];
-  if (version !== STATE_VERSION && version !== WARNED_STATE_VERSION) return 'unsupported record version';
-  const warned = version === WARNED_STATE_VERSION;
-  const withWarnings = (keys: readonly string[]): readonly string[] => (warned ? [...keys, 'warnings'].sort() : keys);
+  if (version !== STATE_VERSION && version !== WARNED_STATE_VERSION && version !== DELIVERY_STATE_VERSION) return 'unsupported record version';
+  // Version 2 always has warnings; version 3 has them only when there are any.
+  const warned = version === WARNED_STATE_VERSION || (version === DELIVERY_STATE_VERSION && Object.hasOwn(record, 'warnings'));
+  const delivered = version === DELIVERY_STATE_VERSION;
+  const withWarnings = (keys: readonly string[]): readonly string[] => [...keys, ...(warned ? ['warnings'] : []), ...(delivered ? ['delivery'] : [])].sort();
   const keysByPhase: Readonly<Record<RecordPhase, readonly string[]>> = {
     sending: withWarnings(SENDING_KEYS),
     completed: withWarnings(COMPLETED_KEYS),
@@ -888,14 +904,18 @@ function recordProblem(record: unknown): string | null {
   // refuses nothing JSON.parse can produce; it establishes the parsed phase
   // type from the value itself rather than from its coercion.
   if (typeof phase !== 'string' && !isCoercedPhase(phase)) return 'unknown record phase';
-  // Only version-1 records predate string phases; version 2 was never written otherwise.
-  if (warned && typeof phase !== 'string') return 'unknown record phase';
+  // Only version-1 records predate string phases; later versions were never written otherwise.
+  if (version !== STATE_VERSION && typeof phase !== 'string') return 'unknown record phase';
   if (!hasExactKeys(record, keysByPhase[phaseKey])) return 'record fields do not match its phase';
   if (warned) {
     const warnings = record['warnings'];
     const problem = warningsProblem(warnings);
     if (problem !== null) return `malformed warnings (${problem})`;
-    if (isList(warnings) && warnings.length === 0) return 'a version-2 record has no warnings';
+    if (isList(warnings) && warnings.length === 0) return `a version-${String(version)} record has an empty warnings list`;
+  }
+  if (delivered) {
+    const problem = deliveryRecordProblem(record['delivery']);
+    if (problem !== null) return `malformed delivery policy (${problem})`;
   }
   const marker = record['marker'];
   if (typeof marker !== 'string' || !MARKER_PATTERN.test(marker)) return 'malformed marker';
@@ -1651,6 +1671,19 @@ function capturedWarnings(warnings: unknown): readonly IDiagnostic[] {
 }
 
 /**
+ * The caller's resolved delivery policy, as a copy: absent means none is
+ * recorded. Anything but a policy in its recorded form is caller misuse
+ * (TypeError, before any I/O).
+ */
+function capturedDelivery(delivery: unknown): IResolvedDeliveryPolicy | undefined {
+  if (delivery === undefined) return undefined;
+  if (!isResolvedDeliveryPolicy(delivery)) {
+    throw new TypeError(`Invalid publication input: delivery must be a resolved delivery policy (${String(deliveryRecordProblem(delivery))})`);
+  }
+  return structuredClone(delivery);
+}
+
+/**
  * Publishes a prepared review under a new identity at `statePath`, or — when
  * a record already exists there — continues that identity without sending.
  * `input` is validated here (TypeError before any I/O), so it is `unknown`.
@@ -1662,6 +1695,7 @@ async function publishPreparedReview(
   validateIdentity(input);
   validatePreparedReview(input['preparedReview']);
   const warnings = capturedWarnings(input['warnings']);
+  const delivery = capturedDelivery(input['delivery']);
   const fs: IPublicationFs = internals.fs || nodeFs;
   const { statePath, transport } = input;
 
@@ -1673,7 +1707,7 @@ async function publishPreparedReview(
   const request = buildRequest(input.destination, input.reviewedCommit, input['preparedReview'], marker, requestedMode(input));
   const record: ISendingRecord = {
     format: STATE_FORMAT,
-    version: warnings.length === 0 ? STATE_VERSION : WARNED_STATE_VERSION,
+    version: delivery !== undefined ? DELIVERY_STATE_VERSION : warnings.length === 0 ? STATE_VERSION : WARNED_STATE_VERSION,
     phase: 'sending',
     marker,
     destination: {
@@ -1687,6 +1721,7 @@ async function publishPreparedReview(
     request,
     requestFingerprint: fingerprintOf(request),
     ...(warnings.length === 0 ? {} : { warnings }),
+    ...(delivery === undefined ? {} : { delivery }),
   };
 
   if (!claimIntent(fs, statePath, record)) {

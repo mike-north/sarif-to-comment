@@ -530,12 +530,7 @@ export const DIAGNOSTIC_CATALOG = {
   'replacement-unanchored': {
     severity: 'error',
     title: 'A fix edits an empty file',
-    remedies: ['Propose the content as a new file, or enable suggestion pull requests.'],
-  },
-  'fix-changes-require-suggestion-prs': {
-    severity: 'error',
-    title: 'A fix with several changes needs suggestion pull requests',
-    remedies: ['Enable suggestion pull requests (`--allow-suggestion-prs`, `allowSuggestionPullRequests`).'],
+    remedies: ['Propose the content as a new file.'],
   },
   'overlapping-replacements': {
     severity: 'error',
@@ -546,36 +541,6 @@ export const DIAGNOSTIC_CATALOG = {
     severity: 'error',
     title: 'A fix edits another revision than the reviewed commit',
     remedies: ['Derive the fix from the reviewed commit.'],
-  },
-  'suggestion-reviewed-commit-not-head': {
-    severity: 'error',
-    title: 'A native suggestion needs the reviewed commit to be the pull request head',
-    remedies: ['Review the pull request\'s head commit, or enable suggestion pull requests.'],
-  },
-  'suggestion-not-inline': {
-    severity: 'error',
-    title: 'The lines cannot carry a native suggestion',
-    remedies: ['Enable suggestion pull requests, or remove the fix.'],
-  },
-  'suggestion-fence-unverified': {
-    severity: 'error',
-    title: 'The replacement contains a suggestion fence',
-    remedies: ['Enable suggestion pull requests, or change the replacement.'],
-  },
-  'suggestion-blank-only-unverified': {
-    severity: 'error',
-    title: 'The replacement is blank lines only',
-    remedies: ['Enable suggestion pull requests, or change the replacement.'],
-  },
-  'suggestion-crlf-unverified': {
-    severity: 'error',
-    title: 'The replacement\'s line endings would not be reproduced',
-    remedies: ['Enable suggestion pull requests, or change the replacement.'],
-  },
-  'suggestion-final-newline-unverified': {
-    severity: 'error',
-    title: 'The replacement\'s end of file would not be reproduced',
-    remedies: ['Enable suggestion pull requests, or change the replacement.'],
   },
   'alternative-path-unrepresentable': {
     severity: 'error',
@@ -657,11 +622,6 @@ export const DIAGNOSTIC_CATALOG = {
     title: 'A finding is located in another file than its proposal',
     remedies: ['Locate the finding in the proposed file, or separate it from the proposal.'],
   },
-  'suggestion-group-requires-suggestion-prs': {
-    severity: 'error',
-    title: 'A suggestion group needs suggestion pull requests',
-    remedies: ['Enable suggestion pull requests (`--allow-suggestion-prs`, `allowSuggestionPullRequests`).', 'Or ungroup the findings (`ungroup-fixes`).'],
-  },
   'suggestion-group-member-without-change': {
     severity: 'error',
     title: 'A grouped finding proposes no change',
@@ -688,23 +648,10 @@ export const DIAGNOSTIC_CATALOG = {
       'Publish fewer proposals in one review, or group related changes.',
     ],
   },
-  'suggestion-pr-fallback': {
-    severity: 'warning',
-    title: 'A change is handled as if suggestion pull requests were not allowed',
-    remedies: ['To propose the change as a suggestion pull request, review the pull request\'s current head again and publish that review.'],
-  },
-  'suggestion-group-pr-unavailable': {
-    severity: 'error',
-    title: 'A group\'s suggestion pull request cannot be made',
-    remedies: [
-      'Review the pull request\'s current head again, and publish that review.',
-      'Or remove the group (`ungroup-fixes`), so that its changes are published on their own.',
-    ],
-  },
   'suggestion-pr-permission-missing': {
     severity: 'error',
     title: 'The account cannot push to the repository',
-    remedies: ['Use a token of an account with push access, or publish without suggestion pull requests.'],
+    remedies: ['Use a token of an account with push access, or publish with delivery lists that do not name `companion`.'],
   },
   'suggestion-pr-configuration-invalid': {
     severity: 'error',
@@ -755,7 +702,7 @@ export const DIAGNOSTIC_CATALOG = {
   'body-too-large': {
     severity: 'error',
     title: 'The review body would be too long',
-    remedies: ['Publish fewer general findings, or enable suggestion pull requests for whole-file proposals.'],
+    remedies: ['Publish fewer general findings, or deliver whole-file proposals as companion pull requests (`--file-operations companion`).'],
   },
   'payload-too-large': {
     severity: 'error',

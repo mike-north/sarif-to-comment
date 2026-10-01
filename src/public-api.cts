@@ -61,6 +61,12 @@ export { publishSarifReview } from './publish-sarif-review.cjs';
 export type {
   IPullRequestDestination,
   IPublishSarifReviewOptions,
+  IDeliveryOptions,
+  EditDeliveryMechanism,
+  GroupedEditDeliveryMechanism,
+  FileOperationDeliveryMechanism,
+  DeliveryPreset,
+  CompanionBundle,
   IPublishSarifReviewInput,
   IPublishedReview,
   IPublishedSuggestion,

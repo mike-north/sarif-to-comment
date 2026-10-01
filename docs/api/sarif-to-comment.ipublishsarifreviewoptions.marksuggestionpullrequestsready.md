@@ -4,7 +4,7 @@
 
 ## IPublishSarifReviewOptions.markSuggestionPullRequestsReady property
 
-Create suggestion pull requests ready for review instead of as drafts (the default). A draft cannot be merged until someone with write access marks it ready. Allowed only with `allowSuggestionPullRequests: true`<!-- -->. Part of the publication identity.
+Create companion pull requests ready for review instead of as drafts (the default). A draft cannot be merged until someone with write access marks it ready. With no companion planned, it has no effect and a`companion-options-unused` note says so. Part of the publication identity.
 
 **Signature:**
 

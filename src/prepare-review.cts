@@ -55,25 +55,26 @@
  *                    // operational and propagates unchanged.
  *   options?: {
  *     ignoreApprovalHold?: boolean,   // bypasses only an approval hold
- *     suggestionPullRequests?: { headRef, ready, resolveRewrittenHead? },
- *                                     // enabled: whole-file proposals and
- *                                     // explicit groups become suggestion
- *                                     // pull requests into the named head
- *                                     // branch, drafts unless `ready` (it
- *                                     // words their lifecycle note).
- *                                     // `resolveRewrittenHead`: async, called
- *                                     // at most once and only when the review
- *                                     // has suggestion units; answers the pull
- *                                     // request's head when the reviewed
- *                                     // commit is not its ancestor, otherwise
- *                                     // undefined. Each suggestion is then
- *                                     // re-applied onto it only when
- *                                     // everything it changes is identical
- *                                     // there; otherwise a whole-file
- *                                     // proposal falls back to the review
- *                                     // body with a warning, and a group or
- *                                     // several-change fix blocks
- *                                     // (contract §2.5.1, issue #37)
+ *     delivery?: { policy, companionOptions?, companionTarget? },
+ *                                     // the resolved delivery policy
+ *                                     // (src/delivery-policy.cts; the
+ *                                     // defaults when absent), the caller's
+ *                                     // companion options as given (for the
+ *                                     // companion-options-unused note), and
+ *                                     // `companionTarget`: async, called at
+ *                                     // most once, the first time a unit's
+ *                                     // `companion` availability is asked;
+ *                                     // answers { headRef, ready,
+ *                                     // unavailable?, resolveRewrittenHead? }:
+ *                                     // the head branch companions target,
+ *                                     // whether they are created ready, the
+ *                                     // obstacles that prevent every one
+ *                                     // (a fork, another base), and the
+ *                                     // pull request's head when the reviewed
+ *                                     // commit is not its ancestor, onto
+ *                                     // which each companion is re-applied
+ *                                     // only when everything it changes is
+ *                                     // identical there (contract §2.5.1)
  *     maxComments?: number,           // default 100 inline comments
  *     maxCommentBodyChars?: number,   // default 60000 UTF-16 units per comment
  *                                     // body and for the review body
@@ -103,12 +104,14 @@
  *       (the preparedReview shape accepted by publication)
  *     evidence: Evidence[],   // one per SARIF result, in SARIF order
  *     warnings: Diagnostic[], markdown: string,
- *     suggestions?: { companions, sections, lifecycleNote } }  // only when suggestion pull
- *       // requests are created: each companion's exact changes (re-applied
- *       // onto the rewritten head when there is one), title, commit message and rendered
- *       // parts, and the body's sections (text, or a companion index
- *       // rendered once its number is known); review.body is then the body
- *       // at its largest possible size, for the limits
+ *     suggestions?: { companions, sections, lifecycleNote } }  // only when the plan
+ *       // has companion pull requests: each companion's exact changes
+ *       // (re-applied onto the rewritten head when there is one), title,
+ *       // commit message and the rendered sections of the proposals it holds
+ *       // (several for a `single` bundle), and the body's sections (text, or
+ *       // a reference to one proposal of one companion, rendered once its
+ *       // number is known); review.body is then the body at its largest
+ *       // possible size, for the limits
  *   { status: 'blocked', diagnostics: Diagnostic[], warnings: Diagnostic[], markdown: string }
  *
  *   Diagnostic: the public IDiagnostic (docs/diagnostics.md, D45), with the
@@ -124,7 +127,7 @@
  *     attribution: { tool, version?, component?: { name, version? }, ruleId? },
  *     fileOperation?: { operation, path, fileMode?, byteLength?,
  *       proposedLines? } (a general result's whole-file proposal),
- *     suggestionPullRequest? (the suggestion carrying a general result's change),
+ *     suggestionPullRequest? (the companion carrying a general result's change),
  *     alternatives?: [{ fix, changes: [{ path, replacement }] }] (a result's
  *       further fixes as listed, each with its index in fixes[] and every
  *       file and exact replacement it makes, in order),
@@ -167,11 +170,13 @@
  *   Producer Markdown may contain balanced ordinary code fences, but never a
  *   line that could open a suggestion block and never an unclosed fence:
  *   only a validated SARIF fix creates a native suggestion.
- * - Fixes: a result's first fix is its suggested change, on the reviewed
- *   head. A first fix with one artifactChange and one text replacement is a
- *   native suggestion, whose reviewed commit must be the diff head; a first
- *   fix with several changes (see suggestion pull requests below) is
- *   accepted whole. A located result's own lines must lie within its
+ * - Fixes: a result's first fix is its suggested change: its exact edits of
+ *   the reviewed files. Whether a fix with one artifactChange and one text
+ *   replacement can be a native suggestion (its reviewed commit is the diff
+ *   head, GitHub's observed application reproduces it, its lines are on the
+ *   new side of the diff) is an availability of the delivery policy, asked
+ *   only when a list names `native` or `native-batch`; a first fix with
+ *   several changes (see delivery below) is accepted whole. A located result's own lines must lie within its
  *   replacement lines (one of them, for a fix with several changes);
  *   otherwise the association is unsupported and blocks (feedback is never
  *   moved to a fix location, and the replacement is never enlarged). Results
@@ -226,31 +231,31 @@
  *   carrying the same proposal share one body section; conflicting
  *   proposals, and fixes on a proposed path, block. `edit` operations are
  *   unsupported: edits are SARIF fixes.
- * - Suggestion pull requests (docs/companion-suggestion-pr-contract.md): a
- *   result's owned `suggestionGroup` joins it to an explicit group of
- *   changes (each member's primary fix or whole-file proposal; at least two
- *   distinct changes; nothing inferred). A fix with several artifact changes
- *   or replacements is a group of its own (SARIF applies a fix whole): its
+ * - Delivery (docs/delivery-policy-contract.md): every proposal is one
+ *   delivery unit, routed by the resolved policy to one destination. A
+ *   result's owned `suggestionGroup` joins it to an explicit group of changes
+ *   (each member's primary fix or whole-file proposal; at least two distinct
+ *   changes; nothing inferred). A fix with several artifact changes or
+ *   replacements is a group of its own (SARIF applies a fix whole): its
  *   replacements are located in the unmodified file, must be disjoint and
  *   start at different positions, and are combined per file, with
- *   replacements sharing lines merged into one whole-line change. A group
- *   member's or several-change fix's edits are exact edits of the reviewed
- *   file, committed rather than rendered, so they need no native-suggestion
- *   eligibility. Without the setting every group, and every several-change
- *   fix, blocks, naming it. With it, each group, each distinct several-change
- *   fix and each distinct standalone whole-file proposal becomes one
- *   suggestion pull request whose body section links it; native
- *   suggestions are unchanged. Every unit must be
- *   acceptable on its own: overlapping edits across units, and any change to
- *   a path another unit creates or deletes, block. At most 10 suggestion
- *   pull requests. A unit whose suggestion pull request cannot be made (the
- *   pull request is not supported, the unit cannot be re-applied onto a
- *   rewritten head, a created file is over 1,000,000 bytes, or its body is
- *   over the comment limit) is handled as without the setting (issue #37):
- *   a whole-file proposal is presented in the body, with a
- *   `suggestion-pr-fallback` warning, and a group or several-change fix
- *   blocks (`suggestion-group-pr-unavailable`), since nothing else keeps its
- *   changes together.
+ *   replacements sharing lines merged into one whole-line change. Units are
+ *   an ungrouped edit (`edits`), an edit group (`groupedEdits`), an ungrouped
+ *   whole-file proposal, and a group with one (`fileOperations`, as a whole).
+ *   Findings carrying the identical change share its unit. Every unit must
+ *   be acceptable on its own: overlapping edits across units, and any change
+ *   to a path another unit creates or deletes, block. Each unit is delivered
+ *   whole by the first available mechanism of its list (announced by a
+ *   `delivery-fallback` warning when it is not the first), or the review is
+ *   blocked (`delivery-unavailable`); availability is asked lazily. In this
+ *   version a native batch (every member a native suggestion, with the
+ *   group's note and the body's guidance) is offered for an explicit group
+ *   of one-change members; `review-body`, `manual-group` and the mixed
+ *   manual group are always unavailable (§8.8). A companion cannot be made
+ *   for an unsupported pull request, a unit that cannot be re-applied onto a
+ *   rewritten head, a created file over 1,000,000 bytes, or a description
+ *   over the comment limit (under `single`, the bundle's). At most 10
+ *   companion pull requests, after bundling.
  *
  * Rendering. Each element is a presentation component in src/presentation/
  * (finding and finding section, attribution, alternatives, file addition,
@@ -280,7 +285,8 @@
  *   lines     = "line " N | "lines " N "-" M     (whole lines of the reviewed file)
  *   attribution = tool name [ " " version ] [ " · " extension name [ " " version ] ]
  *                 [ " · rule " code span of ruleId ]
- *   comment   = items joined by "\n\n---\n\n" [ "\n\n```suggestion\n" replacementText "```" ]
+ *   comment   = items joined by "\n\n---\n\n" [ "\n\n" batch note ] [ "\n\n```suggestion\n" replacementText "```" ]
+ *               (a native batch member's note: src/presentation/native-batch.cts)
  *   section   = [ "**Source:** [" path " " lines " at " short commit "](" permalink ")\n\n"
  *                 fence "\n" source text "\n" fence "\n\n" ] item
  *   proposal  = creation: "**Proposed new file:** " code span of path "\n\n**File details:** "
@@ -290,7 +296,8 @@
  *               then "\n\n" and its items joined by "\n\n---\n\n", each preceded by
  *               "**Location:** line(s) N[-M] of the proposed file\n\n" (creation) or
  *               rendered as a section with its quoted source (deletion)
- *   body      = sections and proposals joined by "\n\n---\n\n" ('' when there are none)
+ *   body      = sections, proposals, companion references and native batch
+ *               guidance joined by "\n\n---\n\n" ('' when there are none)
  *   Source and alternative fences are longer than any backtick run they
  *   enclose, and never shorter than three backticks.
  */
@@ -312,8 +319,9 @@ import type { IAlternative } from './presentation/alternatives.cjs';
 import { renderAttribution } from './presentation/attribution.cjs';
 import type { IProducerAttribution, IProducerComponent } from './presentation/attribution.cjs';
 import { renderCompanionChange } from './presentation/companion-changes.cjs';
-import { renderCompanionDescription } from './presentation/companion-description.cjs';
-import { renderCompanionReference } from './presentation/companion-reference.cjs';
+import { renderCompanionBundleDescription } from './presentation/companion-description.cjs';
+import { renderBundledCompanionReference } from './presentation/companion-reference.cjs';
+import type { ICompanionContent } from './presentation/companion-changes.cjs';
 import { present, presentationOptionProblem } from './presentation/customization.cjs';
 import type { CapturedPresentation } from './presentation/customization.cjs';
 import { fileDetails, proposedContentBlock, renderFileAddition, renderProposedFileFinding } from './presentation/file-addition.cjs';
@@ -322,12 +330,17 @@ import { renderFileDeletion } from './presentation/file-deletion.cjs';
 import { renderFinding, renderFindingSection } from './presentation/finding.cjs';
 import type { QuotedSource } from './presentation/finding.cjs';
 import { renderLifecycleNote } from './presentation/lifecycle-note.cjs';
+import { renderNativeBatchGuidance, renderNativeBatchMemberNote } from './presentation/native-batch.cjs';
 import { SEPARATOR, codeSpan, escapePlain, escapePlainInline, lineSpan } from './presentation/markdown.cjs';
 import { composedProblem, fenceProblem, loadMarkdownParser, unbalancedHtml } from './presentation/markdown-tree.cjs';
 import type { IComposedExpectation } from './presentation/markdown-tree.cjs';
 import { renderDiagnosticLine, renderWarningsList } from './presentation/warnings-list.cjs';
 import { createDiagnostic } from './diagnostics.cjs';
 import type { DiagnosticCode, IDiagnostic } from './diagnostics.cjs';
+import { deliveryRecordProblem, planDelivery, resolveDeliveryPolicy } from './delivery-policy.cjs';
+import type {
+  DeliveryPlan, DeliveryUnit, ICompanionOptions, IEditGroupMember, IResolvedDeliveryPolicy, MechanismAvailability,
+} from './delivery-policy.cjs';
 import type {
   ColumnKind, IAppliedReplacement, IReplacementRegion, IReplacementRequest, ReplacementDiagnostic, ReplacementOutcome,
 } from './replacements.cjs';
@@ -562,30 +575,42 @@ type ExistenceCheck = (commit: string, path: string) => unknown;
 type EntryReader = (commit: string, path: string) => unknown;
 
 /**
- * Suggestion pull requests are enabled (docs/companion-suggestion-pr-contract.md):
- * `headRef` is the pull request's head branch they would target, which their
- * rendered text names, and `ready` whether they are created ready for review
- * (their lifecycle note says which).
+ * What companion suggestion pull requests need to know about the pull request
+ * (docs/companion-suggestion-pr-contract.md): `headRef` is its head branch,
+ * which they target and their texts name, and `ready` whether they are
+ * created ready for review (their lifecycle note says which).
  */
-interface ISuggestionPullRequestsOption {
+interface ICompanionTargetFacts {
   readonly headRef: string;
   readonly ready: boolean;
   /**
    * Answers the pull request's head when the reviewed commit is not its
-   * ancestor (the history was rewritten), otherwise undefined: suggestions
-   * are then re-applied onto it, or handled as if suggestion pull requests
-   * were not allowed (docs/companion-suggestion-pr-contract.md §2.5.1). Called at most once,
-   * and only when the review has suggestion units, so a review that creates
-   * none never depends on it (§2.8). A rejection is operational.
+   * ancestor (the history was rewritten), otherwise undefined: companions
+   * are then re-applied onto it, or `companion` is unavailable for the unit
+   * (docs/companion-suggestion-pr-contract.md §2.5.1). Called at most once,
+   * and only when the target is supported (no `unavailable` obstacle). A
+   * rejection is operational.
    */
-  readonly resolveRewrittenHead?: () => Promise<string | undefined>;
+  readonly resolveRewrittenHead?: () => Promise<unknown>;
   /**
-   * Why no suggestion pull request can be made for this pull request at all
-   * (for example a fork, or a base that is not the default branch), each a
-   * clause for a sentence; absent or empty when they can. Every unit is then
-   * handled as if suggestion pull requests were not allowed (issue #37).
+   * Why no companion pull request can be made for this pull request at all
+   * (for example a fork, or a base that is not the default branch), each an
+   * obstacle sentence; absent or empty when one can (§2.5).
    */
   readonly unavailable?: readonly string[];
+}
+
+/**
+ * The delivery policy preparation follows (docs/delivery-policy-contract.md):
+ * the resolved policy, the caller's companion options as given (for the
+ * `companion-options-unused` note, §12), and how to learn the companion
+ * target, asked the first time a unit's `companion` availability is (§8.7).
+ */
+interface IDeliveryOption {
+  readonly policy: IResolvedDeliveryPolicy;
+  readonly companionOptions?: ICompanionOptions | undefined;
+  /** Called at most once; without it, a list that reaches `companion` is caller misuse (TypeError). */
+  readonly companionTarget?: (() => Promise<ICompanionTargetFacts>) | undefined;
 }
 
 /** Caller options; every limit defaults to PRODUCT_LIMITS. */
@@ -594,7 +619,8 @@ interface IPrepareReviewOptions {
   readonly maxComments?: number | undefined;
   readonly maxCommentBodyChars?: number | undefined;
   readonly maxPayloadBytes?: number | undefined;
-  readonly suggestionPullRequests?: ISuggestionPullRequestsOption | undefined;
+  /** The delivery policy; the defaults when absent. */
+  readonly delivery?: IDeliveryOption | undefined;
   /**
    * The caller's presentation callbacks (src/presentation/customization.cts):
    * each replaces the Markdown of one named component, and the core refuses
@@ -640,7 +666,7 @@ interface IEffectiveOptions {
   readonly maxCommentBodyChars: number | undefined;
   readonly maxPayloadBytes: number | undefined;
   readonly ignoreApprovalHold: boolean | undefined;
-  readonly suggestionPullRequests?: ISuggestionPullRequestsOption | undefined;
+  readonly delivery: IDeliveryOption;
   readonly presentation?: CapturedPresentation | undefined;
 }
 
@@ -782,15 +808,14 @@ interface IPreparedItem {
   readonly uninterpretedProperties: SarifPropertyBag | undefined;
   readonly taxa: readonly ISarifReportingDescriptorReference[] | undefined;
   readonly placement: PreparedPlacement | null;
-  readonly suggestion: IPreparedSuggestion | null;
   readonly fileOperation: PreparedFileOperation | null;
   readonly proposedLines: IProposedLines | null;
   /** The caller's suggestion group, when the result declares one. */
   readonly group: string | undefined;
   /**
-   * The edits of a fix committed in a suggestion pull request rather than
-   * rendered as a native suggestion: a group member's fix, or a fix with
-   * several changes. One per file region, in the fix's order.
+   * The exact edits of the result's primary fix, one per file region, in the
+   * fix's order: whatever delivers them (a native suggestion, a native batch
+   * or a companion pull request) applies exactly these.
    */
   readonly edits: readonly IPreparedEdit[];
   /** Whether the result's own fix has several changes, which are accepted together as a unit of their own (when not in a group). */
@@ -799,14 +824,18 @@ interface IPreparedItem {
   readonly alternatives: readonly IPreparedAlternative[];
 }
 
-/** A committed fix's change to one region: exact whole-line replacement text for lines of the reviewed file. */
+/** A fix's change to one region: exact whole-line replacement text for lines of the reviewed file. */
 interface IPreparedEdit {
   readonly path: string;
   readonly startLine: number;
   readonly endLine: number;
   readonly replacementText: string;
+  /** The replaced lines' text in the reviewed file. */
+  readonly originalText: string;
   /** The complete reviewed file the replacement applies to. */
   readonly sourceText: string;
+  /** The reviewed file with exactly this edit applied. */
+  readonly editedText: string;
   /** The replaced lines at the reviewed commit. */
   readonly source: IPlacementSourceRange;
   readonly description: string | undefined;
@@ -886,24 +915,30 @@ export type Evidence = ISuggestionEvidence | IInlineEvidence | IGeneralEvidence;
 export interface IPreparedCompanion {
   readonly title: string;
   readonly commitMessage: string;
-  /** One change per path, in the order paths first appear. */
+  /** One change per path, in the order paths first appear, every proposal's changes of a path combined. */
   readonly changes: readonly ProposalChange[];
-  /** How many distinct changes the list shows (edits of one file are listed separately). */
-  readonly changeCount: number;
-  /** The rendered change list ("- …" lines). */
-  readonly changeLines: string;
-  /** The rendered findings carrying these changes. */
-  readonly items: string;
+  /**
+   * The proposals it holds, in order: one for a companion of its own,
+   * several for a `single` bundle (docs/delivery-policy-contract.md §9).
+   * Each is its change count, rendered change list and rendered findings.
+   */
+  readonly sections: readonly ICompanionContent[];
+}
+
+/** A review body section that references one proposal of one companion, rendered once its number is known. */
+export interface ICompanionSectionReference {
+  readonly companion: number;
+  readonly section: number;
 }
 
 /** The suggestion pull requests a ready review needs, and where each appears in its body. */
 export interface IPreparedSuggestions {
   readonly companions: readonly IPreparedCompanion[];
   /**
-   * The review body's sections in order: literal text, or the index of the
+   * The review body's sections in order: literal text, or the proposal of a
    * companion whose section is rendered once its pull request exists.
    */
-  readonly sections: readonly (string | number)[];
+  readonly sections: readonly (string | ICompanionSectionReference)[];
   /**
    * The lifecycle note every suggestion pull request's body carries, as
    * presented (built in, or the caller's lifecycleNote callback) during
@@ -925,7 +960,7 @@ export interface IReadyOutcome {
   readonly evidence: readonly Evidence[];
   readonly warnings: readonly IDiagnostic[];
   readonly markdown: string;
-  /** Present exactly when the review needs suggestion pull requests. */
+  /** Present exactly when the plan has companion pull requests. */
   readonly suggestions?: IPreparedSuggestions;
 }
 
@@ -994,35 +1029,32 @@ interface IRenderedProposal {
   readonly characters: number;
 }
 
-/** One general body section before rendering: a single finding, or a proposal and its findings. */
-type BodySection =
-  | { readonly kind: 'item'; readonly item: IPreparedItem }
-  | { readonly kind: 'operation'; readonly operation: PreparedFileOperation; readonly items: IPreparedItem[] };
-
-/** A body section when suggestion pull requests are in play: a single finding, or a suggestion pull request's section. */
-type UnitSection = { readonly kind: 'item'; readonly item: IPreparedItem } | { readonly kind: 'suggestion'; readonly unit: number };
+/** A body section: a single finding, or the section of a delivery unit (its proposal, companion reference or batch guidance). */
+type UnitSection = { readonly kind: 'item'; readonly item: IPreparedItem } | { readonly kind: 'unit'; readonly unit: number };
 
 /** A change a suggestion pull request (or a native suggestion) proposes, as conflicts are judged. */
 type UnitChange =
   | { readonly kind: 'operation'; readonly operation: PreparedFileOperation }
   | { readonly kind: 'edit'; readonly edit: IPreparedEdit };
 
-/** Who proposes a change: a suggestion pull request by index, or a native suggestion. */
-type ChangeOwner = number | 'native';
+/** Who proposes a change: a delivery unit, by index. */
+type ChangeOwner = number;
 
 /**
- * What a suggestion pull request carries: an explicit group, a fix with
- * several changes, or a standalone whole-file proposal. A proposal alone can
- * be presented without a suggestion pull request; a group or fix cannot,
- * because its changes must be accepted together.
+ * A delivery unit while the review is assembled (docs/delivery-policy-contract.md
+ * §2): an ungrouped edit, an edit group (an explicit group of edits, or a fix
+ * with several changes), an ungrouped whole-file operation, or a group with
+ * at least one whole-file operation. Findings carrying the identical change
+ * share its unit (R8). Every unit gets exactly one destination.
  */
-type SuggestionUnitKind = 'group' | 'fix' | 'operation';
-
-/** One suggestion pull request while the review is assembled. */
 interface ISuggestionUnit {
-  readonly kind: SuggestionUnitKind;
+  /** Set once every member is known: a group with any whole-file operation is a file-operation group, whatever its edits (D51). */
+  kind: 'edit' | 'edit-group' | 'file-operation' | 'file-operation-group';
+  /** The explicit group's name; undefined for any other unit. */
   readonly group: string | undefined;
-  readonly sectionIndex: number;
+  /** Whether the unit is a fix with several changes (not in a group). */
+  readonly jointFix: boolean;
+  /** The findings carrying its changes, in SARIF order. */
   readonly items: IPreparedItem[];
   /** Distinct changes in order of first appearance, by identity. */
   readonly changes: Map<string, UnitChange>;
@@ -1043,25 +1075,32 @@ export interface ISuggestionContext {
 }
 
 /**
- * What the unit-based assembly produces (meaningful only when no error was
- * reported); `suggestions` is absent when no suggestion pull request is
- * created, because every one was not re-applied (§2.5.1).
+ * What assembly produces (meaningful only when no error was reported);
+ * `suggestions` is present exactly when the plan has companion pull
+ * requests.
  */
 interface IUnitAssembly {
   readonly review: IPreparedReview;
   readonly evidence: Evidence[];
   readonly sectionCount: number;
-  /** The whole-file proposals presented in the body because they fell back (issue #37), named when the body is too large. */
+  /** The whole-file proposals presented in the body, named when the body is too large. */
   readonly proposals: readonly IRenderedProposal[];
   readonly suggestions?: IPreparedSuggestions;
   /** The composed texts the checkpoint reads once the limits pass; none for a blocked assembly. */
   readonly composed: readonly IComposedUnit[];
+  /** The plan's `delivery-fallback` warnings and `companion-options-unused` note, reported only when the review is ready. */
+  readonly deliveryDiagnostics: readonly IDiagnostic[];
 }
 
-/** Whether one suggestion pull request is created (re-applied onto a head, with that head's edited files) or not. */
+/** Whether one unit can be re-applied onto a rewritten head (with that head's edited files) or not, with every reason. */
 type UnitDecision =
   | { readonly kind: 'created'; readonly headTexts: ReadonlyMap<string, string> }
   | { readonly kind: 'not-created'; readonly reasons: readonly string[] };
+
+/** Whether one edit can be a native suggestion: the suggestion, or every obstacle (docs/delivery-policy-contract.md §8.9). */
+type NativeEligibility =
+  | { readonly available: true; readonly suggestion: IPreparedSuggestion }
+  | { readonly available: false; readonly obstacles: readonly [string, ...string[]] };
 
 /** Source text read at a location's resolved repository path and revision. */
 interface ILocatedSource {
@@ -1100,18 +1139,18 @@ type RegionLines =
   | { readonly error?: undefined; readonly startLine: number; readonly endLine: number }
   | { readonly error: Problem };
 
-/** A native suggestion payload, or why none can be emitted faithfully. */
-type SuggestionPayload = { readonly error?: undefined; readonly text: string } | { readonly error: Problem };
+/** A native suggestion payload, or the sentence saying why none can be emitted faithfully (an obstacle of `native`). */
+type SuggestionPayload = { readonly error?: undefined; readonly text: string } | { readonly error: string };
 
 /** The inline comment a set of items shares, with its coordinates and optional suggestion. */
 interface ICommentEntry {
   readonly coordinates: CommentCoordinates;
   readonly items: IPreparedItem[];
   readonly suggestion?: IPreparedSuggestion;
+  /** A line shown between the findings and the suggestion block: a native batch member's group note. */
+  readonly note?: string;
 }
 
-/** The JSON key identifying one exact replacement: [path, startLine, endLine, replacementText]. */
-type SuggestionKey = readonly [path: string, startLine: number, endLine: number, replacementText: string];
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -1137,9 +1176,6 @@ const OWNED_NAMESPACE = 'sarifToComment';
 /** Owned keys meaningful on a run and on a result. */
 const OWNED_RUN_KEYS: ReadonlySet<string> = new Set(['approval']);
 const OWNED_RESULT_KEYS: ReadonlySet<string> = new Set(['approval', 'proposedFileChanges', 'suggestionGroup']);
-
-/** Suggestion pull requests one review may create (docs/companion-suggestion-pr-contract.md §2.8). */
-const MAX_SUGGESTION_PULL_REQUESTS = 10;
 
 /** Bytes one created or edited file in a suggestion pull request may hold: the source-read limit. */
 const MAX_SUGGESTION_FILE_BYTES = 1_000_000;
@@ -1270,7 +1306,10 @@ async function prepareReview(input: unknown, internals: IPrepareReviewInternals 
   // CommonMark + GFM parser, an ES module loaded once here.
   await loadMarkdownParser();
   const { sarif, context, readSource } = input;
-  const options: IEffectiveOptions = { ...PRODUCT_LIMITS, ignoreApprovalHold: false, ...(input.options || {}) };
+  const { delivery, ...given } = input.options || {};
+  const options: IEffectiveOptions = {
+    ...PRODUCT_LIMITS, ignoreApprovalHold: false, ...given, delivery: delivery ?? { policy: resolveDeliveryPolicy({}) },
+  };
   const report = new Report();
 
   const validate = sarifValidator();
@@ -1312,44 +1351,25 @@ async function prepareReview(input: unknown, internals: IPrepareReviewInternals 
   }
   if (report.errors.length > 0) return blocked(report);
 
-  // Units (suggestion pull requests) are needed only for explicit groups and
-  // fixes with several changes, or for whole-file proposals when suggestion
-  // pull requests are enabled; every other review is assembled exactly as it
-  // always was.
-  const enabled = options.suggestionPullRequests;
-  const needsUnits = items.some((item) => item.group !== undefined || item.jointFix)
-    || (enabled !== undefined && items.some((item) => item.fileOperation !== null));
-  if (needsUnits) {
-    const units = await assembleWithSuggestions(items, state);
-    if (report.errors.length > 0) return blocked(report);
-    enforceLimits(units.review, units.proposals, state);
-    if (report.errors.length > 0) return blocked(report);
-    // The composed-text checkpoint reads only a review within its limits.
-    checkComposed(units.composed, state);
-    if (report.errors.length > 0) return blocked(report);
-    return {
-      status: 'ready',
-      review: units.review,
-      evidence: units.evidence,
-      warnings: report.warnings,
-      markdown: readyMarkdown(units.review, units.sectionCount, report),
-      ...(units.suggestions === undefined ? {} : { suggestions: units.suggestions }),
-    };
-  }
-
-  const assembled = assemble(items, state);
+  // Every proposal is a delivery unit routed by the policy
+  // (docs/delivery-policy-contract.md); a review without proposals has none.
+  const units = await assembleDelivery(items, state);
+  if (units === null || report.errors.length > 0) return blocked(report);
+  enforceLimits(units.review, units.proposals, state);
   if (report.errors.length > 0) return blocked(report);
-  enforceLimits(assembled.review, assembled.proposals, state);
+  // The composed-text checkpoint reads only a review within its limits.
+  checkComposed(units.composed, state);
   if (report.errors.length > 0) return blocked(report);
-  checkComposed(assembled.composed, state);
-  if (report.errors.length > 0) return blocked(report);
-
+  // The plan's fallback warnings and note describe deliveries; a blocked
+  // review delivers nothing, so only a ready one carries them (§10.1, §12).
+  for (const diagnostic of units.deliveryDiagnostics) report.add(diagnostic);
   return {
     status: 'ready',
-    review: assembled.review,
-    evidence: assembled.evidence,
+    review: units.review,
+    evidence: units.evidence,
     warnings: report.warnings,
-    markdown: readyMarkdown(assembled.review, assembled.sectionCount, report),
+    markdown: readyMarkdown(units.review, units.sectionCount, report),
+    ...(units.suggestions === undefined ? {} : { suggestions: units.suggestions }),
   };
 }
 
@@ -1392,20 +1412,15 @@ function validateCallerInput(input: unknown): asserts input is IPrepareReviewInp
     }
     const hold = options['ignoreApprovalHold'];
     if (hold !== undefined && typeof hold !== 'boolean') fail('`options.ignoreApprovalHold` must be a boolean.');
-    const suggestions = options['suggestionPullRequests'];
-    if (
-      suggestions !== undefined &&
-      !(isPlainObject(suggestions) && typeof suggestions['headRef'] === 'string' && suggestions['headRef'] !== '' && typeof suggestions['ready'] === 'boolean')
-    ) {
-      fail('`options.suggestionPullRequests` must be { headRef, ready } naming the pull request\'s head branch and whether they are created ready for review.');
-    }
-    const unavailable = isPlainObject(suggestions) ? suggestions['unavailable'] : undefined;
-    if (unavailable !== undefined && !(Array.isArray(unavailable) && unavailable.every((r) => typeof r === 'string' && r !== ''))) {
-      fail('`options.suggestionPullRequests.unavailable` must list non-empty reasons.');
-    }
-    const resolve = isPlainObject(suggestions) ? suggestions['resolveRewrittenHead'] : undefined;
-    if (resolve !== undefined && typeof resolve !== 'function') {
-      fail('`options.suggestionPullRequests.resolveRewrittenHead` must be a function () => Promise<commit | undefined>.');
+    const delivery = options['delivery'];
+    if (delivery !== undefined) {
+      if (!isPlainObject(delivery)) fail('`options.delivery` must be { policy, companionOptions?, companionTarget? }.');
+      const problem = deliveryRecordProblem(delivery['policy']);
+      if (problem !== null) fail(`\`options.delivery.policy\` must be a resolved delivery policy: ${problem}.`);
+      const target = delivery['companionTarget'];
+      if (target !== undefined && typeof target !== 'function') fail('`options.delivery.companionTarget` must be a function () => Promise<{ headRef, ready, resolveRewrittenHead?, unavailable? }>.');
+      const companionOptions = delivery['companionOptions'];
+      if (companionOptions !== undefined && !isPlainObject(companionOptions)) fail('`options.delivery.companionOptions` must be an object.');
     }
     const presentation = options['presentation'];
     const presentationProblem = presentation === undefined ? null : presentationOptionProblem(presentation);
@@ -1791,7 +1806,6 @@ async function prepareResult(
   }
 
   let placement: PreparedPlacement | null = null;
-  let suggestion: IPreparedSuggestion | null = null;
   let edits: readonly IPreparedEdit[] = [];
   let fileOperation: IFileOperationPlacement | null = null;
   const fixes: readonly ISarifFix[] | null = Array.isArray(result.fixes) && result.fixes.length > 0 ? result.fixes : null;
@@ -1811,19 +1825,14 @@ async function prepareResult(
     placement = fileOperation ? fileOperation.placement : null;
   } else {
     if (locations.length === 1 && onlyLocation !== undefined) placement = await placeLocation(onlyLocation, pointer, runInfo, state);
-    // The first fix is the result's suggested change, whatever follows it.
-    // A group member's fix, and a fix with several changes, is committed in a
-    // suggestion pull request, so it needs exact edits, not native-suggestion
-    // eligibility. Without suggestion pull requests, a fix with several
-    // changes cannot be published at all: it is refused, naming the setting.
-    if (jointFix && state.options.suggestionPullRequests === undefined) {
-      report.error('fix-changes-require-suggestion-prs', pointer,
-        `The fix makes ${String(changeCount)} changes that apply together (a SARIF fix is accepted whole), which needs a suggestion pull request. `
-        + 'Enable suggestion pull requests (options.allowSuggestionPullRequests or --allow-suggestion-prs); a fix is never split into separate suggestions or published in part.');
-    } else if (fixes && (group !== undefined || jointFix)) {
-      edits = await prepareFixEdits(itemAt(fixes, 0), pointer, runInfo, state) ?? [];
+    // The first fix is the result's suggested change, whatever follows it:
+    // its exact edits of the reviewed files. Whether they can also be a
+    // native suggestion is an availability the delivery policy asks for
+    // only when a list names `native` or `native-batch` (§8.7, §8.9).
+    if (fixes && changeCount === 1) {
+      edits = await prepareSingleFix(itemAt(fixes, 0), pointer, runInfo, state) ?? [];
     } else if (fixes) {
-      suggestion = await prepareFix(itemAt(fixes, 0), pointer, runInfo, state);
+      edits = await prepareFixEdits(itemAt(fixes, 0), pointer, runInfo, state) ?? [];
     }
     // Every further fix is listed as an alternative, never chosen instead.
     if (fixes) alternatives = await prepareAlternatives(fixes, pointer, runInfo, state);
@@ -1832,8 +1841,7 @@ async function prepareResult(
   // own source lies within the fix's replacement lines (one of them, for a fix
   // with several changes); it is never moved to the fix location, and the
   // replacement is never enlarged to reach it.
-  const replaced: readonly Pick<IPreparedSuggestion, 'path' | 'startLine' | 'endLine' | 'source'>[] = suggestion ? [suggestion] : edits;
-  if (replaced.length > 0 && placement && !replaced.some((r) => sourceWithin(placement.source, r))) {
+  if (edits.length > 0 && placement && !edits.some((r) => sourceWithin(placement.source, r))) {
     report.error('fix-association-unsupported', pointer,
       'The result\'s location is not within its fix\'s replacement lines; presenting them together would move the feedback. '
       + 'Keep the correct result location and separate the feedback from this unsupported fix association.');
@@ -1851,13 +1859,12 @@ async function prepareResult(
     message: message.markdown,
     locationMessage,
     classification,
-    fixDescription: suggestion ? suggestion.description : edits[0]?.description,
+    fixDescription: edits[0]?.description,
     attribution,
     approval,
     uninterpretedProperties: Object.keys(uninterpreted).length > 0 ? uninterpreted : undefined,
     taxa: Array.isArray(result.taxa) && result.taxa.length > 0 ? result.taxa : undefined,
     placement,
-    suggestion,
     fileOperation: fileOperation ? fileOperation.operation : null,
     proposedLines: fileOperation ? fileOperation.proposedLines : null,
     group,
@@ -2459,17 +2466,14 @@ interface IAppliedFix {
 
 /**
  * Reads a result's first fix, when it makes one change, and applies its one
- * replacement to the reviewed file exactly. `native` adds the
- * native-suggestion requirement that the reviewed commit is the diff head,
- * checked in the order it always was. Returns the applied fix, or null after
- * recording errors at `pointer`.
+ * replacement to the reviewed file exactly. Returns the applied fix, or null
+ * after recording errors at `pointer`.
  */
 async function applyResultFix(
   fix: ISarifFix,
   pointer: string,
   runInfo: IRunInfo,
   state: IPreparationState,
-  native: boolean,
 ): Promise<IAppliedFix | null> {
   const { report, context } = state;
   const fail = (code: DiagnosticCode, message: string): null => {
@@ -2487,10 +2491,6 @@ async function applyResultFix(
   }
   const runProblem = fixRunProblem(runInfo, context);
   if (runProblem) return fail(runProblem[0], runProblem[1]);
-  if (native && context.reviewedCommit !== context.diff.headCommit) {
-    return fail('suggestion-reviewed-commit-not-head',
-      'The reviewed commit is not the pull request head, so a native suggestion could not be applied to the reviewed text.');
-  }
   const source = await readLocatedSource(change.artifactLocation, pointer, runInfo, state);
   if (!source) return null;
 
@@ -2539,38 +2539,61 @@ function applyExactly(
 }
 
 /**
- * Prepares a result's first fix as its native suggestion. Returns
- * { path, startLine, endLine, originalText, replacementText, source, description }
- * or null after recording errors.
+ * Prepares a result's first fix, when it makes one change, as its exact edit
+ * of the reviewed file. Returns the edit, or null after recording errors.
+ * Whether it can also be a native suggestion is decided only when asked
+ * ({@link nativeEligibility}).
  */
-async function prepareFix(
+async function prepareSingleFix(
   fix: ISarifFix,
   pointer: string,
   runInfo: IRunInfo,
   state: IPreparationState,
-): Promise<IPreparedSuggestion | null> {
+): Promise<IPreparedEdit[] | null> {
   const { report, context } = state;
-  const fail = (code: DiagnosticCode, message: string): null => {
-    report.error(code, pointer, message);
-    return null;
-  };
-  const applied = await applyResultFix(fix, pointer, runInfo, state, true);
+  const applied = await applyResultFix(fix, pointer, runInfo, state);
   if (!applied) return null;
   const { source, edit, description } = applied;
-  const { startLine, endLine, originalText, replacementText } = edit;
-  const payload = suggestionPayload(source.text, startLine, endLine, replacementText, edit.editedText);
-  if (payload.error) return fail(payload.error[0], payload.error[1]);
+  const { startLine, endLine, originalText, replacementText, editedText } = edit;
   const placed = classifyPlacement({
     source: { commit: source.commit, path: source.path, text: source.text },
     range: { startLine, endLine },
     diff: context.diff,
   });
+  if (placed.kind === 'rejected') {
+    report.error('diff-context-inconsistent', pointer, `${placed.reason}: ${placed.message}`);
+    return null;
+  }
+  return [{ path: source.path, startLine, endLine, replacementText, originalText, sourceText: source.text, editedText, source: placed.source, description }];
+}
+
+/**
+ * Whether one exact edit can be a native suggestion
+ * (docs/delivery-policy-contract.md §8.9): the reviewed commit is the pull
+ * request's head, GitHub's observed application of the suggestion reproduces
+ * exactly the intended file, and the lines are on the new side of the diff,
+ * checked in that order. The suggestion when it can; otherwise every
+ * obstacle, each the sentence the condition always had.
+ */
+function nativeEligibility(edit: IPreparedEdit, context: IPreparationContext): NativeEligibility {
+  const unavailable = (obstacle: string): NativeEligibility => ({ available: false, obstacles: [obstacle] });
+  if (context.reviewedCommit !== context.diff.headCommit) {
+    return unavailable('The reviewed commit is not the pull request head, so a native suggestion could not be applied to the reviewed text.');
+  }
+  const { path: filePath, startLine, endLine, originalText, replacementText } = edit;
+  const payload = suggestionPayload(edit.sourceText, startLine, endLine, replacementText, edit.editedText);
+  if (payload.error !== undefined) return unavailable(payload.error);
+  const placed = classifyPlacement({
+    source: { commit: edit.source.commit, path: filePath, text: edit.sourceText },
+    range: { startLine, endLine },
+    diff: context.diff,
+  });
   if (placed.kind !== 'inline' || placed.anchor.side !== 'RIGHT' || placed.anchor.commit_id !== context.reviewedCommit) {
-    return fail(placed.kind === 'rejected' ? 'diff-context-inconsistent' : 'suggestion-not-inline',
-      `Lines ${String(startLine)}-${String(endLine)} of ${source.path} cannot carry a native suggestion (${placed.kind === 'inline' ? placed.anchor.side : placed.reason}).`);
+    return unavailable(`Lines ${String(startLine)}-${String(endLine)} of ${filePath} cannot carry a native suggestion (${placed.kind === 'inline' ? placed.anchor.side : placed.reason}).`);
   }
   return {
-    path: source.path, startLine, endLine, originalText, replacementText, payload: payload.text, source: placed.source, description,
+    available: true,
+    suggestion: { path: filePath, startLine, endLine, originalText, replacementText, payload: payload.text, source: placed.source, description: edit.description },
   };
 }
 
@@ -2594,11 +2617,15 @@ interface IAppliedReplacementSpan {
   readonly insertedText: string;
 }
 
-/** A region of one file a committed fix replaces: exact whole-line replacement text for lines of the reviewed file. */
+/** A region of one file a fix replaces: exact whole-line replacement text for lines of the reviewed file. */
 interface IRegionEdit {
   readonly startLine: number;
   readonly endLine: number;
   readonly replacementText: string;
+  /** The replaced lines' text in the reviewed file. */
+  readonly originalText: string;
+  /** The reviewed file with exactly this region's replacements applied. */
+  readonly editedText: string;
 }
 
 /**
@@ -2609,13 +2636,13 @@ interface IRegionEdit {
 const SPAN_SENTINEL = '\uE000sarif-to-comment:span\uE000';
 
 /**
- * Prepares a fix committed in a suggestion pull request rather than rendered:
- * a group member's primary fix, or a fix with several changes. Every
- * replacement is applied to the reviewed file exactly, as a native
- * suggestion's would be, but neither native-suggestion fidelity nor inline
- * placement applies. Returns the fix's edits (per file in the order of the
- * fix's artifact changes, then per region in line order), or null after
- * recording errors.
+ * Prepares a first fix with several changes as its exact edits, whatever
+ * delivers them: every replacement is applied to the reviewed file exactly,
+ * as a native suggestion's would be. Whether each edit could also be a
+ * native suggestion (fidelity and inline placement) is asked only when a
+ * list names `native-batch` (docs/delivery-policy-contract.md §8.7).
+ * Returns the fix's edits (per file in the order of the fix's artifact
+ * changes, then per region in line order), or null after recording errors.
  */
 async function prepareFixEdits(
   fix: ISarifFix,
@@ -2705,7 +2732,9 @@ function fileRegionEdits(
         'The run declares no columnKind and this replacement edits different text in UTF-16 code units and in Unicode code points.');
     }
     if (edit.kind !== 'replacement') return fail(`replacement-${edit.kind}`, `The replacement cannot be applied (${edit.reason}): ${edit.message}`);
-    if (replacements.length === 1) return [{ startLine: edit.startLine, endLine: edit.endLine, replacementText: edit.replacementText }];
+    if (replacements.length === 1) {
+      return [{ startLine: edit.startLine, endLine: edit.endLine, replacementText: edit.replacementText, originalText: edit.originalText, editedText: edit.editedText }];
+    }
     // Source-region coordinates always use the production replacement module.
     if (source.text.includes(SPAN_SENTINEL)) return unlocatable();
     const spans = kinds.map((columnKind) => productionApplyReplacement({
@@ -2743,12 +2772,14 @@ function fileRegionEdits(
     const startLine = Math.min(...members.map((m) => m.edit.startLine));
     const endLine = Math.max(...members.map((m) => m.edit.endLine));
     const [only] = members;
-    if (members.length === 1 && only !== undefined) return { startLine, endLine, replacementText: only.edit.replacementText };
+    if (members.length === 1 && only !== undefined) {
+      return { startLine, endLine, replacementText: only.edit.replacementText, originalText: only.edit.originalText, editedText: only.edit.editedText };
+    }
     let text = source.text;
     for (const m of [...members].sort((a, b) => b.start - a.start)) text = text.slice(0, m.start) + m.insertedText + text.slice(m.end);
     const prefix = offsetOf(startLine);
     const suffix = source.text.length - offsetOf(endLine + 1);
-    return { startLine, endLine, replacementText: text.slice(prefix, text.length - suffix) };
+    return { startLine, endLine, replacementText: text.slice(prefix, text.length - suffix), originalText: lines.slice(startLine - 1, endLine).join(''), editedText: text };
   });
 }
 
@@ -2898,18 +2929,18 @@ function suggestionPayload(
   replacementText: string,
   editedText: string,
 ): SuggestionPayload {
-  const block = (code: DiagnosticCode, message: string): SuggestionPayload => ({ error: [code, message] });
+  const block = (message: string): SuggestionPayload => ({ error: message });
   if (replacementText.includes('```')) {
-    return block('suggestion-fence-unverified',
+    return block(
       'GitHub applied a nested ``` suggestion as a deletion; this replacement cannot be a native suggestion.');
   }
   const payloadLines = replacementText === '' ? [] : replacementText.replace(/\r?\n$/, '').split(/\r?\n/);
   if (payloadLines.length > 0 && payloadLines.every((line) => /^[ \t]*$/.test(line))) {
-    return block('suggestion-blank-only-unverified',
+    return block(
       'GitHub applied a blank-only suggestion as zero lines; this replacement cannot be a native suggestion.');
   }
   if (payloadLines.some((line) => line.includes('\r'))) {
-    return block('suggestion-crlf-unverified', 'A CR in suggestion text is doubled by GitHub; this replacement cannot be a native suggestion.');
+    return block('A CR in suggestion text is doubled by GitHub; this replacement cannot be a native suggestion.');
   }
 
   const lines: readonly string[] = sourceText.match(/[^\n]*\n|[^\n]+$/g) || [];
@@ -2919,9 +2950,9 @@ function suggestionPayload(
   const finalWithoutNewline = endLine === lines.length && terminatorOf(itemAt(lines, lines.length - 1)) === '';
   const touchesFinalLine = endLine === lines.length;
   const unfaithful = (): SuggestionPayload => (touchesFinalLine
-    ? block('suggestion-final-newline-unverified',
+    ? block(
       'GitHub\'s observed application would not reproduce the intended end of the file.')
-    : block('suggestion-crlf-unverified',
+    : block(
       'GitHub\'s observed application would not reproduce the intended line endings.'));
 
   if (terminators.size > 1 || (terminators.size === 0 && payloadLines.length > 1)) return unfaithful();
@@ -2964,138 +2995,8 @@ function evidenceRecord(item: IPreparedItem): IEvidenceRecord {
   };
 }
 
-/**
- * Builds the review: inline comments in SARIF order of first appearance, with
- * identical suggestions merged and overlapping different suggestions
- * blocked; general sections in SARIF order, where every finding carrying the
- * same whole-file proposal joins the section of the first one and different
- * proposals for one path (or a fix editing a proposed path) block; one
- * evidence record per result.
- */
-function assemble(
-  items: readonly IPreparedItem[],
-  state: IPreparationState,
-): {
-  readonly review: IPreparedReview;
-  readonly evidence: Evidence[];
-  readonly commentItems: ICommentEntry[];
-  readonly sectionCount: number;
-  readonly proposals: readonly IRenderedProposal[];
-  readonly composed: readonly IComposedUnit[];
-} {
-  const { context, report } = state;
-  const commentItems: ICommentEntry[] = [];
-  const sections: BodySection[] = [];
-  const evidence: Evidence[] = [];
-  const suggestionComments = new Map<string, number>();
-  /** Body section of each distinct proposal, by its identity. */
-  const proposalSections = new Map<string, number>();
-  /** The identity of the proposal for each proposed path. */
-  const proposedPaths = new Map<string, string>();
-  const suggestedPaths = new Set<string>();
-
-  for (const item of items) {
-    const record = evidenceRecord(item);
-    if (item.fileOperation) {
-      const operation = item.fileOperation;
-      const key = proposalKey(operation);
-      const other = proposedPaths.get(operation.path);
-      if ((other !== undefined && other !== key) || suggestedPaths.has(operation.path)) {
-        report.error('file-operation-conflict', item.pointer,
-          `${operation.path} already has a different proposed change in this review; one of them must be chosen before publication.`);
-        continue;
-      }
-      proposedPaths.set(operation.path, key);
-      let index = proposalSections.get(key);
-      if (index === undefined) {
-        index = sections.length;
-        proposalSections.set(key, index);
-        sections.push({ kind: 'operation', operation, items: [] });
-      }
-      const section = itemAt(sections, index);
-      if (section.kind === 'operation') section.items.push(item);
-      evidence.push({ ...record, treatment: 'general', bodySectionIndex: index,
-        ...(item.placement ? { source: item.placement.source } : {}),
-        fileOperation: fileOperationEvidence(operation, item.proposedLines) });
-    } else if (item.suggestion) {
-      const s = item.suggestion;
-      if (proposedPaths.has(s.path)) {
-        report.error('file-operation-conflict', item.pointer,
-          `The fix edits ${s.path}, which this review proposes to create or delete; the proposals conflict.`);
-        continue;
-      }
-      suggestedPaths.add(s.path);
-      const key = JSON.stringify([s.path, s.startLine, s.endLine, s.replacementText]);
-      let index = suggestionComments.get(key);
-      if (index === undefined) {
-        const overlapping = [...suggestionComments.entries()].find(([otherKey]) => {
-          const [path, start, end] = parseSuggestionKey(otherKey);
-          return path === s.path && start <= s.endLine && s.startLine <= end;
-        });
-        if (overlapping) {
-          report.error('overlapping-replacements', item.pointer,
-            `The replacement of ${s.path} lines ${String(s.startLine)}-${String(s.endLine)} overlaps a different replacement.`);
-          continue;
-        }
-        index = commentItems.length;
-        suggestionComments.set(key, index);
-        commentItems.push({
-          coordinates: inlineCoordinates(s.path, { side: 'RIGHT', line: s.endLine, startLine: s.startLine === s.endLine ? undefined : s.startLine }),
-          items: [],
-          suggestion: s,
-        });
-      }
-      itemAt(commentItems, index).items.push(item);
-      evidence.push({ ...record, treatment: 'suggestion', commentIndex: index,
-        ...(item.placement ? { source: item.placement.source } : {}),
-        fixSource: s.source,
-        replacement: { startLine: s.startLine, endLine: s.endLine, originalText: s.originalText, replacementText: s.replacementText },
-        suggestionPayload: s.payload });
-    } else if (item.placement && item.placement.treatment === 'inline') {
-      const index = commentItems.length;
-      commentItems.push({ coordinates: inlineCoordinates(item.placement.source.path, item.placement.anchor), items: [item] });
-      evidence.push({ ...record, treatment: 'inline', commentIndex: index, source: item.placement.source,
-        anchor: item.placement.anchor });
-    } else {
-      evidence.push({ ...record, treatment: 'general', bodySectionIndex: sections.length,
-        ...(item.placement ? { source: item.placement.source } : {}) });
-      sections.push({ kind: 'item', item });
-    }
-  }
-
-  const { renderer } = state;
-  const rendered = sections.map((section) => (section.kind === 'item'
-    ? renderer.section(section.item)
-    : renderer.proposal(section.operation, section.items)));
-  const proposals = sections.flatMap((section, i): IRenderedProposal[] => (section.kind === 'operation'
-    ? [{ path: section.operation.path, characters: itemAt(rendered, i).length }] : []));
-
-  // Each comment's body follows its coordinates, once every item it presents is known.
-  const comments: PreparedComment[] = commentItems.map((entry) => ({ ...entry.coordinates, body: composeComment(entry, renderer) }));
-  const body = rendered.join(SEPARATOR);
-  const sectionUnits = sections.map((section, i): IComposedUnit => ({
-    what: `body section ${String(i + 1)}`,
-    text: itemAt(rendered, i),
-    expected: {},
-    items: section.kind === 'item' ? [section.item] : section.items,
-    compose: (r) => (section.kind === 'item' ? r.section(section.item) : r.proposal(section.operation, section.items)),
-  }));
-  const composed = [
-    ...commentItems.map((entry, i) => commentUnit(entry, itemAt(comments, i).body, i)),
-    ...bodyUnits(body, sectionUnits, (r) => sectionUnits.map((unit) => unit.compose(r)).join(SEPARATOR)),
-  ];
-  return {
-    composed,
-    review: { commitId: context.reviewedCommit, body, comments },
-    evidence,
-    commentItems,
-    sectionCount: sections.length,
-    proposals,
-  };
-}
-
 // ---------------------------------------------------------------------------
-// Assembly with suggestion pull requests (docs/companion-suggestion-pr-contract.md)
+// Delivery units (docs/delivery-policy-contract.md §2)
 
 /** The identity of a change: equal changes are shared, as equal suggestions and proposals are (R8). */
 function changeKey(change: UnitChange): string {
@@ -3117,12 +3018,14 @@ function unitChangesOf(item: IPreparedItem): UnitChange[] {
 
 /**
  * The key of the unit a result belongs to: its group, its standalone
- * whole-file proposal, or its several-change fix. Results carrying equal
- * proposals, or equal several-change fixes, share one unit (R8).
+ * whole-file proposal, its several-change fix or its one edit. Results
+ * carrying equal proposals, equal several-change fixes or equal edits share
+ * one unit (R8).
  */
 function unitKeyOf(item: IPreparedItem, changes: readonly UnitChange[]): string {
   if (item.group !== undefined) return `group:${item.group}`;
-  return item.jointFix ? `fix:${JSON.stringify(changes.map(changeKey))}` : `operation:${changes.map(changeKey).join('')}`;
+  if (item.fileOperation) return `operation:${changes.map(changeKey).join('')}`;
+  return item.jointFix ? `fix:${JSON.stringify(changes.map(changeKey))}` : `edit:${changes.map(changeKey).join('')}`;
 }
 
 /**
@@ -3241,108 +3144,65 @@ class ChangeRegistry {
 }
 
 /**
- * Builds a review whose explicit groups and several-change fixes, and (when
- * suggestion pull requests are enabled) whose whole-file proposals, travel
- * as suggestion pull requests. Every presentation unit — an inline comment, a native
- * suggestion, a suggestion pull request — must be acceptable on its own;
- * within one unit, equal changes are shared and conflicting ones block.
- * Without the setting, every group is refused, naming the setting (a
- * several-change fix already was, when its result was prepared); nothing is
- * split. Each suggestion pull request's section takes the position of the
- * first finding carrying one of its changes.
+ * Builds the review under the delivery policy (docs/delivery-policy-contract.md):
+ *   1. every proposal is classified into a delivery unit (§2), in SARIF
+ *      order, and each of its changes is admitted so that every unit stays
+ *      acceptable on its own: no conflict with another unit, no change of a
+ *      group carried by anything else (issue #42), every group member with a
+ *      change, every group with at least two;
+ *   2. one destination is planned per unit (§8–§10), asking each
+ *      mechanism's availability lazily, in the order of the unit's list
+ *      (§8.7);
+ *   3. each unit is rendered by its destination (a native suggestion, a
+ *      native batch, a review-body proposal or a companion pull request,
+ *      bundled as planned, §9), and findings without a proposal as always.
+ * Returns null after recording errors: the review is blocked, and a blocked
+ * plan reports only its errors (§10.1).
  */
-async function assembleWithSuggestions(items: readonly IPreparedItem[], state: IPreparationState): Promise<IUnitAssembly> {
-  const { context, report, options, renderer } = state;
-  const enabled = options.suggestionPullRequests;
+async function assembleDelivery(items: readonly IPreparedItem[], state: IPreparationState): Promise<IUnitAssembly | null> {
+  const { report } = state;
   const registry = new ChangeRegistry(report);
-  const commentItems: ICommentEntry[] = [];
-  const sections: UnitSection[] = [];
-  const evidence: Evidence[] = [];
   const units: ISuggestionUnit[] = [];
   const unitByKey = new Map<string, number>();
-  const suggestionComments = new Map<string, number>();
+  const unitOf = new Map<IPreparedItem, number>();
   /** Every distinct change each group's members declared, including refused ones, by group. */
   const declared = new Map<string, Set<string>>();
   /** Each group's first member, in SARIF order. */
   const firstMember = new Map<string, string>();
 
   for (const item of items) {
-    if (item.group === undefined || firstMember.has(item.group)) continue;
-    firstMember.set(item.group, item.pointer);
-    declared.set(item.group, new Set());
-    if (enabled === undefined) {
-      report.error('suggestion-group-requires-suggestion-prs', item.pointer,
-        `Suggestion group ${JSON.stringify(item.group)} must be accepted as one unit, which needs a suggestion pull request. `
-        + 'Enable suggestion pull requests (options.allowSuggestionPullRequests or --allow-suggestion-prs); a group is never split into separate suggestions or published in part.');
-    }
-  }
-
-  for (const item of items) {
-    const record = evidenceRecord(item);
     const changes = unitChangesOf(item);
-    if (item.group !== undefined && changes.length === 0) {
-      report.error('suggestion-group-member-without-change', item.pointer,
-        `The finding is in suggestion group ${JSON.stringify(item.group)} but proposes no change; a group joins changes. `
-        + 'Remove the finding from the group, or give it its change.');
-    } else if (changes.length > 0 && (item.group !== undefined || item.fileOperation || item.jointFix)) {
-      const { group } = item;
-      if (group !== undefined) for (const change of changes) declared.get(group)?.add(changeKey(change));
-      const key = unitKeyOf(item, changes);
-      const owner = unitByKey.get(key) ?? units.length;
-      const admitted = changes.map((change) => registry.admit(change, owner, item.pointer, item.group));
-      if (admitted.includes(false)) continue;
-      let index = unitByKey.get(key);
-      if (index === undefined) {
-        index = units.length;
-        unitByKey.set(key, index);
-        const kind: SuggestionUnitKind = item.group !== undefined ? 'group' : item.jointFix ? 'fix' : 'operation';
-        units.push({ kind, group: item.group, sectionIndex: sections.length, items: [], changes: new Map() });
-        sections.push({ kind: 'suggestion', unit: index });
-      }
-      const unit = itemAt(units, index);
-      for (const [i, change] of changes.entries()) {
-        if (admitted[i] === 'new') unit.changes.set(changeKey(change), change);
-      }
-      unit.items.push(item);
-      evidence.push({ ...record, treatment: 'general', bodySectionIndex: unit.sectionIndex,
-        ...(item.placement ? { source: item.placement.source } : {}),
-        ...(item.fileOperation ? { fileOperation: fileOperationEvidence(item.fileOperation, item.proposedLines) } : {}),
-        suggestionPullRequest: index });
-    } else if (item.suggestion) {
-      const s = item.suggestion;
-      const key = JSON.stringify([s.path, s.startLine, s.endLine, s.replacementText]);
-      let index = suggestionComments.get(key);
-      if (index === undefined) {
-        const native: UnitChange = {
-          kind: 'edit',
-          edit: { path: s.path, startLine: s.startLine, endLine: s.endLine, replacementText: s.replacementText, sourceText: '', source: s.source, description: s.description },
-        };
-        if (registry.admit(native, 'native', item.pointer) === false) continue;
-        index = commentItems.length;
-        suggestionComments.set(key, index);
-        commentItems.push({
-          coordinates: inlineCoordinates(s.path, { side: 'RIGHT', line: s.endLine, startLine: s.startLine === s.endLine ? undefined : s.startLine }),
-          items: [],
-          suggestion: s,
-        });
-      }
-      itemAt(commentItems, index).items.push(item);
-      evidence.push({ ...record, treatment: 'suggestion', commentIndex: index,
-        ...(item.placement ? { source: item.placement.source } : {}),
-        fixSource: s.source,
-        replacement: { startLine: s.startLine, endLine: s.endLine, originalText: s.originalText, replacementText: s.replacementText },
-        suggestionPayload: s.payload });
-    } else if (item.placement && item.placement.treatment === 'inline') {
-      const index = commentItems.length;
-      commentItems.push({ coordinates: inlineCoordinates(item.placement.source.path, item.placement.anchor), items: [item] });
-      evidence.push({ ...record, treatment: 'inline', commentIndex: index, source: item.placement.source, anchor: item.placement.anchor });
-    } else {
-      evidence.push({ ...record, treatment: 'general', bodySectionIndex: sections.length,
-        ...(item.placement ? { source: item.placement.source } : {}) });
-      sections.push({ kind: 'item', item });
+    const { group } = item;
+    if (group !== undefined && !firstMember.has(group)) {
+      firstMember.set(group, item.pointer);
+      declared.set(group, new Set());
     }
+    if (group !== undefined && changes.length === 0) {
+      report.error('suggestion-group-member-without-change', item.pointer,
+        `The finding is in suggestion group ${JSON.stringify(group)} but proposes no change; a group joins changes. `
+        + 'Remove the finding from the group, or give it its change.');
+      continue;
+    }
+    if (changes.length === 0) continue;
+    if (group !== undefined) for (const change of changes) declared.get(group)?.add(changeKey(change));
+    const key = unitKeyOf(item, changes);
+    const owner = unitByKey.get(key) ?? units.length;
+    const admitted = changes.map((change) => registry.admit(change, owner, item.pointer, group));
+    if (admitted.includes(false)) continue;
+    let index = unitByKey.get(key);
+    if (index === undefined) {
+      index = units.length;
+      unitByKey.set(key, index);
+      const kind = group !== undefined || item.jointFix ? 'edit-group' : item.fileOperation ? 'file-operation' : 'edit';
+      units.push({ kind, group, jointFix: item.jointFix, items: [], changes: new Map() });
+    }
+    const unit = itemAt(units, index);
+    for (const [i, change] of changes.entries()) {
+      if (admitted[i] === 'new') unit.changes.set(changeKey(change), change);
+    }
+    unit.items.push(item);
+    unitOf.set(item, index);
   }
-
   for (const [group, changes] of declared) {
     if (changes.size < 2) {
       report.error('suggestion-group-single-change', firstMember.get(group),
@@ -3350,186 +3210,570 @@ async function assembleWithSuggestions(items: readonly IPreparedItem[], state: I
         + 'Remove the group, and the change is published on its own.');
     }
   }
-  const comments: PreparedComment[] = commentItems.map((entry) => ({ ...entry.coordinates, body: composeComment(entry, renderer) }));
-  const blockedAssembly: IUnitAssembly = { review: { commitId: context.reviewedCommit, body: '', comments }, evidence, sectionCount: sections.length, proposals: [], composed: [] };
-  if (enabled === undefined) return blockedAssembly;
+  // A group with any whole-file creation or deletion follows fileOperations
+  // as a whole, whatever its edits' eligibility (D51; §2, §8.5).
+  for (const unit of units) {
+    if (unit.group !== undefined && unit.items.some((item) => item.fileOperation !== null)) unit.kind = 'file-operation-group';
+  }
 
-  // Ancestry is resolved only now that suggestion units exist (§2.8), even
-  // when another problem already blocks, so that the limit below counts what
-  // would be created and is reported with every other problem. A pull
-  // request suggestion pull requests do not support needs none.
-  const unavailable = enabled.unavailable ?? [];
-  const head = units.length === 0 || unavailable.length > 0 ? undefined : await rewrittenHeadOf(enabled, context, state);
-  const target: ISuggestionContext = {
-    owner: context.owner, repo: context.repo, pullNumber: context.pullNumber, reviewedCommit: context.reviewedCommit, headRef: enabled.headRef,
-    ready: enabled.ready, ...(head === undefined ? {} : { reappliedOnto: head }),
-  };
-  // Why each unit's suggestion pull request cannot be made (issue #37): the
-  // pull request is not supported, the history was rewritten and the unit
-  // cannot be re-applied onto the head (contract §2.5.1), a created file is
-  // over the per-file limit, or its description is over the body limit.
-  // A unit with no obstacle is created, with its companion.
-  const obstacles: Obstacle[][] = [];
-  const companionsByUnit = new Map<number, IPreparedCompanion>();
-  const sizingMarker = formatSuggestionMarker({ ...target, id: SIZING_UUID, batch: SIZING_UUID });
-  /** The lifecycle note every suggestion pull request carries, presented once, when the first is prepared. */
-  let lifecycleNote: string | undefined;
-  /** How each unit's companion is prepared with a given renderer, for the composed-text checkpoint. */
-  const companionWith = new Map<number, (r: ReviewRenderer) => IPreparedCompanion>();
-  const companionUnits: IComposedUnit[] = [];
-  const { maxCommentBodyChars } = options;
-  for (const [i, unit] of units.entries()) {
-    const found: Obstacle[] = unavailable.map((reason): Obstacle => ({ kind: 'target', reason }));
+  // The units are planned even when another problem already blocks, so that
+  // every unit no listed mechanism can deliver, and the companion limit, are
+  // reported with every other problem of the review (companion contract
+  // §2.5.1). A blocked review carries no fallback warning or note (§10.1).
+  const companions = new CompanionPlanner(state, units);
+  const availability = new DeliveryAvailability(state, units, companions);
+  const plan = await availability.plan();
+  if (plan.status === 'blocked') {
+    for (const diagnostic of plan.diagnostics) report.add(diagnostic);
+    return null;
+  }
+  if (report.errors.length > 0) return null;
+  return renderDelivery(items, units, unitOf, plan, availability, companions, state);
+}
+
+/** The sentences of the mechanisms this version does not support yet (docs/delivery-policy-contract.md §8.8). */
+const NOT_YET_SUPPORTED = Object.freeze({
+  reviewBody: 'Delivering an edit in the review body is not yet supported by this version.',
+  manualGroup: 'Delivering a group in the review body for manual application is not yet supported by this version.',
+  mixedManualGroup: 'Delivering a group with a whole-file creation or deletion on the original pull request is not yet supported by this version.',
+  jointFixBatch: 'Offering a fix with several changes as a native batch is not yet supported by this version.',
+});
+
+/** An unavailable mechanism with its obstacles (at least one). */
+function unavailableFor(obstacles: readonly string[]): MechanismAvailability {
+  const [first, ...rest] = obstacles;
+  if (first === undefined) throw new Error('Internal error: an unavailable delivery mechanism must name an obstacle.');
+  return { available: false, obstacles: [first, ...rest] };
+}
+
+const AVAILABLE: MechanismAvailability = Object.freeze({ available: true });
+
+/** How a diagnostic names one edit: "The edit of `PATH` line N" (§10.1). */
+function editDescription(edit: IPreparedEdit): string {
+  return `The edit of ${codeSpan(edit.path)} ${lineSpan(edit.startLine, edit.endLine)}`;
+}
+
+/** How a diagnostic names a unit (§10.1): the edit, the group, the fix or the operation. */
+function unitDescription(unit: ISuggestionUnit): string {
+  const [first] = unit.changes.values();
+  if (first === undefined) throw new Error('Internal error: a delivery unit has no change.');
+  if (unit.group !== undefined) return `The group ${codeSpan(unit.group)}`;
+  if (unit.jointFix) return `The fix with ${String(unit.changes.size)} changes at ${codeSpan(itemAt(unit.items, 0).pointer)}`;
+  if (first.kind === 'edit') return editDescription(first.edit);
+  return `The ${first.operation.operation === 'create' ? 'creation' : 'deletion'} of ${codeSpan(first.operation.path)}`;
+}
+
+/** A unit's edits, in order of first appearance. */
+function unitEdits(unit: ISuggestionUnit): IPreparedEdit[] {
+  return [...unit.changes.values()].flatMap((change) => (change.kind === 'edit' ? [change.edit] : []));
+}
+
+/**
+ * Whether each mechanism can deliver each unit, worked out lazily and
+ * remembered (docs/delivery-policy-contract.md §8.7). The pure planner
+ * (src/delivery-policy.cts) asks synchronously; companion availability needs
+ * reads, so {@link DeliveryAvailability.plan} first answers, in each unit's
+ * list order, exactly the questions the planner then asks, stopping at the
+ * first available mechanism, and the planner reads the answers back. A
+ * question the planner asks that was never answered is an internal error.
+ */
+class DeliveryAvailability {
+  readonly #state: IPreparationState;
+  readonly #units: readonly ISuggestionUnit[];
+  readonly #companions: CompanionPlanner;
+  /** Each unit's answers, by mechanism; a native batch's answer is the group's own obstacles only. */
+  readonly #answers: Map<string, MechanismAvailability>[];
+  /** Each edit's native eligibility, by change identity, for the units whose `native` or `native-batch` was asked. */
+  readonly #natives = new Map<string, NativeEligibility>();
+
+  constructor(state: IPreparationState, units: readonly ISuggestionUnit[], companions: CompanionPlanner) {
+    this.#state = state;
+    this.#units = units;
+    this.#companions = companions;
+    this.#answers = units.map(() => new Map<string, MechanismAvailability>());
+  }
+
+  /** The plan: every unit's list answered lazily, in order, then planned (§8–§10). */
+  async plan(): Promise<DeliveryPlan> {
+    const { policy, companionOptions } = this.#state.options.delivery;
+    for (const [index, unit] of this.#units.entries()) {
+      for (const mechanism of this.#listOf(unit)) {
+        if (await this.#answer(index, unit, mechanism)) {
+          if (mechanism === 'companion') this.#companions.accept(index);
+          break;
+        }
+      }
+    }
+    const units = this.#units.map((unit, index): DeliveryUnit => this.#deliveryUnit(unit, index));
+    return planDelivery(policy, units, companionOptions ?? {});
+  }
+
+  /** The native suggestion of an edit whose eligibility was asked and found available. */
+  suggestion(edit: IPreparedEdit): IPreparedSuggestion {
+    const native = this.#natives.get(changeKey({ kind: 'edit', edit }));
+    if (native?.available !== true) throw new Error('Internal error: an edit is delivered natively without a native suggestion.');
+    return native.suggestion;
+  }
+
+  /** The list that governs a unit (§2). */
+  #listOf(unit: ISuggestionUnit): readonly string[] {
+    const { policy } = this.#state.options.delivery;
+    switch (unit.kind) {
+      case 'edit': return policy.edits.value;
+      case 'edit-group': return policy.groupedEdits.value;
+      case 'file-operation':
+      case 'file-operation-group': return policy.fileOperations.value;
+    }
+  }
+
+  /** Answers one question and remembers it; whether the mechanism can deliver the unit as a whole. */
+  async #answer(index: number, unit: ISuggestionUnit, mechanism: string): Promise<boolean> {
+    const answers = itemAt(this.#answers, index);
+    if (mechanism === 'companion') {
+      const answer = await this.#companions.availability(index);
+      answers.set(mechanism, answer);
+      return answer.available;
+    }
+    const answer = this.#localAnswer(unit, mechanism);
+    answers.set(mechanism, answer);
+    if (mechanism !== 'native-batch') return answer.available;
+    const members = unit.jointFix ? [] : unitEdits(unit).map((edit) => this.#native(edit));
+    return answer.available && members.every((m) => m.available);
+  }
+
+  /** The availability of a mechanism that needs no read. */
+  #localAnswer(unit: ISuggestionUnit, mechanism: string): MechanismAvailability {
+    switch (`${unit.kind}:${mechanism}`) {
+      case 'edit:native': {
+        const native = this.#native(itemAt(unitEdits(unit), 0));
+        return native.available ? AVAILABLE : unavailableFor(native.obstacles);
+      }
+      case 'edit:review-body': return unavailableFor([NOT_YET_SUPPORTED.reviewBody]);
+      case 'edit-group:native-batch': return this.#batchObstacles(unit);
+      case 'edit-group:manual-group': return unavailableFor([NOT_YET_SUPPORTED.manualGroup]);
+      case 'file-operation:manual': return AVAILABLE;
+      case 'file-operation-group:manual': return unavailableFor([NOT_YET_SUPPORTED.mixedManualGroup]);
+      default: throw new Error(`Internal error: ${mechanism} is not a mechanism of a ${unit.kind} unit.`);
+    }
+  }
+
+  /**
+   * A native batch's obstacles of the group as a whole (§8.3, §8.8): this
+   * version offers one only for an explicit group whose every member's fix
+   * makes one change. The members' own eligibility is asked separately.
+   */
+  #batchObstacles(unit: ISuggestionUnit): MechanismAvailability {
+    if (unit.jointFix) return unavailableFor([NOT_YET_SUPPORTED.jointFixBatch]);
+    const several = unit.items.filter((item) => item.edits.length > 1).map((item) =>
+      `The finding at ${codeSpan(item.pointer)} makes ${String(item.edits.length)} changes with one fix; a fix with several changes is not yet offered in a native batch by this version.`);
+    return several.length === 0 ? AVAILABLE : unavailableFor(several);
+  }
+
+  /** One edit's native eligibility, worked out once. */
+  #native(edit: IPreparedEdit): NativeEligibility {
+    const key = changeKey({ kind: 'edit', edit });
+    let native = this.#natives.get(key);
+    if (native === undefined) {
+      native = nativeEligibility(edit, this.#state.context);
+      this.#natives.set(key, native);
+    }
+    return native;
+  }
+
+  /** The planner's view of a unit: its identity, description and remembered answers. */
+  #deliveryUnit(unit: ISuggestionUnit, index: number): DeliveryUnit {
+    const answers = itemAt(this.#answers, index);
+    const asked = (mechanism: string): MechanismAvailability => {
+      const answer = answers.get(mechanism);
+      if (answer === undefined) throw new Error(`Internal error: the planner asked for ${mechanism} of a unit, which was never answered.`);
+      return answer;
+    };
+    const base = { id: String(index), description: unitDescription(unit), location: { pointer: itemAt(unit.items, 0).pointer } };
+    switch (unit.kind) {
+      case 'edit': return { ...base, kind: 'edit', availability: asked };
+      case 'edit-group': {
+        const members = unit.jointFix ? [] : unitEdits(unit).map((edit): IEditGroupMember => ({
+          description: editDescription(edit),
+          native: () => {
+            const native = this.#natives.get(changeKey({ kind: 'edit', edit }));
+            if (native === undefined) throw new Error('Internal error: the planner asked for a member\'s native eligibility, which was never answered.');
+            return native.available ? AVAILABLE : unavailableFor(native.obstacles);
+          },
+        }));
+        return { ...base, kind: 'edit-group', members, availability: asked };
+      }
+      case 'file-operation': return { ...base, kind: 'file-operation', availability: asked };
+      case 'file-operation-group': return { ...base, kind: 'file-operation-group', availability: asked };
+    }
+  }
+}
+
+/** A unit whose companion is available: its rendered content and the head's text of each file it edits, when re-applied. */
+interface ICompanionDraft {
+  readonly unit: ISuggestionUnit;
+  readonly content: ICompanionContent;
+  readonly headTexts: ReadonlyMap<string, string>;
+}
+
+/**
+ * Whether a companion pull request can deliver each unit
+ * (docs/companion-suggestion-pr-contract.md §2.5, §2.5.1, §2.8), worked out
+ * only when asked: the pull request's target is read the first time, the
+ * rewritten head (if any) once, and each unit is checked against the
+ * obstacles a companion can meet — an unsupported pull request, a rewritten
+ * history it cannot be re-applied onto, a created file over the per-file
+ * limit, and a description over the body limit (under a `single` bundle,
+ * the bundle's description as planned so far, docs/delivery-policy-contract.md
+ * §9). It then builds the companions the plan bundles.
+ */
+class CompanionPlanner {
+  readonly #state: IPreparationState;
+  readonly #units: readonly ISuggestionUnit[];
+  #facts: ICompanionTargetFacts | undefined;
+  #target: ISuggestionContext | undefined;
+  #lifecycleNote: string | undefined;
+  readonly #drafts = new Map<number, ICompanionDraft>();
+  /** The units delivered by `companion` so far, in order. */
+  readonly #accepted: number[] = [];
+
+  constructor(state: IPreparationState, units: readonly ISuggestionUnit[]) {
+    this.#state = state;
+    this.#units = units;
+  }
+
+  /** The texts every companion of this review names; known once a companion was asked for. */
+  target(): ISuggestionContext {
+    if (this.#target === undefined) throw new Error('Internal error: the companion target is needed before any companion was asked for.');
+    return this.#target;
+  }
+
+  /** The lifecycle note every companion carries; presented once, with the first companion that can be made. */
+  lifecycleNote(): string {
+    if (this.#lifecycleNote === undefined) throw new Error('Internal error: a companion is planned without its lifecycle note.');
+    return this.#lifecycleNote;
+  }
+
+  /** Records that `companion` delivers the unit (so a `single` bundle's size counts it). */
+  accept(index: number): void {
+    this.#accepted.push(index);
+  }
+
+  /** Whether a companion pull request can deliver unit `index`, with every obstacle when it cannot. */
+  async availability(index: number): Promise<MechanismAvailability> {
+    const state = this.#state;
+    const facts = await this.#readFacts();
+    const target = this.#target ?? await this.#resolveTarget(facts);
+    const unit = itemAt(this.#units, index);
+    const obstacles: string[] = [...(facts.unavailable ?? [])];
     let headTexts: ReadonlyMap<string, string> = new Map();
-    if (head !== undefined) {
-      const decision = await reapplication(unit, head, state);
+    if (obstacles.length === 0 && target.reappliedOnto !== undefined) {
+      const decision = await reapplication(unit, target.reappliedOnto, state);
       if (decision.kind === 'created') headTexts = decision.headTexts;
-      else found.push({ kind: 'rewritten', head, reasons: decision.reasons });
+      else {
+        const subject = unit.changes.size === 1 ? 'it' : `its ${String(unit.changes.size)} changes`;
+        obstacles.push(`The history of #${String(target.pullNumber)} was rewritten after the reviewed commit, and ${subject} cannot be re-applied onto commit `
+          + `${codeSpan(target.reappliedOnto)} because ${decision.reasons.join('; ')}.`);
+      }
     }
     for (const change of unit.changes.values()) {
       if (change.kind !== 'operation' || change.operation.operation !== 'create') continue;
       const bytes = Buffer.byteLength(change.operation.text, 'utf8');
-      if (bytes > MAX_SUGGESTION_FILE_BYTES) found.push({ kind: 'file-size', path: change.operation.path, bytes });
-    }
-    if (found.length === 0) {
-      const companion = prepareCompanion(unit, target, renderer, headTexts);
-      lifecycleNote ??= renderer.lifecycleNote(target);
-      const description = renderSuggestionPullBody(companion, sizingMarker, target, lifecycleNote);
-      const characters = description.length;
-      if (maxCommentBodyChars !== undefined && characters > maxCommentBodyChars) {
-        found.push({ kind: 'description-size', characters, limit: maxCommentBodyChars });
-      } else {
-        companionsByUnit.set(i, companion);
-        const prepare = (r: ReviewRenderer): IPreparedCompanion => prepareCompanion(unit, target, r, headTexts);
-        companionWith.set(i, prepare);
-        companionUnits.push({
-          what: `the description of the suggestion pull request for unit ${String(i + 1)}`,
-          text: description,
-          expected: { marker: sizingMarker },
-          items: unit.items,
-          compose: (r) => renderSuggestionPullBody(prepare(r), sizingMarker, target, r.lifecycleNote(target)),
-        });
+      if (bytes > MAX_SUGGESTION_FILE_BYTES) {
+        obstacles.push(`${codeSpan(change.operation.path)} is ${String(bytes)} bytes, and a suggestion pull request carries at most ${String(MAX_SUGGESTION_FILE_BYTES)} bytes per file.`);
       }
     }
-    obstacles.push(found);
-  }
-  // A unit whose suggestion pull request cannot be made is handled as if
-  // suggestion pull requests were not allowed (issue #37): a whole-file
-  // proposal is presented in the body, announced by a warning; a group or
-  // several-change fix cannot be published at all, so the whole review is
-  // refused.
-  /** Each whole-file proposal that falls back to the body, by unit index. */
-  const fallbacks = new Map<number, PreparedFileOperation>();
-  for (const [i, found] of obstacles.entries()) {
-    if (found.length === 0) continue;
-    const unit = itemAt(units, i);
-    const pointer = unit.items[0]?.pointer;
-    const operation = unit.kind === 'operation' ? standaloneOperation(unit) : undefined;
-    if (operation !== undefined) {
-      fallbacks.set(i, operation);
-      report.warn('suggestion-pr-fallback', pointer,
-        `Suggestion pull requests are allowed, but the ${operation.operation === 'create' ? 'creation' : 'deletion'} of ${codeSpan(operation.path)} is not proposed as one: `
-        + `${obstaclesText(found, 'it', target)}. `
-        + 'It is handled as if suggestion pull requests were not allowed: the review body proposes it, with its findings.',
-        { path: operation.path, remedies: fallbackRemedies(found) });
-    } else {
-      const [subject, whole] = unit.group !== undefined
-        ? [`suggestion group ${JSON.stringify(unit.group)}`, 'a group cannot be published']
-        : [`the fix with ${String(unit.changes.size)} changes`, 'a fix with several changes cannot be published'];
-      report.error('suggestion-group-pr-unavailable', pointer,
-        `Suggestion pull requests are allowed, but ${subject} cannot become one: ${obstaclesText(found, `its ${String(unit.changes.size)} changes`, target)}. `
-        + `Without a suggestion pull request, ${whole}: its changes are accepted together or not at all, and are never split or published in part.`,
-        { remedies: refusalRemedies(found, unit.group !== undefined) });
+    if (obstacles.length === 0) {
+      const content = companionContent(unit, state.renderer);
+      this.#lifecycleNote ??= state.renderer.lifecycleNote(target);
+      const bundled = state.options.delivery.policy.companionBundle.value === 'single'
+        ? [...this.#accepted.map((i) => this.#draft(i).content), content]
+        : [content];
+      const sizingMarker = formatSuggestionMarker({ ...target, id: SIZING_UUID, batch: SIZING_UUID });
+      const characters = renderCompanionBundleDescription(bundled, target, this.#lifecycleNote, sizingMarker).length;
+      const limit = state.options.maxCommentBodyChars;
+      if (limit !== undefined && characters > limit) {
+        obstacles.push(`Its suggestion pull request's description would be ${String(characters)} characters, and the limit is ${String(limit)}.`);
+      } else {
+        this.#drafts.set(index, { unit, content, headTexts });
+      }
     }
+    return obstacles.length === 0 ? AVAILABLE : unavailableFor(obstacles);
   }
-  const created = [...companionsByUnit.keys()];
-  if (created.length > MAX_SUGGESTION_PULL_REQUESTS) report.error('too-many-suggestion-prs', undefined, tooManySuggestions(created.length));
-  if (report.errors.length > 0) return blockedAssembly;
 
-  /** Each created unit's companion index, in unit order. */
-  const companionOf = new Map(created.map((unitIndex, companionIndex) => [unitIndex, companionIndex]));
-  const companions = [...companionsByUnit.values()];
+  /** The companions of the plan, each holding its units in order (§9). */
+  build(plan: Extract<DeliveryPlan, { readonly status: 'planned' }>): IPreparedCompanion[] {
+    return plan.companions.map((companion) => bundleCompanion(companion.sections.map((id) => this.#draft(Number(id))), this.target()));
+  }
 
-  /** Each fallen-back proposal's body section, as it is without suggestion pull requests, by unit index. */
-  const fallbackSections = new Map<number, string>();
-  const proposals: IRenderedProposal[] = [];
-  for (const [i, operation] of fallbacks) {
-    const section = renderer.proposal(operation, itemAt(units, i).items);
-    fallbackSections.set(i, section);
-    proposals.push({ path: operation.path, characters: section.length });
+  #draft(index: number): ICompanionDraft {
+    const draft = this.#drafts.get(index);
+    if (draft === undefined) throw new Error('Internal error: a unit is delivered by companion without its companion.');
+    return draft;
   }
-  const parts = sections.map((section): string | number => {
-    if (section.kind === 'item') return renderer.section(section.item);
-    const part = companionOf.get(section.unit) ?? fallbackSections.get(section.unit);
-    if (part === undefined) throw new Error(`Internal error: suggestion unit ${String(section.unit)} is neither created nor presented as a proposal.`);
-    return part;
-  });
-  // A result whose proposal fell back is general feedback in the proposal's section, as without suggestion pull requests.
-  const renumbered = evidence.map((record): Evidence => {
-    if (record.treatment !== 'general' || record.suggestionPullRequest === undefined) return record;
-    const { suggestionPullRequest, ...rest } = record;
-    const index = companionOf.get(suggestionPullRequest);
-    return index === undefined ? rest : { ...rest, suggestionPullRequest: index };
-  });
-  // The composed-text checkpoint (see checkComposed): every comment, every
-  // section, every suggestion pull request's description and the body.
-  const largest = { number: LARGEST_PULL_NUMBER, url: pullRequestUrl(target, LARGEST_PULL_NUMBER) };
-  const sectionWith = (section: UnitSection, r: ReviewRenderer, own: boolean): string => {
-    if (section.kind === 'item') return r.section(section.item);
-    const unit = itemAt(units, section.unit);
-    const prepare = companionWith.get(section.unit);
-    if (prepare !== undefined) return renderCompanionReference(own ? itemAt(companions, companionOf.get(section.unit) ?? -1) : prepare(r), largest, target);
-    const operation = fallbacks.get(section.unit);
-    if (operation === undefined) throw new Error(`Internal error: suggestion unit ${String(section.unit)} is neither created nor presented as a proposal.`);
-    return r.proposal(operation, unit.items);
-  };
-  const sectionItems = (section: UnitSection): readonly IPreparedItem[] => (section.kind === 'item' ? [section.item] : itemAt(units, section.unit).items);
-  const composedBody = (r: ReviewRenderer): string => sections.map((section) => sectionWith(section, r, false)).join(SEPARATOR);
-  // Sections are read only to locate the culprit when the body fails.
-  const sectionUnits = sections.map((section, i): IComposedUnit => ({
-    what: `body section ${String(i + 1)}`,
-    get text(): string { return sectionWith(section, renderer, true); },
-    expected: {},
-    items: sectionItems(section),
-    compose: (r) => sectionWith(section, r, false),
-  }));
-  const composedFor = (body: string): IComposedUnit[] => [
-    ...commentItems.map((entry, i) => commentUnit(entry, itemAt(comments, i).body, i)),
-    ...companionUnits,
-    ...bodyUnits(body, sectionUnits, composedBody),
-  ];
-  if (companions.length === 0) {
-    const body = parts.map(String).join(SEPARATOR);
-    return { review: { commitId: context.reviewedCommit, body, comments }, evidence: renumbered, sectionCount: sections.length, proposals, composed: composedFor(body) };
+
+  /** The caller's target facts, asked once and checked. */
+  async #readFacts(): Promise<ICompanionTargetFacts> {
+    if (this.#facts !== undefined) return this.#facts;
+    const ask = this.#state.options.delivery.companionTarget;
+    if (ask === undefined) throw new TypeError('A delivery list names `companion`, but `options.delivery.companionTarget` is not given.');
+    const facts: unknown = await ask();
+    if (!isPlainObject(facts)) throw new TypeError('`options.delivery.companionTarget` must answer an object.');
+    const headRef = facts['headRef'];
+    const ready = facts['ready'];
+    const unavailable = facts['unavailable'];
+    const resolve = facts['resolveRewrittenHead'];
+    if (typeof headRef !== 'string' || headRef === '' || typeof ready !== 'boolean') {
+      throw new TypeError('`options.delivery.companionTarget` must answer { headRef, ready, resolveRewrittenHead?, unavailable? }.');
+    }
+    if (unavailable !== undefined && !isObstacleList(unavailable)) throw new TypeError('`options.delivery.companionTarget` must answer `unavailable` as non-empty obstacle sentences.');
+    if (resolve !== undefined && typeof resolve !== 'function') throw new TypeError('`resolveRewrittenHead` must be a function () => Promise<commit | undefined>.');
+    this.#facts = {
+      headRef,
+      ready,
+      ...(unavailable === undefined ? {} : { unavailable }),
+      ...(resolve === undefined ? {} : { resolveRewrittenHead: (): Promise<unknown> => Promise.resolve(Reflect.apply(resolve, facts, [])) }),
+    };
+    return this.#facts;
   }
-  // A created companion always had its lifecycle note presented when it was prepared.
-  if (lifecycleNote === undefined) throw new Error('Internal error: a suggestion pull request was prepared without its lifecycle note.');
-  const suggestions: IPreparedSuggestions = { companions, sections: parts, lifecycleNote };
-  const body = renderReviewBody(suggestions, companions.map(() => LARGEST_PULL_NUMBER), target);
-  return {
-    composed: composedFor(body),
-    review: { commitId: context.reviewedCommit, body, comments },
-    evidence: renumbered,
-    sectionCount: sections.length,
-    proposals,
-    suggestions,
-  };
+
+  /** The companion texts' context, with the rewritten head when the pull request is supported and its history was rewritten. */
+  async #resolveTarget(facts: ICompanionTargetFacts): Promise<ISuggestionContext> {
+    const { context } = this.#state;
+    const supported = (facts.unavailable ?? []).length === 0;
+    const head = supported ? await rewrittenHeadOf(facts, context, this.#state) : undefined;
+    this.#target = {
+      owner: context.owner, repo: context.repo, pullNumber: context.pullNumber, reviewedCommit: context.reviewedCommit, headRef: facts.headRef,
+      ready: facts.ready, ...(head === undefined ? {} : { reappliedOnto: head }),
+    };
+    return this.#target;
+  }
+}
+
+/** Whether a value is a list of non-empty obstacle sentences. */
+function isObstacleList(value: unknown): value is readonly string[] {
+  return Array.isArray(value) && value.every((r) => typeof r === 'string' && r !== '');
 }
 
 /**
- * The rewritten head suggestions are re-applied onto (contract §2.5.1), from
+ * The rewritten head companions are re-applied onto (contract §2.5.1), from
  * the caller's resolver, checked: a full commit other than the reviewed one,
  * with a tree read to compare against. Undefined when there is none.
  */
-async function rewrittenHeadOf(enabled: ISuggestionPullRequestsOption, context: IPreparationContext, state: IPreparationState): Promise<string | undefined> {
-  if (enabled.resolveRewrittenHead === undefined) return undefined;
-  const head: unknown = await enabled.resolveRewrittenHead();
+async function rewrittenHeadOf(facts: ICompanionTargetFacts, context: IPreparationContext, state: IPreparationState): Promise<string | undefined> {
+  if (facts.resolveRewrittenHead === undefined) return undefined;
+  const head: unknown = await facts.resolveRewrittenHead();
   if (head === undefined) return undefined;
   if (!isFullCommit(head) || head === context.reviewedCommit) {
     throw new TypeError('`resolveRewrittenHead` must answer a full commit other than the reviewed commit, or undefined.');
   }
   if (state.readEntry === null) throw new TypeError('`readEntry` is required to re-apply suggestions onto a rewritten head.');
   return head;
+}
+
+/** Where each item of a delivered unit goes, once the plan is known. */
+type Destination =
+  | { readonly mechanism: 'native' | 'native-batch' | 'manual' | 'companion'; readonly unit: number }
+  | { readonly mechanism: 'none' };
+
+/**
+ * Renders the planned review: inline comments in SARIF order of first
+ * appearance (native suggestions merged when identical, a native batch's
+ * members each with the group's note), body sections in SARIF order (a
+ * finding, a whole-file proposal with its findings, a companion's reference,
+ * or a native batch's guidance, each unit at its first finding's position),
+ * one evidence record per result, and the companion pull requests.
+ */
+function renderDelivery(
+  items: readonly IPreparedItem[],
+  units: readonly ISuggestionUnit[],
+  unitOf: ReadonlyMap<IPreparedItem, number>,
+  plan: Extract<DeliveryPlan, { readonly status: 'planned' }>,
+  availability: DeliveryAvailability,
+  companions: CompanionPlanner,
+  state: IPreparationState,
+): IUnitAssembly {
+  const { context, renderer } = state;
+  const mechanismOf = new Map(plan.deliveries.map((d) => [Number(d.unitId), d.mechanism]));
+  const referenceOf = new Map<number, ICompanionSectionReference>();
+  for (const [companion, planned] of plan.companions.entries()) {
+    for (const [section, id] of planned.sections.entries()) referenceOf.set(Number(id), { companion, section });
+  }
+  const prepared = companions.build(plan);
+  const destination = (item: IPreparedItem): Destination => {
+    const unit = unitOf.get(item);
+    if (unit === undefined) return { mechanism: 'none' };
+    const mechanism = mechanismOf.get(unit);
+    // `review-body` and `manual-group` are always unavailable in this version (§8.8), so the planner never routes to them.
+    if (mechanism === 'native' || mechanism === 'native-batch' || mechanism === 'manual' || mechanism === 'companion') return { mechanism, unit };
+    throw new Error(`Internal error: a unit is delivered by ${String(mechanism)}, which this version renders nowhere.`);
+  };
+
+  const commentItems: ICommentEntry[] = [];
+  const sections: UnitSection[] = [];
+  const evidence: Evidence[] = [];
+  const suggestionComments = new Map<string, number>();
+  const unitSections = new Map<number, number>();
+  const sectionOf = (unit: number): number => {
+    let index = unitSections.get(unit);
+    if (index === undefined) {
+      index = sections.length;
+      unitSections.set(unit, index);
+      sections.push({ kind: 'unit', unit });
+    }
+    return index;
+  };
+  const suggestionComment = (s: IPreparedSuggestion, note: string | undefined): number => {
+    const key = JSON.stringify([s.path, s.startLine, s.endLine, s.replacementText]);
+    let index = suggestionComments.get(key);
+    if (index === undefined) {
+      index = commentItems.length;
+      suggestionComments.set(key, index);
+      commentItems.push({
+        coordinates: inlineCoordinates(s.path, { side: 'RIGHT', line: s.endLine, startLine: s.startLine === s.endLine ? undefined : s.startLine }),
+        items: [],
+        suggestion: s,
+        ...(note === undefined ? {} : { note }),
+      });
+    }
+    return index;
+  };
+
+  for (const item of items) {
+    const record = evidenceRecord(item);
+    const where = destination(item);
+    switch (where.mechanism) {
+      case 'none':
+        if (item.placement && item.placement.treatment === 'inline') {
+          const index = commentItems.length;
+          commentItems.push({ coordinates: inlineCoordinates(item.placement.source.path, item.placement.anchor), items: [item] });
+          evidence.push({ ...record, treatment: 'inline', commentIndex: index, source: item.placement.source, anchor: item.placement.anchor });
+        } else {
+          evidence.push({ ...record, treatment: 'general', bodySectionIndex: sections.length, ...(item.placement ? { source: item.placement.source } : {}) });
+          sections.push({ kind: 'item', item });
+        }
+        break;
+      case 'native':
+      case 'native-batch': {
+        const unit = itemAt(units, where.unit);
+        if (where.mechanism === 'native-batch') sectionOf(where.unit);
+        const s = availability.suggestion(itemAt(item.edits, 0));
+        const note = where.mechanism === 'native-batch' && unit.group !== undefined ? renderNativeBatchMemberNote(unit.group) : undefined;
+        const index = suggestionComment(s, note);
+        itemAt(commentItems, index).items.push(item);
+        evidence.push({ ...record, treatment: 'suggestion', commentIndex: index,
+          ...(item.placement ? { source: item.placement.source } : {}),
+          fixSource: s.source,
+          replacement: { startLine: s.startLine, endLine: s.endLine, originalText: s.originalText, replacementText: s.replacementText },
+          suggestionPayload: s.payload });
+        break;
+      }
+      case 'manual':
+      case 'companion': {
+        const reference = where.mechanism === 'companion' ? referenceOf.get(where.unit) : undefined;
+        evidence.push({ ...record, treatment: 'general', bodySectionIndex: sectionOf(where.unit),
+          ...(item.placement ? { source: item.placement.source } : {}),
+          ...(item.fileOperation ? { fileOperation: fileOperationEvidence(item.fileOperation, item.proposedLines) } : {}),
+          ...(reference === undefined ? {} : { suggestionPullRequest: reference.companion }) });
+        break;
+      }
+    }
+  }
+
+  /** A body section as `r` renders it; a companion's proposal is its reference, rendered once the numbers are known. */
+  const sectionPart = (section: UnitSection, r: ReviewRenderer): string | ICompanionSectionReference => {
+    if (section.kind === 'item') return r.section(section.item);
+    const unit = itemAt(units, section.unit);
+    const mechanism = mechanismOf.get(section.unit);
+    if (mechanism === 'companion') {
+      const reference = referenceOf.get(section.unit);
+      if (reference === undefined) throw new Error('Internal error: a unit is delivered by companion without a companion.');
+      return reference;
+    }
+    if (mechanism === 'native-batch' && unit.group !== undefined) return renderNativeBatchGuidance(unit.group, unitEdits(unit));
+    if (mechanism !== 'manual') throw new Error(`Internal error: a unit delivered by ${String(mechanism)} has a body section.`);
+    return r.proposal(standaloneOperation(unit), unit.items);
+  };
+  const parts = sections.map((section) => sectionPart(section, renderer));
+  const proposals: IRenderedProposal[] = sections.flatMap((section, i) => {
+    const part = itemAt(parts, i);
+    return section.kind === 'unit' && mechanismOf.get(section.unit) === 'manual' && typeof part === 'string'
+      ? [{ path: standaloneOperation(itemAt(units, section.unit)).path, characters: part.length }] : [];
+  });
+  // Body sections are rendered before inline comments, as they always were, so callbacks see elements in that order.
+  const comments: PreparedComment[] = commentItems.map((entry) => ({ ...entry.coordinates, body: composeComment(entry, renderer) }));
+
+  // The composed-text checkpoint (see checkComposed): every comment, every
+  // section, every companion pull request's description and the body, each
+  // with a way to compose it again with another renderer. A companion's
+  // reference is read with the largest pull request number, as the limits are.
+  const target = prepared.length === 0 ? undefined : companions.target();
+  const referenceText = (reference: ICompanionSectionReference, content: ICompanionContent): string => {
+    if (target === undefined) throw new Error('Internal error: a companion reference without a companion.');
+    const largest = { number: LARGEST_PULL_NUMBER, url: pullRequestUrl(target, LARGEST_PULL_NUMBER) };
+    const count = itemAt(prepared, reference.companion).sections.length;
+    return renderBundledCompanionReference(content, largest, target, reference.section + 1, count);
+  };
+  /** A section's text: a part as rendered, a companion's reference with its planned content or as `r` renders it. */
+  const partText = (part: string | ICompanionSectionReference, r?: ReviewRenderer): string => {
+    if (typeof part === 'string') return part;
+    if (r === undefined) return referenceText(part, itemAt(itemAt(prepared, part.companion).sections, part.section));
+    const unit = itemAt(units, Number(itemAt(itemAt(plan.companions, part.companion).sections, part.section)));
+    return referenceText(part, companionContent(unit, r));
+  };
+  const sectionWith = (section: UnitSection, r: ReviewRenderer): string => partText(sectionPart(section, r), r);
+  const sectionUnits = sections.map((section, i): IComposedUnit => ({
+    what: `body section ${String(i + 1)}`,
+    // Sections are read only to locate the culprit when the body fails.
+    get text(): string { return partText(itemAt(parts, i)); },
+    expected: {},
+    items: section.kind === 'item' ? [section.item] : itemAt(units, section.unit).items,
+    compose: (r) => sectionWith(section, r),
+  }));
+  const composedBody = (r: ReviewRenderer): string => sections.map((section) => sectionWith(section, r)).join(SEPARATOR);
+  const composedFor = (body: string, descriptions: readonly IComposedUnit[]): IComposedUnit[] => [
+    ...commentItems.map((entry, i) => commentUnit(entry, itemAt(comments, i).body, i)),
+    ...descriptions,
+    ...bodyUnits(body, sectionUnits, composedBody),
+  ];
+
+  if (target === undefined) {
+    const body = parts.map((part) => {
+      if (typeof part !== 'string') throw new Error('Internal error: a companion reference without a companion.');
+      return part;
+    }).join(SEPARATOR);
+    return {
+      review: { commitId: context.reviewedCommit, body, comments },
+      evidence,
+      sectionCount: sections.length,
+      proposals,
+      composed: composedFor(body, []),
+      deliveryDiagnostics: plan.diagnostics,
+    };
+  }
+  const lifecycleNote = companions.lifecycleNote();
+  const sizingMarker = formatSuggestionMarker({ ...target, id: SIZING_UUID, batch: SIZING_UUID });
+  const descriptions = plan.companions.map((planned, c): IComposedUnit => {
+    const members = planned.sections.map((id) => Number(id));
+    const delivered = members.map((index) => itemAt(units, index));
+    return {
+      what: `the description of the suggestion pull request for unit${members.length === 1 ? '' : 's'} ${members.map((index) => String(index + 1)).join(', ')}`,
+      text: renderSuggestionPullBody(itemAt(prepared, c), sizingMarker, target, lifecycleNote),
+      expected: { marker: sizingMarker },
+      items: delivered.flatMap((unit) => unit.items),
+      compose: (r) => renderCompanionBundleDescription(delivered.map((unit) => companionContent(unit, r)), target, r.lifecycleNote(target), sizingMarker),
+    };
+  });
+  const suggestions: IPreparedSuggestions = { companions: prepared, sections: parts, lifecycleNote };
+  const body = renderReviewBody(suggestions, prepared.map(() => LARGEST_PULL_NUMBER), target);
+  return {
+    review: { commitId: context.reviewedCommit, body, comments },
+    evidence,
+    sectionCount: sections.length,
+    proposals,
+    suggestions,
+    composed: composedFor(body, descriptions),
+    deliveryDiagnostics: plan.diagnostics,
+  };
 }
 
 /**
@@ -3596,69 +3840,6 @@ function standaloneOperation(unit: ISuggestionUnit): PreparedFileOperation {
 }
 
 /**
- * Why one suggestion pull request cannot be made (issue #37): the pull
- * request is one suggestion pull requests do not support yet (`reason`
- * names why), its history was rewritten and the unit cannot be re-applied
- * onto the head (contract §2.5.1), a created file is over the per-file
- * limit, or its description is over the body limit.
- */
-type Obstacle =
-  | { readonly kind: 'target'; readonly reason: string }
-  | { readonly kind: 'rewritten'; readonly head: string; readonly reasons: readonly string[] }
-  | { readonly kind: 'file-size'; readonly path: string; readonly bytes: number }
-  | { readonly kind: 'description-size'; readonly characters: number; readonly limit: number };
-
-/** The obstacles as one clause, `subject` naming what cannot be re-applied ("it", "its 2 changes"). */
-function obstaclesText(obstacles: readonly Obstacle[], subject: string, target: ISuggestionContext): string {
-  return obstacles.map((o) => {
-    switch (o.kind) {
-      case 'target': return o.reason;
-      case 'rewritten':
-        return `the history of #${String(target.pullNumber)} was rewritten after the reviewed commit, and ${subject} cannot be re-applied onto commit ${codeSpan(o.head)} because ${o.reasons.join('; ')}`;
-      case 'file-size':
-        return `${codeSpan(o.path)} is ${String(o.bytes)} bytes, and a suggestion pull request carries at most ${String(MAX_SUGGESTION_FILE_BYTES)} bytes per file`;
-      case 'description-size':
-        return `its suggestion pull request's description would be ${String(o.characters)} characters, and the limit is ${String(o.limit)}`;
-      default: {
-        const unexpected: never = o;
-        throw new Error(`Internal error: unknown obstacle ${JSON.stringify(unexpected)}.`);
-      }
-    }
-  }).join('; ');
-}
-
-/** The ways, if any, to make the suggestion pull request of a proposal that fell back, one per kind of obstacle. */
-function fallbackRemedies(obstacles: readonly Obstacle[]): string[] {
-  const remedies = obstacles.flatMap((o): string[] => {
-    const lead = 'To propose the change as a suggestion pull request, ';
-    if (o.kind === 'rewritten') return [`${lead}review the pull request's current head again and publish that review.`];
-    if (o.kind === 'file-size') return [`${lead}reduce the proposed file to at most 1,000,000 bytes.`];
-    if (o.kind === 'description-size') return [`${lead}shorten its findings' messages.`];
-    return [];
-  });
-  return [...new Set(remedies)];
-}
-
-/** The ways forward for a group or several-change fix whose suggestion pull request cannot be made: remove each obstacle, or ungroup. */
-function refusalRemedies(obstacles: readonly Obstacle[], group: boolean): string[] {
-  const remedies = [...new Set(obstacles.flatMap((o): string[] => {
-    if (o.kind === 'rewritten') return ['Review the pull request\'s current head again, and publish that review.'];
-    if (o.kind === 'file-size') return ['Reduce the proposed file to at most 1,000,000 bytes.'];
-    if (o.kind === 'description-size') return ['Shorten the findings\' messages.'];
-    return [];
-  }))];
-  const last = group
-    ? 'remove the group (`ungroup-fixes`), so that its changes are published on their own.'
-    : 'split the fix into separate findings, one change each, so that its changes are published on their own.';
-  return [...remedies, remedies.length === 0 ? `${last.charAt(0).toUpperCase()}${last.slice(1)}` : `Or ${last}`];
-}
-
-/** The too-many-suggestion-prs problem for `count` suggestion pull requests (contract §2.8). */
-function tooManySuggestions(count: number): string {
-  return `The review needs ${String(count)} suggestion pull requests; the limit is ${String(MAX_SUGGESTION_PULL_REQUESTS)}. Nothing is split or dropped.`;
-}
-
-/**
  * Why a head file's text is not source a replaced range can be compared in,
  * by the reader's error code (src/github.cts): not UTF-8, or beyond the
  * source-read limit. Such a file is a reason its suggestion cannot be
@@ -3700,20 +3881,32 @@ function sourceLines(text: string): string[] {
   return text.match(/[^\n]*\n|[^\n]+$/g) || [];
 }
 
-/**
- * A unit's companion: its exact commit changes, title, commit message and
- * rendered parts. An edited file whose text at a rewritten head is given has
- * the same ranges replaced in that text (a re-application, contract §2.5.1);
- * otherwise in the reviewed file.
- */
-function prepareCompanion(
-  unit: ISuggestionUnit,
-  target: ISuggestionContext,
-  renderer: ReviewRenderer,
-  headTexts: ReadonlyMap<string, string>,
-): IPreparedCompanion {
+/** A unit's section of a companion: how many changes it makes, its rendered change list and its rendered findings. */
+function companionContent(unit: ISuggestionUnit, renderer: ReviewRenderer): ICompanionContent {
   const changes = [...unit.changes.values()];
-  const commitChanges = [...changesByPath(unit)].map(([filePath, onPath]): ProposalChange => {
+  return {
+    changeCount: changes.length,
+    changeLines: changes.map((change) => renderer.changeLine(change)).join('\n'),
+    items: unit.items.map((item) => renderer.suggestionItem(item)).join(SEPARATOR),
+  };
+}
+
+/**
+ * One companion pull request holding `drafts`' units, in order: its exact
+ * commit changes (each path once, every unit's changes of it combined, an
+ * edited file being the head's text when re-applied, contract §2.5.1),
+ * title, commit message and sections (docs/delivery-policy-contract.md §9).
+ * A companion of one unit is titled as always; a bundle of several, by its
+ * proposals and changes.
+ */
+function bundleCompanion(drafts: readonly ICompanionDraft[], target: ISuggestionContext): IPreparedCompanion {
+  const byPath = new Map<string, UnitChange[]>();
+  const headTexts = new Map<string, string>();
+  for (const draft of drafts) {
+    for (const [filePath, onPath] of changesByPath(draft.unit)) byPath.set(filePath, [...(byPath.get(filePath) ?? []), ...onPath]);
+    for (const [filePath, text] of draft.headTexts) headTexts.set(filePath, text);
+  }
+  const commitChanges = [...byPath].map(([filePath, onPath]): ProposalChange => {
     const first = itemAt(onPath, 0);
     if (first.kind === 'operation') {
       const operation = first.operation;
@@ -3724,11 +3917,13 @@ function prepareCompanion(
     const fileEdits = onPath.flatMap((c) => (c.kind === 'edit' ? [c.edit] : []));
     return { operation: 'edit', path: filePath, text: combineEdits(headTexts.get(filePath) ?? first.edit.sourceText, fileEdits) };
   });
-  const count = changes.length;
+  const count = drafts.reduce((n, draft) => n + draft.content.changeCount, 0);
   const pull = `#${String(target.pullNumber)}`;
-  const only = commitChanges.length === 1 ? itemAt(commitChanges, 0) : undefined;
-  const summary = unit.group !== undefined ? `${unit.group} (${String(count)} changes)`
-    : only === undefined ? `${String(count)} changes` : `${only.operation} ${only.path}`;
+  const [only] = drafts;
+  const single = commitChanges.length === 1 ? itemAt(commitChanges, 0) : undefined;
+  const summary = drafts.length > 1 || only === undefined ? `${String(drafts.length)} proposals (${String(count)} changes)`
+    : only.unit.group !== undefined ? `${only.unit.group} (${String(count)} changes)`
+      : single === undefined ? `${String(count)} changes` : `${single.operation} ${single.path}`;
   const full = `Suggestion for ${pull}: ${summary}`;
   const title = full.length <= MAX_TITLE ? full : `Suggestion for ${pull}: ${String(count)} change${count === 1 ? '' : 's'}`;
   return {
@@ -3736,9 +3931,7 @@ function prepareCompanion(
     commitMessage: `${title}\n\nSuggested in a review of ${target.owner}/${target.repo} pull request ${String(target.pullNumber)} at commit ${target.reviewedCommit}`
       + `${target.reappliedOnto === undefined ? '' : `, and re-applied onto commit ${target.reappliedOnto} after the pull request's history was rewritten`}.`,
     changes: commitChanges,
-    changeCount: count,
-    changeLines: changes.map((change) => renderer.changeLine(change)).join('\n'),
-    items: unit.items.map((item) => renderer.suggestionItem(item)).join(SEPARATOR),
+    sections: drafts.map((draft) => draft.content),
   };
 }
 
@@ -3756,16 +3949,19 @@ function combineEdits(sourceText: string, fileEdits: readonly IPreparedEdit[]): 
 }
 
 /**
- * The review body: its sections in order, each suggestion's section rendered
- * with its pull request number (`numbers[i]` for companion i) as the
- * companion-reference component (src/presentation/companion-reference.cts).
+ * The review body: its sections in order, each proposal of a companion
+ * rendered with its pull request number (`numbers[i]` for companion i) as
+ * the companion-reference component (src/presentation/companion-reference.cts),
+ * naming which proposal of a bundle it is.
  */
 function renderReviewBody(suggestions: Pick<IPreparedSuggestions, 'companions' | 'sections'>, numbers: readonly number[], target: ISuggestionContext): string {
   return suggestions.sections
     .map((part) => {
       if (typeof part === 'string') return part;
-      const number = itemAt(numbers, part);
-      return renderCompanionReference(itemAt(suggestions.companions, part), { number, url: pullRequestUrl(target, number) }, target);
+      const number = itemAt(numbers, part.companion);
+      const companion = itemAt(suggestions.companions, part.companion);
+      const pull = { number, url: pullRequestUrl(target, number) };
+      return renderBundledCompanionReference(itemAt(companion.sections, part.section), pull, target, part.section + 1, companion.sections.length);
     })
     .join(SEPARATOR);
 }
@@ -3774,10 +3970,11 @@ function renderReviewBody(suggestions: Pick<IPreparedSuggestions, 'companions' |
  * A suggestion pull request's body, ending with its structured marker line
  * (src/presentation/companion-description.cts), carrying the lifecycle note
  * every suggestion pull request carries, as presented during preparation
- * (IPreparedSuggestions.lifecycleNote).
+ * (IPreparedSuggestions.lifecycleNote): one proposal's description, or a
+ * bundle's.
  */
 function renderSuggestionPullBody(companion: IPreparedCompanion, marker: string, target: ISuggestionContext, lifecycleNote: string): string {
-  return renderCompanionDescription(companion, target, lifecycleNote, marker);
+  return renderCompanionBundleDescription(companion.sections, target, lifecycleNote, marker);
 }
 
 /** The identity of a proposal: equal proposals share one section (R8). */
@@ -3796,18 +3993,6 @@ function fileOperationEvidence(operation: PreparedFileOperation, proposedLines: 
     byteLength: Buffer.byteLength(operation.text, 'utf8'),
     ...(proposedLines ? { proposedLines } : {}),
   };
-}
-
-/** Reads back a key this module wrote with JSON.stringify in assemble. */
-function parseSuggestionKey(key: string): SuggestionKey {
-  const parsed: unknown = JSON.parse(key);
-  if (!Array.isArray(parsed) || parsed.length !== 4) throw new Error('Internal error: a suggestion key is not a four-element array.');
-  const values: readonly unknown[] = parsed;
-  const [path, startLine, endLine, replacementText] = values;
-  if (typeof path !== 'string' || typeof startLine !== 'number' || typeof endLine !== 'number' || typeof replacementText !== 'string') {
-    throw new Error('Internal error: a suggestion key does not hold a path, two lines and a replacement.');
-  }
-  return [path, startLine, endLine, replacementText];
 }
 
 /** Publication comment coordinates; a multi-line anchor names its start on the same side. */
@@ -3880,10 +4065,14 @@ function suggestionBlock(payload: string): string {
   return `\`\`\`suggestion\n${payload}\`\`\``;
 }
 
-/** An inline comment: its findings, then, for a suggestion, its native suggestion block. */
+/**
+ * An inline comment: its findings, then, for a suggestion, its note (a native
+ * batch member's group note) and its native suggestion block.
+ */
 function composeComment(entry: ICommentEntry, renderer: ReviewRenderer): string {
   const body = entry.items.map((item) => renderer.finding(item)).join(SEPARATOR);
-  return entry.suggestion ? `${body}\n\n${suggestionBlock(entry.suggestion.payload)}` : body;
+  const note = entry.note === undefined ? '' : `\n\n${entry.note}`;
+  return entry.suggestion ? `${body}${note}\n\n${suggestionBlock(entry.suggestion.payload)}` : body;
 }
 
 function commentUnit(entry: ICommentEntry, text: string, index: number): IComposedUnit {
@@ -3990,7 +4179,7 @@ class ReviewRenderer {
 
   /** A prepared finding, with its alternatives and attribution. */
   finding(item: IPreparedItem): string {
-    const primaryPath = item.suggestion ? item.suggestion.path : singlePath(item.edits);
+    const primaryPath = singlePath(item.edits);
     const attribution = this.#attribution(item.attribution);
     const alternatives = this.#alternatives(item.alternatives, primaryPath);
     const c: IClassification = item.classification || {};

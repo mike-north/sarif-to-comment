@@ -22,13 +22,14 @@
  *   Shared fields (unknown keys are refused; spec.ownKeys adds more):
  *     sarif, destination { owner, repo, pullNumber }, reviewedCommit, token,
  *     sourceRootUri?, oldSourceCommit?, options? { ignoreApprovalHold?, submit?,
- *     allowSuggestionPullRequests?, pullRequestLabels?,
- *     markSuggestionPullRequestsReady?, presentation? } — pullRequestLabels and
- *     markSuggestionPullRequestsReady only with
- *     allowSuggestionPullRequests: true (docs/companion-suggestion-pr-contract.md
- *     §2.2); enabled, the captured suggestionPullRequests holds the extra
- *     labels (deduplicated case-insensitively, first spelling kept) and
- *     whether to create them ready, otherwise it is undefined
+ *     delivery?, pullRequestLabels?, markSuggestionPullRequestsReady?,
+ *     presentation? } — `delivery` is the caller's delivery settings
+ *     (docs/delivery-policy-contract.md §12), validated by §11.4's rules and
+ *     captured as the caller layer; the companion options
+ *     (docs/companion-suggestion-pr-contract.md §2.2) are valid with any
+ *     policy, captured as given (for the companion-options-unused note) and
+ *     as the extra labels (deduplicated case-insensitively, first spelling
+ *     kept) and whether companions are created ready
  *   The SARIF, destination and options are deep JSON copies of own data
  *   properties only: caller getters never run, and cycles and non-JSON values
  *   are refused rather than dropped or coerced. The one exception is
@@ -40,25 +41,29 @@
  *   "Invalid <spec.operation> input: ".
  *
  * prepareForDestination(captured, client) -> Promise<ready | blocked>
- *   One fetchContext, verifyContext, then prepareReview with the context's
- *   source reader, existence check and tree read. With suggestion pull
- *   requests enabled (docs/companion-suggestion-pr-contract.md §2.8), the
- *   client's readSuggestionTarget is read before preparation (its head branch
- *   is named in the suggestion texts); when preparation finds suggestion
- *   units, the head is not the reviewed commit and the pull request is one
- *   suggestion pull requests support, the client's compareCommits tests
- *   ancestry, lazily (§2.5, §2.8): a reviewed commit that is
- *   not an ancestor of the head makes preparation re-apply each suggestion
- *   onto the head, or handle it as if suggestion pull requests were not
- *   allowed (§2.5.1). A ready review that needs
- *   suggestion pull requests is then checked against the repository — same
- *   repository, a base that is the default branch, push permission, the
- *   repository configuration read through readDefaultBranchFile
- *   (docs/suggestion-pr-convention.md §4), and every label (canonical and
- *   extra) read through findLabel — all reported together as a block.
- *   Ready carries the head branch, the labels as GitHub names them (the
- *   canonical label first), whether to create them ready for review, and the
- *   commit they are re-applied onto, if they are.
+ *   One fetchContext and verifyContext; then, unless the caller's settings
+ *   decide every one (docs/delivery-policy-contract.md §11.1), the
+ *   repository's delivery configuration `.github/sarif-to-comment.json`,
+ *   read once from the default branch through readDefaultBranchFile (an
+ *   invalid file blocks, a failed read is operational); the policy resolved
+ *   from the caller's settings, the configuration and the defaults (§7);
+ *   then prepareReview with the context's source reader, existence check
+ *   and tree read, and the policy. The companion target is read lazily, the
+ *   first time a unit's `companion` availability is asked (§8.7): the
+ *   client's readSuggestionTarget (its head branch is named in the
+ *   suggestion texts), and — when the head is not the reviewed commit and
+ *   the pull request is one suggestion pull requests support — the client's
+ *   compareCommits, whose answer makes preparation re-apply each companion
+ *   onto a rewritten head or report it unavailable
+ *   (docs/companion-suggestion-pr-contract.md §2.5, §2.5.1). A ready review
+ *   that plans companion pull requests is then checked against the
+ *   repository — push permission, the label configuration read through
+ *   readDefaultBranchFile (docs/suggestion-pr-convention.md §4), and every
+ *   label (canonical and extra) read through findLabel — all reported
+ *   together as a block. Ready carries the resolved policy and, with
+ *   companions, the head branch, the labels as GitHub names them (the
+ *   canonical label first), whether to create them ready for review, and
+ *   the commit they are re-applied onto, if they are.
  *   Operational failures (GitHub, network, source reads, existence checks,
  *   repository, configuration and label reads, a context for another pull
  *   request or commit) reject.
@@ -67,6 +72,15 @@
 import * as util from 'node:util';
 
 import type { CommitComparison, IDefaultBranchFile, IFetchContextRequest, IPullRequestDestination, ISuggestionTarget } from './github.cjs';
+import {
+  DELIVERY_CONFIGURATION_PATH,
+  deliveryConfigurationDiagnostics,
+  deliveryConfigurationNeeded,
+  readDeliveryConfiguration,
+  resolveDeliveryPolicy,
+  validateDeliveryPolicyLayer,
+} from './delivery-policy.cjs';
+import type { ICompanionOptions, IDeliveryPolicyLayer, IDeliveryPolicyProblem, IResolvedDeliveryPolicy } from './delivery-policy.cjs';
 import { blockedBy, codeSpan, prepareReview } from './prepare-review.cjs';
 import { capturePresentation } from './presentation/customization.cjs';
 import type { CapturedPresentation } from './presentation/customization.cjs';
@@ -110,11 +124,12 @@ export interface ICapturedReview {
    */
   readonly submit: boolean | undefined;
   /**
-   * The suggestion pull request settings when the caller allowed them
-   * (docs/companion-suggestion-pr-contract.md §2.2); undefined when they are
-   * disabled, as they are unless allowed.
+   * The caller's delivery settings, validated (docs/delivery-policy-contract.md
+   * §12): the caller layer of the policy; undefined when none was given.
    */
-  readonly suggestionPullRequests: ICapturedSuggestionSettings | undefined;
+  readonly delivery: IDeliveryPolicyLayer | undefined;
+  /** The caller's companion pull request options (docs/companion-suggestion-pr-contract.md §2.2). */
+  readonly companionOptions: ICapturedCompanionOptions;
   /**
    * The caller's presentation callbacks, when supplied: they change how
    * review elements read, never readiness or publication identity, so they
@@ -123,12 +138,14 @@ export interface ICapturedReview {
   readonly presentation: CapturedPresentation | undefined;
 }
 
-/** The caller's suggestion pull request settings, once allowed. */
-export interface ICapturedSuggestionSettings {
+/** The caller's companion pull request options, valid with any delivery policy. */
+export interface ICapturedCompanionOptions {
   /** Extra labels in the order given, deduplicated case-insensitively (first spelling kept). */
   readonly pullRequestLabels: readonly string[];
-  /** Whether suggestion pull requests are created ready for review instead of as drafts. */
+  /** Whether companion pull requests are created ready for review instead of as drafts. */
   readonly markReady: boolean;
+  /** The options as given, for the companion-options-unused note (docs/delivery-policy-contract.md §12). */
+  readonly given: ICompanionOptions;
 }
 
 /**
@@ -159,15 +176,19 @@ export interface IContextClient {
   readonly fetchContext: (
     request: IFetchContextRequest,
   ) => Promise<{ readonly context: unknown; readonly readSource: unknown; readonly fileExists?: unknown; readonly readEntry?: unknown }>;
-  /** Read only with suggestion pull requests enabled; a client without it cannot publish them. */
+  /** Read only when a unit's `companion` availability is asked; a client without it cannot publish them. */
   readonly readSuggestionTarget?: ((request: IPullRequestDestination) => Promise<ISuggestionTarget>) | undefined;
-  /** Read only with suggestion pull requests enabled, when the head is not the reviewed commit: their ancestry. */
+  /** Read only when a companion is asked for and the head is not the reviewed commit: their ancestry. */
   readonly compareCommits?:
     | ((request: { readonly owner: string; readonly repo: string; readonly base: string; readonly head: string }) => Promise<CommitComparison>)
     | undefined;
   /** Read only when a ready review needs suggestion pull requests. */
   readonly findLabel?: ((request: { readonly owner: string; readonly repo: string; readonly name: string }) => Promise<string | null>) | undefined;
-  /** Read only when a ready review needs suggestion pull requests: the repository configuration. */
+  /**
+   * The repository's configuration files on the default branch: the delivery
+   * configuration (unless the caller decides every setting), and the label
+   * configuration when a ready review plans suggestion pull requests.
+   */
   readonly readDefaultBranchFile?:
     | ((request: { readonly owner: string; readonly repo: string; readonly path: string; readonly branch?: string }) => Promise<IDefaultBranchFile>)
     | undefined;
@@ -190,11 +211,13 @@ export interface IReadySuggestionPullRequests {
 }
 
 /**
- * A ready preparation, and — when it needs suggestion pull requests — the
- * head branch they target, their labels as GitHub names them, and whether
- * they are created ready for review.
+ * A ready preparation, the delivery policy it followed, and — when it plans
+ * suggestion pull requests — the head branch they target, their labels as
+ * GitHub names them, and whether they are created ready for review.
  */
 export interface IDestinationReady extends IReadyOutcome {
+  /** The resolved delivery policy, with each value's source, to record with the publication (§13). */
+  readonly delivery: IResolvedDeliveryPolicy;
   readonly suggestionPullRequests?: IReadySuggestionPullRequests;
 }
 
@@ -206,13 +229,14 @@ const SHARED_KEYS: readonly string[] = ['sarif', 'destination', 'reviewedCommit'
 
 /**
  * Every accepted option: the approval-hold override, the explicit submitted
- * mode, suggestion pull requests, and the presentation callbacks (captured
- * separately, since they are functions rather than JSON).
+ * mode, the delivery policy, the companion pull request options, and the
+ * presentation callbacks (captured separately, since they are functions
+ * rather than JSON).
  */
 const OPTION_KEYS: ReadonlySet<string> = new Set([
   'ignoreApprovalHold',
   'submit',
-  'allowSuggestionPullRequests',
+  'delivery',
   'pullRequestLabels',
   'markSuggestionPullRequestsReady',
   'presentation',
@@ -431,7 +455,8 @@ export function captureReviewInput<Own extends object>(input: unknown, spec: IRe
   const optionsValue = field('options');
   let ignoreApprovalHold: boolean | undefined;
   let submit: boolean | undefined;
-  let suggestionPullRequests: ICapturedSuggestionSettings | undefined;
+  let delivery: IDeliveryPolicyLayer | undefined;
+  let companionOptions: ICapturedCompanionOptions = { pullRequestLabels: [], markReady: false, given: {} };
   let presentation: CapturedPresentation | undefined;
   if (optionsValue !== undefined) {
     if (!isPlainObject(optionsValue)) throw invalid('options must be a plain object');
@@ -445,13 +470,14 @@ export function captureReviewInput<Own extends object>(input: unknown, spec: IRe
     const submitValue = options['submit'];
     if (submitValue !== undefined && typeof submitValue !== 'boolean') throw invalid('options.submit must be a boolean');
     submit = submitValue;
-    suggestionPullRequests = captureSuggestionSettings(options, invalid);
+    delivery = captureDelivery(options, invalid);
+    companionOptions = captureCompanionOptions(options, invalid);
     const presentationValue = refusals.dataValue(optionsValue, PRESENTATION_OPTION, `options.${PRESENTATION_OPTION}`);
     if (presentationValue !== undefined) presentation = capturePresentation(presentationValue, invalid);
   }
 
   const shared: ICapturedReview = {
-    sarif, destination, reviewedCommit, oldSourceCommit, token, sourceRootUri, ignoreApprovalHold, submit, suggestionPullRequests, presentation,
+    sarif, destination, reviewedCommit, oldSourceCommit, token, sourceRootUri, ignoreApprovalHold, submit, delivery, companionOptions, presentation,
   };
   return { ...own, ...shared };
 }
@@ -471,17 +497,44 @@ function withoutOwnProperty(value: IPlainObject, key: string): IPlainObject {
 }
 
 /**
- * The suggestion pull request options (docs/companion-suggestion-pr-contract.md
- * §2.2): the opt-in, then the extra labels and the ready setting, which
- * require it. Undefined unless allowed.
+ * The caller's delivery settings (docs/delivery-policy-contract.md §12),
+ * validated by §11.4's rules before anything is read; undefined when none
+ * was given. The first problem is a TypeError naming the member, for
+ * example `options.delivery.edits[1] repeats \`native\``.
  */
-function captureSuggestionSettings(options: IJsonObject, invalid: (message: string) => TypeError): ICapturedSuggestionSettings | undefined {
-  const allow = options['allowSuggestionPullRequests'];
-  if (allow !== undefined && typeof allow !== 'boolean') throw invalid('options.allowSuggestionPullRequests must be a boolean');
-  const extras = options['pullRequestLabels'];
-  if (extras !== undefined && allow !== true) {
-    throw invalid('options.pullRequestLabels applies only with options.allowSuggestionPullRequests: true');
+function captureDelivery(options: IJsonObject, invalid: (message: string) => TypeError): IDeliveryPolicyLayer | undefined {
+  const value = options['delivery'];
+  if (value === undefined) return undefined;
+  const validation = validateDeliveryPolicyLayer(value);
+  if (validation.status === 'invalid') {
+    const [problem] = validation.problems;
+    if (problem === undefined) throw new Error('Internal error: an invalid delivery setting names no problem.');
+    throw invalid(`options.delivery${memberPath(problem)} ${problem.detail}`);
   }
+  return validation.layer;
+}
+
+/**
+ * A caller-layer problem's member as the option names it: its JSON Pointer
+ * from the `delivery` object written as properties and indexes
+ * (`/edits/1` is `.edits[1]`). Member names are those of a caller's own
+ * object, so they are shown as given.
+ */
+function memberPath(problem: IDeliveryPolicyProblem): string {
+  return problem.pointer
+    .split('/')
+    .slice(1)
+    .map((segment) => (/^[0-9]+$/.test(segment) ? `[${segment}]` : `.${segment.replace(/~1/g, '/').replace(/~0/g, '~')}`))
+    .join('');
+}
+
+/**
+ * The companion pull request options (docs/companion-suggestion-pr-contract.md
+ * §2.2): the extra labels and the ready setting, valid with any delivery
+ * policy (docs/delivery-policy-contract.md §12).
+ */
+function captureCompanionOptions(options: IJsonObject, invalid: (message: string) => TypeError): ICapturedCompanionOptions {
+  const extras = options['pullRequestLabels'];
   const labels: string[] = [];
   if (extras !== undefined) {
     if (!Array.isArray(extras)) throw invalid('options.pullRequestLabels must be an array of label names');
@@ -491,11 +544,12 @@ function captureSuggestionSettings(options: IJsonObject, invalid: (message: stri
     }
   }
   const ready = options['markSuggestionPullRequestsReady'];
-  if (ready !== undefined && allow !== true) {
-    throw invalid('options.markSuggestionPullRequestsReady applies only with options.allowSuggestionPullRequests: true');
-  }
   if (ready !== undefined && typeof ready !== 'boolean') throw invalid('options.markSuggestionPullRequestsReady must be a boolean');
-  return allow === true ? { pullRequestLabels: uniqueLabels(labels), markReady: ready ?? false } : undefined;
+  return {
+    pullRequestLabels: uniqueLabels(labels),
+    markReady: ready ?? false,
+    given: { ...(extras === undefined ? {} : { pullRequestLabels: labels }), ...(ready === undefined ? {} : { markSuggestionPullRequestsReady: ready }) },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -540,12 +594,14 @@ function verifyContext(context: unknown, captured: ICapturedReview): asserts con
 
 /**
  * Fetches the review context once, verifies it is for exactly this pull
- * request and reviewed commit, and prepares the whole review against it.
- * With suggestion pull requests enabled, the pull request's branches and the
- * repository are read first (the head branch is named in their text), and a
- * ready review that needs any is checked against the repository
- * (docs/companion-suggestion-pr-contract.md §2.8). Returns `ready` or
- * `blocked`; rejects for an operational failure or an unexpected
+ * request and reviewed commit, resolves the delivery policy (reading the
+ * repository's delivery configuration unless the caller decides every
+ * setting, docs/delivery-policy-contract.md §11.1), and prepares the whole
+ * review against it. The pull request's branches and the repository are read
+ * for companion pull requests only when a unit's `companion` availability is
+ * first asked, and a ready review that plans any is checked against the
+ * repository (docs/companion-suggestion-pr-contract.md §2.8). Returns
+ * `ready` or `blocked`; rejects for an operational failure or an unexpected
  * preparation, never writing anything.
  */
 export async function prepareForDestination(captured: ICapturedReview, client: IContextClient): Promise<DestinationOutcome> {
@@ -557,27 +613,28 @@ export async function prepareForDestination(captured: ICapturedReview, client: I
   const { context, readSource, fileExists, readEntry } = await client.fetchContext(contextRequest);
   verifyContext(context, captured);
 
-  const settings = captured.suggestionPullRequests;
+  const configuration = await readConfigurationLayer(captured, client);
+  if (configuration.status === 'invalid') return blockedBy(configuration.diagnostics, []);
+  const policy = resolveDeliveryPolicy({ caller: captured.delivery, configuration: configuration.layer });
+
+  // The companion target is read at most once, and only when preparation
+  // first asks whether a companion can deliver a unit (§8.7).
   let target: ISuggestionTarget | undefined;
-  if (settings !== undefined) {
-    if (client.readSuggestionTarget === undefined) throw new Error('This GitHub client cannot publish suggestion pull requests.');
-    target = await client.readSuggestionTarget(captured.destination);
-  }
-  // Ancestry is read lazily, only when preparation finds suggestion units
-  // (contract §2.8), and at most once.
   let ancestry: Promise<string | undefined> | undefined;
-  const readTarget = target;
-  const resolveRewrittenHead = (): Promise<string | undefined> => {
-    ancestry ??= readTarget === undefined ? Promise.resolve(undefined) : rewrittenHeadOf(readTarget, captured, client);
-    return ancestry;
+  const companionTarget = async (): Promise<{ readonly headRef: string; readonly ready: boolean; readonly unavailable: readonly string[]; readonly resolveRewrittenHead: () => Promise<string | undefined> }> => {
+    if (client.readSuggestionTarget === undefined) throw new Error('This GitHub client cannot publish suggestion pull requests.');
+    const read = target ?? await client.readSuggestionTarget(captured.destination);
+    target = read;
+    const resolveRewrittenHead = (): Promise<string | undefined> => {
+      ancestry ??= rewrittenHeadOf(read, captured, client);
+      return ancestry;
+    };
+    return { headRef: read.headRef, ready: captured.companionOptions.markReady, unavailable: unsupportedObstacles(read, captured), resolveRewrittenHead };
   };
-  const unavailable = target === undefined ? [] : unsupportedReasons(target, captured);
   const options = {
     ...(captured.ignoreApprovalHold === undefined ? {} : { ignoreApprovalHold: captured.ignoreApprovalHold }),
     ...(captured.presentation === undefined ? {} : { presentation: captured.presentation }),
-    ...(target === undefined || settings === undefined ? {} : {
-      suggestionPullRequests: { headRef: target.headRef, ready: settings.markReady, resolveRewrittenHead, ...(unavailable.length === 0 ? {} : { unavailable }) },
-    }),
+    delivery: { policy, companionOptions: captured.companionOptions.given, companionTarget },
   };
   const prepareInput = {
     sarif: captured.sarif,
@@ -585,7 +642,7 @@ export async function prepareForDestination(captured: ICapturedReview, client: I
     readSource,
     ...(fileExists === undefined ? {} : { fileExists }),
     ...(readEntry === undefined ? {} : { readEntry }),
-    ...(Object.keys(options).length === 0 ? {} : { options }),
+    options,
   };
   const prepared = await prepareReview(prepareInput);
   if (prepared.status === 'blocked') return prepared;
@@ -593,18 +650,43 @@ export async function prepareForDestination(captured: ICapturedReview, client: I
   if (prepared.status !== 'ready' || prepared.review.commitId !== captured.reviewedCommit) {
     throw new Error('Review preparation returned an unexpected outcome; nothing was published.');
   }
-  if (prepared.suggestions === undefined || target === undefined || settings === undefined) return prepared;
+  if (prepared.suggestions === undefined) return { ...prepared, delivery: policy };
+  if (target === undefined) throw new Error('Internal error: suggestion pull requests were prepared without reading their target.');
   const rewrittenHead = ancestry === undefined ? undefined : await ancestry;
-  return checkSuggestionTarget(prepared, target, settings, captured, client, rewrittenHead);
+  return checkSuggestionTarget({ ...prepared, delivery: policy }, target, captured, client, rewrittenHead);
+}
+
+/** The configuration layer: absent or valid (with its layer), or invalid with its diagnostics. */
+type ConfigurationLayer =
+  | { readonly status: 'valid'; readonly layer: IDeliveryPolicyLayer | undefined }
+  | { readonly status: 'invalid'; readonly diagnostics: readonly IDiagnostic[] };
+
+/**
+ * The repository's delivery configuration (docs/delivery-policy-contract.md
+ * §11): not read when the caller decides every setting; otherwise read once
+ * from the default branch through Git objects. An invalid file is every
+ * problem, one diagnostic each; a failed read rejects (operational).
+ */
+async function readConfigurationLayer(captured: ICapturedReview, client: IContextClient): Promise<ConfigurationLayer> {
+  if (!deliveryConfigurationNeeded(captured.delivery)) return { status: 'valid', layer: undefined };
+  if (client.readDefaultBranchFile === undefined) throw new Error('This GitHub client cannot read the repository\'s delivery configuration.');
+  const { owner, repo } = captured.destination;
+  const file = await client.readDefaultBranchFile({ owner, repo, path: DELIVERY_CONFIGURATION_PATH });
+  const read = readDeliveryConfiguration(file);
+  switch (read.status) {
+    case 'absent': return { status: 'valid', layer: undefined };
+    case 'valid': return { status: 'valid', layer: read.layer };
+    case 'invalid': return { status: 'invalid', diagnostics: deliveryConfigurationDiagnostics(read) };
+  }
 }
 
 /**
  * The pull request's head when the reviewed commit is not its ancestor, so
- * that suggestions must be re-applied onto it or handled as if suggestion
- * pull requests were not allowed (contract §2.5, §2.5.1); undefined when the head is the reviewed commit or has only moved
- * forward from it. Read only for a pull request suggestion pull requests
- * support (same repository, default-branch base): the others are refused
- * anyway if they need one. A failed read is operational.
+ * that companions must be re-applied onto it or reported unavailable
+ * (contract §2.5, §2.5.1); undefined when the head is the reviewed commit or
+ * has only moved forward from it. Read only for a pull request suggestion
+ * pull requests support (same repository, default-branch base): the others
+ * have an obstacle already. A failed read is operational.
  */
 async function rewrittenHeadOf(target: ISuggestionTarget, captured: ICapturedReview, client: IContextClient): Promise<string | undefined> {
   const supported = target.headRepository !== null && target.headRepository.toLowerCase() === target.baseRepository.toLowerCase()
@@ -618,26 +700,26 @@ async function rewrittenHeadOf(target: ISuggestionTarget, captured: ICapturedRev
 
 /**
  * Why no suggestion pull request can be made for this pull request, in a
- * fixed order (contract §2.5; issue #37): its head is in a fork, or its head
- * repository was deleted; its base is not the default branch. Each is a
- * clause for the fallback and refusal sentences. Empty when suggestion pull
- * requests are supported.
+ * fixed order (contract §2.5, §2.5.1): its head is in a fork, or its head
+ * repository was deleted; its base is not the default branch. Each is an
+ * obstacle sentence of `companion`. Empty when suggestion pull requests are
+ * supported.
  */
-function unsupportedReasons(target: ISuggestionTarget, captured: ICapturedReview): string[] {
-  const reasons: string[] = [];
+function unsupportedObstacles(target: ISuggestionTarget, captured: ICapturedReview): string[] {
+  const obstacles: string[] = [];
   // GitHub's own name for the pull request's repository decides sameness, whatever the caller's letter case.
   if (target.headRepository === null) {
-    reasons.push("the pull request's head repository was deleted, so there is no branch to propose it into");
+    obstacles.push("The pull request's head repository was deleted, so there is no branch to propose it into.");
   } else if (target.headRepository.toLowerCase() !== target.baseRepository.toLowerCase()) {
-    reasons.push(`the pull request's head branch ${codeSpan(target.headRef)} is in the fork ${target.headRepository}, `
-      + 'and suggestion pull requests are not yet supported for a pull request from a fork');
+    obstacles.push(`The pull request's head branch ${codeSpan(target.headRef)} is in the fork ${target.headRepository}, `
+      + 'and suggestion pull requests are not yet supported for a pull request from a fork.');
   }
   if (target.baseRef !== target.defaultBranch) {
     const { owner, repo } = captured.destination;
-    reasons.push(`the pull request merges into ${codeSpan(target.baseRef)}, which is not the default branch ${codeSpan(target.defaultBranch)} of ${owner}/${repo}, `
-      + 'and suggestion pull requests are not yet supported for such a pull request');
+    obstacles.push(`The pull request merges into ${codeSpan(target.baseRef)}, which is not the default branch ${codeSpan(target.defaultBranch)} of ${owner}/${repo}, `
+      + 'and suggestion pull requests are not yet supported for such a pull request.');
   }
-  return reasons;
+  return obstacles;
 }
 
 /** A label a suggestion pull request must carry, and where it came from (for the missing-label problem). */
@@ -650,20 +732,20 @@ interface IWantedLabel {
  * The repository facts suggestion pull requests need, all reported together
  * in a fixed order (contract §2.5, §2.7): push permission, a valid
  * repository configuration, and every label. A fork or a base other than
- * the default branch never reaches here: preparation already handled every
- * change as if suggestion pull requests were not allowed (issue #37). A head
- * that moved is never among them (§2.5). Ready with the head branch, the
+ * the default branch never reaches here: they are obstacles of `companion`,
+ * so preparation planned no companion for them. A head that moved is never
+ * among them (§2.5). Ready with the head branch, the
  * labels' own names, the ready setting and the commit they are re-applied
  * onto (if any), or blocked.
  */
 async function checkSuggestionTarget(
-  prepared: IReadyOutcome,
+  prepared: IDestinationReady,
   target: ISuggestionTarget,
-  settings: ICapturedSuggestionSettings,
   captured: ICapturedReview,
   client: IContextClient,
   rewrittenHead: string | undefined,
 ): Promise<DestinationOutcome> {
+  const settings = captured.companionOptions;
   const { owner, repo } = captured.destination;
   const repository = `${owner}/${repo}`;
   if (client.findLabel === undefined || client.readDefaultBranchFile === undefined) {
@@ -698,7 +780,9 @@ async function checkSuggestionTarget(
     if (name === null) problem('suggestion-label-missing', missingLabelMessage(label, repository, configuration.branch));
     else found.push(name);
   }
-  if (problems.length > 0) return blockedBy(problems, prepared.warnings);
+  // A blocked review delivers nothing, so it carries no warning or note about
+  // how a proposal would have been delivered (docs/delivery-policy-contract.md §10.1).
+  if (problems.length > 0) return blockedBy(problems, prepared.warnings.filter((w) => w.code !== 'delivery-fallback' && w.code !== 'companion-options-unused'));
   return {
     ...prepared,
     suggestionPullRequests: {
@@ -753,26 +837,12 @@ export function blockedReviewReport(prepared: { readonly diagnostics: readonly u
 export type WarningsHeadlineTense = 'published' | 'ready';
 
 /**
- * How a headline states the warnings of a code whose nature it names
- * specifically: a sentence for `count` of them. Any other code is stated by
- * its catalog title.
- */
-const HEADLINE_SENTENCES: Readonly<Record<string, (count: number, tense: WarningsHeadlineTense) => string>> = {
-  'suggestion-pr-fallback': (count, tense) => {
-    const [pulls, were, change, is] = count === 1
-      ? ['suggestion pull request', tense === 'published' ? 'was' : 'would', 'its change', tense === 'published' ? 'is' : 'would be']
-      : ['suggestion pull requests', tense === 'published' ? 'were' : 'would', 'their changes', tense === 'published' ? 'are' : 'would be'];
-    const created = tense === 'published' ? `${were} not created` : `${were} not be created`;
-    return `${String(count)} ${pulls} ${created}; ${change} ${is} shown in the review.`;
-  },
-};
-
-/**
  * The line a successful outcome states its warnings in, directly under its
- * heading (issue #37): their count, then the nature of each code in the
- * order first found, for example `**Published with 1 warning:** 1 suggestion
- * pull request was not created; its change is shown in the review.` Absent
- * when there is no warning; errors and notes are never counted.
+ * heading (issue #37): their count, then each code's title in the order
+ * first found, with how often when more than once, for example `**Published
+ * with 1 warning:** A proposal is delivered by a later mechanism of its
+ * delivery list.` Absent when there is no warning; errors and notes are
+ * never counted.
  */
 export function warningsHeadline(diagnostics: readonly IDiagnostic[], tense: WarningsHeadlineTense): string | undefined {
   const warnings = diagnostics.filter((d) => d.severity === 'warning');
@@ -783,11 +853,7 @@ export function warningsHeadline(diagnostics: readonly IDiagnostic[], tense: War
     if (seen === undefined) byCode.set(w.code, { count: 1, title: w.title });
     else seen.count += 1;
   }
-  const sentences = [...byCode].map(([code, { count, title }]) => {
-    const sentence = Object.hasOwn(HEADLINE_SENTENCES, code) ? HEADLINE_SENTENCES[code] : undefined;
-    if (sentence !== undefined) return sentence(count, tense);
-    return count === 1 ? `${title}.` : `${title} (${String(count)} times).`;
-  });
+  const sentences = [...byCode.values()].map(({ count, title }) => (count === 1 ? `${title}.` : `${title} (${String(count)} times).`));
   const lead = tense === 'published' ? 'Published' : 'Ready to publish';
   return `**${lead} with ${String(warnings.length)} warning${warnings.length === 1 ? '' : 's'}:** ${sentences.join(' ')}`;
 }

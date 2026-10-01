@@ -37,10 +37,15 @@
  *                                              // submitted, event COMMENT;
  *                                              // part of the publication
  *                                              // identity (never inferred)
- *               allowSuggestionPullRequests?: boolean,     // suggestion pull
- *               pullRequestLabels?: string[],              // requests (docs/
- *               markSuggestionPullRequestsReady?: boolean, // companion-
- *                                              // suggestion-pr-contract.md §2.2)
+ *               delivery?: { preset?, edits?, groupedEdits?,
+ *                 fileOperations?, companionBundle? },  // which mechanism
+ *                                              // delivers each proposal
+ *                                              // (docs/delivery-policy-
+ *                                              // contract.md §12)
+ *               pullRequestLabels?: string[],              // companion pull
+ *               markSuggestionPullRequestsReady?: boolean, // requests (docs/
+ *                                              // companion-suggestion-pr-
+ *                                              // contract.md §2.2)
  *               presentation?: { finding?, attribution?, alternatives?,
  *                 fileAddition?, fileDeletion?, lifecycleNote? } }
  *                                              // Markdown callbacks of named
@@ -84,10 +89,14 @@
  *      Excludes the token, statePath, destination and reviewedCommit (the
  *      latter two are checked separately by publication state) and the
  *      approval-hold override (it authorizes, but does not change, content).
- *      With suggestion pull requests enabled, the document also holds
+ *      When the caller gives delivery settings, the document also holds
+ *      delivery: the caller layer exactly as validated
+ *      (docs/delivery-policy-contract.md §13); when either companion option
+ *      is given with an effect (an extra label, or ready: true), it holds
  *      suggestionPullRequests: { markReady, pullRequestLabels } (the extra
- *      labels deduplicated, in the order given); disabled, it is exactly as
- *      above.
+ *      labels deduplicated, in the order given). Otherwise it is exactly as
+ *      above. The repository's delivery configuration is never in it: the
+ *      resolved policy is recorded with the publication instead.
  *   3. When the state path holds a companion publication plan
  *      (src/companion-publication.cts), continue it: identity checks, then
  *      only the steps it still lacks. Otherwise recoverPublication with only
@@ -96,10 +105,13 @@
  *      intent is investigated with its saved request and is never
  *      re-prepared or re-sent.
  *   4. Only when no state exists: fetch the review context, verify it is for
- *      exactly this pull request and reviewed commit, prepare the whole
- *      review, and return `blocked` (no remote write, no state file), call
- *      publishPreparedReview exactly once, or — when the review needs
- *      suggestion pull requests — start the companion publication.
+ *      exactly this pull request and reviewed commit, resolve the delivery
+ *      policy (reading the repository's configuration unless the caller
+ *      decides every setting), prepare the whole review, and return
+ *      `blocked` (no remote write, no state file), call publishPreparedReview
+ *      exactly once, or — when the plan has companion pull requests — start
+ *      the companion publication. Either records the resolved policy before
+ *      its first write.
  *
  * internals (private seam, not caller API):
  *   createGitHubClient({ token, fetch }) -> client with the publication
@@ -133,6 +145,7 @@ import {
 } from './review-preflight.cjs';
 import type { ICapturedReview, IContextClient, IReported, IReviewInputSpec } from './review-preflight.cjs';
 import type { IJsonObject, JsonValue } from './sarif-common.cjs';
+import type { IDeliveryPolicyLayer } from './delivery-policy.cjs';
 import { createDiagnostic, mapDiagnosticText, orderDiagnostics } from './diagnostics.cjs';
 import type { IDiagnostic } from './diagnostics.cjs';
 
@@ -180,35 +193,38 @@ export interface IPublishSarifReviewOptions {
    */
   readonly submit?: boolean | undefined;
   /**
-   * Allow suggestion pull requests: whole-file creations and deletions, a
-   * fix with several changes, and explicitly grouped changes
-   * (`properties.sarifToComment.suggestionGroup`, written by
-   * {@link groupSarifFixes}) are proposed as pull requests into the pull
-   * request's head branch, which the review links. They follow the
-   * tool-neutral suggestion pull request convention and carry the
-   * repository's canonical label: the `label` of `.github/suggestion-prs.json`
-   * on the default branch, otherwise `suggestion-pr`. Omitted or `false`:
-   * disabled; creations and deletions are shown in the review body, and a
-   * grouped document or a fix with several changes is refused, naming this
-   * option. Small edits stay native suggestions either way. Part of the
-   * publication identity.
+   * Which mechanism delivers each proposed change: a native suggestion, the
+   * review body, or a companion (suggestion) pull request into the pull
+   * request's head branch. Each setting is an ordered list; the first listed
+   * mechanism that can deliver a proposal does, and a later one is used only
+   * as an announced fallback (a `delivery-fallback` warning). When none can,
+   * nothing is published (`blocked`, with a `delivery-unavailable` error).
+   * Settings you give win over the repository's `.github/sarif-to-comment.json`
+   * on its default branch, which wins over the defaults (edits
+   * `['native']`, grouped edits `['native-batch']`, file operations
+   * `['manual']`, bundle `'per-unit'`), which never create a companion pull
+   * request. Part of the publication identity. See {@link IDeliveryOptions}.
    */
-  readonly allowSuggestionPullRequests?: boolean | undefined;
+  readonly delivery?: IDeliveryOptions;
   /**
-   * Extra labels every suggestion pull request carries in addition to the
-   * canonical label, for example a team or campaign tag. Deduplicated
-   * case-insensitively, so listing the canonical label is harmless. Each
-   * must already exist (a missing one blocks the review; labels are never
-   * created) and be 1-50 characters without commas, control or invisible
-   * formatting characters or surrounding whitespace. Allowed only with
-   * `allowSuggestionPullRequests: true`. Part of the publication identity.
+   * Extra labels every companion pull request carries in addition to the
+   * canonical label (the `label` of `.github/suggestion-prs.json` on the
+   * default branch, otherwise `suggestion-pr`), for example a team or
+   * campaign tag. Deduplicated case-insensitively, so listing the canonical
+   * label is harmless. Each must already exist (a missing one blocks the
+   * review; labels are never created) and be 1-50 characters without
+   * commas, control or invisible formatting characters or surrounding
+   * whitespace. With no companion planned, it has no effect and a
+   * `companion-options-unused` note says so. Part of the publication
+   * identity.
    */
   readonly pullRequestLabels?: readonly string[] | undefined;
   /**
-   * Create suggestion pull requests ready for review instead of as drafts
+   * Create companion pull requests ready for review instead of as drafts
    * (the default). A draft cannot be merged until someone with write access
-   * marks it ready. Allowed only with `allowSuggestionPullRequests: true`.
-   * Part of the publication identity.
+   * marks it ready. With no companion planned, it has no effect and a
+   * `companion-options-unused` note says so. Part of the publication
+   * identity.
    */
   readonly markSuggestionPullRequestsReady?: boolean | undefined;
   /**
@@ -223,6 +239,76 @@ export interface IPublishSarifReviewOptions {
    * line.
    */
   readonly presentation?: IReviewPresentation | undefined;
+}
+
+/**
+ * A mechanism that can deliver an ungrouped edit: a `'native'` suggestion, its
+ * replacement in the `'review-body'` (not yet supported by this version), or
+ * a `'companion'` pull request holding it.
+ *
+ * @public
+ */
+export type EditDeliveryMechanism = 'native' | 'review-body' | 'companion';
+
+/**
+ * A mechanism that can deliver a group of edits (an explicit
+ * `suggestionGroup`, or a SARIF fix with several changes), always whole: every
+ * member as a native suggestion to add to one batch (`'native-batch'`), one
+ * `'companion'` pull request, or one review-body section to apply by hand
+ * (`'manual-group'`, not yet supported by this version).
+ *
+ * @public
+ */
+export type GroupedEditDeliveryMechanism = 'native-batch' | 'companion' | 'manual-group';
+
+/**
+ * A mechanism that can deliver a whole-file creation or deletion, and any
+ * group containing one, whole: its section of the review body, applied by
+ * hand (`'manual'`; for a group, not yet supported by this version), or a
+ * `'companion'` pull request.
+ *
+ * @public
+ */
+export type FileOperationDeliveryMechanism = 'manual' | 'companion';
+
+/**
+ * A named set of delivery lists: `'original-pr'` keeps every proposal on the
+ * pull request (edits `['native', 'review-body']`, grouped edits
+ * `['native-batch', 'manual-group']`, file operations `['manual']`);
+ * `'companion'` sends every proposal to companion pull requests, strictly.
+ *
+ * @public
+ */
+export type DeliveryPreset = 'original-pr' | 'companion';
+
+/**
+ * How companion-delivered proposals are packaged: one companion pull request
+ * per proposal (`'per-unit'`), or one holding them all, one section each
+ * (`'single'`). One review creates at most 10 companion pull requests.
+ *
+ * @public
+ */
+export type CompanionBundle = 'per-unit' | 'single';
+
+/**
+ * The caller's delivery settings, the same members as the `delivery` object
+ * of `.github/sarif-to-comment.json`. Every member is optional; a specific
+ * list wins over the preset. A list names at least one mechanism, each at
+ * most once, in the order to try them; anything else is a `TypeError`.
+ *
+ * @public
+ */
+export interface IDeliveryOptions {
+  /** A preset, for every dimension it sets that you do not set yourself. */
+  readonly preset?: DeliveryPreset;
+  /** How an edit that belongs to no group is delivered. */
+  readonly edits?: readonly EditDeliveryMechanism[];
+  /** How a group of edits is delivered. */
+  readonly groupedEdits?: readonly GroupedEditDeliveryMechanism[];
+  /** How a whole-file creation or deletion, and any group containing one, is delivered. */
+  readonly fileOperations?: readonly FileOperationDeliveryMechanism[];
+  /** How companion-delivered proposals are packaged. */
+  readonly companionBundle?: CompanionBundle;
 }
 
 /**
@@ -329,11 +415,11 @@ export interface IPublishedOutcome {
   /** Human-readable explanation, including the review link. */
   readonly markdown: string;
   /**
-   * Warnings and notes about this publication: preparation's warnings (for
-   * example a finding published in the review body, or a whole-file
-   * proposal presented in the body because no suggestion pull request could
-   * be made for it), a completion that could not be recorded, and a branch
-   * that moved while suggestions were created. Preparation's warnings are
+   * Warnings and notes about this publication: preparation's warnings and
+   * notes (for example a finding published in the review body, a proposal
+   * delivered by a later mechanism of its delivery list, or companion
+   * options that had no effect), a completion that could not be recorded,
+   * and a branch that moved while suggestions were created. Preparation's warnings are
    * recorded with the publication, so every call with the same `statePath`
    * reports the same ones. The `markdown` states every warning in a headline
    * under its heading.
@@ -493,27 +579,39 @@ function jsonMember(object: IJsonObject, key: string): JsonValue {
 
 /**
  * Fingerprint of everything that determines the prepared content (see module
- * doc). Enabled suggestion pull requests, their extra labels and their ready
- * setting change what is published, so they are part of it; disabled, the
+ * doc). The caller's delivery settings, and companion options given with an
+ * effect, change what is published, so they are part of it; without them the
  * identity document is exactly what it always was.
  */
 function inputFingerprintOf(captured: ICapturedInput): string {
+  const { companionOptions, delivery } = captured;
+  const companions = companionOptions.markReady || companionOptions.pullRequestLabels.length > 0;
   const identity: IJsonObject = {
     format: INPUT_FORMAT,
     version: INPUT_VERSION,
     sarif: captured.sarif,
     sourceRootUri: captured.sourceRootUri ?? null,
     oldSourceCommit: captured.oldSourceCommit ?? null,
-    ...(captured.suggestionPullRequests === undefined
-      ? {}
-      : {
-          suggestionPullRequests: {
-            markReady: captured.suggestionPullRequests.markReady,
-            pullRequestLabels: [...captured.suggestionPullRequests.pullRequestLabels],
-          },
-        }),
+    ...(delivery === undefined ? {} : { delivery: deliveryIdentity(delivery) }),
+    ...(companions
+      ? { suggestionPullRequests: { markReady: companionOptions.markReady, pullRequestLabels: [...companionOptions.pullRequestLabels] } }
+      : {}),
   };
   return `sha256:${crypto.createHash('sha256').update(canonicalJson(identity), 'utf8').digest('hex')}`;
+}
+
+/**
+ * The caller layer as the identity document holds it: each setting given,
+ * lists in the given order (docs/delivery-policy-contract.md §13).
+ */
+function deliveryIdentity(layer: IDeliveryPolicyLayer): IJsonObject {
+  return {
+    ...(layer.preset === undefined ? {} : { preset: layer.preset }),
+    ...(layer.edits === undefined ? {} : { edits: [...layer.edits] }),
+    ...(layer.groupedEdits === undefined ? {} : { groupedEdits: [...layer.groupedEdits] }),
+    ...(layer.fileOperations === undefined ? {} : { fileOperations: [...layer.fileOperations] }),
+    ...(layer.companionBundle === undefined ? {} : { companionBundle: layer.companionBundle }),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -905,6 +1003,7 @@ async function run(captured: ICapturedInput, createGitHubClient: CreatePublishin
       ready: prepared.suggestionPullRequests.ready,
       ...(prepared.suggestionPullRequests.reappliedOnto === undefined ? {} : { reappliedOnto: prepared.suggestionPullRequests.reappliedOnto }),
       warnings,
+      delivery: prepared.delivery,
     });
     return presentCompanion(outcome, captured);
   }
@@ -913,6 +1012,7 @@ async function run(captured: ICapturedInput, createGitHubClient: CreatePublishin
     ...identity,
     preparedReview: { body: prepared.review.body, comments: prepared.review.comments },
     warnings,
+    delivery: prepared.delivery,
   });
   return present(result, captured);
 }

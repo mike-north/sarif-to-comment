@@ -213,6 +213,45 @@ export function resolveDeliveryPolicy(inputs: IDeliveryPolicyInputs): IResolvedD
 }
 
 /**
+ * Why `value` is not a resolved policy in its recorded form (§13), or null:
+ * exactly the four settings in their order, each `{ value, source }` with a
+ * list or value from its vocabulary (a list non-empty and without repeats),
+ * a known source, and `preset` exactly when the source is a preset layer.
+ * Publication state and companion plans are checked with it when they are
+ * read back, so a corrupt record is refused rather than trusted.
+ */
+export function deliveryRecordProblem(value: unknown): string | null {
+  if (!isPlainObject(value)) return 'the delivery policy is not an object';
+  const names = Object.keys(value);
+  const expected = ['edits', 'groupedEdits', 'fileOperations', 'companionBundle'];
+  if (names.length !== expected.length || names.some((name, i) => name !== expected[i])) return 'the delivery policy does not hold exactly its four settings, in order';
+  for (const name of expected) {
+    const setting = value[name];
+    if (!isPlainObject(setting)) return `the delivery policy's ${name} is not an object`;
+    const source = setting['source'];
+    const presetSource = source === 'caller-preset' || source === 'configuration-preset';
+    const keys = Object.keys(setting).sort().join(',');
+    if (keys !== (presetSource ? 'preset,source,value' : 'source,value')) return `the delivery policy's ${name} does not hold exactly its fields`;
+    if (!presetSource && source !== 'caller' && source !== 'configuration' && source !== 'default') return `the delivery policy's ${name} has an unknown source`;
+    if (presetSource && !isOneOf(setting['preset'], DELIVERY_PRESETS)) return `the delivery policy's ${name} names an unknown preset`;
+    const recorded = setting['value'];
+    if (name === 'companionBundle') {
+      if (!isOneOf(recorded, COMPANION_BUNDLES)) return 'the delivery policy\'s companionBundle is not a bundle setting';
+      continue;
+    }
+    const vocabulary: readonly string[] = DELIVERY_MECHANISMS[name === 'edits' ? 'edits' : name === 'groupedEdits' ? 'groupedEdits' : 'fileOperations'];
+    const problems: IDeliveryPolicyProblem[] = [];
+    if (validateList(recorded, `/${name}`, vocabulary, problems) === undefined) return `the delivery policy's ${name} is not a list of its mechanisms`;
+  }
+  return null;
+}
+
+/** Whether `value` is a resolved policy in its recorded form (see {@link deliveryRecordProblem}). */
+export function isResolvedDeliveryPolicy(value: unknown): value is IResolvedDeliveryPolicy {
+  return deliveryRecordProblem(value) === null;
+}
+
+/**
  * Whether the configuration file must be read (§11.1): true unless the
  * caller's specific settings and preset together decide `edits`,
  * `groupedEdits`, `fileOperations` and `companionBundle`, in which case no

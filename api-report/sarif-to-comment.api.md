@@ -23,10 +23,25 @@ export function closeSuggestionPullRequests(input: ICloseSuggestionPullRequestsI
 export type CloseSuggestionPullRequestsStatus = 'complete' | 'permission-limited' | 'incomplete' | 'too-many-candidates' | 'label-not-suggestion-prs';
 
 // @public
+export type CompanionBundle = 'per-unit' | 'single';
+
+// @public
 export function createSarifDocument(options?: ICreateSarifDocumentOptions): ISarifLog;
 
 // @public
+export type DeliveryPreset = 'original-pr' | 'companion';
+
+// @public
 export type DiagnosticSeverity = 'error' | 'warning' | 'note';
+
+// @public
+export type EditDeliveryMechanism = 'native' | 'review-body' | 'companion';
+
+// @public
+export type FileOperationDeliveryMechanism = 'manual' | 'companion';
+
+// @public
+export type GroupedEditDeliveryMechanism = 'native-batch' | 'companion' | 'manual-group';
 
 // @public
 export function groupSarifFixes(sarif: object, options: IGroupSarifFixesOptions): GroupSarifFixesOutcome;
@@ -146,6 +161,15 @@ export interface ICloseSuggestionPullRequestsOutcome {
 export interface ICreateSarifDocumentOptions {
     readonly source?: ISarifSourceBinding | undefined;
     readonly tool?: ISarifToolIdentity | undefined;
+}
+
+// @public
+export interface IDeliveryOptions {
+    readonly companionBundle?: CompanionBundle;
+    readonly edits?: readonly EditDeliveryMechanism[];
+    readonly fileOperations?: readonly FileOperationDeliveryMechanism[];
+    readonly groupedEdits?: readonly GroupedEditDeliveryMechanism[];
+    readonly preset?: DeliveryPreset;
 }
 
 // @public
@@ -471,7 +495,7 @@ export interface IPublishSarifReviewInput {
 
 // @public
 export interface IPublishSarifReviewOptions {
-    readonly allowSuggestionPullRequests?: boolean | undefined;
+    readonly delivery?: IDeliveryOptions;
     readonly ignoreApprovalHold?: boolean | undefined;
     readonly markSuggestionPullRequestsReady?: boolean | undefined;
     readonly presentation?: IReviewPresentation | undefined;
