@@ -35,43 +35,138 @@ Prepared October 1, 2026. Everything merged since 0.2.1 is unreleased. The pendi
 - **Also verified:** an independent final review of the release notes, documentation and final fixes, which found them ready. The earlier acceptance of `89826ad` ([evidence](evidence/release-acceptance/README.md)) is historical. It covered the live runs on fixture pull requests #102 to #106, which this acceptance did not repeat.
 
   Live GitHub evidence for each feature is listed in the README's "Limitations".
-- **Optional abandonment cleanup (D54).** Implemented, October 1, 2026: `requireAbandonedOriginal` / `--if-abandoned`, the note `original-pull-request-not-abandoned` and the status `original-not-abandoned` ([cleanup contract §2.12](suggestion-cleanup-contract.md#212-requiring-an-abandoned-original-requireabandonedoriginal---if-abandoned)), and an [example workflow](examples/abandonment-cleanup.md), shipped as documentation only. It is verified against the simulated host and the installed package, and live by dry runs in doc-linter ([evidence](evidence/abandonment-cleanup/README.md)). **Remaining obstacle:** running the example workflow on GitHub (the realignment plan's E7: its trigger, its two-minute wait, and a quick close and reopen) needs the owner's authority to install a workflow in a fixture repository's branch. The example runs with a personal access token from a repository secret, the supported credential. The run's Phase 2 would also establish whether the automatic Actions token, documented as an alternative and not yet claimed by the support profile, can run guarded cleanup. The bounded experiment is described in the [evidence](evidence/abandonment-cleanup/README.md#the-remaining-obstacle-a-live-workflow-run). Nothing in the package depends on that run; whether the release waits for it is the owner's call.
+- **Optional abandonment cleanup (D54).** Implemented, October 1, 2026: `requireAbandonedOriginal` / `--if-abandoned`, the note `original-pull-request-not-abandoned` and the status `original-not-abandoned` ([cleanup contract §2.12](suggestion-cleanup-contract.md#212-requiring-an-abandoned-original-requireabandonedoriginal---if-abandoned)), and an [example workflow](examples/abandonment-cleanup.md), shipped as documentation only. It is verified against the simulated host and the installed package, and live by dry runs in doc-linter ([evidence](evidence/abandonment-cleanup/README.md)). **Remaining obstacle:** running the example workflow on GitHub (the realignment plan's E7: its trigger, its two-minute wait, and a quick close and reopen) needs the owner's authority to install a workflow in a fixture repository's branch and let it run. The experiment's first phase uses the workflow's own token (`github.token`), read-only and in dry-run mode, and stores no secret. Its separately authorized second phase would establish whether that token, documented as an alternative and not yet claimed by the support profile, can close a suggestion pull request. Storing a personal token as a repository secret is not part of the experiment. The bounded experiment is described in the [evidence](evidence/abandonment-cleanup/README.md#the-remaining-obstacle-a-live-workflow-run). Nothing in the package depends on that run; whether the release waits for it is the owner's call.
 - **What remains before release:**
-  - the owner's review of the items below, including whether to authorize the example workflow's live experiment (E7) before the release or leave it for later;
+  - the owner's three [release decisions](#release-decisions): whether to publish 0.3.0, the default delivery of a group, and whether the release waits for the example workflow's live experiment (E7). The other items listed with them are open to review and do not block the release;
   - versioning (`pnpm run release:version`), then publishing through the version pull request and the publish workflow (README, "Releasing"). Neither versioning nor publishing is part of this preparation.
 - **Not in 0.3.0:** repository templates for the review's presentation (D60: no engine is selected; see the evaluation), alternative-remedy families (D53, an open scenario), suggestion pull requests for forks or for pull requests into a base other than the default branch (the release acceptance recorded the refusal live: `validate` on doc-linter #102 answered `blocked`, exit status 2, before any write; [evidence](evidence/release-acceptance/README.md#b1-a-first-fixture-whose-base-is-not-the-default-branch-refused-before-any-write), [`b01-validate-102.json`](evidence/release-acceptance/live/b01-validate-102.json)), an exact three-way projection beyond the documented limits, and a live run of the example abandonment-cleanup workflow (E7), which needs the owner's authority to install a workflow in a fixture repository's branch.
 
 ## Items for the owner's confirmation at release review
 
-This is the one list of what the owner has not yet confirmed. Each item is implemented as described and documented where it says; none is presented elsewhere as settled. It lists items, not decisions.
+Reconciled October 1, 2026 against the owner's decisions [D48–D60](design-decisions.md#owner-decisions-of-september-30-2026-delivery-policy-and-the-force-push-boundary) and the realignment brief. The three release decisions below are the only approvals the release needs. Every other item is implemented and documented, open to the owner's review, and not recorded as accepted. None of them blocks the release, and none is presented as an approval this section gives.
 
-1. **`groupedEdits` defaults to `[native-batch]`.** A suggestion group of edits, or one fix with several changes, whose changes can all be native suggestions is delivered as a native batch; otherwise the review is blocked naming each change that cannot be one. Documented in the [delivery policy §5 and §15 item 1](delivery-policy-contract.md#15-owner-confirmation-and-open-questions).
-2. **Defaults that turn 0.2.1 refusals into delivery.** Under the defaults, a group containing a whole-file creation or deletion is delivered as the mixed manual group in the review body (`fileOperations: [manual]`), and a fix with several changes is delivered as a native batch (item 1). 0.2.1 refused both. Documented in the [delivery policy §5, §8.3 and §8.5](delivery-policy-contract.md#5-defaults).
-3. **The companion index's engineering choices (D56).** The index is the body's first section and keeps each created suggestion pull request's own section; the option is `existingCompanions` / `--existing-companion N`; an existing companion is checked against the convention except uniqueness of its id; its state is a `companion-reused` note, never enforced; titles are code spans with visible escapes; the index and sections are customizable, checked with placeholder numbers before any write and run again with the real numbers when the review is composed, so a callback that is not deterministic is refused only then: after the suggestion pull requests exist, before the review is recorded and sent. Documented in the [companion contract §2.13 and §4 item 9](companion-suggestion-pr-contract.md#4-decisions-awaiting-acceptance).
-4. **Repository templates: the recommendation and the opt-in question.** No repository template is read today; only library callbacks customize the review. The evaluation recommends an in-house Mustache subset without scope fallback and with Markdown fragments in its context, with mustache.js behind a strict wrapper as the alternative, and leaves open whether honoring repository templates also needs an explicit caller opt-in. Documented in the [template engine evaluation §8 and §9](template-engine-evaluation.md#8-recommendation).
-5. **A suggestion pull request projected to conflict is created, with a warning.** It is created on the reviewed commit with `companion-conflicts-at-head`, and GitHub's `mergeable` is read back and reported beside the projection, rather than the suggestion being refused. Documented in the [companion contract §2.5.1 and §4 item 7](companion-suggestion-pr-contract.md#251-fidelity-after-a-rewritten-history).
-6. **The directory-rename trigger is conservative.** A path added under a directory the other side removed is a limit of the projection whether that side renamed the directory or deleted its files, so such a suggestion pull request is not made (`delivery-fallback` or `delivery-unavailable`). Documented in the [companion contract §2.5.1](companion-suggestion-pr-contract.md#251-fidelity-after-a-rewritten-history), item 6 of the projection.
-7. **Visible escapes in a projected suggestion's own diff.** A character a code block does not show is written as `{U+XXXX}`, with a note after the diff; the commit keeps the exact bytes and the suggestion pull request is still made. Documented in the [companion contract §2.11 and §4 item 7](companion-suggestion-pr-contract.md#211-presentation).
-8. **The reviewed commit's association and placement after a rebase.** Reachability from the base alone does not associate a commit; when association cannot be established (a force-push with no recorded earlier head, an incomplete timeline, an earlier head GitHub no longer serves) the review is published with the note `reviewed-commit-association-unknown`, not blocked; after a rebase, findings on files the base side also changed go to the body with `inline-placement-unavailable`, conservatively. Documented in the [specification R13.1 and R17](specification.md#r131-the-reviewed-diff-historical-placement-and-native-suggestions).
-9. **The delivery policy contract as a whole.** It is a draft contract, implemented: the configuration file `.github/sarif-to-comment.json` on the default branch and its trust and failure rules, the mechanism vocabulary, the precedence of layers, the presets, the `companion-options-unused` note, and reading the configuration only when the caller leaves a dimension undecided. Documented in the [delivery policy contract](delivery-policy-contract.md), §15 "Resolved since the first draft".
-10. **The review presentation contract.** Written down from the implemented components and not yet presented for acceptance, including the outcome reports' list of diagnostics, whose messages' own lines are nested under their item. Documented in the [review presentation contract](review-presentation-contract.md).
-11. **The companion contract's other open details**, items 1–8: the head-branch target with the reviewed-commit parent, presentation details, refusal wording (for example, why a pull request into a base other than the default branch is not yet supported; the supported scope itself is the owner's decision D41, and the release acceptance recorded the refusal live on doc-linter #102, [`b01-validate-102.json`](evidence/release-acceptance/live/b01-validate-102.json)), option details, configuration-read details, one labels request, the details of the fidelity projection, and reporting (not stopping) when a branch is rewritten again after planning. Documented in the [companion contract §4](companion-suggestion-pr-contract.md#4-decisions-awaiting-acceptance).
-12. **The convention's four open questions:** the identifier alphabet, the marker's member order, ignored configuration members, and GitHub's label creation. Documented in the [convention §10](suggestion-pr-convention.md#10-open-questions).
-13. **The cleanup contract's two open questions:** the early exit's evidence, and branches with more than 10 open pull requests. Documented in the [cleanup contract §4](suggestion-cleanup-contract.md#4-decisions).
-14. **Publication state version 3 cannot be continued by 0.2.1.** A downgrade mid-publication is not supported; 0.2.1 refuses the file and treats it as neither absent nor complete. Documented in the [delivery policy §13](delivery-policy-contract.md#13-recording-the-resolved-policy) and the release notes.
-15. **The abandonment guard's engineering choices (D54).**
-    - The names `requireAbandonedOriginal` / `--if-abandoned`.
-    - A skip has its own status, `original-not-abandoned`, which exits 0, with a note. A not-found original under the guard gives that note, not the `original-pull-request-not-found` warning.
-    - An unreadable original is an operational error (exit 1), not `incomplete` (exit 3).
-    - The example workflow:
-      - runs with a personal access token from a repository secret, `SARIF_TO_COMMENT_TOKEN`, the supported credential;
-      - documents the automatic Actions token (`github.token`) as an alternative whose support is not yet established;
-      - keeps `permissions:`, which scope `github.token` if a caller switches to it;
-      - uses `--owner all`: with the personal token, `me` would close only the suggestion pull requests that token's account opened, and with `github.token`, `me` would match nothing;
-      - adds `issues: read` as a precaution;
-      - pins `sarif-to-comment@0.3.0`, which resolves only once 0.3.0 is published.
+### Release decisions
 
-    Documented in the [cleanup contract §2.12 and §4](suggestion-cleanup-contract.md#212-requiring-an-abandoned-original-requireabandonedoriginal---if-abandoned) and the [example's page](examples/abandonment-cleanup.md).
+1. **Whether to version and publish 0.3.0.** Approving it accepts the [breaking changes listed above](#release-readiness-030). Each one follows an owner decision or a documented contract:
+   - the association check follows D58 ([specification R17](specification.md#r17-publish-only-about-a-commit-of-the-pull-request));
+   - the `IProblem` shape, the renamed codes and the move to stderr follow [D45](design-decisions.md#d45-model-diagnostics-once-and-render-them-per-audience--owner-decision);
+   - **publication state version 3 cannot be continued by 0.2.1.** A downgrade in the middle of a publication is not supported. 0.2.1 refuses the file and treats it as neither absent nor complete ([delivery policy §13](delivery-policy-contract.md#13-recording-the-resolved-policy)).
+
+   Approving it also releases, as public interface, the names that D48, D45 and D55 left unselected: the options `--delivery`, `--edits`, `--grouped-edits`, `--file-operations` and `--companion-bundle` (and the library's `delivery` option), the configuration file `.github/sarif-to-comment.json` on the default branch, the presets, and the diagnostic codes. Once released, changing one of them is a breaking change.
+
+   *Recommended: approve.* The acceptance attests to the candidate `99b461d` and its tarball. The changes since then are documentation that the package does not contain. The tarball published from the version pull request is a different file, which the acceptance does not cover (see [Package identity](#package-identity)).
+2. **The default delivery of a group.** D48 accepted caller control and precedence, and did not choose a new default. D49 allows a group to be either a native batch or one companion. The implemented defaults are `edits: [native]`, `groupedEdits: [native-batch]`, `fileOperations: [manual]` and `companionBundle: per-unit`. `edits` continues 0.2.1's native suggestions, and `fileOperations` its review-body file proposals. Two default behaviors are new, and 0.2.1 refused both:
+   - under `groupedEdits: [native-batch]`, a suggestion group of edits, or one fix with several changes, is delivered as a native batch when every change can be a native suggestion; otherwise the review is blocked, naming each change that cannot be one;
+   - under `fileOperations: [manual]`, a group containing a whole-file creation or deletion is delivered as the mixed manual group in the review body, which D49's manual route allows.
+
+   *Recommended: keep `[native-batch]`.* By default it creates no pull requests and no notifications, and it keeps the native-first feel.
+
+   *Tradeoff:* a group with a member that cannot be a native suggestion blocks the review, unless the caller or the configuration also lists `companion` or `manual-group`. The alternative, `[native-batch, companion]`, never blocks on such a group, but it creates pull requests that nobody asked for.
+
+   Documented in the [delivery policy §5, §8.3, §8.5 and §15 item 1](delivery-policy-contract.md#15-owner-confirmation-and-open-questions).
+3. **Whether the release waits for the example workflow's live run (E7).** D54's guard is released code. Its workflow is an example in `docs/`, not part of the package. The release notes and the example's page both say it has not been run on GitHub.
+
+   *Recommended: do not wait.* E7 is optional, and [the evidence](evidence/abandonment-cleanup/README.md#the-remaining-obstacle-a-live-workflow-run) sets out the authority it needs. The run with the least exposure uses the workflow's own short-lived token, read-only and in dry-run mode, and stores no secret. A live real close would need its own authority, and so would storing any personal token as a repository secret.
+
+### Implementation details open to review
+
+These are engineering choices made within the owner's direction. Changing one is a follow-up, not a condition of release.
+
+- **A suggestion pull request projected to conflict is created, with a warning.** This is the most consequential choice. Rather than being refused, the suggestion pull request is created on the reviewed commit with `companion-conflicts-at-head`. GitHub's `mergeable` is then read back and reported beside the projection (D58, D59). Documented in the [companion contract §2.5.1 and §4 item 7](companion-suggestion-pr-contract.md#251-fidelity-after-a-rewritten-history).
+- **The directory-rename trigger is conservative.** A path added under a directory that the other side removed is a limit of the projection, whether that side renamed the directory or deleted its files. Such a suggestion pull request is not made (`delivery-fallback` or `delivery-unavailable`). Documented in the [companion contract §2.5.1](companion-suggestion-pr-contract.md#251-fidelity-after-a-rewritten-history), item 6 of the projection.
+- **Visible escapes in a projected suggestion's own diff.** A character that a code block does not show is written as `{U+XXXX}`, with a note after the diff. The commit keeps the exact bytes, and the suggestion pull request is still made. Documented in the [companion contract §2.11 and §4 item 7](companion-suggestion-pr-contract.md#211-presentation).
+- **The reviewed commit's association, and placement after a rebase.**
+  - Reachability from the base alone does not associate a commit.
+  - When association cannot be established, the review is published with the note `reviewed-commit-association-unknown`, not blocked. This happens after a force-push with no recorded earlier head, with an incomplete timeline, or when GitHub no longer serves an earlier head.
+  - After a rebase, findings on files that the base side also changed go to the body with `inline-placement-unavailable`. This is conservative.
+
+  Documented in the [specification R13.1 and R17](specification.md#r131-the-reviewed-diff-historical-placement-and-native-suggestions).
+- **The companion index (D56).**
+  - It is the body's first section, and each created suggestion pull request keeps its own section.
+  - The option is `existingCompanions` / `--existing-companion N`.
+  - An existing companion is checked against the convention, except for the uniqueness of its id. Its state is a `companion-reused` note and is never enforced.
+  - Titles are code spans with visible escapes.
+  - The index and the sections are customizable (D60). A customization is checked with placeholder numbers before any write, then run again with the real numbers when the review is composed. A callback that is not deterministic is therefore refused only at that point: after the suggestion pull requests exist, and before the review is recorded and sent.
+
+  Documented in the [companion contract §2.13 and §4 item 9](companion-suggestion-pr-contract.md#4-decisions-awaiting-acceptance).
+- **The abandonment guard (D54).**
+  - The names are `requireAbandonedOriginal` / `--if-abandoned`.
+  - A skip has its own status, `original-not-abandoned`, which exits 0 with a note. Under the guard, an original that is not found gives that note, not the `original-pull-request-not-found` warning.
+  - An unreadable original is an operational error (exit 1), not `incomplete` (exit 3).
+  - The example workflow:
+    - takes its credential from a repository secret, `SARIF_TO_COMMENT_TOKEN`, holding a personal access token, which the support profile covers. The page advises a fine-grained token limited to the repository;
+    - documents `github.token` as an alternative whose support is not yet established;
+    - keeps `permissions:`, which scope `github.token` if a caller switches to it;
+    - uses `--owner all`: with the personal token, `me` would close only the suggestion pull requests that token's account opened, and with `github.token`, `me` would match nothing;
+    - adds `issues: read` as a precaution;
+    - pins `sarif-to-comment@0.3.0`, which resolves only once 0.3.0 is published.
+
+  If E7's second phase shows that `github.token` works, the example could default to it. That would be a follow-up, not a release condition. Documented in the [cleanup contract §2.12 and §4](suggestion-cleanup-contract.md#212-requiring-an-abandoned-original-requireabandonedoriginal---if-abandoned) and the [example's page](examples/abandonment-cleanup.md).
+
+### Draft contracts and their open questions
+
+These contracts are labelled draft, or have open questions. The label records that the owner has not yet reviewed the text. It does not mean the behavior is unauthorized: each contract implements accepted direction, and the owner can accept its text after the release. The names it releases are covered by release decision 1, because changing one after the release is a breaking change.
+
+- **The [delivery policy contract](delivery-policy-contract.md) as a whole** (D48–D52, D55). It covers:
+  - the configuration file `.github/sarif-to-comment.json` on the default branch, with its trust and failure rules;
+  - the mechanism vocabulary;
+  - the precedence of layers;
+  - the presets;
+  - the `companion-options-unused` note;
+  - reading the configuration only when the caller leaves a dimension undecided.
+
+  See its §15, "Resolved since the first draft".
+- **The [review presentation contract](review-presentation-contract.md)** (D60). It was written down from the implemented components, including the outcome reports' list of diagnostics.
+- **The [companion contract §4](companion-suggestion-pr-contract.md#4-decisions-awaiting-acceptance), items 1–8:**
+  - the head-branch target, with the reviewed commit as its parent;
+  - presentation details;
+  - refusal wording, for example why a pull request into a base other than the default branch is not yet supported. That scope is the owner's decision D41, and the refusal was recorded live on doc-linter #102 ([`b01-validate-102.json`](evidence/release-acceptance/live/b01-validate-102.json));
+  - option details and configuration-read details;
+  - one labels request;
+  - the details of the fidelity projection;
+  - reporting, rather than stopping, when a branch is rewritten again after planning.
+- **The [convention §10](suggestion-pr-convention.md#10-open-questions)** has four open questions:
+  - the identifier alphabet;
+  - the marker's member order;
+  - ignored configuration members;
+  - GitHub's label creation.
+- **The [cleanup contract §4](suggestion-cleanup-contract.md#4-decisions)** has two open questions:
+  - the evidence for the early exit;
+  - branches with more than 10 open pull requests.
+
+### Already decided: no confirmation needed
+
+These are the owner's recorded direction, implemented as decided:
+
+- a mixed group kept on the original pull request as one manual group (D49's manual route, D51);
+- the strict request: an unavailable mechanism is reported, and no other mechanism is substituted (D55);
+- no re-application after a force-push, and no abort because the branch moved (D58, D59);
+- the review's companion index, and reuse of existing companions (D56);
+- customizable components, including the companion list and the companion reference (D60);
+- the guard's fresh read of the original, which proceeds only for one closed without merging (D54). D54's two-minute grace period belongs to the example workflow, which has not yet run (release decision 3).
+
+### Not part of this release
+
+These are future selections, not open conditions of 0.3.0:
+
+- **Repository templates (D60).** No repository template is read; library callbacks customize the review. The [template engine evaluation](template-engine-evaluation.md#8-recommendation) recommends an in-house Mustache subset. That is an engineering recommendation, not a selection. The engine, and whether honoring repository templates needs an explicit opt-in, are for a later release.
+- **Alternative-remedy families (D53).** This remains an open owner scenario.
+
+### Package identity
+
+- **Attested:** the candidate `99b461d599d58d4bcca7fc7cfdad5d4b0076343b` and its packed `sarif-to-comment-0.2.1.tgz`, with 537 files, 501,411 bytes and SHA-256 `72ec9f58c1f2b20b59de85920dcc0eb9d69ff3d48cba66b2ffef94e23b423385` ([record](release-candidate-0.3.0-verification.md)).
+- **Current `main`.** It differs from the candidate only in:
+  - `docs/evidence/`;
+  - `docs/release-candidate-0.3.0-verification.md`;
+  - `docs/evidence-policy.md`;
+  - this page.
+
+  None of these is in the package's `files`, so the same build is expected to pack an identical tarball. That expectation rests on comparing the paths; the pack was not rerun.
+- **Published.** Versioning makes it a different tarball. It sets `package.json`'s version to 0.3.0, so `--version` changes, and it writes `CHANGELOG.md`. The acceptance does not attest to that tarball, and no defined release step compares the two:
+  - the publish workflow's release guard (`verify-pack`) checks only that the pack matches the distribution boundary, contains the required files, and is named and versioned as `package.json` says;
+  - a verification from the registry after publication, as was done for 0.2.1 ([record](typescript-migration-release-verification.md)), would be a separate step, not yet part of README's "Releasing".
+
+  Nothing has been versioned or published.
 
 ## Releases and unreleased changes
 
