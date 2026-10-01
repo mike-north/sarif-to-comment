@@ -380,6 +380,16 @@ One entry per code: its severity, its title, what it means and its typical remed
 | `suggestion-pr-configuration-invalid` | error | The suggestion pull request configuration is not valid | `.github/suggestion-prs.json` on the default branch cannot be used. | Fix the file on the default branch. |
 | `suggestion-label-missing` | error | A suggestion label does not exist | Every label must already exist; the tool never creates one. | Create the label in the repository, or choose an existing one. |
 
+### Delivery policy
+
+These codes belong to the [delivery policy contract](delivery-policy-contract.md), which supersedes `suggestion-pr-fallback`, `suggestion-group-pr-unavailable`, `suggestion-group-requires-suggestion-prs` and `fix-changes-require-suggestion-prs` ([§10.3](delivery-policy-contract.md#103-diagnostic-codes)). Publication reports them once it follows that contract; until then it reports the codes above.
+
+| Code | Severity | Title | Meaning | Typical remedies |
+|---|---|---|---|---|
+| `delivery-unavailable` | error | No delivery mechanism the policy lists is available for a proposal | No mechanism in the proposal's delivery list can deliver it, and nothing unlisted is substituted, so the whole review is blocked before anything is written (D55). The message names the proposal, the list, where the list was set, and each listed mechanism's obstacles. A group is never split to deliver part of it. | Remove the obstacle the message names, then publish again.<br>Or list a mechanism that is available for this kind of proposal (`--edits`, `--grouped-edits`, `--file-operations`, the `delivery` option, or `.github/sarif-to-comment.json`). |
+| `delivery-fallback` | warning | A proposal is delivered by a later mechanism of its delivery list | The first mechanism of the proposal's delivery list cannot deliver it, so a later one the list authorizes does. The message names the proposal, the mechanism used, the list, where the list was set, and each earlier mechanism's obstacles. | To use an earlier mechanism, remove the obstacle the message names, then publish again.<br>To refuse rather than fall back, list only the mechanism you require. |
+| `delivery-configuration-invalid` | error | The delivery configuration is not valid | `.github/sarif-to-comment.json` on the default branch cannot be used: it is not a valid JSON object, holds an unknown member, or a list or value outside its vocabulary, an empty list or a repeated mechanism. Nothing is taken from it, and the review is blocked before anything is written. Each problem is reported, naming its member. | Fix `.github/sarif-to-comment.json` on the default branch. |
+
 ### Review limits
 
 | Code | Severity | Title | Meaning | Typical remedies |

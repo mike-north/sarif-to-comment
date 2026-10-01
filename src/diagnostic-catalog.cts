@@ -713,6 +713,27 @@ export const DIAGNOSTIC_CATALOG = {
     title: 'A suggestion label does not exist',
     remedies: ['Create the label in the repository, or choose an existing one.'],
   },
+  'delivery-unavailable': {
+    severity: 'error',
+    title: 'No delivery mechanism the policy lists is available for a proposal',
+    remedies: [
+      'Remove the obstacle the message names, then publish again.',
+      'Or list a mechanism that is available for this kind of proposal (`--edits`, `--grouped-edits`, `--file-operations`, the `delivery` option, or `.github/sarif-to-comment.json`).',
+    ],
+  },
+  'delivery-fallback': {
+    severity: 'warning',
+    title: 'A proposal is delivered by a later mechanism of its delivery list',
+    remedies: [
+      'To use an earlier mechanism, remove the obstacle the message names, then publish again.',
+      'To refuse rather than fall back, list only the mechanism you require.',
+    ],
+  },
+  'delivery-configuration-invalid': {
+    severity: 'error',
+    title: 'The delivery configuration is not valid',
+    remedies: ['Fix `.github/sarif-to-comment.json` on the default branch.'],
+  },
   'too-many-comments': {
     severity: 'error',
     title: 'The review needs too many inline comments',
