@@ -1,0 +1,16 @@
+{
+  "command": "close-suggestion-prs",
+  "status": "complete",
+  "dryRun": true,
+  "owner": "me",
+  "originals": [],
+  "suggestions": [],
+  "counts": {
+    "candidates": 18,
+    "checked": 0,
+    "labeled": 0,
+    "conforming": 0
+  },
+  "message": "## Suggestion pull request cleanup: dry run\n\nChecked the open pull requests on `suggestion-pr/` branches in mike-north/doc-linter; the suggestion label is `suggestion-pr` (the default suggestion label). Only suggestion pull requests opened by this account are closed.\n\nNo suggestion pull requests were found.\n\nThis was a dry run: nothing was closed.\n\nClosing never deletes a branch: each proposal branch is left in place.",
+  "diagnostics": []
+}

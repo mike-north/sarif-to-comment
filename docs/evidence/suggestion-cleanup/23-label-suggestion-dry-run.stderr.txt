@@ -1,0 +1,7 @@
+▲ warning  The label does not seem to mark suggestion pull requests  [label-not-suggestion-prs]
+  mike-north/doc-linter
+  None of the 2 open pull requests labeled `suggestion` in mike-north/doc-linter has a suggestion marker or a `suggestion-pr/` branch, so the label does not look like a suggestion label, and nothing was checked or closed.
+  → Check the label: `--label` names the label suggestion pull requests were left under.
+  → If the label is right, run again with `--force` (library: `force: true`) to check every pull request carrying it.
+
+1 warning

@@ -1,0 +1,28 @@
+{
+  "command": "close-suggestion-prs",
+  "status": "label-not-suggestion-prs",
+  "dryRun": true,
+  "owner": "me",
+  "originals": [],
+  "suggestions": [],
+  "counts": {
+    "candidates": 2,
+    "checked": 0,
+    "labeled": 0,
+    "conforming": 0
+  },
+  "message": "## Suggestion pull request cleanup stopped: the label does not mark suggestion pull requests\n\nNone of the 2 open pull requests labeled `suggestion` in mike-north/doc-linter has a suggestion marker or a `suggestion-pr/` branch, so the label does not look like a suggestion label, and nothing was checked or closed.",
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "code": "label-not-suggestion-prs",
+      "title": "The label does not seem to mark suggestion pull requests",
+      "message": "None of the 2 open pull requests labeled `suggestion` in mike-north/doc-linter has a suggestion marker or a `suggestion-pr/` branch, so the label does not look like a suggestion label, and nothing was checked or closed.",
+      "subject": "mike-north/doc-linter",
+      "remedies": [
+        "Check the label: `--label` names the label suggestion pull requests were left under.",
+        "If the label is right, run again with `--force` (library: `force: true`) to check every pull request carrying it."
+      ]
+    }
+  ]
+}
