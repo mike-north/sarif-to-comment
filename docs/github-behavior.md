@@ -1,6 +1,6 @@
 # Observed GitHub behavior
 
-This is the project's starting point for questions about what GitHub actually does. It consolidates existing experiments so that established observations do not have to be rediscovered in a conversation. Seeded September 30, 2026 from the reports and evidence below; no new experiment was performed to create this register. GH-14 was added the same day from the existing force-push report.
+This is the project's starting point for questions about what GitHub actually does. It consolidates existing experiments so that established observations do not have to be rediscovered in a conversation. Seeded September 30, 2026 from the reports and evidence below; no new experiment was performed to create this register. GH-14 was added the same day from the existing force-push report. GH-15 and GH-16 were added October 1, 2026 from new, bounded experiments on the same fixtures.
 
 An observation establishes the recorded case, with its conditions. It is not a universal guarantee, an implementation requirement, or proof that this library currently supports the behavior. GitHub documentation describes advertised behavior; keep it distinct from observed outcomes, especially when the two appear to disagree. Product choices belong in the [decision log](design-decisions.md).
 
@@ -52,7 +52,7 @@ Most seeded observations used one authenticated account and synthetic, same-repo
 
 **Evidence:** [Placement report](placement-host-probe.md), [raw accepted threads](evidence/placement-host-probe/valid-batch-threads.json), [product readback](evidence/milestone-e2e/pr14-readback-04-cli-final.json), [browser evidence index](evidence/milestone-e2e/README.md).
 
-**Limits:** LEFT-context acceptance is an observed case, not an established portable host contract. The placement-only fixture had no browser verification. This does not establish newly created inline comments against historical/discarded commits.
+**Limits:** LEFT-context acceptance is an observed case, not an established portable host contract. The placement-only fixture had no browser verification. This does not establish newly created inline comments against historical/discarded commits; GH-16 later recorded that case.
 
 ### GH-05 — The tested invalid batch created no partial review
 
@@ -76,7 +76,7 @@ Most seeded observations used one authenticated account and synthetic, same-repo
 
 **Evidence:** [Application/readback report](suggestion-application-e2e.md), [submitted readback](evidence/suggestion-application/raw/pr16-readback-03-suggestions-submitted.json), [head-advancement report](milestone-e2e-evidence.md), [after advancement](evidence/milestone-e2e/pr15-readback-05-after-head-advance.json).
 
-**Limits:** Readback shapes from these fixtures. The attempted base-advancement case did not produce a different `base.sha`; that variant was not observed. Persistence of existing comments does not prove eligibility for creating new historical comments.
+**Limits:** Readback shapes from these fixtures. The attempted base-advancement case did not produce a different `base.sha`; that variant was not observed. Persistence of existing comments does not prove eligibility for creating new historical comments; GH-16 records that separately.
 
 ## Native suggestions and literal content
 
@@ -166,6 +166,8 @@ Do not promote them to observed merge outcomes.
 - A retry after a second rewrite.
 - An actual merge of any companion.
 
+Later experiments covered two of these: submitting a pending review across a rewrite (GH-15) and new inline comments at a historical `commit_id` (GH-16). The others remain untested.
+
 **Evidence:** The [force-push experiment report](force-push-experiment.md), with its inline readback excerpts, and the live PRs, reviews and branches it lists, which were left in place. No raw readback files from the run itself are retained in the repository.
 
 **Later read-only snapshot (October 1, 2026):** A [readback of #41–#52](evidence/realignment/e0-readme.md) recorded the fixtures' state a day after the run, with no writes. It is observed state at that time, not the experiment's own evidence.
@@ -181,6 +183,38 @@ Later implementation runs separately observed companions proposed on the reviewe
 
 **Limits:** One authenticated account, same-repository draft PRs, one modification hunk per synthetic file. Only the rebase variant advanced its base.
 
+### GH-15 — A pending review created before a force-push was submitted afterwards, unchanged
+
+**Observed October 1, 2026:** On the GH-14 fixtures, `POST …/reviews/<id>/events` with `{"event":"COMMENT"}` submitted two pending reviews created on September 29.
+
+- **Review 5356480526 on [#41](https://github.com/mike-north/doc-linter/pull/41).** Its reviewed commit `e69981e` had been discarded by two amends; the head was `b3e3ed7`. GitHub answered HTTP 200, with `state: COMMENTED` and no warning. The review's `commit_id` stayed `e69981e`, and so did the commit of its `PullRequestReview` timeline item.
+- **Its comments kept the state they had reached while pending.** The line-6 comment stayed at the head (`commit_id` `b3e3ed7`, `line` 6, not outdated). The line-5 comment, whose change the head dropped, stayed outdated: `line: null`, `original_line` 5, `commit_id` `3007343`, the discarded intermediate head. Only the comment state (`PENDING` to `SUBMITTED`) and `updated_at` changed on submission.
+- **Control: review 5356482670 on [#44](https://github.com/mike-north/doc-linter/pull/44)**, whose reviewed commit `91f433c` is an ancestor of the head after an ordinary push. The same outcome: HTTP 200, `commit_id` `91f433c`, both comments at the head `4b82f10` and not outdated.
+
+**Evidence:** [E1 and E3 record](evidence/realignment/e1-e3-readme.md), with the before, submit and after readbacks in `evidence/realignment/e3-*.json`.
+
+**Limits:** Only the `COMMENT` event. One account, which was also the pull request's author; same-repository draft PRs; no forks. Rendering was not observed. Pending review 5356511269 on #43, created after the force-push, was not submitted.
+
+### GH-16 — New inline comments were accepted at an ancestor, a discarded and an unrelated `commit_id`
+
+**Observed October 1, 2026:** On the GH-14 fixtures, `POST …/pulls/<pr>/reviews` with `event: COMMENT`, an older `commit_id` and one single-line comment (`line` and `side`) per review.
+
+- **Ancestor and discarded commits were accepted.** At `91f433c` on #44 (an ancestor of the head), at `e69981e` on #41 (discarded by an amend) and at `7eb3dc6` on [#42](https://github.com/mike-north/doc-linter/pull/42) (discarded by a rebase onto an advanced base), GitHub accepted RIGHT comments on lines 5 and 6 and LEFT comments on deleted lines 5 and 6, with HTTP 200 and no warning. This includes line 5, whose change the heads of #41 and #42 dropped.
+- **Lines were resolved against the reviewed commit's diff, not the head's.** RIGHT line 2, inside the reviewed commit's hunk but outside the head's diff, was accepted on #41 and #42. RIGHT line 15, inside the head's diff but outside the reviewed commit's, was refused on #41 and #44 with HTTP 422 "Line could not be resolved". RIGHT line 11, outside both, was refused on every fixture. Refused requests created no review.
+- **On #42 the diff ran from the PR's current base commit.** RIGHT line 18 was accepted although only the diff from the current base `13fddb7` to `7eb3dc6` contains it. The diff from their merge base `7b5863e` does not. The stored `diff_hunk` is from the `13fddb7` diff.
+- **The comments were neither moved nor outdated.** Each comment's `commit_id` and `original_commit_id` were the reviewed commit, `position` equaled `original_position`, and GraphQL reported `outdated: false` and thread `isOutdated: false`. This held on the discarded commits too, unlike the pre-existing comments in GH-14 and GH-15, which had moved to the head. A readback about 23 minutes later was identical. The exception was #42's line 18, outdated from creation (`position` 1, `original_position` 16).
+- **GitHub did not check that the commit belongs to the PR.** On #44, reviews whose `commit_id` was the tip of an unrelated branch (`bbd615c`, `demo/content-review`) or of another experiment's fixture (`909a3c3`, `exp-reapply-20260929-advanced`) were accepted, both body-only and with an inline comment on a file #44 does not contain. Each review's `commit_id` and timeline commit were the foreign commit.
+
+**Inferred, not observed:**
+
+- #42's line 18 may be outdated because GitHub re-resolved it against the merge-base diff, which lacks that line. This was not tested separately.
+- The "current base commit" on #42 is both the base branch's tip and the merge base of the base and the head. These fixtures cannot tell which one GitHub uses.
+- Any association check between a reviewed commit and a PR must be the tool's own; the host does not supply one.
+
+**Evidence:** [E1 and E3 record](evidence/realignment/e1-e3-readme.md), with each request and response in `evidence/realignment/e1-*-create.json` and the readbacks beside it.
+
+**Limits:** Plain single-line comments only: no native suggestions, no multi-line ranges and no file-level comments. Rendering was not observed, so whether the web interface shows these comments in the current diff, as outdated, or only in the conversation is unknown. No later push to these branches, so repositioning on a later push is untested. One account; same-repository draft PRs; no forks or cross-repository commits.
+
 ## Existing summaries whose primary evidence needs a repository home
 
 **Product boundary:** The [settled force-push decisions](design-decisions.md#settled-force-push-boundary--september-30-2026) distinguish host review lifecycle, upstream follow-up and this project's faithful-publication responsibilities. Capability gaps below are experiment questions, not authority to invent a review-maintenance service.
@@ -189,14 +223,15 @@ The force-push experiment now has a repository home. Its report is [force-push-e
 
 Two working summaries of the experiment, a briefing and a responsibility review, exist only in the maintainer's uncommitted working logs. GH-14 keeps their distinctions between observed, inferred and untested results, and nothing in this register depends on them.
 
-Keep the established limits attached. The removed-content restoration case was a local `merge-tree` projection plus a live mergeability verdict, **not a live merge**. Newly published historical inline comments, native-suggestion application after the branch moved, submission of a pending review after a rewrite, and a retry after a second rewrite remain untested. Do not promote the projection to an observed GitHub merge outcome.
+Keep the established limits attached. The removed-content restoration case was a local `merge-tree` projection plus a live mergeability verdict, **not a live merge**. Native-suggestion application after the branch moved, and a retry after a second rewrite, remain untested. Newly published historical inline comments and the submission of a pending review after a rewrite were later recorded in GH-16 and GH-15. Do not promote the projection to an observed GitHub merge outcome.
 
 ## Cases this register does not establish
 
 - Sibling alternatives automatically closing when the merged referencing companion targets the original feature branch (GH-01 only established a default-branch source).
 - An optional Actions workflow performing abandonment cleanup (GH-02 established the condition motivating it).
 - Pending-comment discovery, editing and post-submission links for a cross-linked native-suggestion group.
-- New inline comments or native suggestions published at a historical or discarded commit; native-suggestion application after the branch moved; a pending review submitted across a rewrite; an actual merge of a companion built on a discarded commit (GH-14 records each as untested).
+- Native suggestions published at a historical or discarded commit (GH-16 covers plain inline comments only); native-suggestion application after the branch moved; an actual merge of a companion built on a discarded commit (GH-14 records each as untested).
+- How the web interface renders the reviews and comments in GH-15 and GH-16; only API state was recorded.
 - Any broader behavior excluded by an entry's stated limits.
 
 These boundaries preserve the observed facts; they are not a request to perform new experiments.
