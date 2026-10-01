@@ -23,6 +23,7 @@
  * @see https://github.com/mike-north/sarif-to-comment/issues/30
  * @see https://spec.commonmark.org/0.31.2/#code-spans
  * @see https://github.github.com/gfm/#fenced-code-blocks
+ * @see https://spec.commonmark.org/0.31.2/#list-items
  */
 
 import * as assert from 'node:assert/strict';
@@ -47,6 +48,9 @@ import { renderNativeBatchGuidance, renderNativeBatchMemberNote } from '../dist/
 import { renderDiagnosticLine, renderWarningsList } from '../dist/presentation/warnings-list.cjs';
 import { codeSpan, escapePlain, escapePlainInline, fenced, lineSpan } from '../dist/presentation/markdown.cjs';
 import { fenceProblem, loadMarkdownParser, unbalancedHtml } from '../dist/presentation/markdown-tree.cjs';
+import { fromMarkdown } from 'mdast-util-from-markdown';
+import { gfmFromMarkdown } from 'mdast-util-gfm';
+import { gfm } from 'micromark-extension-gfm';
 
 const C = '2222222222222222222222222222222222222222';
 
@@ -563,5 +567,35 @@ describe('the warnings list of an outcome report (docs/diagnostics.md)', () => {
   test('the list is headed **Warnings:** and keeps the order given', () => {
     assert.equal(renderWarningsList([warning('a-code', 'First.', '/x'), warning('b-code', 'Second.')]),
       '**Warnings:**\n\n- `a-code` at `/x`: First.\n- `b-code`: Second.');
+  });
+  // Review presentation contract §6: every line of a message after its first is indented two spaces, the content
+  // column of "- ", so it continues the list item (CommonMark §5.2); blank lines stay empty. The text is unchanged.
+  const OBSTACLES = 'The group `g` cannot be delivered:\n\n- `native-batch`: The edit of `README.md` line 5.\n- `companion`: Not yet supported.';
+
+  test('regression: a message with its own list stays inside its diagnostic\'s item, indented two spaces', () => {
+    assert.equal(renderDiagnosticLine(warning('delivery-unavailable', OBSTACLES, '/runs/0/results/7')), [
+      '- `delivery-unavailable` at `/runs/0/results/7`: The group `g` cannot be delivered:',
+      '',
+      '  - `native-batch`: The edit of `README.md` line 5.',
+      '  - `companion`: Not yet supported.',
+    ].join('\n'));
+  });
+
+  test('every continuation line is indented, a fenced block included, and blank lines carry no spaces', () => {
+    assert.equal(renderDiagnosticLine(warning('c', 'One\ntwo\n\n```\ncode\n```')), '- `c`: One\n  two\n\n  ```\n  code\n  ```');
+  });
+
+  test('regression: as CommonMark reads it, each message\'s list nests under its own item, and the items stay siblings', () => {
+    const tree = fromMarkdown(renderWarningsList([warning('a-code', OBSTACLES, '/x'), warning('b-code', 'Second.')]), {
+      extensions: [gfm()], mdastExtensions: [gfmFromMarkdown()],
+    });
+    const lists = tree.children.filter((node) => node.type === 'list');
+    assert.equal(lists.length, 1, 'one list of diagnostics; no sibling list after it');
+    const [list] = lists;
+    assert.ok(list?.type === 'list');
+    assert.equal(list.children.length, 2, 'two diagnostics, nothing more at their level');
+    const nested = list.children[0]?.children.filter((node) => node.type === 'list') ?? [];
+    assert.equal(nested.length, 1, 'the obstacles are a list inside the first diagnostic\'s item');
+    assert.equal(nested[0]?.type === 'list' ? nested[0].children.length : 0, 2);
   });
 });

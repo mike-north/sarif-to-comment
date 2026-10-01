@@ -1479,7 +1479,7 @@ describe('a native multi-change fix (one SARIF fix with several changes)', () =>
     // Delivery policy §5, §8.3: a fix with several changes follows groupedEdits, whose
     // default native batch needs every change to be a native suggestion.
     const line = '- `delivery-unavailable` at `/runs/0/results/0`: The fix with 2 changes at `/runs/0/results/0` cannot be delivered. `groupedEdits` is `[native-batch]`, the default, and no mechanism it lists is available:\n\n'
-      + '- `native-batch`: The edit of `src/client.ts` line 2: Lines 2-2 of src/client.ts cannot carry a native suggestion (file-not-in-diff).';
+      + '  - `native-batch`: The edit of `src/client.ts` line 2: Lines 2-2 of src/client.ts cannot carry a native suggestion (file-not-in-diff).';
     await assertBlockedEverywhere(makeWorld(), document([multiFile()]), [line], null);
   });
 

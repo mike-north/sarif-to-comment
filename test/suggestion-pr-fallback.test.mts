@@ -170,8 +170,9 @@ function readyHeadline(count: number): string {
 }
 
 /** The problem line blocked Markdown lists for a diagnostic (its code, pointer and message). */
+/** Review presentation contract §6: a diagnostic's line, its message's later lines indented two spaces under its item. */
 const problemLine = (d: Json): string =>
-  `- \`${asString(d['code'])}\` at \`${asString(asRecord(d['location'])['pointer'])}\`: ${asString(d['message'])}`;
+  `- \`${asString(d['code'])}\` at \`${asString(asRecord(d['location'])['pointer'])}\`: ${asString(d['message']).replace(/\n(?=[^\n])/g, '\n  ')}`;
 
 // Review-body proposals exactly as without suggestion pull requests
 // (docs/file-operation-publication-contract.md; the grammar in src/prepare-review.cts's header).
