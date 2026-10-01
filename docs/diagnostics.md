@@ -196,7 +196,7 @@ These internal codes were unclear. They were renamed before their first release 
 
 ## Retired codes
 
-These codes were never released. The [delivery policy](delivery-policy-contract.md#103-diagnostic-codes) replaced them, so they are no longer reported:
+These codes were never released, and are no longer reported. The [delivery policy](delivery-policy-contract.md#103-diagnostic-codes) replaced all but one of them; the reviewed diff made `suggestion-reviewed-commit-not-head` unnecessary:
 
 | Retired | Reported instead |
 |---|---|
@@ -204,14 +204,14 @@ These codes were never released. The [delivery policy](delivery-policy-contract.
 | `suggestion-group-pr-unavailable` | `delivery-unavailable`: a group or fix with several changes that no listed mechanism can deliver. |
 | `suggestion-group-requires-suggestion-prs` | `delivery-unavailable` |
 | `fix-changes-require-suggestion-prs` | `delivery-unavailable` |
-| `suggestion-reviewed-commit-not-head` | `delivery-unavailable`, whose `native` obstacle states the condition; its remedies start with `Review the pull request's head commit, and publish that review.` |
+| `suggestion-reviewed-commit-not-head` | Nothing: a native suggestion no longer needs the reviewed commit to be the pull request's head. It is eligible when its lines have an anchor on the reviewed diff ([specification R13.1](specification.md#r131-the-reviewed-diff-historical-placement-and-native-suggestions)); otherwise `native` is unavailable with the obstacle that replaced `suggestion-not-inline`. |
 | `suggestion-not-inline` | `delivery-unavailable`, whose `native` obstacle states the condition; its remedies start with `Remove the fix.` |
 | `suggestion-fence-unverified` | `delivery-unavailable`, whose `native` obstacle states the condition; its remedies start with `Change the replacement.` |
 | `suggestion-blank-only-unverified` | `delivery-unavailable`, whose `native` obstacle states the condition; its remedies start with `Change the replacement.` |
 | `suggestion-crlf-unverified` | `delivery-unavailable`, whose `native` obstacle states the condition; its remedies start with `Change the replacement.` |
 | `suggestion-final-newline-unverified` | `delivery-unavailable`, whose `native` obstacle states the condition; its remedies start with `Change the replacement.` |
 
-Each retired code's specific remedy now appears in the remedies of the `delivery-unavailable` (or `delivery-fallback`) diagnostic whose obstacle it relates to, before the code's catalogued remedies, each once ([delivery policy §8.9, §10.1](delivery-policy-contract.md#89-native-eligibility-of-an-edit)); the part that said to enable suggestion pull requests is the catalogued remedy of listing another mechanism. The remedies of `suggestion-group-pr-unavailable` for a rewritten history, a file over the limit and a long description appear the same way, with the `companion` obstacles.
+Each code that `delivery-unavailable` or `delivery-fallback` replaced now gives its specific remedy among the remedies of that diagnostic, for the obstacle it relates to, before the code's catalogued remedies, each once ([delivery policy §8.9, §10.1](delivery-policy-contract.md#89-native-eligibility-of-an-edit)); the part that said to enable suggestion pull requests is the catalogued remedy of listing another mechanism. The remedies of `suggestion-group-pr-unavailable` for a rewritten history, a file over the limit and a long description appear the same way, with the `companion` obstacles.
 
 ## Code catalog
 
@@ -333,6 +333,8 @@ One entry per code: its severity, its title, what it means and its typical remed
 
 | Code | Severity | Title | Meaning | Typical remedies |
 |---|---|---|---|---|
+| `reviewed-commit-not-in-pull-request` | error | The reviewed commit does not belong to the pull request | The reviewed commit is not the pull request's head or an ancestor of it, and no force-push of its branch replaced a head that contains it ([specification R17](specification.md#r17-publish-only-about-a-commit-of-the-pull-request)). GitHub would accept a review there, so the tool refuses before anything is prepared or written. A commit reachable only from the base branch is not part of the pull request. | Check the reviewed commit: review a commit of this pull request.<br>Check the pull request number. |
+| `reviewed-commit-association-unknown` | note | Whether the reviewed commit belongs to the pull request is not known | It is not the head or an ancestor of it, and the force-push history could not show it either way: an event names no earlier head, the events could not all be listed, an earlier head could not be compared, or more than 10 would need comparing. A limited lookup is not proof of absence, so the review is published at the reviewed commit. | — |
 | `source-file-missing` | error | The file does not exist at the source revision | The location names a file the reviewed commit (or the run's source revision) does not have. | Correct the location, or review the commit the finding refers to. |
 | `source-range-invalid` | error | A region does not denote text in the file | The region's lines or columns are out of range, inverted, or address only the end-of-file position. | Correct the region against the reviewed source. |
 | `source-coordinates-inconsistent` | error | A region's coordinates disagree | Its line/column and character offsets denote different text. | Make the region's coordinates agree, or give only one kind. |

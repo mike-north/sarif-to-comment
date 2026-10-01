@@ -126,6 +126,8 @@ The adapter MUST determine host placement eligibility for the relevant context. 
 
 A valid source reference outside native inline placement MUST default to general review feedback with an exact-revision source link. The tool MUST make the source association explicit and MUST NOT fabricate a source location or describe an unverified location as verified. An unverified or inconsistent location requires reconciliation rather than this fallback. A general comment MUST NOT be represented as retaining unavailable native click-to-apply behavior. Host capability details remain in O4. **[D3; A9]**
 
+Inline eligibility is decided against the reviewed diff of [R13](#r13-preserve-the-reviewed-revision-and-caller-selected-publication-mode), whether or not the reviewed commit is still the pull request's head. **[D58]**
+
 ### R8. Let actual replacement ranges determine native suggestion scope
 
 Several feedback items within one replacement range may accompany one rendered suggestion. Their explanations and origins MUST be retained. The tool MUST NOT duplicate the replacement per producer or enlarge its range merely to include nearby feedback. Feedback outside the replacement range remains separate. **[D4; A2]**
@@ -203,6 +205,50 @@ The caller MUST be able to choose pending or submitted publication. R11 and R12 
 Pending publication means a **draft code review**. Associated suggestion PRs may be created as drafts at that time, using GitHub's normal visibility. The publisher MUST NOT introduce an additional privacy or deferred-creation requirement solely because repository readers can see those draft PRs. This does not require a service synchronizing their later lifecycle with manual review submission or discard. **[D26; A35]**
 
 When publication mode is omitted, the publisher MUST leave the code review as a draft. Immediate submission MUST require an explicit caller choice. **[D26]**
+
+#### R13.1 The reviewed diff, historical placement and native suggestions
+
+*Added October 1, 2026, implementing [D58](design-decisions.md#d58-do-not-abort-historical-review-publication-merely-because-the-pr-branch-changes--owner-selected-force-push-direction) for inline placement and native suggestions. The host behavior it relies on is recorded in the [behavior register](github-behavior.md) as GH-16 (new inline comments at an older `commit_id`) and GH-19 (applying native suggestions anchored at an older commit), with raw evidence in `docs/evidence/realignment/` (`e1-e3-readme.md`, `e2-readme.md`).*
+
+Let R be the reviewed commit and H the pull request's current head. A review is always created with `commit_id` R, and every inline comment is anchored on one diff, the **reviewed diff**: from the pull request's diff base B to R. **[D15, D58]**
+
+- **B** is the merge base of the pull request's base commit (`base.sha`) and H, as GitHub's comparison `GET compare/{base.sha}...{H}` names it, or the caller's `oldSourceCommit`, which replaces that request. B is a candidate until each read at B is verified against the reviewed diff: the file's reviewed patch, reverse-applied to its text at R, must reproduce its text at B, and a file the reviewed diff does not change must be identical at both.
+- **R is H.** The reviewed diff is the pull request's own diff, read from its file list (`GET pulls/{n}/files`, every page, with the pull request read before and after to exclude a moving head). This is unchanged.
+- **R is not H.** The reviewed diff is read through GitHub's comparison `GET compare/{B}...{R}` instead. The pull request is read once and its file list is not read.
+  - `ahead` (B is an ancestor of R) or `identical`: the comparison's files and patches are the two-dot diff from B to R.
+  - `behind` or `diverged` (the base side has changes R lacks, for example after a rebase onto an advanced base): GitHub's REST comparison has no two-dot form (`compare/{B}..{R}` answered 404 when tried on October 1, 2026). A second comparison `GET compare/{R}...{B}` lists the files changed on the base side since the two commits' merge base. Those files belong to the reviewed diff, but with no patch: a finding on one is general feedback with an `inline-placement-unavailable` warning. Every other file keeps the first comparison's patch, which is its two-dot patch because its base-side text did not change. When that second list holds 300 files, GitHub's most for one comparison, it may be incomplete, so no file keeps a patch.
+  - A first comparison that lists 300 files may be incomplete and is refused (`files-incomplete`); nothing is truncated.
+
+**Why this diff.** GH-16 observed GitHub accept new inline comments at an ancestor R and at a discarded R, and resolve their lines against the two-dot diff from the pull request's current base commit to R: a line only in the reviewed commit's diff was accepted, a line only in the head's diff was refused with HTTP 422 ("Line could not be resolved"), and on a rebased fixture a line that only the two-dot diff contains, not the diff from the merge base of the base commit and R, was accepted. **Known limit:** in those fixtures the current base commit was both the base branch's tip and the merge base of the base and the head, so they cannot tell which GitHub uses. The tool uses the merge base of the base commit and the head (the base of the pull request's current diff). Where GitHub uses something else and the two diffs differ, GitHub refuses the whole create request; nothing partial is created (GH-05), and publication reports it as `rejected`.
+
+**Placement.** Inline placement follows R7 on the reviewed diff, whether R is H, an ancestor of H, or a commit a force-push discarded. A location whose lines the reviewed diff contains is anchored inline at R; any other keeps R7's fallback, general feedback with an exact link to R. So a line that only the head's diff contains is general feedback, and a line that only the reviewed diff contains is inline. A finding is never moved to H or to newer lines. A SARIF provenance revision other than R or B still yields general feedback, as before. **[D3, D58]**
+
+**Native suggestions.** A native suggestion at R is offered whenever its lines have a valid RIGHT anchor on the reviewed diff and the other eligibility rules hold: the fix edits R, and GitHub's observed application reproduces exactly the intended file. R need not be H. The tool does not predict applicability from GitHub's `outdated` field: GH-19 observed the API report a suggestion current that the web interface treated as outdated. **[D4, D58]**
+
+**Host behavior relied on, not enforced.** GH-19 observed, for one-line LF replacements on same-repository draft pull requests, with one account that was also the pull request's author: on lines the head left unchanged, GitHub offered a suggestion at R and applied it to the head's file byte for byte, singly and in batches; on lines the head changed, GitHub marked the suggestion Outdated and disabled applying it, so it could not overwrite the head's change. The tool relies on GitHub for this. It does not check whether the head changed a suggestion's lines, and does not withhold a suggestion because it did.
+
+### R17. Publish only about a commit of the pull request
+
+*Added October 1, 2026, implementing [D58](design-decisions.md#d58-do-not-abort-historical-review-publication-merely-because-the-pr-branch-changes--owner-selected-force-push-direction)'s rule that the reviewed commit must be associated with the pull request.*
+
+Before any publication write, and in readiness assessment, the tool MUST establish whether the reviewed commit R belongs to the pull request, currently or historically. GitHub does not check it: GH-16 observed reviews, inline and body-only, accepted at commits of unrelated branches. **[D58]**
+
+R is **associated** when it equals, or is an ancestor of, the pull request's current head H, or the `beforeCommit` of a `HeadRefForcePushedEvent` in the pull request's timeline (a head that a force-push replaced; E0 found each discarded reviewed commit named there). Reachability from the base branch alone does not associate R: a commit that neither H nor a replaced head contains is not part of this pull request, wherever else it is.
+
+- **Associated:** preparation proceeds.
+- **Not associated:** the review is blocked before anything is prepared or written, with the error `reviewed-commit-not-in-pull-request` naming R and the pull request. Publication returns `blocked` (CLI exit status 2), and so does readiness assessment.
+- **Unknown:** no check associated R, and the lookup could not see every replaced head: a force-push event names no `beforeCommit` (null), the timeline's events cannot all be listed (fewer listed than its `filteredCount`, or more than 100 pages), an earlier head cannot be compared (GitHub answers 404), or more than 10 distinct earlier heads would need comparing. A limited lookup that misses is not proof of absence, so publication proceeds and reports the note `reviewed-commit-association-unknown`. The note is one of the publication's preparation warnings: it is recorded with the publication and reported on every later call for it, and assessment reports it with `ready`.
+
+Any other failed read (network, authentication, a refused or malformed answer, GraphQL errors) is operational, as for every other read: publication rejects and assessment answers `incomplete`. The check runs when a publication is planned, never on a retry with an existing state path, which never prepares again (R14).
+
+**Requests,** in order, stopping as soon as R is associated:
+
+1. R is H: none.
+2. `GET compare/{R}...{H}`. `ahead` associates R. One request.
+3. Every page of one GraphQL query of the pull request's `timelineItems(itemTypes: [HEAD_REF_FORCE_PUSHED_EVENT], first: 100, after: …)`, selecting `filteredCount`, `pageInfo { hasNextPage endCursor }` and each event's `beforeCommit { oid }`: ⌈n / 100⌉ pages for n force-push events, at least one. A `beforeCommit` equal to R associates it.
+4. `GET compare/{R}...{X}` for each distinct earlier head X, newest event first, until one answers `ahead`: at most 10.
+
+So the check costs at most 1 + max(1, ⌈n / 100⌉) + min(k, 10) requests for n events naming k distinct earlier heads: none for a review of the head, one for an ancestor of the head, and two for a reviewed commit that a force-push replaced (with at most 100 events).
 
 ### R14. Recover uncertain creation using persisted publication identity
 
