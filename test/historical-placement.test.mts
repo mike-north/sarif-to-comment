@@ -49,6 +49,7 @@ import {
   LATER_BASE,
   MOVED_HEAD,
   MOVED_R,
+  TIP_NOTES,
   NOTES,
   OWNER,
   PULL,
@@ -243,6 +244,31 @@ describe('a base branch that moved on without the pull request: base.sha is not 
     const world = makeWorld('moved-picked');
     await validate(world, MOVED_R, document([finding('Line 5.', SAMPLE, 5)]));
     assert.ok(reads(world).includes(`/compare/${BASE}...${TIP_PICKED}`), reads(world).join('\n'));
+  });
+
+  test('regression: a base-side finding on a file only the moved tip changed goes to the body; the run is not rejected', async () => {
+    // B = BASE, T = TIP_NOTES (only notes line 3), R = ANCESTOR_R (only the sample). The finding reads the notes at B.
+    const world = makeWorld('tip-notes');
+    const outcome = await publish(world, ANCESTOR_R, document([finding('The first note, as the base had it.', NOTES, 2)], BASE));
+    assert.equal(status(outcome), 'published', markdown(outcome));
+    const review = theReview(world);
+    assert.equal(review.request.commit_id, ANCESTOR_R);
+    assert.deepEqual(anchors(review), []);
+    assert.ok(review.body.includes(permalink(BASE, NOTES, 2)), review.body);
+    assert.ok(review.body.includes('First note.'), 'the text quoted is the diff base\'s');
+    assert.deepEqual(codes(outcome), [['warning', 'inline-placement-unavailable']]);
+  });
+
+  test('regression: after a rebase, a base-side finding on a file only the base changed goes to the body; the run is not rejected', async () => {
+    // B = T = TIP_NOTES, onto which the head was rebased; R = ANCESTOR_R, replaced by the force-push. Only the base changed the notes.
+    const world = makeWorld('rebased-notes');
+    const outcome = await publish(world, ANCESTOR_R, document([finding('The second note, as the base has it.', NOTES, 3)], TIP_NOTES));
+    assert.equal(status(outcome), 'published', markdown(outcome));
+    const review = theReview(world);
+    assert.deepEqual(anchors(review), []);
+    assert.ok(review.body.includes(permalink(TIP_NOTES, NOTES, 3)), review.body);
+    assert.ok(review.body.includes('Second note, on the base.'), 'the text quoted is the diff base\'s');
+    assert.deepEqual(codes(outcome), [['warning', 'inline-placement-unavailable']]);
   });
 
   test('at the head, the pull request\'s own diff is used as before', async () => {

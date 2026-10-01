@@ -30,9 +30,17 @@
  *   then changes line 15. The base branch's tip T, the pull request's
  *   `base.sha`, is no longer the merge base B of the base and the head:
  *   either T cherry-picked R's lines 5 and 6 ('moved-picked'), or T inserted
- *   a line near the top of the sample ('moved-inserted'). GitHub resolves a
- *   line at R against T..R (GH-16), which differs from B..R in the sample but
- *   not in the notes, which T left alone.
+ *   a line near the top of the sample ('moved-inserted'). GH-16 cannot tell
+ *   whether GitHub resolves a line at R against T..R or against
+ *   merge-base(base, head)..R, since its fixtures had T equal to that merge
+ *   base. The host models the tip hypothesis, the one the tool must survive:
+ *   under it T..R differs from B..R in the sample, but not in the notes,
+ *   which T left alone.
+ * - TIP-NOTES: files only the base side changed. The base tip changed only
+ *   line 3 of the notes, which R never touched. Either the pull request did
+ *   not follow ('tip-notes', with the ANCESTOR head), or its head was rebased
+ *   onto that tip, keeping R's line 6 ('rebased-notes', R replaced by a
+ *   force-push).
  *
  * The host models documented and recorded GitHub behavior; it is not
  * evidence of live GitHub behavior.
@@ -79,6 +87,9 @@ export const MOVED_R = 'f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1';
 export const MOVED_HEAD = 'f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2';
 export const TIP_PICKED = 'f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3';
 export const TIP_INSERTED = 'f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4';
+/** TIP-NOTES: a base tip that changed only line 3 of the notes, and a head rebased onto it. */
+export const TIP_NOTES = '9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a';
+export const REBASED_NOTES_HEAD = '9b9b9b9b9b9b9b9b9b9b9b9b9b9b9b9b9b9b9b9b';
 
 /** A recorded line of the fixture file (docs/evidence/realignment/e0-41-compare-e69981e-b3e3ed7.json). */
 function line(n: number, text: string): string {
@@ -100,6 +111,7 @@ export const REVIEWED_5 = 'reviewed change one (added by C1).';
 export const REVIEWED_6 = 'reviewed change two (added by C1).';
 const NOTES_BASE = ['# Notes\n', 'First note.\n', 'Second note.\n'];
 const NOTES_REVIEWED = ['# Notes\n', 'First note, reviewed.\n', 'Second note.\n'];
+const NOTES_TIP = ['# Notes\n', 'First note.\n', 'Second note, on the base.\n'];
 
 export const SNAPSHOTS: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>> = {
   [BASE]: { [SAMPLE]: sample(), [NOTES]: NOTES_BASE },
@@ -117,6 +129,8 @@ export const SNAPSHOTS: Readonly<Record<string, Readonly<Record<string, readonly
   [MOVED_HEAD]: { [SAMPLE]: sample({ 5: REVIEWED_5, 6: REVIEWED_6, 15: 'follow-up commit C2.' }), [NOTES]: NOTES_REVIEWED },
   [TIP_PICKED]: { [SAMPLE]: sample({ 5: REVIEWED_5, 6: REVIEWED_6 }), [NOTES]: NOTES_BASE },
   [TIP_INSERTED]: { [SAMPLE]: [...sample().slice(0, 1), 'Inserted by the base.\n', ...sample().slice(1)], [NOTES]: NOTES_BASE },
+  [TIP_NOTES]: { [SAMPLE]: sample(), [NOTES]: NOTES_TIP },
+  [REBASED_NOTES_HEAD]: { [SAMPLE]: sample({ 6: REVIEWED_6 }), [NOTES]: NOTES_TIP },
 };
 
 export const PARENTS: Readonly<Record<string, readonly string[]>> = {
@@ -134,6 +148,8 @@ export const PARENTS: Readonly<Record<string, readonly string[]>> = {
   [MOVED_HEAD]: [MOVED_R],
   [TIP_PICKED]: [BASE],
   [TIP_INSERTED]: [BASE],
+  [TIP_NOTES]: [BASE],
+  [REBASED_NOTES_HEAD]: [TIP_NOTES],
 };
 
 /**
@@ -141,7 +157,7 @@ export const PARENTS: Readonly<Record<string, readonly string[]>> = {
  * that and the head when it differs (the base of the pull request's diff),
  * its head, and the heads force-pushes replaced.
  */
-export type WorldName = 'ancestor' | 'discarded' | 'rebased' | 'moved-picked' | 'moved-inserted';
+export type WorldName = 'ancestor' | 'discarded' | 'rebased' | 'moved-picked' | 'moved-inserted' | 'tip-notes' | 'rebased-notes';
 interface IWorldPull {
   readonly base: string;
   readonly mergeBase?: string;
@@ -154,6 +170,8 @@ const PULLS: Readonly<Record<WorldName, IWorldPull>> = {
   rebased: { base: ADVANCED_BASE, head: REBASED_HEAD, forcePushes: [REBASED_R] },
   'moved-picked': { base: TIP_PICKED, mergeBase: BASE, head: MOVED_HEAD, forcePushes: [] },
   'moved-inserted': { base: TIP_INSERTED, mergeBase: BASE, head: MOVED_HEAD, forcePushes: [] },
+  'tip-notes': { base: TIP_NOTES, mergeBase: BASE, head: ANCESTOR_HEAD, forcePushes: [] },
+  'rebased-notes': { base: TIP_NOTES, head: REBASED_NOTES_HEAD, forcePushes: [ANCESTOR_R] },
 };
 
 /** A snapshot's files as text. */

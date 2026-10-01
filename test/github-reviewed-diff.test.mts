@@ -43,6 +43,7 @@ import {
   TOKEN,
   MOVED_HEAD,
   MOVED_R,
+  TIP_NOTES,
   TIP_PICKED,
   UNRELATED,
   makeWorld,
@@ -297,6 +298,18 @@ describe('fetchContext returns the reviewed diff (specification R13.1)', () => {
     const objectReads = world.host.log().slice(before).map((r) => r.path);
     assert.ok(objectReads.includes(`/repos/${OWNER}/${REPO}/git/commits/${DISCARDED_R}`), 'the reviewed commit\'s file is read');
     assert.ok(!objectReads.includes(`/repos/${OWNER}/${REPO}/git/commits/${DISCARDED_HEAD}`), 'the head is never read');
+  });
+
+  test('an old-side read of a file only another side changed is the diff base\'s own file, never refused', async () => {
+    // tip-notes: B = BASE, the moved tip changed only the notes. rebased-notes: B = the tip, onto which the head was rebased.
+    for (const [name, base] of [['tip-notes', BASE], ['rebased-notes', TIP_NOTES]] as const) {
+      const { client } = clientFor(name);
+      const { context, readSource } = await client.fetchContext({ destination: DESTINATION, reviewedCommit: ANCESTOR_R });
+      assert.equal(context.diff.baseCommit, base, name);
+      assert.deepEqual(context.diff.files.find((f) => f.path === NOTES), { path: NOTES }, `${name}: listed without a patch`);
+      const expected = name === 'tip-notes' ? '# Notes\nFirst note.\nSecond note.\n' : '# Notes\nFirst note.\nSecond note, on the base.\n';
+      assert.equal(await readSource(base, NOTES), expected, name);
+    }
   });
 
   test('an old-side read of a file without a reviewed patch is refused', async () => {
