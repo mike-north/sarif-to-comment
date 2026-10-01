@@ -46,7 +46,9 @@
  *   that commit, docs/specification.md R13.1, which preparation checks); then
  *   the reviewed commit's association with the pull request
  *   (src/reviewed-commit-association.cts, R17): a commit outside it is
- *   blocked alone, before anything else is read or prepared, with
+ *   blocked alone, before any source is read or anything is prepared or
+ *   written (only the context's own reads and the association's precede
+ *   it), with
  *   `reviewed-commit-not-in-pull-request`, and an undecided lookup adds the
  *   note `reviewed-commit-association-unknown` to the outcome's warnings;
  *   then, unless the caller's settings decide every one
@@ -630,7 +632,8 @@ function pullHeadOf(context: IPlainObject, captured: ICapturedReview): string {
  * Fetches the review context once, verifies it is for exactly this pull
  * request and reviewed commit, checks that the reviewed commit belongs to the
  * pull request (docs/specification.md R17: a commit outside it blocks before
- * anything else is read, and an undecided lookup is a note on the outcome),
+ * any source is read or anything is prepared or written, and an undecided
+ * lookup is a note on the outcome),
  * resolves the delivery policy (reading the repository's delivery
  * configuration unless the caller decides every setting,
  * docs/delivery-policy-contract.md §11.1), and prepares the whole review
@@ -649,9 +652,10 @@ export async function prepareForDestination(captured: ICapturedReview, client: I
   };
   const { context, readSource, fileExists, readEntry } = await client.fetchContext(contextRequest);
   verifyContext(context, captured);
-  // The reviewed commit must belong to the pull request before anything is
-  // prepared (docs/specification.md R17): a commit outside it blocks alone,
-  // and an undecided lookup becomes a note on whatever preparation answers.
+  // The reviewed commit must belong to the pull request before any source is
+  // read or anything is prepared or written (docs/specification.md R17): a
+  // commit outside it blocks alone, and an undecided lookup becomes a note on
+  // whatever preparation answers.
   const association = { destination: captured.destination, reviewedCommit: captured.reviewedCommit, head: pullHeadOf(context, captured) };
   const diagnostic = associationDiagnostic(await associateReviewedCommit(association, client), association);
   if (diagnostic?.severity === 'error') return blockedBy([diagnostic], []);

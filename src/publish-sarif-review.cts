@@ -119,6 +119,13 @@
  *     oldSourceCommit? }) -> { context, readSource, fileExists }, and — for
  *     suggestion pull requests — the companion transport of src/github.cts.
  *     Defaults to src/github.cts.
+ *     Since docs/specification.md R13.1 the context's diff must be the
+ *     reviewed diff, ending at the reviewed commit: a client whose
+ *     fetchContext answers with the pull request's current diff while the
+ *     reviewed commit is not its head makes preparation reject with a
+ *     TypeError. When the reviewed commit is not the head, the client also
+ *     needs compareCommits and listHeadRefForcePushes (R17); without them the
+ *     preflight rejects.
  */
 
 import * as crypto from 'node:crypto';
