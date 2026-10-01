@@ -24,16 +24,18 @@
  *   dryRun?:             discover and verify, write nothing
  *
  * Sequence (every read completes before the first write):
- *   0. The label: the override, or else the repository's canonical label
- *      resolved exactly as publication resolves it (contract §2.2.1): the
+ *   0. The repository and the label: the override, after reading the
+ *      repository itself (a failed read rejects as operational, naming the
+ *      repository), or else the repository's canonical label resolved
+ *      exactly as publication resolves it (contract §2.2.1): the
  *      configuration on the default branch, otherwise 'suggestion-pr'. An
  *      invalid configuration rejects, naming the file and field; a failed
- *      read rejects as operational.
+ *      read rejects as operational. The repository is read once either way.
  *   1. Discovery. Sweep: every open pull request with the label (the
  *      client's labeled issues listing). Targeted: the original is resolved
- *      first; if it cannot be verified nothing else is read; otherwise its
- *      cross-referencing pull requests in this repository (D21). A pull
- *      request listed twice counts once.
+ *      first; if it cannot be verified, or does not exist (404), nothing
+ *      else is read; otherwise its cross-referencing pull requests in this
+ *      repository (D21). A pull request listed twice counts once.
  *   2. Classification in ascending number order (contract §2.6): marker,
  *      repository, targeted original, shared suggestion id, targeted state
  *      and label, then the original's state, resolved once per original.
@@ -114,12 +116,15 @@ export interface ICloseSuggestionPullRequestsInput {
 }
 
 /**
- * An original pull request's state: `unverified` when it could not be read,
- * which is never treated as ended.
+ * An original pull request's state. `not-found` when GitHub answered that the
+ * repository has no pull request with its number that this account can read
+ * (HTTP 404): a definitive answer, which running cleanup again does not
+ * change. `unverified` when it could not be read for any other reason, which
+ * running cleanup again may change. Neither is ever treated as ended.
  *
  * @public
  */
-export type OriginalPullRequestState = 'open' | 'merged' | 'closed' | 'unverified';
+export type OriginalPullRequestState = 'open' | 'merged' | 'closed' | 'not-found' | 'unverified';
 
 /**
  * An original pull request cleanup resolved.
@@ -147,7 +152,8 @@ export interface IOriginalPullRequest {
  * - `failed`: reading or closing it failed; running cleanup again is safe.
  * - `not-ours`: it does not conform to the suggestion pull request
  *   convention (no, several or a changed marker, another repository or
- *   original, a fork, or another branch), so it was not touched.
+ *   original, an original that is not a pull request of the repository, a
+ *   fork, or another branch), so it was not touched.
  * - `unlabeled`: it does not carry the label, so it was not touched.
  *
  * @public
@@ -225,12 +231,13 @@ export interface ICloseSuggestionPullRequestsOutcome {
 /** What cleanup needs from a GitHub client. */
 type CleanupClient = Pick<
   IGitHubClient,
-  'readDefaultBranchFile' | 'listOpenLabeledPullRequests' | 'getPullRequest' | 'listCrossReferencingPullRequests' | 'closePullRequest'
+  'readDefaultBranchFile' | 'readRepository' | 'listOpenLabeledPullRequests' | 'getPullRequest' | 'listCrossReferencingPullRequests' | 'closePullRequest'
 >;
 
 /** The client methods cleanup calls. */
 const CLEANUP_METHODS: readonly (keyof CleanupClient)[] = [
   'readDefaultBranchFile',
+  'readRepository',
   'listOpenLabeledPullRequests',
   'getPullRequest',
   'listCrossReferencingPullRequests',
@@ -328,9 +335,19 @@ function capture(input: unknown): ICaptured {
  * configuration; otherwise the canonical label, resolved exactly as
  * publication resolves it. An invalid configuration is refused, naming the
  * file and field; a failed read propagates as the operational error it is.
+ *
+ * Either way the repository is read exactly once here, before anything else:
+ * the configuration read begins with it, and with an override it is read on
+ * its own. That read is what makes an original's 404 mean "no such pull
+ * request" (`not-found`): GitHub answers 404 as well for a repository that
+ * does not exist or that the token cannot see, which must fail, never pass
+ * as a complete cleanup.
  */
 async function resolveLabel(captured: ICaptured, client: CleanupClient): Promise<ICleanupLabel> {
-  if (captured.label !== undefined) return { name: captured.label, source: 'override', branch: '' };
+  if (captured.label !== undefined) {
+    await confirmRepository(captured, client);
+    return { name: captured.label, source: 'override', branch: '' };
+  }
   const { owner, repo } = captured;
   const configuration = await client.readDefaultBranchFile({ owner, repo, path: SUGGESTION_PR_CONFIGURATION_PATH });
   const canonical = resolveCanonicalLabel(configuration);
@@ -340,6 +357,23 @@ async function resolveLabel(captured: ICaptured, client: CleanupClient): Promise
     );
   }
   return { name: canonical.label, source: canonical.source, branch: canonical.branch };
+}
+
+/**
+ * Reads the repository, rejecting with an operational Error that names it
+ * when the read fails for any reason (a mistyped name and a repository the
+ * token cannot see are both a 404).
+ */
+async function confirmRepository(captured: ICaptured, client: CleanupClient): Promise<void> {
+  const { owner, repo } = captured;
+  try {
+    await client.readRepository({ owner, repo });
+  } catch (err) {
+    if (!(err instanceof GitHubError)) throw err;
+    // The message carries GitHub's answer; like the configuration refusal in
+    // resolveLabel, no cause is attached, so it is not printed twice.
+    throw new Error(`The repository ${owner}/${repo} could not be read (${err.message}). Check the repository name, and that this token can read it.`);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -393,7 +427,9 @@ class Cleanup {
       candidates = await this.labeledCandidates();
     } else {
       const original = await this.resolveOriginal(originalPullNumber);
-      if (original.state === 'unverified') return [];
+      // Nothing can be closed for an original that cannot be verified; and
+      // nothing can reference one that does not exist.
+      if (original.state === 'unverified' || original.state === 'not-found') return [];
       candidates = await this.referencingCandidates(originalPullNumber);
     }
 
@@ -440,6 +476,7 @@ class Cleanup {
         const resolved = await this.resolveOriginal(original);
         if (resolved.state === 'open') this.report(candidate, original, 'left-open');
         else if (resolved.state === 'unverified') this.report(candidate, original, 'unverified', resolved.reason);
+        else if (resolved.state === 'not-found') this.report(candidate, original, 'not-ours', `its marker names #${String(original)}, which is not a pull request in ${this.fullName()}`);
         else if (await this.verify(candidate, marker, line)) eligible.push({ candidate, original });
       }
     }
@@ -464,7 +501,12 @@ class Cleanup {
     );
   }
 
-  /** An original's state, read once however many suggestions name it (contract §2.7). */
+  /**
+   * An original's state, read once however many suggestions name it
+   * (contract §2.7). A 404 is GitHub's definitive answer that the repository
+   * has no such pull request this account can read: `not-found`, the same on
+   * every run. Every other failure is `unverified`.
+   */
   private async resolveOriginal(pullNumber: number): Promise<IOriginalPullRequest> {
     const known = this.originals.get(pullNumber);
     if (known !== undefined) return known;
@@ -476,7 +518,9 @@ class Cleanup {
       // Positive verification only: a lookup that fails for any reason is
       // not evidence that the original ended.
       if (!(err instanceof GitHubError)) throw err;
-      resolved = { number: pullNumber, state: 'unverified', reason: this.safe(err.message) };
+      resolved = err.code === 'http-status' && err.status === 404
+        ? { number: pullNumber, state: 'not-found' }
+        : { number: pullNumber, state: 'unverified', reason: this.safe(err.message) };
     }
     this.originals.set(pullNumber, resolved);
     return resolved;
@@ -549,7 +593,12 @@ class Cleanup {
 
   /** Whether `owner/repo` names this repository (GitHub names are case-insensitive). */
   private isThisRepository(fullName: string): boolean {
-    return fullName.toLowerCase() === `${this.captured.owner}/${this.captured.repo}`.toLowerCase();
+    return fullName.toLowerCase() === this.fullName().toLowerCase();
+  }
+
+  /** This repository as `owner/repo`, as given. */
+  private fullName(): string {
+    return `${this.captured.owner}/${this.captured.repo}`;
   }
 
   private safe(text: string): string {
@@ -588,10 +637,13 @@ class Cleanup {
 
 /**
  * The diagnostics of a cleanup, each about one pull request: every original
- * that could not be verified, and every suggestion pull request that failed,
- * could not be closed with this account, or does not follow the convention.
- * Suggestions left open because their original could not be verified are
- * covered by that original's warning.
+ * that could not be verified, the targeted original when it does not exist,
+ * and every suggestion pull request that failed, could not be closed with
+ * this account, or does not follow the convention. Suggestions left open
+ * because their original could not be verified are covered by that
+ * original's warning. An original that does not exist and is not the
+ * targeted one was named by a suggestion's marker, whose `not-ours` note
+ * says so.
  */
 function cleanupDiagnostics(
   captured: ICaptured,
@@ -603,9 +655,13 @@ function cleanupDiagnostics(
   const forOriginal = (original: number | null): string => (original === null ? '' : ` (for #${String(original)})`);
   const found: IDiagnostic[] = [];
   for (const o of originals) {
-    if (o.state !== 'unverified') continue;
-    found.push(createDiagnostic('original-pull-request-unverified',
-      `Pull request #${String(o.number)} could not be verified${because(o.reason)}, so its suggestion pull requests were left open.`, { subject: subject(o.number) }));
+    if (o.state === 'unverified') {
+      found.push(createDiagnostic('original-pull-request-unverified',
+        `Pull request #${String(o.number)} could not be verified${because(o.reason)}, so its suggestion pull requests were left open.`, { subject: subject(o.number) }));
+    } else if (o.state === 'not-found' && o.number === captured.originalPullNumber) {
+      found.push(createDiagnostic('original-pull-request-not-found',
+        `${notFoundText(captured, o.number)}, so no suggestion pull request can reference it.`, { subject: subject(o.number) }));
+    }
   }
   for (const s of suggestions) {
     const which = `#${String(s.number)}${forOriginal(s.original)}`;
@@ -630,16 +686,28 @@ function unique(candidates: readonly ICandidate[]): ICandidate[] {
 // ---------------------------------------------------------------------------
 // Presentation
 
-const ORIGINAL_TEXT: Readonly<Record<Exclude<OriginalPullRequestState, 'unverified'>, string>> = {
+const ORIGINAL_TEXT: Readonly<Record<Exclude<OriginalPullRequestState, 'unverified' | 'not-found'>, string>> = {
   open: 'open',
   merged: 'merged',
   closed: 'closed without merging',
 };
 
-function originalLine(original: IOriginalPullRequest): string {
-  const state = original.state === 'unverified' ? `could not be verified (${original.reason ?? 'no reason given'})` : ORIGINAL_TEXT[original.state];
+/** What GitHub's 404 for original `n` establishes, as a clause. */
+function notFoundText(captured: ICaptured, n: number): string {
+  return `${captured.owner}/${captured.repo} has no pull request #${String(n)} that this account can read`;
+}
+
+function originalLine(captured: ICaptured, original: IOriginalPullRequest): string {
+  const state = original.state === 'unverified'
+    ? `could not be verified (${original.reason ?? 'no reason given'})`
+    : original.state === 'not-found'
+      ? `not found (${notFoundText(captured, original.number)})`
+      : ORIGINAL_TEXT[original.state];
   return `- #${String(original.number)}: ${state}`;
 }
+
+/** Original states that are diagnostics (see cleanupDiagnostics), which the CLI's human report leaves to stderr. */
+const DIAGNOSED_ORIGINALS: ReadonlySet<OriginalPullRequestState> = new Set(['unverified', 'not-found']);
 
 function resultText(entry: IChecked, label: string): string {
   const reason = entry.reason ?? 'no reason given';
@@ -683,8 +751,8 @@ const DIAGNOSED_RESULTS: ReadonlySet<SuggestionCleanupResult> = new Set(['unveri
  * The cleanup report. In full for the outcome's `markdown`; with `full`
  * false, the CLI's human report (IReported), which leaves out the entries
  * the outcome's diagnostics already say: originals that could not be
- * verified, and suggestions left open by them, refused, failed or not
- * conforming.
+ * verified or were not found, and suggestions left open by them, refused,
+ * failed or not conforming.
  */
 function renderMarkdown(
   captured: ICaptured,
@@ -694,14 +762,14 @@ function renderMarkdown(
   allChecked: readonly IChecked[],
   full = true,
 ): string {
-  const originals = full ? allOriginals : allOriginals.filter((o) => o.state !== 'unverified');
+  const originals = full ? allOriginals : allOriginals.filter((o) => !DIAGNOSED_ORIGINALS.has(o.state));
   const checked = full ? allChecked : allChecked.filter((c) => !DIAGNOSED_RESULTS.has(c.result));
   const where = `${captured.owner}/${captured.repo}`;
   const scope = captured.originalPullNumber === undefined
     ? `Checked the open pull requests labeled \`${label.name}\` in ${where} (${labelSource(label)}).`
     : `Checked the pull requests that reference #${String(captured.originalPullNumber)} in ${where}; the suggestion label is \`${label.name}\` (${labelSource(label)}).`;
   const lines = [status === 'complete' && captured.dryRun ? '## Suggestion pull request cleanup: dry run' : TITLES[status], '', scope, ''];
-  if (originals.length > 0) lines.push('Original pull requests:', '', ...originals.map(originalLine), '');
+  if (originals.length > 0) lines.push('Original pull requests:', '', ...originals.map((o) => originalLine(captured, o)), '');
   if (allChecked.length === 0) {
     lines.push('No suggestion pull requests were found.', '');
   } else if (checked.length > 0) {
@@ -740,8 +808,9 @@ function renderMarkdown(
  * only the pull requests referencing that original.
  * A suggestion is closed only after its original has been read and found
  * merged or closed, and after the suggestion itself has been read again and
- * verified: an original that cannot be read is `unverified`, never treated as
- * ended. Everything is read before anything is closed.
+ * verified: an original that cannot be read is `unverified`, and one GitHub
+ * reports does not exist is `not-found`; neither is ever treated as ended.
+ * Everything is read before anything is closed.
  *
  * Closing is the only change made. Branches are never deleted, and nothing
  * is edited, labeled, commented on or reopened; the original is never

@@ -391,6 +391,22 @@ describe('library + real GitHub client over HTTP', () => {
     assert.equal(world.host.log().length, before, 'a remembered refusal needs no request');
     assert.equal(world.host.reviews().length, 1);
   });
+
+  test('regression (#43): the review-refused message states the refusal once and ends each sentence', async () => {
+    // Written from the catalog meaning of review-refused (docs/diagnostics.md)
+    // and GitHub's 422 answer the host gives: its message and errors.
+    const expected = 'GitHub refused the create-review request (HTTP 422): Unprocessable Entity; User can only have one pending review per pull request. '
+      + 'It is never resent; this state path now records the refusal. Resolve the cause, then publish under a new state path.';
+    const world = makeWorld();
+    assert.equal((await run(world)).status, 'published');
+    const secondPath = path.join(world.stateDir, 'second.json');
+    for (const attempt of ['the response', 'the recorded refusal']) {
+      const outcome = await run(world, { statePath: secondPath });
+      assert.equal(outcome.status, 'rejected', outcome.markdown);
+      assert.deepEqual(outcome.diagnostics.map((d) => [d.code, d.message]), [['review-refused', expected]], attempt);
+      assert.ok(outcome.markdown.includes(`\n\n${expected}\n\n`), `${attempt}: ${outcome.markdown}`);
+    }
+  });
 });
 
 describe('CLI + real GitHub client over HTTP', () => {

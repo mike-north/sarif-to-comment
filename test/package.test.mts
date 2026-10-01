@@ -439,6 +439,12 @@ describe('installed package', () => {
     const help = spawnSync(bin, ['--help'], { cwd: consumer, encoding: 'utf8', env: cleanEnv });
     assert.equal(help.status, 0, help.stderr);
     assert.match(help.stdout, /--sarif FILE/);
+    // #43: the installed executable reports the installed package's version,
+    // which is this package.json's.
+    const version = spawnSync(bin, ['--version'], { cwd: consumer, encoding: 'utf8', env: cleanEnv });
+    assert.equal(version.status, 0, version.stderr);
+    assert.equal(version.stdout, `${manifest['version']}\n`);
+    assert.equal(version.stdout, `${PKG.version}\n`);
     const usage = spawnSync(bin, ['--pull', '7'], { cwd: consumer, encoding: 'utf8', env: cleanEnv });
     assert.equal(usage.status, 1);
     assert.match(usage.stderr, /missing required option --sarif/);

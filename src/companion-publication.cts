@@ -94,6 +94,7 @@ import {
   modeMismatch,
   publishPreparedReview,
   recoverPublication,
+  refusalSentence,
   replaceFileDurably,
   thrownMessage,
   MAX_REJECTION_MESSAGE,
@@ -716,7 +717,7 @@ class Publication {
       suggestion: index + 1,
       httpStatus: status,
       via,
-      detail: `GitHub refused to ${what} (HTTP ${String(status)}): ${message}`,
+      detail: refusalSentence(`GitHub refused to ${what}`, status, message),
       established: this.established,
     };
   }

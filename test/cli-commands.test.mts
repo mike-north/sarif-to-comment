@@ -275,6 +275,98 @@ describe('command dispatch and help', () => {
   });
 });
 
+describe('help layout (#43)', () => {
+  /** The width help text is wrapped to: the width of its option and prose columns. */
+  const HELP_WIDTH = 80;
+  const topics: readonly (readonly string[])[] = [
+    [], ['init'], ['add-comment'], ['remove-comment'], ['group-fixes'], ['ungroup-fixes'], ['inspect'], ['add-staged-changes'],
+    ['validate'], ['publish'], ['close-suggestion-prs'],
+  ];
+  const firstWord = (line: string): string => line.trimStart().split(' ')[0] ?? '';
+  for (const topic of topics) {
+    const name = ['sarif-to-comment', ...topic, '--help'].join(' ');
+    test(`regression (#43): ${name} is wrapped to ${String(HELP_WIDTH)} columns, with filled prose and a lowercase title`, () => {
+      const result = run([...topic, '--help']);
+      assert.equal(result.status, 0, result.stderr);
+      const lines = result.stdout.split('\n');
+      for (const line of lines) assert.ok(line.length <= HELP_WIDTH, `${String(line.length)} columns: ${JSON.stringify(line)}`);
+
+      // The title names the command and says what it does in lowercase, as a
+      // phrase rather than a sentence.
+      const title = lines[0] ?? '';
+      assert.match(title, new RegExp(`^${['sarif-to-comment', ...topic].join(' ')} — [a-z]`), title);
+      assert.equal(title.endsWith('.'), false, title);
+
+      // A paragraph of prose (unindented lines, or the continuation lines of
+      // an option's description) is filled: no line ends where the next
+      // line's first word would still have fit. Synopses (the Usage: block)
+      // are laid out by option group instead.
+      let synopsis = false;
+      for (let i = 1; i + 1 < lines.length; i += 1) {
+        const line = lines[i] ?? '';
+        const next = lines[i + 1] ?? '';
+        if (line === 'Usage:') synopsis = true;
+        else if (line === '') synopsis = false;
+        const prose = !line.startsWith(' ') && !next.startsWith(' ') && !line.endsWith(':');
+        const continuation = /^ {33}\S/.test(next) && /^ {2}\S.{29} \S|^ {33}\S/.test(line);
+        if (synopsis || line === '' || next === '' || !(prose || continuation)) continue;
+        assert.ok(line.length + 1 + firstWord(next).length > HELP_WIDTH, `"${firstWord(next)}" fits after ${JSON.stringify(line)}`);
+      }
+    });
+  }
+});
+
+describe('--version (#43)', () => {
+  // The version is the package's own, read from package.json when the
+  // command runs; every expectation compares with package.json itself.
+  test('prints the version from package.json and nothing else, needing no token', () => {
+    const result = run(['--version']);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, `${PKG.version}\n`);
+    assert.equal(result.stderr, '');
+  });
+
+  test('in JSON it is one document with the version, and TOON carries the same', () => {
+    const result = run(['--version', '--format', 'json']);
+    assert.equal(result.status, 0);
+    assert.equal(result.stderr, '');
+    const doc = asRecord(JSON.parse(result.stdout), 'the version document');
+    assert.deepEqual(doc, { command: null, status: 'version', version: PKG.version, diagnostics: [] });
+    assert.deepEqual(Object.keys(doc), ['command', 'status', 'version', 'diagnostics']);
+    const toon = run(['--format', 'toon', '--version']);
+    assert.equal(toon.status, 0);
+    assert.equal(toon.stdout, `command: null\nstatus: version\nversion: ${PKG.version}\ndiagnostics: []\n`);
+  });
+
+  test('after a command it is still the package version, and the command is not run', () => {
+    const dir = tempDir('version');
+    const output = path.join(dir, 'never.sarif');
+    const result = run(['init', '--output', output, '--version']);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, `${PKG.version}\n`);
+    assert.equal(fs.existsSync(output), false, 'init did not run');
+    assert.equal(asRecord(JSON.parse(run(['inspect', '--version', '--format', 'json']).stdout))['command'], 'inspect');
+  });
+
+  test('it is read when the command runs: the same executable beside another package.json reports that version', () => {
+    const copy = tempDir('version-copy');
+    fs.cpSync(path.join(ROOT, 'dist'), path.join(copy, 'dist'), { recursive: true });
+    for (const dir of ['node_modules', 'vendor']) fs.symlinkSync(path.join(ROOT, dir), path.join(copy, dir), 'dir');
+    writeJson(path.join(copy, 'package.json'), { name: 'sarif-to-comment', version: '9.8.7-copy.1', type: 'commonjs' });
+    const result = spawnSync(process.execPath, [path.join(copy, 'dist', 'sarif-to-comment.cjs'), '--version'], {
+      encoding: 'utf8', timeout: 60_000, env: { PATH: process.env['PATH'] },
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, '9.8.7-copy.1\n');
+  });
+
+  test('the top-level help documents it', () => {
+    const help = run(['--help']).stdout;
+    assert.ok(help.includes('  sarif-to-comment --version\n'), help);
+    assert.match(help, /^ {2}--version {2,}Show the package version\./m);
+  });
+});
+
 describe('JSON documents: the envelope comes first and field order is stable', () => {
   // Module doc (src/cli.cts): "The envelope is { command, status, ... }".
   // The remaining order of each document is the contract's listing where it

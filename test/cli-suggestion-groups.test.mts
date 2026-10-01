@@ -113,7 +113,7 @@ describe('help', () => {
     assert.equal(result.status, 0, result.stderr);
     assert.ok(result.stdout.includes('  group-fixes          Group fixes of several findings to be accepted together.\n'), result.stdout);
     assert.ok(result.stdout.includes('  ungroup-fixes        Remove findings from their suggestion groups.\n'), result.stdout);
-    assert.ok(result.stdout.includes('  sarif-to-comment group-fixes --sarif FILE --finding SELECTOR [...] --group NAME [options]\n'), result.stdout);
+    assert.ok(result.stdout.includes('  sarif-to-comment group-fixes --sarif FILE --finding SELECTOR [...]\n                   --group NAME [options]\n'), result.stdout);
     assert.ok(result.stdout.includes('  sarif-to-comment ungroup-fixes --sarif FILE --finding SELECTOR [...] [options]\n'), result.stdout);
   });
 

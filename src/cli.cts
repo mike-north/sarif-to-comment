@@ -26,12 +26,15 @@
  *                       (docs/suggestion-cleanup-contract.md)
  * A first argument beginning with "-" (or no argument) is the original
  * flag-only publisher, which keeps its exact behavior, output, credentials and
- * exit statuses. Anything else is a usage error.
+ * exit statuses. Anything else is a usage error. `--help` (or `-h`) anywhere
+ * prints help instead of running anything; otherwise `--version` anywhere
+ * prints the package's version, read from its package.json at run time.
  *
  * Output format (`--format human|json|toon`, default human, never inferred
  * from a terminal) and `--color auto|always|never` are resolved before
  * anything else, wherever they appear. An invalid, missing or repeated value
- * is a human usage error on stderr with nothing on stdout. Once JSON or TOON
+ * is a human usage error on stderr with nothing on stdout; its remedy names
+ * the help of the command given, wherever the option stands. Once JSON or TOON
  * is selected, every handled outcome — including help, usage errors and
  * operational errors — is exactly one document on stdout and nothing is
  * written to stderr; TOON is the JSON document encoded as TOON. The envelope
@@ -42,7 +45,7 @@
  * happened to each file) to stdout and the diagnostics, as colored blocks
  * when color is on, to stderr.
  *
- * Exit statuses: 0 success or help; 1 usage error or operational error; 2 the
+ * Exit statuses: 0 success, help or version; 1 usage error or operational error; 2 the
  * content was refused (`invalid` / `failed` / `stale` / `refused`). `publish` keeps the publisher's
  * statuses: 0 published, 2 blocked, 3 uncertain, 1 otherwise. `validate`
  * (docs/readiness-assessment-contract.md): 0 ready, 2 blocked, 1 incomplete
@@ -68,7 +71,7 @@ import type { ISarifSourceBinding } from './public-types.cjs';
 import { parseFindingSelector } from './finding-selectors.cjs';
 import { createSarifDocument, addSarifCommentWithUntypedInput, removeSarifCommentWithUntypedInput } from './sarif-authoring.cjs';
 import type { ICreateSarifDocumentOptions, INewSarifRun, ISarifComment } from './sarif-authoring.cjs';
-import { isNormalizedRepositoryPath, isSuggestionGroupName, OWNER_PATTERN, REPO_PATTERN } from './sarif-common.cjs';
+import { isNormalizedRepositoryPath, isSuggestionGroupName, packageVersion, OWNER_PATTERN, REPO_PATTERN } from './sarif-common.cjs';
 import { inspectSarifWithUntypedInput, renderInspectionText } from './sarif-inspection.cjs';
 import { groupSarifFixesWithUntypedInput, ungroupSarifFixesWithUntypedInput } from './suggestion-groups.cjs';
 import { LABEL_RULE, isLabelName } from './suggestion-pr-convention.cjs';
@@ -150,7 +153,8 @@ const REVIEW_POLICY_OPTIONS = md`  --source-root ABSOLUTE_FILE_URI
                                  system (file:///.../ ending in "/").
   --old-source-commit FULLSHA    Candidate commit for the diff's old side, used
                                  only when GitHub's comparison cannot establish
-                                 it; verified against the pull request's patches.
+                                 it; verified against the pull request's
+                                 patches.
   --ignore-approval-hold         Publish despite an approval hold (bypasses only
                                  the hold, never validation).
   --submit                       Create the review already submitted, as a
@@ -195,45 +199,62 @@ const FORMAT_OPTION = md`  --format human|json|toon       Output format (default
                                  terminal; NO_COLOR and FORCE_COLOR apply).
 `;
 
-/** Help text: the top-level usage and each command's. */
+/**
+ * Help text: the top-level usage and each command's. Every line fits in 80
+ * columns, prose is filled to that width, and each title is the command and a
+ * lowercase phrase saying what it does (test/cli-commands.test.mts).
+ */
 const USAGE: Readonly<Record<'top' | CliCommand, string>> = {
   top: md`sarif-to-comment — author, inspect and publish SARIF as one GitHub draft review
 
 Usage:
   sarif-to-comment init --output FILE [options]
-  sarif-to-comment add-comment --sarif FILE --file PATH --line N (--message TEXT | --message-file FILE|-) [options]
+  sarif-to-comment add-comment --sarif FILE --file PATH --line N
+                   (--message TEXT | --message-file FILE|-) [options]
   sarif-to-comment remove-comment --sarif FILE --finding SELECTOR [options]
-  sarif-to-comment group-fixes --sarif FILE --finding SELECTOR [...] --group NAME [options]
+  sarif-to-comment group-fixes --sarif FILE --finding SELECTOR [...]
+                   --group NAME [options]
   sarif-to-comment ungroup-fixes --sarif FILE --finding SELECTOR [...] [options]
   sarif-to-comment inspect --sarif FILE [options]
-  sarif-to-comment add-staged-changes --sarif IN --output OUT --worktree DIR --repo OWNER/REPO --commit FULLSHA [options]
-  sarif-to-comment validate --sarif FILE --repo OWNER/REPO --pull N --commit FULLSHA [options]
-  sarif-to-comment publish --sarif FILE --repo OWNER/REPO --pull N --commit FULLSHA --state ABSOLUTE_FILE [options]
+  sarif-to-comment add-staged-changes --sarif IN --output OUT --worktree DIR
+                   --repo OWNER/REPO --commit FULLSHA [options]
+  sarif-to-comment validate --sarif FILE --repo OWNER/REPO --pull N
+                   --commit FULLSHA [options]
+  sarif-to-comment publish --sarif FILE --repo OWNER/REPO --pull N
+                   --commit FULLSHA --state ABSOLUTE_FILE [options]
   sarif-to-comment close-suggestion-prs --repo OWNER/REPO [options]
   sarif-to-comment --sarif FILE --repo OWNER/REPO --pull N --commit FULLSHA
                    --state ABSOLUTE_FILE [--source-root ABSOLUTE_FILE_URI]
-                   [--old-source-commit FULLSHA] [--ignore-approval-hold] [--submit]
-                   [--allow-suggestion-prs [--pr-labels A,B,C] [--mark-suggestion-prs-ready]]
+                   [--old-source-commit FULLSHA] [--ignore-approval-hold]
+                   [--submit] [--allow-suggestion-prs [--pr-labels A,B,C]
+                   [--mark-suggestion-prs-ready]]
   sarif-to-comment [COMMAND] --help
+  sarif-to-comment --version
 
 Commands:
   init                 Create a SARIF document for your own findings.
   add-comment          Add one finding on a line or line range to a SARIF file.
-  remove-comment       Remove a finding and its attached fixes from the SARIF document.
+  remove-comment       Remove a finding and its attached fixes from the SARIF
+                       document.
   group-fixes          Group fixes of several findings to be accepted together.
   ungroup-fixes        Remove findings from their suggestion groups.
   inspect              Show the findings, locations and fixes in a SARIF file.
-  add-staged-changes   Add proposed changes from the Git index to a SARIF document.
-  validate             Check, without publishing, that a SARIF file can be published.
-  publish              Publish a SARIF file as one GitHub pull request review (a draft
-                       unless --submit).
-  close-suggestion-prs Close suggestion pull requests whose original pull request has
-                       merged or closed.
-Every command reads and writes ordinary SARIF files; SARIF from any producer
-can be inspected, extended and published without init.
+  add-staged-changes   Add proposed changes from the Git index to a SARIF
+                       document.
+  validate             Check, without publishing, that a SARIF file can be
+                       published.
+  publish              Publish a SARIF file as one GitHub pull request review
+                       (a draft unless --submit).
+  close-suggestion-prs Close suggestion pull requests whose original pull
+                       request has merged or closed.
+
+Every command reads and writes ordinary SARIF files; SARIF from any producer can
+be inspected, extended and published without init.
 
 Publishing without a command (the original form) takes the publish options:
 ${PUBLISH_OPTIONS}${FORMAT_OPTION}  --help                         Show help. Needs no token, makes no request.
+  --version                      Show the package version. Needs no token, makes
+                                 no request.
 
 ${CREDENTIALS}
 Exit status:
@@ -250,12 +271,13 @@ Exit status:
 
 Usage:
   sarif-to-comment init --output FILE [--tool-name NAME [--tool-version V]]
-                        [--repo OWNER/REPO --commit FULLSHA] [--format human|json|toon]
+                        [--repo OWNER/REPO --commit FULLSHA]
+                        [--format human|json|toon]
 
 Options:
   --output FILE                  New SARIF file; an existing file is refused.
-  --tool-name NAME               Who the findings come from, for example
-                                 "Review agent" (default: sarif-to-comment).
+  --tool-name NAME               Who the findings come from (default:
+                                 sarif-to-comment), for example "Review agent".
   --tool-version V               Version of that tool (only with --tool-name).
   --repo OWNER/REPO              Bind the run to this repository ...
   --commit FULLSHA               ... at this full 40-character reviewed commit.
@@ -266,16 +288,19 @@ Exit status: 0 created; 1 usage error or the file could not be created.
   'add-comment': md`sarif-to-comment add-comment — add one finding to a SARIF file
 
 Usage:
-  sarif-to-comment add-comment --sarif FILE --file PATH --line N [--end-line M]
-                               (--message TEXT | --message-file FILE|-) [--markdown]
-                               [--rule-id ID] [--level none|note|warning|error]
-                               [--run N | --new-run-tool NAME [--new-run-tool-version V]
+  sarif-to-comment add-comment --sarif FILE --file PATH --line N
+                               [--end-line M]
+                               (--message TEXT | --message-file FILE|-)
+                               [--markdown] [--rule-id ID]
+                               [--level none|note|warning|error]
+                               [--run N | --new-run-tool NAME
+                                          [--new-run-tool-version V]
                                           [--repo OWNER/REPO --commit FULLSHA]]
                                [--format human|json|toon]
 
 The SARIF file is updated in place (atomically). Line numbers are one-based and
-refer to the reviewed revision of the file (or to the proposed content of a
-file that the reviewed revision does not have).
+refer to the reviewed revision of the file (or to the proposed content of a file
+that the reviewed revision does not have).
 
 Options:
   --sarif FILE                   SARIF file to update.
@@ -283,41 +308,47 @@ Options:
   --line N                       First line of the finding.
   --end-line M                   Last line (inclusive); default: --line.
   --message TEXT                 The finding's full text.
-  --message-file FILE|-          Read the text from a UTF-8 file, or "-" for stdin.
+  --message-file FILE|-          Read the text from a UTF-8 file, or "-" for
+                                 stdin.
   --markdown                     The text is Markdown.
   --rule-id ID                   Rule identifier to record.
-  --level LEVEL                  none, note, warning or error (omitted otherwise).
-  --run N                        Add to existing run N (needed when there are several).
+  --level LEVEL                  none, note, warning or error (omitted
+                                 otherwise).
+  --run N                        Add to existing run N (needed when there are
+                                 several).
   --new-run-tool NAME            Add to a new run attributed to NAME, so another
                                  tool is never credited with your finding.
   --new-run-tool-version V       Version of that tool.
   --repo OWNER/REPO              Bind the new run to this repository ...
-  --commit FULLSHA               ... at this reviewed commit. Give both or neither.
+  --commit FULLSHA               ... at this reviewed commit. Give both or
+                                 neither.
 ${FORMAT_OPTION}
 While it runs, the command owns FILE through a marker file
 ".<name>.sarif-to-comment-lock" beside it; another command's marker is never
 taken over.
 
-Exit status: 0 added; 2 the SARIF file is not valid SARIF; 1 usage error or
-the file could not be read or replaced.
+Exit status: 0 added; 2 the SARIF file is not valid SARIF; 1 usage error or the
+file could not be read or replaced.
 `,
-  'remove-comment': md`sarif-to-comment remove-comment — Remove a finding and its attached fixes from the SARIF document.
+  'remove-comment': md`sarif-to-comment remove-comment — remove a finding from a SARIF file
 
 Usage:
-  sarif-to-comment remove-comment --sarif FILE --finding SELECTOR [--format human|json|toon]
+  sarif-to-comment remove-comment --sarif FILE --finding SELECTOR
+                                  [--format human|json|toon]
 
-Removes the whole finding, with every fix and proposed file operation attached
-to it. Every other finding and fix stays as it is, including identical ones.
-The SARIF file is updated in place (atomically); no GitHub review is changed.
+Remove a finding and its attached fixes from the SARIF document. The whole
+finding goes, with every fix and proposed file operation attached to it; every
+other finding and fix stays as it is, including identical ones. The SARIF file
+is updated in place (atomically); no GitHub review is changed.
 
 Take SELECTOR from inspect: "Selector:" under each finding, or "selector" in
 JSON. It belongs to the file exactly as inspected, so inspect again after any
 change. A selector the file no longer fits is refused, never applied to
 whichever finding has moved into its place.
 
-To correct a finding, remove it and add the corrected one with add-comment.
-If you made an output with add-staged-changes, run it again on the corrected
-file rather than editing that output.
+To correct a finding, remove it and add the corrected one with add-comment. If
+you made an output with add-staged-changes, run it again on the corrected file
+rather than editing that output.
 
 Options:
   --sarif FILE                   SARIF file to update.
@@ -331,21 +362,21 @@ Exit status: 0 removed; 2 the selector is stale (the file changed since it was
 inspected) or the file is not valid SARIF; 1 usage error or the file could not
 be read or replaced.
 `,
-  'group-fixes': md`sarif-to-comment group-fixes — Group fixes of several findings to be accepted together.
+  'group-fixes': md`sarif-to-comment group-fixes — group fixes to be accepted together
 
 Usage:
-  sarif-to-comment group-fixes --sarif FILE --finding SELECTOR [...] --group NAME
-                               [--output FILE] [--format human|json|toon]
+  sarif-to-comment group-fixes --sarif FILE --finding SELECTOR [...]
+                               --group NAME [--output FILE]
+                               [--format human|json|toon]
 
 Records that the changes of the selected findings must be accepted together:
 each finding gets the same properties.sarifToComment.suggestionGroup. A NAME
-already in use extends that group, so a single finding may be added; groups
-are never joined. A finding's change is its primary (first) fix, or its
-proposed whole-file operation; further fixes are alternatives and are never
-grouped. Publishing with --allow-suggestion-prs proposes the group as one
-suggestion pull request; without it, publication refuses the group and never
-splits it. A single fix with several changes is already accepted whole and
-needs no group.
+already in use extends that group, so a single finding may be added; groups are
+never joined. A finding's change is its primary (first) fix, or its proposed
+whole-file operation; further fixes are alternatives and are never grouped.
+Publishing with --allow-suggestion-prs proposes the group as one suggestion pull
+request; without it, publication refuses the group and never splits it. A single
+fix with several changes is already accepted whole and needs no group.
 
 Take each SELECTOR from inspect: "Selector:" under each finding, or "selector"
 in JSON. Selectors belong to the file exactly as inspected, so inspect again
@@ -358,40 +389,44 @@ file.
 
 Options:
   --sarif FILE                   SARIF file to read (and update in place).
-  --finding SELECTOR             A finding's selector from inspect; repeat for more.
-                                 A new group needs at least two distinct changes.
+  --finding SELECTOR             A finding's selector from inspect; repeat for
+                                 more. A new group needs at least two distinct
+                                 changes.
   --group NAME                   The group's name, shown in the suggestion pull
                                  request's title: 1-100 characters, no control
                                  or invisible characters, no surrounding spaces.
   --output FILE                  Write the result to this new file instead; an
-                                 existing file is refused and --sarif is not changed.
+                                 existing file is refused and --sarif is not
+                                 changed.
 ${FORMAT_OPTION}
 While it runs, the command owns the file it writes through a marker file
 ".<name>.sarif-to-comment-lock" beside it; another command's marker is never
 taken over.
 
-Exit status: 0 grouped; 2 refused, a stale selector, or not valid SARIF; 1
-usage error or a file could not be read or written.
+Exit status: 0 grouped; 2 refused, a stale selector, or not valid SARIF; 1 usage
+error or a file could not be read or written.
 `,
-  'ungroup-fixes': md`sarif-to-comment ungroup-fixes — Remove findings from their suggestion groups.
+  'ungroup-fixes': md`sarif-to-comment ungroup-fixes — remove findings from their suggestion groups
 
 Usage:
   sarif-to-comment ungroup-fixes --sarif FILE --finding SELECTOR [...]
                                  [--output FILE] [--format human|json|toon]
 
-Removes properties.sarifToComment.suggestionGroup from each selected finding,
-so its fix is published on its own again. A group is never left with fewer
-than two distinct changes, which publication would always refuse: to
-dissolve a group, select all of its findings (a refusal lists the rest).
+Removes properties.sarifToComment.suggestionGroup from each selected finding, so
+its fix is published on its own again. A group is never left with fewer than two
+distinct changes, which publication would always refuse: to dissolve a group,
+select all of its findings (a refusal lists the rest).
 
 Take each SELECTOR from inspect, as for group-fixes. The SARIF file is updated
 in place (atomically) unless --output names a new file.
 
 Options:
   --sarif FILE                   SARIF file to read (and update in place).
-  --finding SELECTOR             A finding's selector from inspect; repeat for more.
+  --finding SELECTOR             A finding's selector from inspect; repeat for
+                                 more.
   --output FILE                  Write the result to this new file instead; an
-                                 existing file is refused and --sarif is not changed.
+                                 existing file is refused and --sarif is not
+                                 changed.
 ${FORMAT_OPTION}
 While it runs, the command owns the file it writes through a marker file
 ".<name>.sarif-to-comment-lock" beside it; another command's marker is never
@@ -403,32 +438,37 @@ usage error or a file could not be read or written.
   inspect: md`sarif-to-comment inspect — show the findings and fixes in a SARIF file
 
 Usage:
-  sarif-to-comment inspect --sarif FILE [--preview-lines N|all] [--preview-chars N|all]
-                           [--source-root ABSOLUTE_FILE_URI] [--format human|json|toon]
+  sarif-to-comment inspect --sarif FILE [--preview-lines N|all]
+                           [--preview-chars N|all]
+                           [--source-root ABSOLUTE_FILE_URI]
+                           [--format human|json|toon]
 
 Shows every finding with its full text, locations, fixes and suggestion group,
-and the selector remove-comment, group-fixes and ungroup-fixes take. Only fix previews are shortened, and visibly so. The file
-is not changed and nothing is contacted. Inspection is not a check that the
-file can be published.
+and the selector remove-comment, group-fixes and ungroup-fixes take. Only fix
+previews are shortened, and visibly so. The file is not changed and nothing is
+contacted. Inspection is not a check that the file can be published.
 
 Options:
   --sarif FILE                   SARIF file to inspect.
   --preview-lines N|all          Lines shown per fix preview (default 20).
-  --preview-chars N|all          Characters shown per fix preview (default 2000).
+  --preview-chars N|all          Characters shown per fix preview (default
+                                 2000).
   --source-root ABSOLUTE_FILE_URI
                                  Repository root in the SARIF producer's file
                                  system (file:///.../ ending in "/").
 ${FORMAT_OPTION}
 Exit status: 0 inspected; 2 not valid SARIF; 1 usage error or unreadable file.
 `,
-  'add-staged-changes': md`sarif-to-comment add-staged-changes — Add proposed changes from the Git index to a SARIF document.
+  'add-staged-changes': md`sarif-to-comment add-staged-changes — add staged Git changes as SARIF fixes
 
 Usage:
   sarif-to-comment add-staged-changes --sarif IN --output OUT --worktree DIR
                                       --repo OWNER/REPO --commit FULLSHA
-                                      [--source-root ABSOLUTE_FILE_URI] [--format human|json|toon]
+                                      [--source-root ABSOLUTE_FILE_URI]
+                                      [--format human|json|toon]
 
-Reads what is staged in DIR's Git index (never unstaged working-tree content),
+Add proposed changes from the Git index to a SARIF document. The command reads
+what is staged in DIR's Git index (never unstaged working-tree content),
 compares it with the reviewed commit, and writes a copy of IN to OUT in which
 the staged changes are fixes on the findings they belong to. Source files and
 the index are not changed.
@@ -436,37 +476,43 @@ the index are not changed.
 Options:
   --sarif IN                     SARIF file to start from (not changed).
   --output OUT                   Where to write the result; must differ from IN.
-  --worktree DIR                 A directory in the Git working tree whose index is read.
-  --repo OWNER/REPO              GitHub repository recorded as the fixes' source.
-  --commit FULLSHA               Reviewed commit the staged changes are compared with.
+  --worktree DIR                 A directory in the Git working tree whose index
+                                 is read.
+  --repo OWNER/REPO              GitHub repository recorded as the fixes'
+                                 source.
+  --commit FULLSHA               Reviewed commit the staged changes are compared
+                                 with.
   --source-root ABSOLUTE_FILE_URI
-                                 Repository root in the SARIF producer's file system.
+                                 Repository root in the SARIF producer's file
+                                 system.
 ${FORMAT_OPTION}
-Existing output is preserved: if OUT exists it is first renamed to
-"<UTC time>.old.<name>" beside it (its creation time, or its modification time
-when the system does not record one). If the command then fails, no OUT is
-written. While it runs, the command owns OUT through a marker file
+Existing output is preserved: an existing OUT is first renamed, beside it, to
+"<UTC time>.old.<name>" (its creation time, or its modification time when the
+system does not record one). If the command then fails, no OUT is written. While
+it runs, the command owns OUT through a marker file
 ".<name>.sarif-to-comment-lock" beside it.
 
 Exit status: 0 written; 2 invalid SARIF or a staged change that cannot be
 represented faithfully (nothing written); 1 usage error or operational failure.
 `,
-  validate: md`sarif-to-comment validate — check that a SARIF file can be published as one GitHub review
+  validate: md`sarif-to-comment validate — check that a SARIF file can be published
 
 Usage:
-  sarif-to-comment validate --sarif FILE --repo OWNER/REPO --pull N --commit FULLSHA
-                            [--source-root ABSOLUTE_FILE_URI] [--old-source-commit FULLSHA]
+  sarif-to-comment validate --sarif FILE --repo OWNER/REPO --pull N
+                            --commit FULLSHA [--source-root ABSOLUTE_FILE_URI]
+                            [--old-source-commit FULLSHA]
                             [--ignore-approval-hold] [--submit]
-                            [--allow-suggestion-prs [--pr-labels A,B,C] [--mark-suggestion-prs-ready]]
+                            [--allow-suggestion-prs [--pr-labels A,B,C]
+                            [--mark-suggestion-prs-ready]]
                             [--format human|json|toon]
 
 Runs every check publish runs, reading the pull request and its source from
-GitHub, and stops before publishing: nothing is written to GitHub and no file
-is written. It also reads the pull request's reviews: a pending review of
-yours already there is reported as blocked, because GitHub refuses another
-review, draft or submitted, while it exists. A ready result is not an
-approval: publish repeats every check against the pull request as it is then.
-Validation takes no publication state file and reserves no publication.
+GitHub, and stops before publishing: nothing is written to GitHub and no file is
+written. It also reads the pull request's reviews: a pending review of yours
+already there is reported as blocked, because GitHub refuses another review,
+draft or submitted, while it exists. A ready result is not an approval: publish
+repeats every check against the pull request as it is then. Validation takes no
+publication state file and reserves no publication.
 
 Options:
 ${VALIDATE_OPTIONS}${FORMAT_OPTION}
@@ -479,17 +525,20 @@ Exit status:
      the network or a source read failed), or a usage error, unreadable SARIF
      file or operational failure
 `,
-  publish: md`sarif-to-comment publish — publish a SARIF file as one GitHub review (a draft unless --submit)
+  publish: md`sarif-to-comment publish — publish a SARIF file as one GitHub review
 
 Usage:
-  sarif-to-comment publish --sarif FILE --repo OWNER/REPO --pull N --commit FULLSHA
-                           --state ABSOLUTE_FILE [--source-root ABSOLUTE_FILE_URI]
-                           [--old-source-commit FULLSHA] [--ignore-approval-hold]
-                           [--submit] [--allow-suggestion-prs [--pr-labels A,B,C]
+  sarif-to-comment publish --sarif FILE --repo OWNER/REPO --pull N
+                           --commit FULLSHA --state ABSOLUTE_FILE
+                           [--source-root ABSOLUTE_FILE_URI]
+                           [--old-source-commit FULLSHA]
+                           [--ignore-approval-hold] [--submit]
+                           [--allow-suggestion-prs [--pr-labels A,B,C]
                            [--mark-suggestion-prs-ready]]
                            [--format human|json|toon]
 
-The same operation as the original form without a command.
+The same operation as the original form without a command. The review is a draft
+unless --submit is given.
 
 Options:
 ${PUBLISH_OPTIONS}${FORMAT_OPTION}
@@ -500,37 +549,41 @@ Exit status:
   3  uncertain: delivery could not be confirmed; retry with the same --state
   1  usage error, unreadable SARIF file, refused request, or operational failure
 `,
-  'close-suggestion-prs': md`sarif-to-comment close-suggestion-prs — close suggestion pull requests whose original ended
+  'close-suggestion-prs': md`sarif-to-comment close-suggestion-prs — close suggestions whose original ended
 
 Usage:
-  sarif-to-comment close-suggestion-prs --repo OWNER/REPO [--label NAME] [--original N]
-                                        [--dry-run] [--format human|json|toon]
+  sarif-to-comment close-suggestion-prs --repo OWNER/REPO [--label NAME]
+                                        [--original N] [--dry-run]
+                                        [--format human|json|toon]
 
-Closes open suggestion pull requests (made by publish --allow-suggestion-prs,
-or by any tool following the suggestion pull request convention) whose
-original pull request has merged or closed. They are recognized by the marker
-in their description, never by their title. They carry the repository's
-suggestion label: suggestion-pr, or the label in .github/suggestion-prs.json
-on the default branch; an invalid file stops the command. A
-suggestion is closed only after its original has been read and found merged
-or closed and the suggestion itself has been read again; an original that
-cannot be read is never treated as ended. Everything is read before anything
-is closed. Closing never deletes a branch, and nothing else is changed.
-Running it again is safe.
+Closes open suggestion pull requests (made by publish --allow-suggestion-prs, or
+by any tool following the suggestion pull request convention) whose original
+pull request has merged or closed. They are recognized by the marker in their
+description, never by their title. They carry the repository's suggestion label:
+suggestion-pr, or the label in .github/suggestion-prs.json on the default
+branch; an invalid file stops the command. A suggestion is closed only after its
+original has been read and found merged or closed and the suggestion itself has
+been read again; an original that cannot be read is never treated as ended.
+Everything is read before anything is closed. Closing never deletes a branch,
+and nothing else is changed. Running it again is safe.
 
 Options:
-  --repo OWNER/REPO              Repository whose suggestion pull requests are checked.
+  --repo OWNER/REPO              Repository whose suggestion pull requests are
+                                 checked.
   --label NAME                   Check this label instead of the repository's
                                  suggestion label, for suggestions left under a
                                  previously configured label.
   --original N                   Check only the pull requests that reference
                                  original pull request N, instead of every open
-                                 pull request with the label.
+                                 pull request with the label. If N does not
+                                 exist, nothing can reference it: the cleanup is
+                                 complete, with a warning.
   --dry-run                      Read and verify everything, close nothing.
 ${FORMAT_OPTION}
 ${CREDENTIALS}
 Exit status:
-  0  complete: nothing left to do (also a dry run)
+  0  complete: nothing left to do (also a dry run, and an --original pull
+     request that does not exist)
   2  permission-limited: some suggestion pull requests could not be closed with
      this token; someone allowed to close them can finish
   3  incomplete: an original could not be verified or an action failed; run
@@ -619,11 +672,35 @@ function takeGlobalOption<T extends string>(argv: readonly string[], name: strin
   return { value, argv: rest };
 }
 
+/** The value-typed options every invocation takes, wherever they appear. */
+const GLOBAL_OPTIONS: readonly string[] = ['--format', '--color'];
+
 /** Removes and resolves `--format` and `--color`; throws UsageError. */
 function resolveGlobalOptions(argv: readonly string[]): IGlobalOptions {
   const format = takeGlobalOption<OutputFormat>(argv, '--format', ['human', 'json', 'toon']);
   const color = takeGlobalOption<ColorChoice>(format.argv, '--color', ['auto', 'always', 'never']);
   return { format: format.value ?? 'human', color: color.value ?? 'auto', argv: color.argv };
+}
+
+/**
+ * The command an invocation names, found without resolving its global
+ * options, so that a mistake in one of them can still point to the
+ * command's own help: the first argument that is neither a global option nor
+ * the value takeGlobalOption would take for it. Null when that argument is
+ * not a command (the flag-only publisher, or an unknown command), whose help
+ * is the top-level help.
+ */
+function commandNamedIn(argv: readonly string[]): CliCommand | null {
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argAt(argv, i);
+    if (GLOBAL_OPTIONS.includes(arg)) {
+      const next = argv[i + 1];
+      if (next !== undefined && !next.startsWith('--')) i += 1;
+    } else if (!GLOBAL_OPTIONS.some((name) => arg.startsWith(`${name}=`))) {
+      return isCommand(arg) ? arg : null;
+    }
+  }
+  return null;
 }
 
 /**
@@ -850,16 +927,43 @@ function tokenMissing(): IDiagnostic {
   return createDiagnostic('github-token-missing', 'no GitHub token: set GH_TOKEN (or GITHUB_TOKEN) to a personal access token or user token.');
 }
 
+/**
+ * A usage error about `subject`, the command whose help documents the
+ * mistake, or null for the top-level help (no command, the flag-only
+ * publisher, or an unknown command). The remedy names that exact help
+ * command (docs/diagnostics.md, usage-error).
+ */
+function usageDiagnostic(subject: CliCommand | null, message: string): IDiagnostic {
+  const hint = subject === null ? 'sarif-to-comment --help' : `sarif-to-comment ${subject} --help`;
+  return createDiagnostic('usage-error', message, { subject: subject ?? undefined, remedies: [`Run \`${hint}\` for usage.`] });
+}
+
 /** A usage error; `usage` is the command's help (or the top-level help). */
 function usageOutcome(command: CliCommand | null, message: string, legacy = false): IOutcome {
-  const subject = legacy || command === null ? undefined : command;
-  const hint = subject === undefined ? 'sarif-to-comment --help' : `sarif-to-comment ${subject} --help`;
   return {
     exit: EXIT.usage,
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- every command has help text; the top-level fallback is kept as the durable guard it always was
     doc: { command, status: 'usage-error', message, usage: USAGE[command ?? 'top'] ?? USAGE.top },
-    diagnostics: [createDiagnostic('usage-error', message, { subject, remedies: [`Run \`${hint}\` for usage.`] })],
+    diagnostics: [usageDiagnostic(legacy ? null : command, message)],
   };
+}
+
+/**
+ * The package's version, as `--version` reports it: read from this
+ * package's package.json when the command runs, so it is always the
+ * installed release's. `command` is the command given with it, if any; the
+ * version is the package's either way. A manifest that cannot be read is a
+ * broken installation, reported as an operational failure.
+ */
+function versionOutcome(command: CliCommand | null): IOutcome {
+  let version: string;
+  try {
+    version = packageVersion();
+  } catch (err) {
+    const failure = operationFailure(`The package version could not be read from this package's package.json: ${describeError(err)}`);
+    return { exit: EXIT.error, doc: { command, status: 'error', message: failure.message }, diagnostics: [failure] };
+  }
+  return { exit: EXIT.ok, doc: { command, status: 'version', version }, out: `${version}\n` };
 }
 
 /** Human lines saying what happened to files, for stdout; nothing when there are none. */
@@ -1920,8 +2024,7 @@ async function main(
   } catch (err) {
     if (!(err instanceof UsageError)) throw err;
     // The format (or the color) is unknown, so this is always human output.
-    const failure = createDiagnostic('usage-error', err.message, { remedies: ['Run `sarif-to-comment --help` for usage.'] });
-    await writeDiagnostics([failure], stderr, env, 'auto', safe);
+    await writeDiagnostics([usageDiagnostic(commandNamedIn(argv), err.message)], stderr, env, 'auto', safe);
     return EXIT.usage;
   }
 
@@ -1951,6 +2054,8 @@ async function main(
     const helpCommand = legacy ? null : command;
     const usage = USAGE[helpCommand ?? 'top'];
     outcome = { exit: EXIT.ok, doc: { command: helpCommand, status: 'help', usage }, out: usage };
+  } else if (rest.includes('--version')) {
+    outcome = versionOutcome(legacy ? null : command);
   } else {
     try {
       outcome = await HANDLERS[command](rest, { env, stdin, cwd }, internals);

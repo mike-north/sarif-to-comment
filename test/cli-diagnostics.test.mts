@@ -263,6 +263,31 @@ describe('--format and --color values', () => {
     }
   });
 
+  // docs/diagnostics.md, usage-error: "The CLI's remedy names the exact
+  // `--help` command": the command's own help whenever a command was given,
+  // wherever the global option stands; the top-level help otherwise.
+  const globalErrors: readonly (readonly [readonly string[], string | null])[] = [
+    [['inspect', '--format', 'json', '--format', 'json'], 'inspect'],
+    [['--format', 'yaml', 'close-suggestion-prs', '--repo', 'octo/widgets'], 'close-suggestion-prs'],
+    [['group-fixes', '--sarif', 'x.sarif.json', '--color'], 'group-fixes'],
+    [['--color=sometimes', 'init', '--output', 'x.sarif.json'], 'init'],
+    [['--format', 'json', 'publish', '--color', 'never', '--color', 'never'], 'publish'],
+    [['--format', 'yaml'], null],
+    [['--format', 'yaml', '--sarif', 'x.sarif.json'], null],
+    [['frobnicate', '--format', 'yaml'], null],
+  ];
+  for (const [argv, command] of globalErrors) {
+    test(`regression (#43): a global-option error in "${argv.join(' ')}" names ${command === null ? 'the top-level' : `the ${command}`} help`, () => {
+      const result = run(argv, { cwd: dir });
+      assert.equal(result.status, 1);
+      assert.equal(result.stdout, '');
+      const help = command === null ? 'sarif-to-comment --help' : `sarif-to-comment ${command} --help`;
+      assert.ok(result.stderr.includes(`→ Run \`${help}\` for usage.`), result.stderr);
+      assert.equal(result.stderr.split('\n').filter((line) => line.includes('→ Run')).length, 1, result.stderr);
+      if (command !== null) assert.ok(result.stderr.split('\n').includes(`  ${command}`), `the diagnostic is about ${command}: ${result.stderr}`);
+    });
+  }
+
   test('--color is accepted in both forms and with every format', () => {
     assert.equal(run([...refused, '--color=never'], { cwd: dir }).status, 2);
     for (const format of FORMATS) assert.equal(run([...refused, '--format', format, '--color', 'always'], { cwd: dir }).status, 2, format);

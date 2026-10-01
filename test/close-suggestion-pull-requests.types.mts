@@ -22,7 +22,7 @@ type IsMutuallyAssignable<A, B> = [A] extends [B] ? ([B] extends [A] ? true : fa
 
 export const vocabularies: readonly true[] = [
   true satisfies IsMutuallyAssignable<CloseSuggestionPullRequestsStatus, 'complete' | 'permission-limited' | 'incomplete'>,
-  true satisfies IsMutuallyAssignable<OriginalPullRequestState, 'open' | 'merged' | 'closed' | 'unverified'>,
+  true satisfies IsMutuallyAssignable<OriginalPullRequestState, 'open' | 'merged' | 'closed' | 'not-found' | 'unverified'>,
   true satisfies IsMutuallyAssignable<
     SuggestionCleanupResult,
     'closed' | 'would-close' | 'already-closed' | 'left-open' | 'unverified' | 'permission-limited' | 'failed' | 'not-ours' | 'unlabeled'
