@@ -628,10 +628,13 @@ function pullHeadOf(context: IPlainObject, captured: ICapturedReview): string {
 
 /**
  * Fetches the review context once, verifies it is for exactly this pull
- * request and reviewed commit, resolves the delivery policy (reading the
- * repository's delivery configuration unless the caller decides every
- * setting, docs/delivery-policy-contract.md §11.1), and prepares the whole
- * review against it. The pull request's branches and the repository are read
+ * request and reviewed commit, checks that the reviewed commit belongs to the
+ * pull request (docs/specification.md R17: a commit outside it blocks before
+ * anything else is read, and an undecided lookup is a note on the outcome),
+ * resolves the delivery policy (reading the repository's delivery
+ * configuration unless the caller decides every setting,
+ * docs/delivery-policy-contract.md §11.1), and prepares the whole review
+ * against it. The pull request's branches and the repository are read
  * for companion pull requests only when a unit's `companion` availability is
  * first asked, and a ready review that plans any is checked against the
  * repository (docs/companion-suggestion-pr-contract.md §2.8). Returns
@@ -748,6 +751,16 @@ async function readConfigurationLayer(captured: ICapturedReview, client: IContex
  * has only moved forward from it. Read only for a pull request suggestion
  * pull requests support (same repository, default-branch base): the others
  * have an obstacle already. A failed read is operational.
+ *
+ * This comparison overlaps the reviewed commit's association check
+ * (src/reviewed-commit-association.cts), which has already compared the
+ * reviewed commit with the head before preparation began: the same two
+ * commits are compared twice, once to decide whether the review belongs to
+ * the pull request (docs/specification.md R17) and once to decide whether
+ * companions must be re-applied. The overlap is deliberate and lasts until
+ * re-application after a rewritten history is removed (D58, D59), which
+ * removes this read; until then each check keeps its own read, so neither
+ * depends on how the other is ordered or cached.
  */
 async function rewrittenHeadOf(target: ISuggestionTarget, captured: ICapturedReview, client: IContextClient): Promise<string | undefined> {
   const supported = target.headRepository !== null && target.headRepository.toLowerCase() === target.baseRepository.toLowerCase()
