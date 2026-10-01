@@ -21,7 +21,7 @@ Only reviews were written, and only on #41, #42 and #44. No branch was pushed, n
 | E1: created a submitted review | #41 | 5373957613, 5373957705, 5373957807, 5373957926, 5373958025 |
 | E1: created a submitted review | #42 | 5373958189, 5373958297, 5373958412, 5373958488, 5373958588, 5373958814 |
 
-The six E1 requests that GitHub refused created nothing. The review counts after the run equal the earlier reviews plus the accepted cases: 6 on #41, 7 on #42 and 8 on #44 (`e1-<pr>-after-reviews-rest.json`).
+The five E1 requests that GitHub refused created nothing. The review counts after the run equal the earlier reviews plus the accepted cases: 6 on #41, 7 on #42 and 8 on #44 (`e1-<pr>-after-reviews-rest.json`).
 
 Each E1 review body carries a marker `<!-- e1:<pr>:<case> -->` and says it is a fixture. No E1 comment carries a suggestion block.
 
@@ -164,6 +164,6 @@ At 02:02:48 UTC, about 23 minutes after the writes, `GET …/pulls/<pr>/comments
 
 ## Denied or skipped requests
 
-GitHub denied nothing: every refusal is one of the six recorded 422s, and each was an intended case.
+GitHub denied nothing: every refusal is one of the five recorded 422s, and each was an intended case.
 
 Locally, a steering hook stops each new `gh api` command on its first run and asks for a reason. Every `gh api` command was run once plainly, stopped by the hook, and rerun unchanged with the reason "bounded doc-linter fixture experiment approved by the owner; no gh subcommand creates historical-commit reviews". No command was routed around the hook. No screenshots were taken.
