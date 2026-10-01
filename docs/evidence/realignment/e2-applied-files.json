@@ -1,0 +1,145 @@
+{
+  "method": "Each commit created by GitHub's web 'Commit suggestions' action (single or batched) was fetched into a local clone. The expected bytes are the parent commit's blob with exactly the suggested line(s) replaced by the suggestion payload plus LF; the actual bytes are `git show <commit>:<path>`. Both are compared byte for byte and by Git blob id (`git hash-object --stdin` vs `git rev-parse <commit>:<path>`). Independently, each file was read through the contents API with the raw media type at the applied commit (the approved gh-file read tool); `apiRawReadBlob` is `git hash-object` of those bytes and `apiRawReadMatchesGit` reports a byte-for-byte comparison with `git show`.",
+  "results": [
+    {
+      "pr": 94,
+      "case": "ancestor",
+      "mode": "single",
+      "suggestions": [
+        "H7"
+      ],
+      "commit": "f3a01c687814c5c1907b69a56ec2819112426915",
+      "commitMessage": "E2 apply H7 (ancestor, single)",
+      "parent": "511cd5ed3e9e5656aa5a18f47982c39043956724",
+      "path": "docs/experiments/e2/sample-ancestor.md",
+      "changedPaths": [
+        "docs/experiments/e2/sample-ancestor.md"
+      ],
+      "bytes": 499,
+      "expectedBlob": "07fb2920b19260289daf878cf039d4004d8a574a",
+      "actualBlob": "07fb2920b19260289daf878cf039d4004d8a574a",
+      "exactBytesMatch": true,
+      "onlyFileChanged": true,
+      "actualText": "Line 1: original text.\nLine 2: original text.\nLine 3: original text.\nLine 4: original text.\nLine 5: reviewed change (R).\nLine 6: head change (F).\nLine 7: applied H7 (ancestor).\nLine 8: reviewed change (R).\nLine 9: reviewed change (R).\nLine 10: original text.\nLine 11: original text.\nLine 12: original text.\nLine 13: original text.\nLine 14: original text.\nLine 15: original text.\nLine 16: original text.\nLine 17: original text.\nLine 18: original text.\nLine 19: original text.\nLine 20: original text.\n",
+      "apiRawReadBlob": "07fb2920b19260289daf878cf039d4004d8a574a",
+      "apiRawReadMatchesGit": true
+    },
+    {
+      "pr": 94,
+      "case": "ancestor",
+      "mode": "batch",
+      "suggestions": [
+        "H8",
+        "C9"
+      ],
+      "commit": "15af1b1f2fc4bf8797cfc97ddead7df04f69f448",
+      "commitMessage": "E2 apply H8 + C9 (ancestor, batch)",
+      "parent": "f3a01c687814c5c1907b69a56ec2819112426915",
+      "path": "docs/experiments/e2/sample-ancestor.md",
+      "changedPaths": [
+        "docs/experiments/e2/sample-ancestor.md"
+      ],
+      "bytes": 503,
+      "expectedBlob": "2cd9a29417120b3762a794be074e05d30e98d662",
+      "actualBlob": "2cd9a29417120b3762a794be074e05d30e98d662",
+      "exactBytesMatch": true,
+      "onlyFileChanged": true,
+      "actualText": "Line 1: original text.\nLine 2: original text.\nLine 3: original text.\nLine 4: original text.\nLine 5: reviewed change (R).\nLine 6: head change (F).\nLine 7: applied H7 (ancestor).\nLine 8: applied H8 (ancestor).\nLine 9: applied C9 (ancestor).\nLine 10: original text.\nLine 11: original text.\nLine 12: original text.\nLine 13: original text.\nLine 14: original text.\nLine 15: original text.\nLine 16: original text.\nLine 17: original text.\nLine 18: original text.\nLine 19: original text.\nLine 20: original text.\n",
+      "apiRawReadBlob": "2cd9a29417120b3762a794be074e05d30e98d662",
+      "apiRawReadMatchesGit": true
+    },
+    {
+      "pr": 94,
+      "case": "ancestor",
+      "mode": "single",
+      "suggestions": [
+        "P5"
+      ],
+      "commit": "e0414c3ed8863cba5db212f1f962cafee4ab3379",
+      "commitMessage": "E2 apply P5 (ancestor, single)",
+      "parent": "15af1b1f2fc4bf8797cfc97ddead7df04f69f448",
+      "path": "docs/experiments/e2/sample-ancestor.md",
+      "changedPaths": [
+        "docs/experiments/e2/sample-ancestor.md"
+      ],
+      "bytes": 505,
+      "expectedBlob": "ee5d871a1a642fd6117598388d27954c42d93321",
+      "actualBlob": "ee5d871a1a642fd6117598388d27954c42d93321",
+      "exactBytesMatch": true,
+      "onlyFileChanged": true,
+      "actualText": "Line 1: original text.\nLine 2: original text.\nLine 3: original text.\nLine 4: original text.\nLine 5: applied P5 (ancestor).\nLine 6: head change (F).\nLine 7: applied H7 (ancestor).\nLine 8: applied H8 (ancestor).\nLine 9: applied C9 (ancestor).\nLine 10: original text.\nLine 11: original text.\nLine 12: original text.\nLine 13: original text.\nLine 14: original text.\nLine 15: original text.\nLine 16: original text.\nLine 17: original text.\nLine 18: original text.\nLine 19: original text.\nLine 20: original text.\n",
+      "apiRawReadBlob": "ee5d871a1a642fd6117598388d27954c42d93321",
+      "apiRawReadMatchesGit": true
+    },
+    {
+      "pr": 95,
+      "case": "discarded",
+      "mode": "single",
+      "suggestions": [
+        "H7"
+      ],
+      "commit": "255d5dc347533f66bc79dad45df9c49c11cf1b58",
+      "commitMessage": "E2 apply H7 (discarded, single)",
+      "parent": "54bd5cdb688b1f568b003698e22d9d01672bb433",
+      "path": "docs/experiments/e2/sample-discarded.md",
+      "changedPaths": [
+        "docs/experiments/e2/sample-discarded.md"
+      ],
+      "bytes": 506,
+      "expectedBlob": "10d707436e60ed03dfb544b53a3ac4d39d49fb87",
+      "actualBlob": "10d707436e60ed03dfb544b53a3ac4d39d49fb87",
+      "exactBytesMatch": true,
+      "onlyFileChanged": true,
+      "actualText": "Line 1: original text.\nLine 2: original text.\nLine 3: original text.\nLine 4: original text.\nLine 5: reviewed change (R).\nLine 6: rewritten change (R').\nLine 7: applied H7 (discarded).\nLine 8: reviewed change (R).\nLine 9: reviewed change (R).\nLine 10: original text.\nLine 11: original text.\nLine 12: original text.\nLine 13: original text.\nLine 14: original text.\nLine 15: original text.\nLine 16: original text.\nLine 17: original text.\nLine 18: original text.\nLine 19: original text.\nLine 20: original text.\n",
+      "apiRawReadBlob": "10d707436e60ed03dfb544b53a3ac4d39d49fb87",
+      "apiRawReadMatchesGit": true
+    },
+    {
+      "pr": 95,
+      "case": "discarded",
+      "mode": "batch",
+      "suggestions": [
+        "P5",
+        "H8"
+      ],
+      "commit": "4f2f59b62900a204677caea514ee89412adec233",
+      "commitMessage": "E2 apply P5 + H8 (discarded, batch)",
+      "parent": "255d5dc347533f66bc79dad45df9c49c11cf1b58",
+      "path": "docs/experiments/e2/sample-discarded.md",
+      "changedPaths": [
+        "docs/experiments/e2/sample-discarded.md"
+      ],
+      "bytes": 512,
+      "expectedBlob": "e7b97ec6e909d2738d4fe61794bd4d27f099da02",
+      "actualBlob": "e7b97ec6e909d2738d4fe61794bd4d27f099da02",
+      "exactBytesMatch": true,
+      "onlyFileChanged": true,
+      "actualText": "Line 1: original text.\nLine 2: original text.\nLine 3: original text.\nLine 4: original text.\nLine 5: applied P5 (discarded).\nLine 6: rewritten change (R').\nLine 7: applied H7 (discarded).\nLine 8: applied H8 (discarded).\nLine 9: reviewed change (R).\nLine 10: original text.\nLine 11: original text.\nLine 12: original text.\nLine 13: original text.\nLine 14: original text.\nLine 15: original text.\nLine 16: original text.\nLine 17: original text.\nLine 18: original text.\nLine 19: original text.\nLine 20: original text.\n",
+      "apiRawReadBlob": "e7b97ec6e909d2738d4fe61794bd4d27f099da02",
+      "apiRawReadMatchesGit": true
+    },
+    {
+      "pr": 95,
+      "case": "discarded",
+      "mode": "single",
+      "suggestions": [
+        "C9"
+      ],
+      "commit": "cc0f422704f9904f704229239d64544c0b0ef0c1",
+      "commitMessage": "E2 apply C9 (discarded, single control)",
+      "parent": "4f2f59b62900a204677caea514ee89412adec233",
+      "path": "docs/experiments/e2/sample-discarded.md",
+      "changedPaths": [
+        "docs/experiments/e2/sample-discarded.md"
+      ],
+      "bytes": 515,
+      "expectedBlob": "6a7f3855daa6e5f6e0432b4e32b97347b7d8f86b",
+      "actualBlob": "6a7f3855daa6e5f6e0432b4e32b97347b7d8f86b",
+      "exactBytesMatch": true,
+      "onlyFileChanged": true,
+      "actualText": "Line 1: original text.\nLine 2: original text.\nLine 3: original text.\nLine 4: original text.\nLine 5: applied P5 (discarded).\nLine 6: rewritten change (R').\nLine 7: applied H7 (discarded).\nLine 8: applied H8 (discarded).\nLine 9: applied C9 (discarded).\nLine 10: original text.\nLine 11: original text.\nLine 12: original text.\nLine 13: original text.\nLine 14: original text.\nLine 15: original text.\nLine 16: original text.\nLine 17: original text.\nLine 18: original text.\nLine 19: original text.\nLine 20: original text.\n",
+      "apiRawReadBlob": "6a7f3855daa6e5f6e0432b4e32b97347b7d8f86b",
+      "apiRawReadMatchesGit": true
+    }
+  ]
+}

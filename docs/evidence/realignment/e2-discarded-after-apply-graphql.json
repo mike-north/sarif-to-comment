@@ -1,0 +1,258 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "graphql"
+  },
+  "status": 200,
+  "statusLine": "HTTP/2.0 200 OK",
+  "response": {
+    "data": {
+      "repository": {
+        "pullRequest": {
+          "number": 95,
+          "headRefName": "exp-e2-20261001-discarded",
+          "headRefOid": "cc0f422704f9904f704229239d64544c0b0ef0c1",
+          "baseRefName": "exp-e2-20261001-base",
+          "baseRefOid": "0c03fd7293730bd5164121ec8f91b9b8833ae34e",
+          "commits": {
+            "nodes": [
+              {
+                "commit": {
+                  "oid": "54bd5cdb688b1f568b003698e22d9d01672bb433",
+                  "messageHeadline": "E2 fixture (discarded): R-prime rewrites R, line 6 differs"
+                }
+              },
+              {
+                "commit": {
+                  "oid": "255d5dc347533f66bc79dad45df9c49c11cf1b58",
+                  "messageHeadline": "E2 apply H7 (discarded, single)"
+                }
+              },
+              {
+                "commit": {
+                  "oid": "4f2f59b62900a204677caea514ee89412adec233",
+                  "messageHeadline": "E2 apply P5 + H8 (discarded, batch)"
+                }
+              },
+              {
+                "commit": {
+                  "oid": "cc0f422704f9904f704229239d64544c0b0ef0c1",
+                  "messageHeadline": "E2 apply C9 (discarded, single control)"
+                }
+              }
+            ]
+          },
+          "reviews": {
+            "nodes": [
+              {
+                "databaseId": 5374198882,
+                "state": "COMMENTED",
+                "commit": {
+                  "oid": "639c1f8d34703d6329a33cea0cad51853ce1b891"
+                },
+                "submittedAt": "2026-10-01T02:19:18Z",
+                "body": "<!-- e2:discarded:P -->\nE2 fixture review P (discarded): created at R while R is the head, before the branch moves."
+              },
+              {
+                "databaseId": 5374214025,
+                "state": "COMMENTED",
+                "commit": {
+                  "oid": "639c1f8d34703d6329a33cea0cad51853ce1b891"
+                },
+                "submittedAt": "2026-10-01T02:21:06Z",
+                "body": "<!-- e2:discarded:H -->\nE2 fixture review H (discarded): created after the branch moved, with commit_id set to R `639c1f8`, which is not the head."
+              },
+              {
+                "databaseId": 5374214161,
+                "state": "COMMENTED",
+                "commit": {
+                  "oid": "54bd5cdb688b1f568b003698e22d9d01672bb433"
+                },
+                "submittedAt": "2026-10-01T02:21:08Z",
+                "body": "<!-- e2:discarded:C -->\nE2 fixture review C (discarded): control, created at the head `54bd5cd`."
+              }
+            ]
+          },
+          "reviewThreads": {
+            "nodes": [
+              {
+                "id": "PRRT_kwDOUuyy7s6nx6_9",
+                "isOutdated": true,
+                "isResolved": true,
+                "line": null,
+                "originalLine": 5,
+                "diffSide": "RIGHT",
+                "path": "docs/experiments/e2/sample-discarded.md",
+                "comments": {
+                  "nodes": [
+                    {
+                      "databaseId": 4151194037,
+                      "body": "E2 fixture suggestion P5 (discarded).\n\n```suggestion\nLine 5: applied P5 (discarded).\n```",
+                      "state": "SUBMITTED",
+                      "outdated": true,
+                      "line": null,
+                      "originalLine": 5,
+                      "position": 1,
+                      "originalPosition": 9,
+                      "commit": {
+                        "oid": "255d5dc347533f66bc79dad45df9c49c11cf1b58"
+                      },
+                      "originalCommit": {
+                        "oid": "639c1f8d34703d6329a33cea0cad51853ce1b891"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "PRRT_kwDOUuyy7s6nx7AG",
+                "isOutdated": true,
+                "isResolved": false,
+                "line": null,
+                "originalLine": 6,
+                "diffSide": "RIGHT",
+                "path": "docs/experiments/e2/sample-discarded.md",
+                "comments": {
+                  "nodes": [
+                    {
+                      "databaseId": 4151194047,
+                      "body": "E2 fixture suggestion P6 (discarded).\n\n```suggestion\nLine 6: applied P6 (discarded).\n```",
+                      "state": "SUBMITTED",
+                      "outdated": true,
+                      "line": null,
+                      "originalLine": 6,
+                      "position": 1,
+                      "originalPosition": 10,
+                      "commit": {
+                        "oid": "639c1f8d34703d6329a33cea0cad51853ce1b891"
+                      },
+                      "originalCommit": {
+                        "oid": "639c1f8d34703d6329a33cea0cad51853ce1b891"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "PRRT_kwDOUuyy7s6nx8nm",
+                "isOutdated": true,
+                "isResolved": false,
+                "line": null,
+                "originalLine": 6,
+                "diffSide": "RIGHT",
+                "path": "docs/experiments/e2/sample-discarded.md",
+                "comments": {
+                  "nodes": [
+                    {
+                      "databaseId": 4151204702,
+                      "body": "E2 fixture suggestion H6 (discarded).\n\n```suggestion\nLine 6: applied H6 (discarded).\n```",
+                      "state": "SUBMITTED",
+                      "outdated": true,
+                      "line": null,
+                      "originalLine": 6,
+                      "position": 1,
+                      "originalPosition": 10,
+                      "commit": {
+                        "oid": "639c1f8d34703d6329a33cea0cad51853ce1b891"
+                      },
+                      "originalCommit": {
+                        "oid": "639c1f8d34703d6329a33cea0cad51853ce1b891"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "PRRT_kwDOUuyy7s6nx8ns",
+                "isOutdated": true,
+                "isResolved": true,
+                "line": null,
+                "originalLine": 7,
+                "diffSide": "RIGHT",
+                "path": "docs/experiments/e2/sample-discarded.md",
+                "comments": {
+                  "nodes": [
+                    {
+                      "databaseId": 4151204716,
+                      "body": "E2 fixture suggestion H7 (discarded).\n\n```suggestion\nLine 7: applied H7 (discarded).\n```",
+                      "state": "SUBMITTED",
+                      "outdated": true,
+                      "line": null,
+                      "originalLine": 7,
+                      "position": 1,
+                      "originalPosition": 11,
+                      "commit": {
+                        "oid": "639c1f8d34703d6329a33cea0cad51853ce1b891"
+                      },
+                      "originalCommit": {
+                        "oid": "639c1f8d34703d6329a33cea0cad51853ce1b891"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "PRRT_kwDOUuyy7s6nx8n0",
+                "isOutdated": true,
+                "isResolved": true,
+                "line": null,
+                "originalLine": 8,
+                "diffSide": "RIGHT",
+                "path": "docs/experiments/e2/sample-discarded.md",
+                "comments": {
+                  "nodes": [
+                    {
+                      "databaseId": 4151204724,
+                      "body": "E2 fixture suggestion H8 (discarded).\n\n```suggestion\nLine 8: applied H8 (discarded).\n```",
+                      "state": "SUBMITTED",
+                      "outdated": true,
+                      "line": null,
+                      "originalLine": 8,
+                      "position": 1,
+                      "originalPosition": 12,
+                      "commit": {
+                        "oid": "255d5dc347533f66bc79dad45df9c49c11cf1b58"
+                      },
+                      "originalCommit": {
+                        "oid": "639c1f8d34703d6329a33cea0cad51853ce1b891"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "PRRT_kwDOUuyy7s6nx8ox",
+                "isOutdated": true,
+                "isResolved": true,
+                "line": null,
+                "originalLine": 9,
+                "diffSide": "RIGHT",
+                "path": "docs/experiments/e2/sample-discarded.md",
+                "comments": {
+                  "nodes": [
+                    {
+                      "databaseId": 4151204827,
+                      "body": "E2 fixture suggestion C9 (discarded).\n\n```suggestion\nLine 9: applied C9 (discarded).\n```",
+                      "state": "SUBMITTED",
+                      "outdated": true,
+                      "line": null,
+                      "originalLine": 9,
+                      "position": 1,
+                      "originalPosition": 13,
+                      "commit": {
+                        "oid": "4f2f59b62900a204677caea514ee89412adec233"
+                      },
+                      "originalCommit": {
+                        "oid": "54bd5cdb688b1f568b003698e22d9d01672bb433"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,109 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "repos/mike-north/doc-linter/commits/15af1b1f2fc4bf8797cfc97ddead7df04f69f448"
+  },
+  "status": 200,
+  "statusLine": "HTTP/2.0 200 OK",
+  "response": {
+    "sha": "15af1b1f2fc4bf8797cfc97ddead7df04f69f448",
+    "node_id": "C_kwDOUuyy7toAKDE1YWYxYjFmMmZjNGJmODc5N2NmYzk3ZGRlYWQ3ZGYwNGY2OWY0NDg",
+    "commit": {
+      "author": {
+        "name": "Mike North",
+        "email": "<redacted-email>",
+        "date": "2026-10-01T02:26:31Z"
+      },
+      "committer": {
+        "name": "GitHub",
+        "email": "<redacted-email>",
+        "date": "2026-10-01T02:26:31Z"
+      },
+      "message": "E2 apply H8 + C9 (ancestor, batch)\n\nCo-authored-by: Mike North <<redacted-email>>",
+      "tree": {
+        "sha": "9c780d1e018e68f0a195fec1205816fa7f71cf67",
+        "url": "https://api.github.com/repos/mike-north/doc-linter/git/trees/9c780d1e018e68f0a195fec1205816fa7f71cf67"
+      },
+      "url": "https://api.github.com/repos/mike-north/doc-linter/git/commits/15af1b1f2fc4bf8797cfc97ddead7df04f69f448",
+      "comment_count": 0,
+      "verification": {
+        "verified": true,
+        "reason": "valid",
+        "signature": "-----BEGIN PGP SIGNATURE-----\n\nwsFcBAABCAAQBQJqvcTXCRC1aQ7uu5UhlAAAJxIQAGMMBPd26hvN56YpMpsDJiQ2\nw9hvLO/1gF1vnO8VMvb7wVDLgfvpPYYWqMWrbZlHVi6MeVXD+7NSyNI990FeKm8G\nEc6N+kwRkrr2e+JfyXewa5KsjIWdNyzGqqr2oRSGcSY/IJm4kra8JAnUAWOn+H+3\nG6E+Nj5+vQY9aD/Ex9w+5PNbce+bOkh8n0dk+nlrKYMnBEe1kMt+Y0x5LCrTpHPX\n1aup3wYkCU0h1jfuBq0p2KvdrwaSMvnD4fJH9+JzmeUSLbO00OfWPqCTfZ9DyO/J\nPRe5Jhw5kvuO42M20NnZZm+Hb651Ny9FAYpTpsX30erjjT5dFjdvVoNiuNIdvnVF\ngNsAV29roeT7xU7xuEJ343eDNnGZQcEZj+SwX3fXIZSFY+D5DQW0GrVq+zUZSrSk\nJvsEdaH/gxxFe98QE6hxlzHX7xgBwJD/Jz7qscpkruColmGnYCi9QiHODLzvBWYz\nlS3LvdzMHfD3bjQ7fcglzo33QvnzUd5HdidTgON2C2Ew0nCaBBdyM4xkcC+MGXd8\nKE0oqCQFsh0WR9oysu4UrGGPDht4jiSFWqrjWhyymsBLwLkieqXCdxA6bDZWQAKM\nJoI7XBHLzqt468O2q5iQZtHkUL9PlPiHJLfukQPXQv9IARn1d60LgvwXE147iXfi\nI3cjiLHw7FnlfMH2QNpk\n=0h9U\n-----END PGP SIGNATURE-----\n",
+        "payload": "tree 9c780d1e018e68f0a195fec1205816fa7f71cf67\nparent f3a01c687814c5c1907b69a56ec2819112426915\nauthor Mike North <<redacted-email>> 1790821591 -0700\ncommitter GitHub <<redacted-email>> 1790821591 -0700\n\nE2 apply H8 + C9 (ancestor, batch)\n\nCo-authored-by: Mike North <<redacted-email>>",
+        "verified_at": "2026-10-01T02:26:32Z"
+      }
+    },
+    "url": "https://api.github.com/repos/mike-north/doc-linter/commits/15af1b1f2fc4bf8797cfc97ddead7df04f69f448",
+    "html_url": "https://github.com/mike-north/doc-linter/commit/15af1b1f2fc4bf8797cfc97ddead7df04f69f448",
+    "comments_url": "https://api.github.com/repos/mike-north/doc-linter/commits/15af1b1f2fc4bf8797cfc97ddead7df04f69f448/comments",
+    "author": {
+      "login": "mike-north",
+      "id": 558005,
+      "node_id": "MDQ6VXNlcjU1ODAwNQ==",
+      "avatar_url": "https://avatars.githubusercontent.com/u/558005?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/mike-north",
+      "html_url": "https://github.com/mike-north",
+      "followers_url": "https://api.github.com/users/mike-north/followers",
+      "following_url": "https://api.github.com/users/mike-north/following{/other_user}",
+      "gists_url": "https://api.github.com/users/mike-north/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/mike-north/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/mike-north/subscriptions",
+      "organizations_url": "https://api.github.com/users/mike-north/orgs",
+      "repos_url": "https://api.github.com/users/mike-north/repos",
+      "events_url": "https://api.github.com/users/mike-north/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/mike-north/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "committer": {
+      "login": "web-flow",
+      "id": 19864447,
+      "node_id": "MDQ6VXNlcjE5ODY0NDQ3",
+      "avatar_url": "https://avatars.githubusercontent.com/u/19864447?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/web-flow",
+      "html_url": "https://github.com/web-flow",
+      "followers_url": "https://api.github.com/users/web-flow/followers",
+      "following_url": "https://api.github.com/users/web-flow/following{/other_user}",
+      "gists_url": "https://api.github.com/users/web-flow/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/web-flow/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/web-flow/subscriptions",
+      "organizations_url": "https://api.github.com/users/web-flow/orgs",
+      "repos_url": "https://api.github.com/users/web-flow/repos",
+      "events_url": "https://api.github.com/users/web-flow/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/web-flow/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "parents": [
+      {
+        "sha": "f3a01c687814c5c1907b69a56ec2819112426915",
+        "url": "https://api.github.com/repos/mike-north/doc-linter/commits/f3a01c687814c5c1907b69a56ec2819112426915",
+        "html_url": "https://github.com/mike-north/doc-linter/commit/f3a01c687814c5c1907b69a56ec2819112426915"
+      }
+    ],
+    "stats": {
+      "total": 4,
+      "additions": 2,
+      "deletions": 2
+    },
+    "files": [
+      {
+        "sha": "2cd9a29417120b3762a794be074e05d30e98d662",
+        "filename": "docs/experiments/e2/sample-ancestor.md",
+        "status": "modified",
+        "additions": 2,
+        "deletions": 2,
+        "changes": 4,
+        "blob_url": "https://github.com/mike-north/doc-linter/blob/15af1b1f2fc4bf8797cfc97ddead7df04f69f448/docs%2Fexperiments%2Fe2%2Fsample-ancestor.md",
+        "raw_url": "https://github.com/mike-north/doc-linter/raw/15af1b1f2fc4bf8797cfc97ddead7df04f69f448/docs%2Fexperiments%2Fe2%2Fsample-ancestor.md",
+        "contents_url": "https://api.github.com/repos/mike-north/doc-linter/contents/docs%2Fexperiments%2Fe2%2Fsample-ancestor.md?ref=15af1b1f2fc4bf8797cfc97ddead7df04f69f448",
+        "patch": "@@ -5,8 +5,8 @@ Line 4: original text.\n Line 5: reviewed change (R).\n Line 6: head change (F).\n Line 7: applied H7 (ancestor).\n-Line 8: reviewed change (R).\n-Line 9: reviewed change (R).\n+Line 8: applied H8 (ancestor).\n+Line 9: applied C9 (ancestor).\n Line 10: original text.\n Line 11: original text.\n Line 12: original text."
+      }
+    ]
+  }
+}

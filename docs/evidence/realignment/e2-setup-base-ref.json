@@ -1,0 +1,22 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "repos/mike-north/doc-linter/git/refs",
+    "body": {
+      "ref": "refs/heads/exp-e2-20261001-base",
+      "sha": "0c03fd7293730bd5164121ec8f91b9b8833ae34e"
+    }
+  },
+  "status": 201,
+  "statusLine": "HTTP/2.0 201 Created",
+  "response": {
+    "ref": "refs/heads/exp-e2-20261001-base",
+    "node_id": "REF_kwDOUuyy7r9yZWZzL2hlYWRzL2V4cC1lMi0yMDI2MTAwMS1iYXNl",
+    "url": "https://api.github.com/repos/mike-north/doc-linter/git/refs/heads/exp-e2-20261001-base",
+    "object": {
+      "sha": "0c03fd7293730bd5164121ec8f91b9b8833ae34e",
+      "type": "commit",
+      "url": "https://api.github.com/repos/mike-north/doc-linter/git/commits/0c03fd7293730bd5164121ec8f91b9b8833ae34e"
+    }
+  }
+}
