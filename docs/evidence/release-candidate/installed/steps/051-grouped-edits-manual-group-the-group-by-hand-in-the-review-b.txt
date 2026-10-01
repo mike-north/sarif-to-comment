@@ -1,0 +1,47 @@
+# 051 `--grouped-edits manual-group`: the group by hand in the review body
+feature: manual-group
+
+$ GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-rYLCZ2/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/delivery-composition-rYLCZ2/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --grouped-edits manual-group --state <tmp>/delivery-composition-rYLCZ2/state/review.json --format json
+exit status: 0
+
+checks:
+  PASS  the token never appears in stdout or stderr
+  PASS  exit 0, no diagnostics
+  PASS  guidance "apply these 2 changes together, by hand, in one commit" and two change labels
+  PASS  no suggestion block, no inline comment
+
+--- stdout
+{
+  "command": "publish",
+  "status": "published",
+  "review": {
+    "id": 5000,
+    "url": "https://github.com/octo/widgets/pull/7#pullrequestreview-5000"
+  },
+  "statePath": "<tmp>/delivery-composition-rYLCZ2/state/review.json",
+  "message": "## Draft review published\n\nCreated the draft [review 5000](https://github.com/octo/widgets/pull/7#pullrequestreview-5000) on octo/widgets#7 at commit `feedfeedfeedfeedfeedfeedfeedfeedfeedfeed`. It stays a draft until someone submits it on GitHub.",
+  "diagnostics": []
+}
+
+--- stderr
+
+--- input SARIF (as given to --sarif, before the command)
+{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"Review bot","version":"1.0.0"}},"columnKind":"utf16CodeUnits","versionControlProvenance":[{"repositoryUri":"https://github.com/octo/widgets","revisionId":"feedfeedfeedfeedfeedfeedfeedfeedfeedfeed"}],"artifacts":[],"results":[{"message":{"text":"Retry once on timeout."},"locations":[{"physicalLocation":{"artifactLocation":{"uri":"src/client.ts"},"region":{"startLine":2}}}],"fixes":[{"artifactChanges":[{"artifactLocation":{"uri":"src/client.ts"},"replacements":[{"deletedRegion":{"startLine":2},"insertedContent":{"text":"  const response = await request(id).catch(() => request(id));"}}]}]}],"properties":{"sarifToComment":{"suggestionGroup":"m"}}},{"message":{"text":"Revise note 3."},"locations":[{"physicalLocation":{"artifactLocation":{"uri":"notes.txt"},"region":{"startLine":3}}}],"fixes":[{"artifactChanges":[{"artifactLocation":{"uri":"notes.txt"},"replacements":[{"deletedRegion":{"startLine":3},"insertedContent":{"text":"Note 3, revised."}}]}]}],"properties":{"sarifToComment":{"suggestionGroup":"m"}}}]}]}
+--- fake host after the command (writes so far, review requests, pull requests)
+{
+  "writesSoFar": [
+    "POST /repos/octo/widgets/pulls/7/reviews"
+  ],
+  "reviews": [
+    {
+      "id": 5000,
+      "state": "PENDING",
+      "request": {
+        "commit_id": "feedfeedfeedfeedfeedfeedfeedfeedfeedfeed",
+        "body": "**Suggestion group `m`:** apply these 2 changes together, by hand, in one commit: make every change below in a local copy of the pull request's branch, then commit them together. They are not offered as suggestions, and nothing checks that they are applied together.\n\n- `src/client.ts` line 2\n- `notes.txt` line 3\n\n---\n\n**Suggestion group `m` — change 1 of 2**\n\n**Proposed edit, to make by hand:** replace [src/client.ts line 2 at feedfee](https://github.com/octo/widgets/blob/feedfeedfeedfeedfeedfeedfeedfeedfeedfeed/src/client.ts?plain=1#L2) with:\n\n```\n  const response = await request(id).catch(() => request(id));\n```\n\n**Source:** [src/client.ts line 2 at feedfee](https://github.com/octo/widgets/blob/feedfeedfeedfeedfeedfeedfeedfeedfeedfeed/src/client.ts?plain=1#L2)\n\n```\n  const response = await request(id);\n```\n\nRetry once on timeout.\n\n<sub>— Review bot 1.0.0</sub>\n\n---\n\n**Suggestion group `m` — change 2 of 2**\n\n**Proposed edit, to make by hand:** replace [notes.txt line 3 at feedfee](https://github.com/octo/widgets/blob/feedfeedfeedfeedfeedfeedfeedfeedfeedfeed/notes.txt?plain=1#L3) with:\n\n```\nNote 3, revised.\n```\n\n**Source:** [notes.txt line 3 at feedfee](https://github.com/octo/widgets/blob/feedfeedfeedfeedfeedfeedfeedfeedfeedfeed/notes.txt?plain=1#L3)\n\n```\nNote 3.\n```\n\nRevise note 3.\n\n<sub>— Review bot 1.0.0</sub>\n\n<!-- sarif-to-comment:review:832b4b4b-15f9-4eb1-9da2-8c6e85bb7e91 -->",
+        "comments": []
+      }
+    }
+  ],
+  "pulls": []
+}

@@ -1,0 +1,2788 @@
+[
+  {
+    "id": "001",
+    "feature": "--version",
+    "title": "version of the installed executable",
+    "command": "sarif-to-comment --version",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "exit status 0",
+        "pass": true
+      },
+      {
+        "name": "prints the installed package.json version (0.2.1) and nothing else",
+        "pass": true
+      },
+      {
+        "name": "stderr empty",
+        "pass": true
+      }
+    ],
+    "file": "steps/001-version-of-the-installed-executable.txt"
+  },
+  {
+    "id": "002",
+    "feature": "--version",
+    "title": "`publish --version` needs no token and makes no request",
+    "command": "sarif-to-comment publish --version",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "exit 0 and the same version",
+        "pass": true
+      }
+    ],
+    "file": "steps/002-publish-version-needs-no-token-and-makes-no-request.txt"
+  },
+  {
+    "id": "003",
+    "feature": "inspect",
+    "title": "inspect review.sarif for selectors (json)",
+    "command": "sarif-to-comment inspect --sarif <tmp>/authoring-HObiYv/review.sarif --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "exit 0",
+        "pass": true
+      },
+      {
+        "name": "every finding has a document-bound selector /runs/0/results/N@<16 hex>",
+        "pass": true
+      },
+      {
+        "name": "5 findings",
+        "pass": true
+      }
+    ],
+    "file": "steps/003-inspect-review-sarif-for-selectors-json.txt"
+  },
+  {
+    "id": "004",
+    "feature": "inspect",
+    "title": "inspect (human) shows a \"Selector:\" line per finding",
+    "command": "sarif-to-comment inspect --sarif <tmp>/authoring-HObiYv/review.sarif --color never",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "exit 0",
+        "pass": true
+      },
+      {
+        "name": "5 \"Selector:\" lines",
+        "pass": true
+      }
+    ],
+    "file": "steps/004-inspect-human-shows-a-selector-line-per-finding.txt"
+  },
+  {
+    "id": "005",
+    "feature": "group-fixes",
+    "title": "group two README fixes into a new file (--output)",
+    "command": "sarif-to-comment group-fixes --sarif <tmp>/authoring-HObiYv/review.sarif --finding /runs/0/results/0@e6bf06fcf799f76c --finding /runs/0/results/1@e6bf06fcf799f76c --group readme-typos --output <tmp>/authoring-HObiYv/grouped.sarif --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "exit 0, status grouped",
+        "pass": true
+      },
+      {
+        "name": "--sarif is not changed when --output is given",
+        "pass": true
+      },
+      {
+        "name": "results 0 and 1 carry properties.sarifToComment.suggestionGroup \"readme-typos\"; others none",
+        "pass": true
+      }
+    ],
+    "file": "steps/005-group-two-readme-fixes-into-a-new-file-output.txt"
+  },
+  {
+    "id": "006",
+    "feature": "inspect",
+    "title": "inspect shows the suggestion group (json and human)",
+    "command": "sarif-to-comment inspect --sarif <tmp>/authoring-HObiYv/grouped.sarif --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "findings 0 and 1 show the group, finding 2 does not",
+        "pass": true
+      }
+    ],
+    "file": "steps/006-inspect-shows-the-suggestion-group-json-and-human.txt"
+  },
+  {
+    "id": "007",
+    "feature": "inspect",
+    "title": "inspect (human) of the grouped file",
+    "command": "sarif-to-comment inspect --sarif <tmp>/authoring-HObiYv/grouped.sarif --color never",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the human view names the group",
+        "pass": true
+      }
+    ],
+    "file": "steps/007-inspect-human-of-the-grouped-file.txt"
+  },
+  {
+    "id": "008",
+    "feature": "group-fixes",
+    "title": "extend the existing group in place with one more finding",
+    "command": "sarif-to-comment group-fixes --sarif <tmp>/authoring-HObiYv/grouped.sarif --finding /runs/0/results/2@75479f4e300513ae --group readme-typos --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "exit 0, grouped, extended: true",
+        "pass": true
+      }
+    ],
+    "file": "steps/008-extend-the-existing-group-in-place-with-one-more-finding.txt"
+  },
+  {
+    "id": "009",
+    "feature": "group-fixes",
+    "title": "a selector from before the in-place change is stale (refused)",
+    "command": "sarif-to-comment group-fixes --sarif <tmp>/authoring-HObiYv/grouped.sarif --finding /runs/0/results/3@75479f4e300513ae --finding /runs/0/results/4@75479f4e300513ae --group notes --format json",
+    "exit": 2,
+    "pass": true,
+    "checks": [
+      {
+        "name": "exit 2",
+        "pass": true
+      },
+      {
+        "name": "the file is unchanged",
+        "pass": true
+      },
+      {
+        "name": "diagnostic code reported",
+        "pass": true
+      }
+    ],
+    "file": "steps/009-a-selector-from-before-the-in-place-change-is-stale-refused.txt"
+  },
+  {
+    "id": "010",
+    "feature": "inspect",
+    "title": "inspect grouped.sarif for selectors (json)",
+    "command": "sarif-to-comment inspect --sarif <tmp>/authoring-HObiYv/grouped.sarif --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "exit 0",
+        "pass": true
+      },
+      {
+        "name": "every finding has a document-bound selector /runs/0/results/N@<16 hex>",
+        "pass": true
+      }
+    ],
+    "file": "steps/010-inspect-grouped-sarif-for-selectors-json.txt"
+  },
+  {
+    "id": "011",
+    "feature": "group-fixes",
+    "title": "a new group of one change is refused",
+    "command": "sarif-to-comment group-fixes --sarif <tmp>/authoring-HObiYv/grouped.sarif --finding /runs/0/results/3@c3eb456d3f0ec34d --group solo --format json",
+    "exit": 2,
+    "pass": true,
+    "checks": [
+      {
+        "name": "exit 2, nothing changed",
+        "pass": true
+      }
+    ],
+    "file": "steps/011-a-new-group-of-one-change-is-refused.txt"
+  },
+  {
+    "id": "012",
+    "feature": "ungroup-fixes",
+    "title": "ungroup one finding in place",
+    "command": "sarif-to-comment ungroup-fixes --sarif <tmp>/authoring-HObiYv/grouped.sarif --finding /runs/0/results/2@c3eb456d3f0ec34d --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "exit 0",
+        "pass": true
+      },
+      {
+        "name": "result 2 has no group; results 0 and 1 keep it",
+        "pass": true
+      }
+    ],
+    "file": "steps/012-ungroup-one-finding-in-place.txt"
+  },
+  {
+    "id": "013",
+    "feature": "remove-comment",
+    "title": "remove-comment with a stale selector is refused",
+    "command": "sarif-to-comment remove-comment --sarif <tmp>/authoring-HObiYv/grouped.sarif --finding /runs/0/results/4@c3eb456d3f0ec34d --format json",
+    "exit": 2,
+    "pass": true,
+    "checks": [
+      {
+        "name": "exit 2, file unchanged",
+        "pass": true
+      }
+    ],
+    "file": "steps/013-remove-comment-with-a-stale-selector-is-refused.txt"
+  },
+  {
+    "id": "014",
+    "feature": "inspect",
+    "title": "inspect grouped.sarif for selectors (json)",
+    "command": "sarif-to-comment inspect --sarif <tmp>/authoring-HObiYv/grouped.sarif --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "exit 0",
+        "pass": true
+      },
+      {
+        "name": "every finding has a document-bound selector /runs/0/results/N@<16 hex>",
+        "pass": true
+      }
+    ],
+    "file": "steps/014-inspect-grouped-sarif-for-selectors-json.txt"
+  },
+  {
+    "id": "015",
+    "feature": "remove-comment",
+    "title": "remove the last finding with a fresh selector",
+    "command": "sarif-to-comment remove-comment --sarif <tmp>/authoring-HObiYv/grouped.sarif --finding /runs/0/results/4@75479f4e300513ae --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "exit 0, status removed",
+        "pass": true
+      },
+      {
+        "name": "4 findings remain; the note finding is gone",
+        "pass": true
+      }
+    ],
+    "file": "steps/015-remove-the-last-finding-with-a-fresh-selector.txt"
+  },
+  {
+    "id": "016",
+    "feature": "inspect",
+    "title": "inspect grouped.sarif for selectors (json)",
+    "command": "sarif-to-comment inspect --sarif <tmp>/authoring-HObiYv/grouped.sarif --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "exit 0",
+        "pass": true
+      },
+      {
+        "name": "every finding has a document-bound selector /runs/0/results/N@<16 hex>",
+        "pass": true
+      }
+    ],
+    "file": "steps/016-inspect-grouped-sarif-for-selectors-json.txt"
+  },
+  {
+    "id": "017",
+    "feature": "remove-comment",
+    "title": "remove-comment human output",
+    "command": "sarif-to-comment remove-comment --sarif <tmp>/authoring-HObiYv/grouped.sarif --finding /runs/0/results/3@d677490fc532d675 --color never",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "exit 0 with a human sentence on stdout",
+        "pass": true
+      }
+    ],
+    "file": "steps/017-remove-comment-human-output.txt"
+  },
+  {
+    "id": "018",
+    "feature": "inspect / group-fixes / ungroup-fixes / remove-comment",
+    "title": "library: inspectSarif, groupSarifFixes, ungroupSarifFixes (a lone member refused; the whole group restores the document), removeSarifComment in memory",
+    "command": "SARIF='{\"version\":\"2.1.0\",\"runs\":[{\"tool\":{\"driver\":{\"name\":\"Review…(1275 chars)' node <consumer>/u8-authoring.mjs",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "exit 0 (every in-script assertion held)",
+        "pass": true
+      }
+    ],
+    "file": "steps/018-library-inspectsarif-groupsariffixes-ungroupsariffixes-a-lon.txt"
+  },
+  {
+    "id": "019",
+    "feature": "validate",
+    "title": "validate: ready (human, --color never)",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-CSpHzT/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment validate --sarif <tmp>/delivery-composition-CSpHzT/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --color never",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0",
+        "pass": true
+      },
+      {
+        "name": "stdout starts \"## Ready to publish\"",
+        "pass": true
+      },
+      {
+        "name": "validate wrote nothing to the host",
+        "pass": true
+      }
+    ],
+    "file": "steps/019-validate-ready-human-color-never.txt"
+  },
+  {
+    "id": "020",
+    "feature": "validate",
+    "title": "publish a draft review (sets up the pending-review check)",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-CSpHzT/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/delivery-composition-CSpHzT/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --state <tmp>/delivery-composition-CSpHzT/state/review.json --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0, published",
+        "pass": true
+      },
+      {
+        "name": "one PENDING review with one inline native suggestion",
+        "pass": true
+      },
+      {
+        "name": "no event sent (a draft)",
+        "pass": true
+      }
+    ],
+    "file": "steps/020-publish-a-draft-review-sets-up-the-pending-review-check.txt"
+  },
+  {
+    "id": "021",
+    "feature": "validate",
+    "title": "validate after the draft: the pending review of this account is blocked",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-CSpHzT/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment validate --sarif <tmp>/delivery-composition-CSpHzT/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --format json",
+    "exit": 2,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 2, blocked",
+        "pass": true
+      },
+      {
+        "name": "the problem says the pull request already has a pending review",
+        "pass": true
+      },
+      {
+        "name": "nothing more was written",
+        "pass": true
+      }
+    ],
+    "file": "steps/021-validate-after-the-draft-the-pending-review-of-this-account-.txt"
+  },
+  {
+    "id": "022",
+    "feature": "--submit",
+    "title": "validate --submit: ready, as a submitted comment review",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-Be3lHK/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment validate --sarif <tmp>/delivery-composition-Be3lHK/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --submit --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0, ready",
+        "pass": true
+      }
+    ],
+    "file": "steps/022-validate-submit-ready-as-a-submitted-comment-review.txt"
+  },
+  {
+    "id": "023",
+    "feature": "--submit",
+    "title": "publish --submit",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-Be3lHK/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/delivery-composition-Be3lHK/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --submit --state <tmp>/delivery-composition-Be3lHK/state/review.json --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0, published",
+        "pass": true
+      },
+      {
+        "name": "the create request carries event COMMENT; the host stores it COMMENTED",
+        "pass": true
+      }
+    ],
+    "file": "steps/023-publish-submit.txt"
+  },
+  {
+    "id": "024",
+    "feature": "--submit",
+    "title": "retry publish --submit with the same state: already published, nothing sent",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-Be3lHK/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/delivery-composition-Be3lHK/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --submit --state <tmp>/delivery-composition-Be3lHK/state/review.json --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0 and still one review",
+        "pass": true
+      }
+    ],
+    "file": "steps/024-retry-publish-submit-with-the-same-state-already-published-n.txt"
+  },
+  {
+    "id": "025",
+    "feature": "--submit",
+    "title": "retry the same state WITHOUT --submit: refused (mode bound to the state)",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-Be3lHK/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/delivery-composition-Be3lHK/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --state <tmp>/delivery-composition-Be3lHK/state/review.json --format json",
+    "exit": 1,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "non-zero exit and still one review",
+        "pass": true
+      }
+    ],
+    "file": "steps/025-retry-the-same-state-without-submit-refused-mode-bound-to-th.txt"
+  },
+  {
+    "id": "026",
+    "feature": "validate",
+    "title": "validate after a SUBMITTED review: not blocked by the pending-review check",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-Be3lHK/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment validate --sarif <tmp>/delivery-composition-Be3lHK/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0, ready",
+        "pass": true
+      }
+    ],
+    "file": "steps/026-validate-after-a-submitted-review-not-blocked-by-the-pending.txt"
+  },
+  {
+    "id": "027",
+    "feature": "whole-file proposals",
+    "title": "publish a creation and a deletion under the defaults (fileOperations [manual])",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-qTRYVh/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/delivery-composition-qTRYVh/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --state <tmp>/delivery-composition-qTRYVh/state/review.json --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0, published, no diagnostics",
+        "pass": true
+      },
+      {
+        "name": "the review body proposes docs/guide.md with its exact content, and the deletion of obsolete.txt",
+        "pass": true
+      },
+      {
+        "name": "no inline comment, no suggestion block, no companion pull request",
+        "pass": true
+      }
+    ],
+    "file": "steps/027-publish-a-creation-and-a-deletion-under-the-defaults-fileope.txt"
+  },
+  {
+    "id": "028",
+    "feature": "alternatives",
+    "title": "a result with two fixes: the first is the suggestion, the second listed",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-0Cssbg/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/delivery-composition-0Cssbg/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --state <tmp>/delivery-composition-0Cssbg/state/review.json --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0, published",
+        "pass": true
+      },
+      {
+        "name": "the inline comment has the first fix as its native suggestion",
+        "pass": true
+      },
+      {
+        "name": "the comment lists \"Alternatives to consider:\" with the second fix",
+        "pass": true
+      }
+    ],
+    "file": "steps/028-a-result-with-two-fixes-the-first-is-the-suggestion-the-seco.txt"
+  },
+  {
+    "id": "029",
+    "feature": "delivery: strict-list block",
+    "title": "`--edits native` (strict) with an edit outside the diff: blocked",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-IJ9ZeJ/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/delivery-composition-IJ9ZeJ/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --edits native --state <tmp>/delivery-composition-IJ9ZeJ/state/review.json --format json",
+    "exit": 2,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 2, blocked, delivery-unavailable",
+        "pass": true
+      },
+      {
+        "name": "the obstacle sentence names the edit (file-not-in-diff)",
+        "pass": true
+      },
+      {
+        "name": "no write and no state file",
+        "pass": true
+      }
+    ],
+    "file": "steps/029-edits-native-strict-with-an-edit-outside-the-diff-blocked.txt"
+  },
+  {
+    "id": "030",
+    "feature": "delivery: strict-list block",
+    "title": "the defaults block the same edit (edits [native])",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-OpAeNt/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment validate --sarif <tmp>/delivery-composition-OpAeNt/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --format json",
+    "exit": 2,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 2, delivery-unavailable",
+        "pass": true
+      }
+    ],
+    "file": "steps/030-the-defaults-block-the-same-edit-edits-native.txt"
+  },
+  {
+    "id": "031",
+    "feature": "delivery: announced fallback",
+    "title": "`--edits native,review-body`: the edit falls back to the review body, announced",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-waW17R/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/delivery-composition-waW17R/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --edits native,review-body --state <tmp>/delivery-composition-waW17R/state/review.json --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0, published, one delivery-fallback warning",
+        "pass": true
+      },
+      {
+        "name": "the body holds the manual edit section \"**Proposed edit, to make by hand:**\"",
+        "pass": true
+      },
+      {
+        "name": "no suggestion block anywhere",
+        "pass": true
+      }
+    ],
+    "file": "steps/031-edits-native-review-body-the-edit-falls-back-to-the-review-b.txt"
+  },
+  {
+    "id": "032",
+    "feature": "delivery: announced fallback",
+    "title": "a retry with the same state reports the same warning",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-waW17R/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/delivery-composition-waW17R/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --edits native,review-body --state <tmp>/delivery-composition-waW17R/state/review.json --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0, same diagnostics, nothing sent",
+        "pass": true
+      }
+    ],
+    "file": "steps/032-a-retry-with-the-same-state-reports-the-same-warning.txt"
+  },
+  {
+    "id": "033",
+    "feature": "review-body edits",
+    "title": "`--edits review-body`: an edit made by hand, no warning",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-EZs54V/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/delivery-composition-EZs54V/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --edits review-body --state <tmp>/delivery-composition-EZs54V/state/review.json --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0, no diagnostics",
+        "pass": true
+      },
+      {
+        "name": "body has the manual edit of README.md line 2 with its replacement, no suggestion",
+        "pass": true
+      }
+    ],
+    "file": "steps/033-edits-review-body-an-edit-made-by-hand-no-warning.txt"
+  },
+  {
+    "id": "034",
+    "feature": "delivery: preset original-pr",
+    "title": "`--delivery original-pr`: native where possible, the rest by hand, never a companion",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-3IPRY4/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/delivery-composition-3IPRY4/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --delivery original-pr --state <tmp>/delivery-composition-3IPRY4/state/review.json --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0, published",
+        "pass": true
+      },
+      {
+        "name": "two delivery-fallback warnings (the edit and the group)",
+        "pass": true
+      },
+      {
+        "name": "README line 2 is an inline native suggestion",
+        "pass": true
+      },
+      {
+        "name": "the group is a manual group section and the edit a manual edit",
+        "pass": true
+      },
+      {
+        "name": "no companion pull request",
+        "pass": true
+      },
+      {
+        "name": "the recorded policy names the preset as its source (caller-preset)",
+        "pass": true
+      }
+    ],
+    "file": "steps/034-delivery-original-pr-native-where-possible-the-rest-by-hand-.txt"
+  },
+  {
+    "id": "035",
+    "feature": "delivery: preset companion",
+    "title": "`--delivery companion`: every proposal in its own companion (per-unit)",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-FSnShp/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/delivery-composition-FSnShp/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --delivery companion --state <tmp>/delivery-composition-FSnShp/state/review.json --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0, published",
+        "pass": true
+      },
+      {
+        "name": "two draft suggestion pull requests into feature/retry, labeled suggestion-pr",
+        "pass": true
+      },
+      {
+        "name": "no inline comment",
+        "pass": true
+      }
+    ],
+    "file": "steps/035-delivery-companion-every-proposal-in-its-own-companion-per-u.txt"
+  },
+  {
+    "id": "036",
+    "feature": "delivery: --companion-bundle",
+    "title": "`--delivery companion --companion-bundle single`: one companion holding both",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-sNiE5m/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/delivery-composition-sNiE5m/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --delivery companion --companion-bundle single --state <tmp>/delivery-composition-sNiE5m/state/review.json --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0 and exactly one suggestion pull request",
+        "pass": true
+      },
+      {
+        "name": "it holds both files",
+        "pass": true
+      }
+    ],
+    "file": "steps/036-delivery-companion-companion-bundle-single-one-companion-hol.txt"
+  },
+  {
+    "id": "037",
+    "feature": "delivery: --edits",
+    "title": "`--edits companion`: one edit as a companion",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-MEz8t7/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/delivery-composition-MEz8t7/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --edits companion --state <tmp>/delivery-composition-MEz8t7/state/review.json --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0, one companion, its branch changes README line 2",
+        "pass": true
+      }
+    ],
+    "file": "steps/037-edits-companion-one-edit-as-a-companion.txt"
+  },
+  {
+    "id": "038",
+    "feature": "delivery: --grouped-edits",
+    "title": "`--grouped-edits companion`: a group as one companion",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-wcCZAn/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/delivery-composition-wcCZAn/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --grouped-edits companion --state <tmp>/delivery-composition-wcCZAn/state/review.json --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0, exactly one companion titled for group g",
+        "pass": true
+      }
+    ],
+    "file": "steps/038-grouped-edits-companion-a-group-as-one-companion.txt"
+  },
+  {
+    "id": "039",
+    "feature": "delivery: --file-operations",
+    "title": "`--file-operations companion`: a creation as a companion",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-SixwJ4/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/delivery-composition-SixwJ4/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --file-operations companion --state <tmp>/delivery-composition-SixwJ4/state/review.json --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0, one companion creating docs/guide.md with the exact content",
+        "pass": true
+      }
+    ],
+    "file": "steps/039-file-operations-companion-a-creation-as-a-companion.txt"
+  },
+  {
+    "id": "040",
+    "feature": "delivery: companion options",
+    "title": "`--pr-labels team-a` with no companion planned: companion-options-unused note",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-LPDY9T/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/delivery-composition-LPDY9T/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --pr-labels team-a --state <tmp>/delivery-composition-LPDY9T/state/review.json --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0 with one companion-options-unused note",
+        "pass": true
+      }
+    ],
+    "file": "steps/040-pr-labels-team-a-with-no-companion-planned-companion-options.txt"
+  },
+  {
+    "id": "041",
+    "feature": "delivery: configuration file",
+    "title": "`.github/sarif-to-comment.json` sets edits [companion]",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-1Onnb6/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/delivery-composition-1Onnb6/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --state <tmp>/delivery-composition-1Onnb6/state/review.json --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0 and the edit is a companion (from the configuration)",
+        "pass": true
+      },
+      {
+        "name": "the recorded policy names the configuration as the source of edits",
+        "pass": true
+      }
+    ],
+    "file": "steps/041-github-sarif-to-comment-json-sets-edits-companion.txt"
+  },
+  {
+    "id": "042",
+    "feature": "delivery: configuration file",
+    "title": "a caller flag (`--edits native`) overrides the configuration",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-FSUZtL/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/delivery-composition-FSUZtL/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --edits native --state <tmp>/delivery-composition-FSUZtL/state/review.json --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0, no companion, one inline suggestion",
+        "pass": true
+      }
+    ],
+    "file": "steps/042-a-caller-flag-edits-native-overrides-the-configuration.txt"
+  },
+  {
+    "id": "043",
+    "feature": "delivery: configuration file",
+    "title": "an invalid configuration blocks with delivery-configuration-invalid",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-dbUDoh/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment validate --sarif <tmp>/delivery-composition-dbUDoh/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --format json",
+    "exit": 2,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 2, blocked",
+        "pass": true
+      },
+      {
+        "name": "exactly the contract message (§11.4): `.github/sarif-to-comment.json` on the default branch `main` cannot be used: `/delivery/edits/1` repeats `native`.",
+        "pass": true
+      }
+    ],
+    "file": "steps/043-an-invalid-configuration-blocks-with-delivery-configuration-.txt"
+  },
+  {
+    "id": "044",
+    "feature": "delivery: usage errors",
+    "title": "an empty list entry is a usage error",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-ILicmG/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment validate --sarif <tmp>/delivery-composition-ILicmG/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --edits native,,review-body --format json",
+    "exit": 1,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 1, usage-error, no request",
+        "pass": true
+      }
+    ],
+    "file": "steps/044-an-empty-list-entry-is-a-usage-error.txt"
+  },
+  {
+    "id": "045",
+    "feature": "delivery: usage errors",
+    "title": "an unknown preset is a usage error",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-ILicmG/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment validate --sarif <tmp>/delivery-composition-ILicmG/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --delivery everything --format json",
+    "exit": 1,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 1, usage-error",
+        "pass": true
+      }
+    ],
+    "file": "steps/045-an-unknown-preset-is-a-usage-error.txt"
+  },
+  {
+    "id": "046",
+    "feature": "delivery: usage errors",
+    "title": "the retired --allow-suggestion-prs is unknown",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-ILicmG/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment validate --sarif <tmp>/delivery-composition-ILicmG/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --allow-suggestion-prs",
+    "exit": 1,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 1, \"unknown option --allow-suggestion-prs\"",
+        "pass": true
+      }
+    ],
+    "file": "steps/046-the-retired-allow-suggestion-prs-is-unknown.txt"
+  },
+  {
+    "id": "047",
+    "feature": "delivery: library",
+    "title": "library: delivery preset original-pr reports the fallback; a repeated mechanism is a TypeError",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-BCDHvJ/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts SARIF='{\"version\":\"2.1.0\",\"runs\":[{\"tool\":{\"driver\":{\"name\":\"Review…(653 chars)' REVIEW_COMMIT=feedfeedfeedfeedfeedfeedfeedfeedfeedfeed REVIEW_STATE=<tmp>/delivery-composition-BCDHvJ/state/review.json node <consumer>/u8-delivery.mjs",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0 (every in-script assertion held)",
+        "pass": true
+      }
+    ],
+    "file": "steps/047-library-delivery-preset-original-pr-reports-the-fallback-a-r.txt"
+  },
+  {
+    "id": "048",
+    "feature": "native-batch",
+    "title": "an explicit group of three README edits under the defaults (native-batch)",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-XWGSDX/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/delivery-composition-XWGSDX/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --state <tmp>/delivery-composition-XWGSDX/state/review.json --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0, published, no diagnostics",
+        "pass": true
+      },
+      {
+        "name": "three inline comments, each with the group note and a native suggestion block",
+        "pass": true
+      },
+      {
+        "name": "the body has the guidance \"apply these 3 suggestions together, in one commit\"",
+        "pass": true
+      }
+    ],
+    "file": "steps/048-an-explicit-group-of-three-readme-edits-under-the-defaults-n.txt"
+  },
+  {
+    "id": "049",
+    "feature": "native-batch",
+    "title": "one fix with two changes under the defaults: a native batch labelled \"Fix with 2 changes\"",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-r2fz3L/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/delivery-composition-r2fz3L/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --state <tmp>/delivery-composition-r2fz3L/state/review.json --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0, two inline suggestions and the \"Fix with 2 changes\" guidance",
+        "pass": true
+      }
+    ],
+    "file": "steps/049-one-fix-with-two-changes-under-the-defaults-a-native-batch-l.txt"
+  },
+  {
+    "id": "050",
+    "feature": "manual-group",
+    "title": "a group that cannot be native, under the defaults: blocked (manual-group is never a default)",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-rYLCZ2/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment validate --sarif <tmp>/delivery-composition-rYLCZ2/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --format json",
+    "exit": 2,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 2, delivery-unavailable",
+        "pass": true
+      }
+    ],
+    "file": "steps/050-a-group-that-cannot-be-native-under-the-defaults-blocked-man.txt"
+  },
+  {
+    "id": "051",
+    "feature": "manual-group",
+    "title": "`--grouped-edits manual-group`: the group by hand in the review body",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-rYLCZ2/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/delivery-composition-rYLCZ2/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --grouped-edits manual-group --state <tmp>/delivery-composition-rYLCZ2/state/review.json --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0, no diagnostics",
+        "pass": true
+      },
+      {
+        "name": "guidance \"apply these 2 changes together, by hand, in one commit\" and two change labels",
+        "pass": true
+      },
+      {
+        "name": "no suggestion block, no inline comment",
+        "pass": true
+      }
+    ],
+    "file": "steps/051-grouped-edits-manual-group-the-group-by-hand-in-the-review-b.txt"
+  },
+  {
+    "id": "052",
+    "feature": "mixed groups",
+    "title": "a group with a creation, an edit and a deletion under the defaults: the mixed manual group",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-a9haOt/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/delivery-composition-a9haOt/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --state <tmp>/delivery-composition-a9haOt/state/review.json --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0, no diagnostics",
+        "pass": true
+      },
+      {
+        "name": "guidance for 3 changes by hand, the new file content, the edit and the deletion",
+        "pass": true
+      }
+    ],
+    "file": "steps/052-a-group-with-a-creation-an-edit-and-a-deletion-under-the-def.txt"
+  },
+  {
+    "id": "053",
+    "feature": "mixed groups",
+    "title": "the same mixed group with `--file-operations companion`: one companion holding all three",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-imoMh0/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/delivery-composition-imoMh0/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --file-operations companion --state <tmp>/delivery-composition-imoMh0/state/review.json --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0, one companion; guide created, note 5 revised, obsolete.txt absent",
+        "pass": true
+      }
+    ],
+    "file": "steps/053-the-same-mixed-group-with-file-operations-companion-one-comp.txt"
+  },
+  {
+    "id": "054",
+    "feature": "historical placement",
+    "title": "validate at a commit a force-push discarded: ready, no association note",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/historical-placement-OzriJb/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment validate --sarif <tmp>/historical-placement-OzriJb/review.sarif --repo octo/gadgets --pull 12 --commit d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1 --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0, ready, no diagnostics",
+        "pass": true
+      }
+    ],
+    "file": "steps/054-validate-at-a-commit-a-force-push-discarded-ready-no-associa.txt"
+  },
+  {
+    "id": "055",
+    "feature": "historical placement",
+    "title": "publish at the discarded commit",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/historical-placement-OzriJb/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/historical-placement-OzriJb/review.sarif --repo octo/gadgets --pull 12 --commit d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1 --state <tmp>/historical-placement-OzriJb/state/review.json --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0, published",
+        "pass": true
+      },
+      {
+        "name": "the review is pinned to the discarded commit (commit_id R, not the head)",
+        "pass": true
+      },
+      {
+        "name": "two inline comments on RIGHT lines 2 and 6; line 6 carries the native suggestion",
+        "pass": true
+      }
+    ],
+    "file": "steps/055-publish-at-the-discarded-commit.txt"
+  },
+  {
+    "id": "056",
+    "feature": "historical placement: unrelated commit blocked",
+    "title": "publish at a commit outside the pull request: blocked",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/historical-placement-dug1N3/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/historical-placement-dug1N3/review.sarif --repo octo/gadgets --pull 12 --commit e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1 --state <tmp>/historical-placement-dug1N3/state/review.json --format json",
+    "exit": 2,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 2, blocked, reviewed-commit-not-in-pull-request",
+        "pass": true
+      },
+      {
+        "name": "nothing written, no state file",
+        "pass": true
+      }
+    ],
+    "file": "steps/056-publish-at-a-commit-outside-the-pull-request-blocked.txt"
+  },
+  {
+    "id": "057",
+    "feature": "historical placement",
+    "title": "validate at an ancestor of the head: ready",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/historical-placement-Dwqrlv/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment validate --sarif <tmp>/historical-placement-Dwqrlv/review.sarif --repo octo/gadgets --pull 12 --commit a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1 --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0, ready",
+        "pass": true
+      }
+    ],
+    "file": "steps/057-validate-at-an-ancestor-of-the-head-ready.txt"
+  },
+  {
+    "id": "058",
+    "feature": "companion fidelity: unfaithful",
+    "title": "head D (dropped the reviewed change): `--file-operations companion` deletion projected unfaithful, blocked",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/force-push-composition-ukXAXD/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/force-push-composition-ukXAXD/review.sarif --repo octo/widgets --pull 7 --commit c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1 --file-operations companion --state <tmp>/force-push-composition-ukXAXD/state/review.json --format json",
+    "exit": 2,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 2, delivery-unavailable",
+        "pass": true
+      },
+      {
+        "name": "the obstacle says merging would bring back content the head no longer has",
+        "pass": true
+      },
+      {
+        "name": "nothing created",
+        "pass": true
+      }
+    ],
+    "file": "steps/058-head-d-dropped-the-reviewed-change-file-operations-companion.txt"
+  },
+  {
+    "id": "059",
+    "feature": "companion fidelity: faithful",
+    "title": "head C1′ (amended): a creation projected faithful, created with no warning",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/force-push-composition-XJAjAI/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/force-push-composition-XJAjAI/review.sarif --repo octo/widgets --pull 7 --commit c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1 --file-operations companion --state <tmp>/force-push-composition-XJAjAI/state/review.json --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0, published, no diagnostics, one companion",
+        "pass": true
+      },
+      {
+        "name": "the proposal commit's parent is the reviewed commit (never re-applied)",
+        "pass": true
+      },
+      {
+        "name": "the plan is version 3 and records a faithful projection onto the head",
+        "pass": true
+      }
+    ],
+    "file": "steps/059-head-c1-amended-a-creation-projected-faithful-created-with-n.txt"
+  },
+  {
+    "id": "060",
+    "feature": "companion fidelity: conflicts",
+    "title": "head C1′: a group touching the reviewed lines projected to conflict, created with a warning",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/force-push-composition-CxmQxG/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/force-push-composition-CxmQxG/review.sarif --repo octo/widgets --pull 7 --commit c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1 --grouped-edits companion --state <tmp>/force-push-composition-CxmQxG/state/review.json --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0, one companion-conflicts-at-head warning",
+        "pass": true
+      },
+      {
+        "name": "GitHub's mergeable reported as observed: conflicting",
+        "pass": true
+      },
+      {
+        "name": "the review stays pinned to the reviewed commit",
+        "pass": true
+      }
+    ],
+    "file": "steps/060-head-c1-a-group-touching-the-reviewed-lines-projected-to-con.txt"
+  },
+  {
+    "id": "061",
+    "feature": "--existing-companion",
+    "title": "`--existing-companion 98` whose marker names #8: blocked",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-JxP34u/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment validate --sarif <tmp>/delivery-composition-JxP34u/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --file-operations companion --existing-companion 98 --format json",
+    "exit": 2,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 2, companion-not-reusable with the contract message",
+        "pass": true
+      }
+    ],
+    "file": "steps/061-existing-companion-98-whose-marker-names-8-blocked.txt"
+  },
+  {
+    "id": "062",
+    "feature": "companion index",
+    "title": "publish creating one companion and reusing #97: the body begins with the index",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-JxP34u/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/delivery-composition-JxP34u/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --file-operations companion --existing-companion 97 --state <tmp>/delivery-composition-JxP34u/state/review.json --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0, one companion-reused note",
+        "pass": true
+      },
+      {
+        "name": "exactly one created; the review body begins with the index (contract §2.13.3)",
+        "pass": true
+      },
+      {
+        "name": "#97 was not changed",
+        "pass": true
+      }
+    ],
+    "file": "steps/062-publish-creating-one-companion-and-reusing-97-the-body-begin.txt"
+  },
+  {
+    "id": "063",
+    "feature": "companion index",
+    "title": "a retry reports the same note and sends nothing",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-JxP34u/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/delivery-composition-JxP34u/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --file-operations companion --existing-companion 97 --state <tmp>/delivery-composition-JxP34u/state/review.json --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0, same diagnostics, one review",
+        "pass": true
+      }
+    ],
+    "file": "steps/063-a-retry-reports-the-same-note-and-sends-nothing.txt"
+  },
+  {
+    "id": "064",
+    "feature": "--existing-companion",
+    "title": "defaults (no companion created) listing #97: the index alone",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-zuRYRX/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/delivery-composition-zuRYRX/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --existing-companion 97 --state <tmp>/delivery-composition-zuRYRX/state/review.json --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0; body begins with the index listing #97 as reused; no companion-options-unused",
+        "pass": true
+      }
+    ],
+    "file": "steps/064-defaults-no-companion-created-listing-97-the-index-alone.txt"
+  },
+  {
+    "id": "065",
+    "feature": "presentation callbacks",
+    "title": "library: finding, lifecycleNote and companionIndex callbacks shape the companion and the review",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-OR4UvA/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts SARIF='{\"version\":\"2.1.0\",\"runs\":[{\"tool\":{\"driver\":{\"name\":\"Review…(628 chars)' REVIEW_COMMIT=feedfeedfeedfeedfeedfeedfeedfeedfeedfeed REVIEW_STATE=<tmp>/delivery-composition-OR4UvA/state/review.json node <consumer>/u8-presentation.mjs",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0 (in-script assertions held)",
+        "pass": true
+      },
+      {
+        "name": "the companion description carries the custom lifecycle note and finding, and still ends with its marker",
+        "pass": true
+      },
+      {
+        "name": "the review body begins with the custom index",
+        "pass": true
+      }
+    ],
+    "file": "steps/065-library-finding-lifecyclenote-and-companionindex-callbacks-s.txt"
+  },
+  {
+    "id": "066",
+    "feature": "presentation callbacks",
+    "title": "library: a lifecycleNote leaving an HTML comment open is refused with a TypeError before any write",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-G8fqy1/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts SARIF='{\"version\":\"2.1.0\",\"runs\":[{\"tool\":{\"driver\":{\"name\":\"Review…(628 chars)' REVIEW_COMMIT=feedfeedfeedfeedfeedfeedfeedfeedfeedfeed REVIEW_STATE=<tmp>/delivery-composition-G8fqy1/state/review.json node <consumer>/u8-presentation-refused.mjs",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0 (TypeError asserted, no state file)",
+        "pass": true
+      },
+      {
+        "name": "nothing written to the host",
+        "pass": true
+      }
+    ],
+    "file": "steps/066-library-a-lifecyclenote-leaving-an-html-comment-open-is-refu.txt"
+  },
+  {
+    "id": "067",
+    "feature": "close-suggestion-prs",
+    "title": "--dry-run: reads and verifies, closes nothing",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/cleanup-3pVsIL/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment close-suggestion-prs --repo octo/cleanup-uat --dry-run --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0, complete, owner me",
+        "pass": true
+      },
+      {
+        "name": "38, 39 left open (original open); 40 would close; 41 other-owner",
+        "pass": true
+      },
+      {
+        "name": "no pull request changed",
+        "pass": true
+      }
+    ],
+    "file": "steps/067-dry-run-reads-and-verifies-closes-nothing.txt"
+  },
+  {
+    "id": "068",
+    "feature": "close-suggestion-prs",
+    "title": "--owner all --dry-run: 41 would close too",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/cleanup-3pVsIL/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment close-suggestion-prs --repo octo/cleanup-uat --owner all --dry-run --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0; 40 and 41 would close",
+        "pass": true
+      }
+    ],
+    "file": "steps/068-owner-all-dry-run-41-would-close-too.txt"
+  },
+  {
+    "id": "069",
+    "feature": "close-suggestion-prs",
+    "title": "--max-candidates 2: more candidates than the limit, nothing checked",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/cleanup-3pVsIL/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment close-suggestion-prs --repo octo/cleanup-uat --max-candidates 2 --format json",
+    "exit": 1,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 1, too-many-candidates, nothing closed",
+        "pass": true
+      }
+    ],
+    "file": "steps/069-max-candidates-2-more-candidates-than-the-limit-nothing-chec.txt"
+  },
+  {
+    "id": "070",
+    "feature": "close-suggestion-prs",
+    "title": "usage error: --max-candidates with --original",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/cleanup-3pVsIL/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment close-suggestion-prs --repo octo/cleanup-uat --original 37 --max-candidates 10 --format json",
+    "exit": 1,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 1, usage-error",
+        "pass": true
+      }
+    ],
+    "file": "steps/070-usage-error-max-candidates-with-original.txt"
+  },
+  {
+    "id": "071",
+    "feature": "close-suggestion-prs",
+    "title": "usage error: --force without --label",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/cleanup-3pVsIL/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment close-suggestion-prs --repo octo/cleanup-uat --force --format json",
+    "exit": 1,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 1, usage-error \"--force requires --label (only a --label sweep stops early)\", no request",
+        "pass": true
+      }
+    ],
+    "file": "steps/071-usage-error-force-without-label.txt"
+  },
+  {
+    "id": "072",
+    "feature": "close-suggestion-prs",
+    "title": "--label bug: the label does not mark suggestion pull requests (early exit)",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/cleanup-3pVsIL/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment close-suggestion-prs --repo octo/cleanup-uat --label bug --format json",
+    "exit": 2,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 2, label-not-suggestion-prs",
+        "pass": true
+      }
+    ],
+    "file": "steps/072-label-bug-the-label-does-not-mark-suggestion-pull-requests-e.txt"
+  },
+  {
+    "id": "073",
+    "feature": "close-suggestion-prs",
+    "title": "--label bug --force --max-candidates 10: --force lifts only the early exit; the limit still applies",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/cleanup-3pVsIL/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment close-suggestion-prs --repo octo/cleanup-uat --label bug --force --max-candidates 10 --format json",
+    "exit": 1,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 1, too-many-candidates",
+        "pass": true
+      }
+    ],
+    "file": "steps/073-label-bug-force-max-candidates-10-force-lifts-only-the-early.txt"
+  },
+  {
+    "id": "074",
+    "feature": "close-suggestion-prs",
+    "title": "cleanup (no --dry-run): closes only this account's suggestion of the closed original",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/cleanup-3pVsIL/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment close-suggestion-prs --repo octo/cleanup-uat --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0; 40 closed, 41 other-owner left open",
+        "pass": true
+      },
+      {
+        "name": "exactly one PATCH (the close), and no branch deleted",
+        "pass": true
+      }
+    ],
+    "file": "steps/074-cleanup-no-dry-run-closes-only-this-account-s-suggestion-of-.txt"
+  },
+  {
+    "id": "075",
+    "feature": "close-suggestion-prs",
+    "title": "--original 37: targeted discovery",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/cleanup-3pVsIL/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment close-suggestion-prs --repo octo/cleanup-uat --original 37 --dry-run --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0; 40 already-closed, 41 other-owner",
+        "pass": true
+      }
+    ],
+    "file": "steps/075-original-37-targeted-discovery.txt"
+  },
+  {
+    "id": "076",
+    "feature": "close-suggestion-prs",
+    "title": "human output of a dry run",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/cleanup-3pVsIL/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment close-suggestion-prs --repo octo/cleanup-uat --dry-run --color never",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0; Markdown on stdout says closing never deletes a branch",
+        "pass": true
+      }
+    ],
+    "file": "steps/076-human-output-of-a-dry-run.txt"
+  },
+  {
+    "id": "077",
+    "feature": "every --format",
+    "title": "close-suggestion-prs --format toon",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/cleanup-3pVsIL/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment close-suggestion-prs --repo octo/cleanup-uat --dry-run --format toon",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0, TOON (not JSON) naming the status",
+        "pass": true
+      }
+    ],
+    "file": "steps/077-close-suggestion-prs-format-toon.txt"
+  },
+  {
+    "id": "078",
+    "feature": "close-suggestion-prs",
+    "title": "library: closeSuggestionPullRequests dry run; option misuse is refused",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/cleanup-3pVsIL/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts node <consumer>/u8-cleanup.mjs",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0 (in-script assertions held)",
+        "pass": true
+      }
+    ],
+    "file": "steps/078-library-closesuggestionpullrequests-dry-run-option-misuse-is.txt"
+  },
+  {
+    "id": "079",
+    "feature": "every --format",
+    "title": "human, --color never",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-qwajm6/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment validate --sarif <tmp>/delivery-composition-qwajm6/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --edits native,review-body --color never",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0; stdout Markdown with the warning headline",
+        "pass": true
+      },
+      {
+        "name": "stderr: the uncoloured diagnostics block, no ANSI escapes",
+        "pass": true
+      }
+    ],
+    "file": "steps/079-human-color-never.txt"
+  },
+  {
+    "id": "080",
+    "feature": "every --format",
+    "title": "human, --color always",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-qwajm6/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment validate --sarif <tmp>/delivery-composition-qwajm6/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --edits native,review-body --color always",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0; stderr has ANSI colour escapes; stdout identical to --color never",
+        "pass": true
+      }
+    ],
+    "file": "steps/080-human-color-always.txt"
+  },
+  {
+    "id": "081",
+    "feature": "every --format",
+    "title": "human, --color auto (not a terminal)",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-qwajm6/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment validate --sarif <tmp>/delivery-composition-qwajm6/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --edits native,review-body",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "no escapes when stderr is not a terminal",
+        "pass": true
+      }
+    ],
+    "file": "steps/081-human-color-auto-not-a-terminal.txt"
+  },
+  {
+    "id": "082",
+    "feature": "every --format",
+    "title": "human, --color auto with FORCE_COLOR=1",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-qwajm6/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts FORCE_COLOR=1 sarif-to-comment validate --sarif <tmp>/delivery-composition-qwajm6/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --edits native,review-body",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "FORCE_COLOR colours it",
+        "pass": true
+      }
+    ],
+    "file": "steps/082-human-color-auto-with-force-color-1.txt"
+  },
+  {
+    "id": "083",
+    "feature": "every --format",
+    "title": "human, --color always with NO_COLOR=1 (the flag decides first)",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-qwajm6/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts NO_COLOR=1 sarif-to-comment validate --sarif <tmp>/delivery-composition-qwajm6/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --edits native,review-body --color always",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "--color always wins over NO_COLOR: escapes present (diagnostics.md colour precedence)",
+        "pass": true
+      }
+    ],
+    "file": "steps/083-human-color-always-with-no-color-1-the-flag-decides-first.txt"
+  },
+  {
+    "id": "084",
+    "feature": "every --format",
+    "title": "human, --color auto with NO_COLOR=1 and FORCE_COLOR=1 (FORCE_COLOR wins, as in Node)",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-qwajm6/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts NO_COLOR=1 FORCE_COLOR=1 sarif-to-comment validate --sarif <tmp>/delivery-composition-qwajm6/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --edits native,review-body",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "FORCE_COLOR overrides NO_COLOR: escapes present",
+        "pass": true
+      }
+    ],
+    "file": "steps/084-human-color-auto-with-no-color-1-and-force-color-1-force-col.txt"
+  },
+  {
+    "id": "085",
+    "feature": "every --format",
+    "title": "human, --color auto with NO_COLOR=1 only",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-qwajm6/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts NO_COLOR=1 sarif-to-comment validate --sarif <tmp>/delivery-composition-qwajm6/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --edits native,review-body",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "no escapes",
+        "pass": true
+      }
+    ],
+    "file": "steps/085-human-color-auto-with-no-color-1-only.txt"
+  },
+  {
+    "id": "086",
+    "feature": "every --format",
+    "title": "--format json --color always: JSON never contains colour",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-qwajm6/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment validate --sarif <tmp>/delivery-composition-qwajm6/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --edits native,review-body --format json --color always",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0, no escapes on stdout or stderr",
+        "pass": true
+      }
+    ],
+    "file": "steps/086-format-json-color-always-json-never-contains-colour.txt"
+  },
+  {
+    "id": "087",
+    "feature": "every --format",
+    "title": "--format json",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-qwajm6/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment validate --sarif <tmp>/delivery-composition-qwajm6/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --edits native,review-body --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0; one JSON document: command validate, status ready, delivery-fallback warning",
+        "pass": true
+      },
+      {
+        "name": "stderr empty in json format",
+        "pass": true
+      }
+    ],
+    "file": "steps/087-format-json.txt"
+  },
+  {
+    "id": "088",
+    "feature": "every --format",
+    "title": "--format toon",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-qwajm6/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment validate --sarif <tmp>/delivery-composition-qwajm6/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --edits native,review-body --format toon",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0; not JSON; stderr empty",
+        "pass": true
+      }
+    ],
+    "file": "steps/088-format-toon.txt"
+  },
+  {
+    "id": "089",
+    "feature": "every --format",
+    "title": "decode the TOON output with the installed @toon-format/toon and compare it with the JSON output",
+    "command": "TOON='command: validate\nstatus: ready\nmessage: \"## Ready to publis…(1841 chars)' JSON_DOC='{\n  \"command\": \"validate\",\n  \"status\": \"ready\",\n  \"message\":…(1969 chars)' node <consumer>/u8-toon-decode.mjs",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "TOON decodes to exactly the JSON document",
+        "pass": true
+      }
+    ],
+    "file": "steps/089-decode-the-toon-output-with-the-installed-toon-format-toon-a.txt"
+  },
+  {
+    "id": "090",
+    "feature": "every --format",
+    "title": "inspect --format human",
+    "command": "sarif-to-comment inspect --sarif <tmp>/formats-9CPypa/r.sarif --format human --color never",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "exit 0 and the group appears",
+        "pass": true
+      }
+    ],
+    "file": "steps/090-inspect-format-human.txt"
+  },
+  {
+    "id": "091",
+    "feature": "every --format",
+    "title": "inspect --format json",
+    "command": "sarif-to-comment inspect --sarif <tmp>/formats-9CPypa/r.sarif --format json --color never",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "exit 0 and the group appears",
+        "pass": true
+      }
+    ],
+    "file": "steps/091-inspect-format-json.txt"
+  },
+  {
+    "id": "092",
+    "feature": "every --format",
+    "title": "inspect --format toon",
+    "command": "sarif-to-comment inspect --sarif <tmp>/formats-9CPypa/r.sarif --format toon --color never",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "exit 0 and the group appears",
+        "pass": true
+      }
+    ],
+    "file": "steps/092-inspect-format-toon.txt"
+  },
+  {
+    "id": "093",
+    "feature": "every --format",
+    "title": "a usage error in json format is still one JSON document on stdout",
+    "command": "sarif-to-comment inspect --format json",
+    "exit": 1,
+    "pass": true,
+    "checks": [
+      {
+        "name": "exit 1, usage-error document",
+        "pass": true
+      }
+    ],
+    "file": "steps/093-a-usage-error-in-json-format-is-still-one-json-document-on-s.txt"
+  },
+  {
+    "id": "094",
+    "feature": "--help title",
+    "title": "root --help: the title names both review modes and fits 80 columns",
+    "command": "sarif-to-comment --help",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "exit 0, stderr empty",
+        "pass": true
+      },
+      {
+        "name": "the first line is exactly \"sarif-to-comment — author, inspect, publish SARIF as a draft or submitted review\"",
+        "pass": true
+      },
+      {
+        "name": "the title is at most 80 characters",
+        "pass": true
+      },
+      {
+        "name": "the title no longer says the review is always a draft (\"draft or submitted\")",
+        "pass": true
+      }
+    ],
+    "file": "steps/094-root-help-the-title-names-both-review-modes-and-fits-80-colu.txt"
+  },
+  {
+    "id": "095",
+    "feature": "path rule: whole-file proposal",
+    "title": "a creation whose path holds U+200B: refused (file-operation-path-unrepresentable)",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-PbGhV4/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/delivery-composition-PbGhV4/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --state <tmp>/delivery-composition-PbGhV4/state/review.json --format json",
+    "exit": 2,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 2, blocked",
+        "pass": true
+      },
+      {
+        "name": "one problem, file-operation-path-unrepresentable",
+        "pass": true
+      },
+      {
+        "name": "its message names the character: \"contains U+200B, which cannot be shown exactly\"",
+        "pass": true
+      },
+      {
+        "name": "nothing written, no state file",
+        "pass": true
+      }
+    ],
+    "file": "steps/095-a-creation-whose-path-holds-u-200b-refused-file-operation-pa.txt"
+  },
+  {
+    "id": "096",
+    "feature": "path rule: alternative",
+    "title": "an alternative on a file whose path holds U+200B: refused (alternative-path-unrepresentable)",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-SQjq9D/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/delivery-composition-SQjq9D/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --state <tmp>/delivery-composition-SQjq9D/state/review.json --format json",
+    "exit": 2,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 2, blocked",
+        "pass": true
+      },
+      {
+        "name": "one problem, alternative-path-unrepresentable",
+        "pass": true
+      },
+      {
+        "name": "its message says \"the file path contains U+200B, which cannot be shown exactly\"",
+        "pass": true
+      },
+      {
+        "name": "nothing written, no state file",
+        "pass": true
+      }
+    ],
+    "file": "steps/096-an-alternative-on-a-file-whose-path-holds-u-200b-refused-alt.txt"
+  },
+  {
+    "id": "097",
+    "feature": "path rule: edit made by hand",
+    "title": "`--edits review-body`: an edit of a file whose path holds U+200B: refused (delivery-unavailable)",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-rEZu4h/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/delivery-composition-rEZu4h/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --edits review-body --state <tmp>/delivery-composition-rEZu4h/state/review.json --format json",
+    "exit": 2,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 2, blocked, delivery-unavailable",
+        "pass": true
+      },
+      {
+        "name": "the review-body obstacle ends \"the file path contains U+200B, which cannot be shown exactly.\"",
+        "pass": true
+      },
+      {
+        "name": "nothing written, no state file",
+        "pass": true
+      }
+    ],
+    "file": "steps/097-edits-review-body-an-edit-of-a-file-whose-path-holds-u-200b-.txt"
+  },
+  {
+    "id": "098",
+    "feature": "path rule: whole-file proposal",
+    "title": "a creation whose path holds U+00A0: refused (file-operation-path-unrepresentable)",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-wsVX6V/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/delivery-composition-wsVX6V/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --state <tmp>/delivery-composition-wsVX6V/state/review.json --format json",
+    "exit": 2,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 2, blocked",
+        "pass": true
+      },
+      {
+        "name": "one problem, file-operation-path-unrepresentable",
+        "pass": true
+      },
+      {
+        "name": "its message names the character: \"contains U+00A0, which cannot be shown exactly\"",
+        "pass": true
+      },
+      {
+        "name": "nothing written, no state file",
+        "pass": true
+      }
+    ],
+    "file": "steps/098-a-creation-whose-path-holds-u-00a0-refused-file-operation-pa.txt"
+  },
+  {
+    "id": "099",
+    "feature": "path rule: alternative",
+    "title": "an alternative on a file whose path holds U+00A0: refused (alternative-path-unrepresentable)",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-KdPjjW/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/delivery-composition-KdPjjW/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --state <tmp>/delivery-composition-KdPjjW/state/review.json --format json",
+    "exit": 2,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 2, blocked",
+        "pass": true
+      },
+      {
+        "name": "one problem, alternative-path-unrepresentable",
+        "pass": true
+      },
+      {
+        "name": "its message says \"the file path contains U+00A0, which cannot be shown exactly\"",
+        "pass": true
+      },
+      {
+        "name": "nothing written, no state file",
+        "pass": true
+      }
+    ],
+    "file": "steps/099-an-alternative-on-a-file-whose-path-holds-u-00a0-refused-alt.txt"
+  },
+  {
+    "id": "100",
+    "feature": "path rule: edit made by hand",
+    "title": "`--edits review-body`: an edit of a file whose path holds U+00A0: refused (delivery-unavailable)",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-iVXfN1/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/delivery-composition-iVXfN1/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --edits review-body --state <tmp>/delivery-composition-iVXfN1/state/review.json --format json",
+    "exit": 2,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 2, blocked, delivery-unavailable",
+        "pass": true
+      },
+      {
+        "name": "the review-body obstacle ends \"the file path contains U+00A0, which cannot be shown exactly.\"",
+        "pass": true
+      },
+      {
+        "name": "nothing written, no state file",
+        "pass": true
+      }
+    ],
+    "file": "steps/100-edits-review-body-an-edit-of-a-file-whose-path-holds-u-00a0-.txt"
+  },
+  {
+    "id": "101",
+    "feature": "outcome Markdown nesting",
+    "title": "a blocked validate (fork, json): two delivery-unavailable problems with two obstacles each",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-64bhde/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment validate --sarif <tmp>/delivery-composition-64bhde/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --edits native,companion --grouped-edits native-batch,companion --format json",
+    "exit": 2,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 2, blocked, two delivery-unavailable problems",
+        "pass": true
+      },
+      {
+        "name": "the outcome message lists two problems",
+        "pass": true
+      },
+      {
+        "name": "every obstacle line is indented two spaces (the item's content column), four in all, none at column 0",
+        "pass": true
+      },
+      {
+        "name": "the companion obstacle is the fork obstacle (companion contract §2.5.1)",
+        "pass": true
+      }
+    ],
+    "file": "steps/101-a-blocked-validate-fork-json-two-delivery-unavailable-proble.txt"
+  },
+  {
+    "id": "102",
+    "feature": "outcome Markdown nesting",
+    "title": "parse the blocked outcome with CommonMark (installed mdast-util-from-markdown + GFM)",
+    "command": "MD='## Review blocked\n\nNothing was published and no publication …(1324 chars)' EXPECT='{\"items\":2,\"nested\":[2,2],\"heading\":\"Review blocked:\"}' node <consumer>/u8-nesting-blocked-outcome.mjs",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "exit 0: as CommonMark reads it, each problem holds its own two obstacles and the problems stay siblings",
+        "pass": true
+      }
+    ],
+    "file": "steps/102-parse-the-blocked-outcome-with-commonmark-installed-mdast-ut.txt"
+  },
+  {
+    "id": "103",
+    "feature": "outcome Markdown nesting",
+    "title": "publish with one delivery-fallback warning (json): the outcome message's warnings list",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-MBcgyV/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/delivery-composition-MBcgyV/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --edits native,review-body --state <tmp>/delivery-composition-MBcgyV/state/review.json --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0, published, delivery-fallback",
+        "pass": true
+      },
+      {
+        "name": "the obstacle is indented: \"\\n\\n  - `native`: Lines 2-2 of src/client.ts cannot carry a native suggestion (file-not-in-diff).\"",
+        "pass": true
+      },
+      {
+        "name": "the diagnostic's own message keeps its text unindented (only the outcome list indents)",
+        "pass": true
+      }
+    ],
+    "file": "steps/103-publish-with-one-delivery-fallback-warning-json-the-outcome-.txt"
+  },
+  {
+    "id": "104",
+    "feature": "outcome Markdown nesting",
+    "title": "parse the warnings list with CommonMark (installed mdast-util-from-markdown + GFM)",
+    "command": "MD='## Draft review published\n\n**Published with 1 warning:** A p…(705 chars)' EXPECT='{\"items\":1,\"nested\":[1],\"heading\":\"Warnings:\"}' node <consumer>/u8-nesting-warnings-list.mjs",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "exit 0: the warning holds its one obstacle",
+        "pass": true
+      }
+    ],
+    "file": "steps/104-parse-the-warnings-list-with-commonmark-installed-mdast-util.txt"
+  },
+  {
+    "id": "105",
+    "feature": "projected diff",
+    "title": "validate at the reviewed commit after a force-push, `--edits companion`: ready",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/force-push-composition-5N4oXC/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment validate --sarif <tmp>/force-push-composition-5N4oXC/review.sarif --repo octo/widgets --pull 7 --commit c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1 --edits companion --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0, ready, no diagnostics",
+        "pass": true
+      }
+    ],
+    "file": "steps/105-validate-at-the-reviewed-commit-after-a-force-push-edits-com.txt"
+  },
+  {
+    "id": "106",
+    "feature": "projected diff",
+    "title": "publish: one suggestion pull request whose description shows the projected diff",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/force-push-composition-5N4oXC/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment publish --sarif <tmp>/force-push-composition-5N4oXC/review.sarif --repo octo/widgets --pull 7 --commit c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1 --edits companion --state <tmp>/force-push-composition-5N4oXC/state/review.json --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0, published, no diagnostics",
+        "pass": true
+      },
+      {
+        "name": "exactly one suggestion pull request, draft, into the pull request's branch",
+        "pass": true
+      },
+      {
+        "name": "the description holds the projection section exactly: the hunk states \"CRLF line endings become LF line endings\", U+200B is written {U+200B}, and the escapes note follows (§2.11)",
+        "pass": true
+      },
+      {
+        "name": "no raw U+200B (or other unshown character) reaches the description",
+        "pass": true
+      },
+      {
+        "name": "the committed bytes of docs/crlf.txt are exactly \"Only line,\\u200Bwith LF.\\n\" (e2 80 8b, one LF, no CR)",
+        "pass": true
+      },
+      {
+        "name": "docs/sample.md on the branch is the reviewed commit's, unchanged",
+        "pass": true
+      },
+      {
+        "name": "the proposal commit's parent is the reviewed commit",
+        "pass": true
+      },
+      {
+        "name": "the plan is version 3 and records a faithful projection onto the head",
+        "pass": true
+      },
+      {
+        "name": "the review is pinned to the reviewed commit",
+        "pass": true
+      }
+    ],
+    "file": "steps/106-publish-one-suggestion-pull-request-whose-description-shows-.txt"
+  },
+  {
+    "id": "107",
+    "feature": "--if-abandoned",
+    "title": "open original #50: skipped (json)",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/abandon-YqbKgx/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment close-suggestion-prs --repo octo/cleanup-ab --original 50 --if-abandoned --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0, status original-not-abandoned",
+        "pass": true
+      },
+      {
+        "name": "originals [{ number: 50, state: open }], no suggestions, zero counts",
+        "pass": true
+      },
+      {
+        "name": "exactly one note, original-pull-request-not-abandoned, about octo/cleanup-ab#50: \"#50 is open, not closed without merging, so nothing was checked or closed.\"",
+        "pass": true
+      },
+      {
+        "name": "the outcome message is the skip title and the note",
+        "pass": true
+      },
+      {
+        "name": "the original is read first (only repository/configuration reads before it), and nothing is requested after it",
+        "pass": true
+      },
+      {
+        "name": "no pull request changed",
+        "pass": true
+      }
+    ],
+    "file": "steps/107-open-original-50-skipped-json.txt"
+  },
+  {
+    "id": "108",
+    "feature": "--if-abandoned",
+    "title": "open original #50: skipped (human)",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/abandon-YqbKgx/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment close-suggestion-prs --repo octo/cleanup-ab --original 50 --if-abandoned",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0; stdout is the title and \"Nothing was checked or closed.\"",
+        "pass": true
+      },
+      {
+        "name": "stderr carries the note block",
+        "pass": true
+      }
+    ],
+    "file": "steps/108-open-original-50-skipped-human.txt"
+  },
+  {
+    "id": "109",
+    "feature": "--if-abandoned",
+    "title": "merged original #51: skipped (json)",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/abandon-YqbKgx/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment close-suggestion-prs --repo octo/cleanup-ab --original 51 --if-abandoned --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0, status original-not-abandoned",
+        "pass": true
+      },
+      {
+        "name": "originals [{ number: 51, state: merged }], no suggestions, zero counts",
+        "pass": true
+      },
+      {
+        "name": "exactly one note, original-pull-request-not-abandoned, about octo/cleanup-ab#51: \"#51 was merged, not closed without merging, so nothing was checked or closed.\"",
+        "pass": true
+      },
+      {
+        "name": "the outcome message is the skip title and the note",
+        "pass": true
+      },
+      {
+        "name": "the original is read first (only repository/configuration reads before it), and nothing is requested after it",
+        "pass": true
+      },
+      {
+        "name": "no pull request changed",
+        "pass": true
+      }
+    ],
+    "file": "steps/109-merged-original-51-skipped-json.txt"
+  },
+  {
+    "id": "110",
+    "feature": "--if-abandoned",
+    "title": "original #99 does not exist: skipped with the note, not the not-found warning (json)",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/abandon-YqbKgx/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment close-suggestion-prs --repo octo/cleanup-ab --original 99 --if-abandoned --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0, status original-not-abandoned",
+        "pass": true
+      },
+      {
+        "name": "originals [{ number: 99, state: not-found }], no suggestions, zero counts",
+        "pass": true
+      },
+      {
+        "name": "exactly one note, original-pull-request-not-abandoned, about octo/cleanup-ab#99: \"octo/cleanup-ab has no pull request #99 that this account can read, so nothing was checked or closed.\"",
+        "pass": true
+      },
+      {
+        "name": "the outcome message is the skip title and the note",
+        "pass": true
+      },
+      {
+        "name": "the original is read first (only repository/configuration reads before it), and nothing is requested after it",
+        "pass": true
+      },
+      {
+        "name": "no pull request changed",
+        "pass": true
+      },
+      {
+        "name": "no original-pull-request-not-found warning",
+        "pass": true
+      }
+    ],
+    "file": "steps/110-original-99-does-not-exist-skipped-with-the-note-not-the-not.txt"
+  },
+  {
+    "id": "111",
+    "feature": "--if-abandoned",
+    "title": "closed-unmerged original #52, dry run: proceeds as targeted cleanup",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/abandon-YqbKgx/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment close-suggestion-prs --repo octo/cleanup-ab --original 52 --if-abandoned --dry-run --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0, complete, #52 closed (without merging), #62 would-close, no diagnostics",
+        "pass": true
+      },
+      {
+        "name": "no pull request changed",
+        "pass": true
+      }
+    ],
+    "file": "steps/111-closed-unmerged-original-52-dry-run-proceeds-as-targeted-cle.txt"
+  },
+  {
+    "id": "112",
+    "feature": "--if-abandoned",
+    "title": "control: the same targeted dry run without --if-abandoned",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/abandon-YqbKgx/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment close-suggestion-prs --repo octo/cleanup-ab --original 52 --dry-run --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "the guarded and unguarded documents are identical (the guard changes nothing for an abandoned original)",
+        "pass": true
+      }
+    ],
+    "file": "steps/112-control-the-same-targeted-dry-run-without-if-abandoned.txt"
+  },
+  {
+    "id": "113",
+    "feature": "--if-abandoned",
+    "title": "closed-unmerged original #52: closes its suggestion #62",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/abandon-YqbKgx/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment close-suggestion-prs --repo octo/cleanup-ab --original 52 --if-abandoned --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0, complete, #62 closed",
+        "pass": true
+      },
+      {
+        "name": "exactly one write: PATCH pulls/62; no DELETE",
+        "pass": true
+      },
+      {
+        "name": "only #62 changed state",
+        "pass": true
+      }
+    ],
+    "file": "steps/113-closed-unmerged-original-52-closes-its-suggestion-62.txt"
+  },
+  {
+    "id": "114",
+    "feature": "--if-abandoned",
+    "title": "a repeat run for #52: #62 already-closed, nothing written",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/abandon-YqbKgx/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment close-suggestion-prs --repo octo/cleanup-ab --original 52 --if-abandoned --format json",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0, #62 already-closed",
+        "pass": true
+      }
+    ],
+    "file": "steps/114-a-repeat-run-for-52-62-already-closed-nothing-written.txt"
+  },
+  {
+    "id": "115",
+    "feature": "--if-abandoned",
+    "title": "original #53 cannot be read (forbidden): an operational error (json)",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/abandon-YqbKgx/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment close-suggestion-prs --repo octo/cleanup-ab --original 53 --if-abandoned --format json",
+    "exit": 1,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 1, status error, one operation-failed",
+        "pass": true
+      },
+      {
+        "name": "the message begins \"Pull request octo/cleanup-ab#53 could not be read (\", names HTTP 403, and ends \"nothing was checked or closed.\"",
+        "pass": true
+      },
+      {
+        "name": "nothing requested after the failed read, nothing written",
+        "pass": true
+      }
+    ],
+    "file": "steps/115-original-53-cannot-be-read-forbidden-an-operational-error-js.txt"
+  },
+  {
+    "id": "116",
+    "feature": "--if-abandoned",
+    "title": "original #54 cannot be read (server-error): an operational error (json)",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/abandon-YqbKgx/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment close-suggestion-prs --repo octo/cleanup-ab --original 54 --if-abandoned --format json",
+    "exit": 1,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 1, status error, one operation-failed",
+        "pass": true
+      },
+      {
+        "name": "the message begins \"Pull request octo/cleanup-ab#54 could not be read (\", names HTTP 502, and ends \"nothing was checked or closed.\"",
+        "pass": true
+      },
+      {
+        "name": "nothing requested after the failed read, nothing written",
+        "pass": true
+      }
+    ],
+    "file": "steps/116-original-54-cannot-be-read-server-error-an-operational-error.txt"
+  },
+  {
+    "id": "117",
+    "feature": "--if-abandoned",
+    "title": "original #54 cannot be read: human output",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/abandon-YqbKgx/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment close-suggestion-prs --repo octo/cleanup-ab --original 54 --if-abandoned",
+    "exit": 1,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 1; stdout \"Nothing was closed.\"; stderr operation-failed",
+        "pass": true
+      }
+    ],
+    "file": "steps/117-original-54-cannot-be-read-human-output.txt"
+  },
+  {
+    "id": "118",
+    "feature": "--if-abandoned",
+    "title": "usage error: --if-abandoned without --original",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/abandon-YqbKgx/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment close-suggestion-prs --repo octo/cleanup-ab --if-abandoned",
+    "exit": 1,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 1, stdout empty, stderr names \"--if-abandoned requires --original (it checks that original pull request)\" and the command's --help, no request",
+        "pass": true
+      }
+    ],
+    "file": "steps/118-usage-error-if-abandoned-without-original.txt"
+  },
+  {
+    "id": "119",
+    "feature": "--if-abandoned",
+    "title": "usage error: --if-abandoned with a --label sweep",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/abandon-YqbKgx/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment close-suggestion-prs --repo octo/cleanup-ab --label suggestion-pr --if-abandoned",
+    "exit": 1,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 1, stdout empty, stderr names \"--if-abandoned requires --original\" and the command's --help, no request",
+        "pass": true
+      }
+    ],
+    "file": "steps/119-usage-error-if-abandoned-with-a-label-sweep.txt"
+  },
+  {
+    "id": "120",
+    "feature": "--if-abandoned",
+    "title": "usage error: a value for --if-abandoned",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/abandon-YqbKgx/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment close-suggestion-prs --repo octo/cleanup-ab --original 52 --if-abandoned=yes",
+    "exit": 1,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 1, stdout empty, stderr names \"--if-abandoned takes no value\" and the command's --help, no request",
+        "pass": true
+      }
+    ],
+    "file": "steps/120-usage-error-a-value-for-if-abandoned.txt"
+  },
+  {
+    "id": "121",
+    "feature": "--if-abandoned",
+    "title": "usage error in json: --if-abandoned without --original",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/abandon-YqbKgx/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment close-suggestion-prs --repo octo/cleanup-ab --if-abandoned --format json",
+    "exit": 1,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 1, one usage-error document with the message",
+        "pass": true
+      }
+    ],
+    "file": "steps/121-usage-error-in-json-if-abandoned-without-original.txt"
+  },
+  {
+    "id": "122",
+    "feature": "--if-abandoned",
+    "title": "close-suggestion-prs --help documents --if-abandoned (no token)",
+    "command": "sarif-to-comment close-suggestion-prs --help",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "exit 0; the synopsis names [--if-abandoned]; the option and the skip are described",
+        "pass": true
+      }
+    ],
+    "file": "steps/122-close-suggestion-prs-help-documents-if-abandoned-no-token.txt"
+  },
+  {
+    "id": "123",
+    "feature": "--if-abandoned",
+    "title": "library: requireAbandonedOriginal skips an open original; without an original it is a TypeError",
+    "command": "GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/abandon-YqbKgx/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts node <consumer>/u8-abandon.mjs",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "the token never appears in stdout or stderr",
+        "pass": true
+      },
+      {
+        "name": "exit 0 (in-script assertions held)",
+        "pass": true
+      }
+    ],
+    "file": "steps/123-library-requireabandonedoriginal-skips-an-open-original-with.txt"
+  },
+  {
+    "id": "124",
+    "feature": "example workflow",
+    "title": "parse the example workflow YAML (yaml 2.x) and check its shape",
+    "command": "node: yaml.parse(<repo>/docs/examples/abandonment-cleanup.workflow.yml)",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "parses as YAML",
+        "pass": true
+      },
+      {
+        "name": "triggers only on pull_request closed, never pull_request_target",
+        "pass": true
+      },
+      {
+        "name": "the job runs only when the event says not merged",
+        "pass": true
+      },
+      {
+        "name": "it waits two minutes (sleep 120) before cleanup",
+        "pass": true
+      },
+      {
+        "name": "permissions: pull-requests write, contents read, issues read",
+        "pass": true
+      },
+      {
+        "name": "the credential is the repository secret SARIF_TO_COMMENT_TOKEN (a personal access token), not github.token",
+        "pass": true
+      },
+      {
+        "name": "it runs close-suggestion-prs --repo --original --if-abandoned --owner all, pinned to sarif-to-comment@0.3.0",
+        "pass": true
+      },
+      {
+        "name": "no checkout step",
+        "pass": true
+      },
+      {
+        "name": "concurrency cancels an earlier waiting run for the same pull request",
+        "pass": true
+      }
+    ],
+    "file": "steps/124-parse-the-example-workflow-yaml-yaml-2-x-and-check-its-shape.txt"
+  },
+  {
+    "id": "125",
+    "feature": "example workflow",
+    "title": "actionlint 1.7.12 on the example workflow",
+    "command": "actionlint -no-color <repo>/docs/examples/abandonment-cleanup.workflow.yml",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "actionlint is available and reports nothing (exit 0)",
+        "pass": true
+      }
+    ],
+    "file": "steps/125-actionlint-1-7-12-on-the-example-workflow.txt"
+  },
+  {
+    "id": "126",
+    "feature": "example workflow",
+    "title": "every option the workflow passes exists in the installed close-suggestion-prs --help",
+    "command": "sarif-to-comment close-suggestion-prs --help",
+    "exit": 0,
+    "pass": true,
+    "checks": [
+      {
+        "name": "--repo, --original, --if-abandoned and --owner me|all are in the installed help",
+        "pass": true
+      }
+    ],
+    "file": "steps/126-every-option-the-workflow-passes-exists-in-the-installed-clo.txt"
+  }
+]

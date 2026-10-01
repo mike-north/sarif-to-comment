@@ -1,0 +1,96 @@
+/**
+ * Part C checks of the 0.3.0 candidate acceptance, computed from the saved
+ * live outputs in docs/evidence/release-candidate/live/ (no network). Expected
+ * values are written by hand from the companion contract §2.11 and the
+ * cleanup contract §2.12. Writes live/checks.json.
+ */
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
+type Json = Record<string, any>;
+const DIR = path.resolve(process.argv[2] ?? '');
+const read = (f: string): string => fs.readFileSync(path.join(DIR, f), 'utf8');
+const json = (f: string): Json => JSON.parse(read(f)) as Json;
+const MAIN = '0a7b03fe399255a62118311cbc3e1bd6fe64cb23';
+const C0 = '3c2704853bb0cb524a8936892121ac5a697c46be';
+const R = '920fc63ae2fde7a398dd63c1d80dad425c7fc085';
+const A = '37064469185a2a04ffef0063059c5c6fd8332c31';
+const PROPOSAL = '5747d6ab1c7779e3601da56bdb5962fdd2bf83e5';
+const PATH = 'docs/experiments/rc030/crlf.txt';
+const BRANCH = 'sarif-rc030-crlf-20261001';
+const AFTER = 'Only line,​with LF.\n';
+
+interface ICheck { step: string; name: string; pass: boolean; detail?: string }
+const checks: ICheck[] = [];
+const check = (step: string, name: string, pass: boolean, detail?: unknown): void => {
+  checks.push({ step, name, pass, ...(pass || detail === undefined ? {} : { detail: JSON.stringify(detail).slice(0, 800) }) });
+};
+
+const g = json('c06-readback.json')['data']['repository'];
+// c00 the fixture
+const refs = read('c13-refs-after.txt');
+check('c00 fixture', `main is ${MAIN.slice(0, 7)} after the run (never touched)`, refs.includes(`${MAIN}\trefs/heads/main`), refs);
+check('c00 fixture', `#107 is open, draft, into main, head ${A.slice(0, 7)}`, g.original.state === 'OPEN' && g.original.isDraft === true && g.original.baseRefName === 'main' && g.original.headRefOid === A, g.original);
+check('c00 fixture', `the timeline records one force-push, ${R.slice(0, 7)} -> ${A.slice(0, 7)}`, JSON.stringify(g.original.timelineItems.nodes) === JSON.stringify([{ beforeCommit: { oid: R }, afterCommit: { oid: A } }]), g.original.timelineItems.nodes);
+
+// c01 validate
+const v = json('c01-validate-107.json');
+check('c01 validate', 'exit 0, status ready, no diagnostics', read('c01-exit.txt').trim() === '0' && v['status'] === 'ready' && v['diagnostics'].length === 0, v);
+check('c01 validate', `plans one draft suggestion pull request, projected onto the head ${A}`, v['message'].includes('Publication would also create 1 draft suggestion pull request') && v['message'].includes(`was projected onto the head \`${A}\`: merging it applies only its own changes.`), v['message']);
+check('c01 validate', 'stderr empty', read('c01-validate-107.stderr.txt') === '');
+
+// c03 publish
+const p = json('c03-publish-107.json');
+check('c03 publish', 'exit 0, status published, no diagnostics', read('c03-exit.txt').trim() === '0' && p['status'] === 'published' && p['diagnostics'].length === 0, p);
+check('c03 publish', 'one review and one suggestion pull request, #108', p['review']?.['id'] === 5378749555 && JSON.stringify(p['suggestions'].map((s: Json) => s['number'])) === '[108]', p);
+check('c03 publish', 'stderr empty', read('c03-publish-107.stderr.txt') === '');
+
+// c04 / c06 the companion description
+const c = g.companion;
+const view = json('c04-pr-108-view.json');
+check('c04 companion', `#108 is open, draft, into ${BRANCH}, labeled suggestion-pr`, c.state === 'OPEN' && c.isDraft === true && c.baseRefName === BRANCH && JSON.stringify(c.labels.nodes.map((l: Json) => l['name'])) === '["suggestion-pr"]', c);
+check('c04 companion', 'GitHub reports it mergeable (MERGEABLE, CLEAN)', c.mergeable === 'MERGEABLE' && c.mergeStateStatus === 'CLEAN', [c.mergeable, c.mergeStateStatus]);
+check('c04 companion', 'the description read by gh pr view equals the one read by GraphQL', view['body'] === c.body);
+const lead = `**The reviewed commit is not part of the branch of #107:** the branch was rewritten after commit ${R} (its head was ${A} when this was proposed). `
+  + 'GitHub shows this pull request\'s changes from an older merge base, so they also list changes of the reviewed commit itself. '
+  + 'Projected onto that head before this pull request was created, merging it applies only its own changes, which are these:';
+const section = [lead, '', '```diff', `--- a/${PATH}`, `+++ b/${PATH}`, '@@ -1 +1 @@ CRLF line endings become LF line endings', '-Only line, with CRLF.', '+Only line,{U+200B}with LF.', '```', '',
+  'In this diff, each `{U+XXXX}` stands for the character with that code point, written visibly; this pull request\'s commit has the exact bytes.'].join('\n');
+check('c04 companion', 'the description holds the projection section exactly as §2.11 specifies: the hunk states "CRLF line endings become LF line endings", U+200B is written {U+200B}, and the escapes note follows', c.body.includes(`Suggested in a review of #107 at commit ${R}.\n\n${section}\n\n`), c.body);
+check('c04 companion', 'no raw U+200B, U+00A0 or carriage return reaches the description', !/[​ \r]/u.test(c.body));
+const marker = /\n\n<!-- suggestion-pr (\{[^\n]*\}) -->$/.exec(c.body);
+const m = marker === null ? {} : JSON.parse(marker[1] ?? '{}') as Json;
+check('c04 companion', `the description ends with a version 1 marker naming mike-north/doc-linter#107 and the reviewed commit`, m['version'] === 1 && JSON.stringify(m['original']) === '{"owner":"mike-north","repo":"doc-linter","pullNumber":107}' && m['reviewedCommit'] === R, m);
+check('c04 companion', `its commits are R (parent C0) and the proposal commit ${PROPOSAL.slice(0, 7)} (parent R)`, JSON.stringify(c.commits.nodes.map((n: Json) => [n['commit']['oid'], n['commit']['parents']['nodes'].map((x: Json) => x['oid'])])) === JSON.stringify([[R, [C0]], [PROPOSAL, [R]]]), c.commits.nodes);
+
+// c05 / c06 the committed bytes
+const bytes = read('c05-companion-branch-bytes.txt');
+check('c05 bytes', `the branch tip is ${PROPOSAL.slice(0, 7)}, whose only parent is R`, bytes.includes(`tip: ${PROPOSAL}`) && bytes.includes(`tip parents: ${R} \n`), bytes);
+check('c05 bytes', 'git: the committed crlf.txt is exactly 4f6e6c79206c696e652c e2808b 77697468204c462e 0a ("Only line,", U+200B, "with LF.", one LF, no CR)', bytes.includes('00000000: 4f6e 6c79 206c 696e 652c e280 8b77 6974  Only line,...wit\n00000010: 6820 4c46 2e0a                           h LF..'), bytes);
+check('c05 bytes', 'git: the proposal commit changes only crlf.txt; sample.md is the reviewed commit\'s blob', bytes.includes(' docs/experiments/rc030/crlf.txt | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)') && /sample\.md blob at tip: (\w+) {2}at R: \1/.test(bytes), bytes);
+check('c06 bytes', 'GitHub: the blob on the suggestion branch is 22 bytes, not binary, and its text is exactly the replacement', g.blobAtCompanion.byteSize === Buffer.byteLength(AFTER) && g.blobAtCompanion.isBinary === false && g.blobAtCompanion.text === AFTER, g.blobAtCompanion);
+check('c06 bytes', 'GitHub: the blob at the reviewed commit is the CRLF original (23 bytes)', g.blobAtReviewed.byteSize === 23 && g.blobAtReviewed.text === 'Only line, with CRLF.\r\n', g.blobAtReviewed);
+
+// c06 the review
+const reviews = g.original.reviews.nodes as Json[];
+const review = reviews[0] ?? {};
+const recorded = json('state/review-107.json.review');
+check('c06 review', 'one review on #107: 5378749555, PENDING, at the reviewed commit, no inline comment', reviews.length === 1 && review['databaseId'] === 5378749555 && review['state'] === 'PENDING' && review['commit']['oid'] === R && review['comments']['nodes'].length === 0, reviews);
+check('c06 review', 'its body equals the request recorded before sending, and the recorded commit is R', recorded['request']['body'] === review['body'] && recorded['request']['commitId'] === R);
+check('c06 review', 'the body begins with the companion index listing #108, created with this review', String(review['body']).startsWith('**Companion pull requests of this review:**\n\n- [#108](https://github.com/mike-north/doc-linter/pull/108): `Suggestion for #107: edit docs/experiments/rc030/crlf.txt` — created with this review\n\n---\n\n'), review['body']);
+check('c06 review', 'the plan is version 3 and records a faithful projection onto A from merge base C0', (() => { const s = json('state/review-107.json'); return s['version'] === 3 && JSON.stringify(s['projection']) === JSON.stringify({ head: A, mergeBase: C0, suggestions: [{ verdict: 'faithful', conflicts: [] }] }); })());
+
+// C2 --if-abandoned --dry-run
+const open = json('c08-open-107-guarded-dry-run.json');
+check('c08 guard: open #107', 'exit 0, original-not-abandoned, dry run, originals [{107, open}], no suggestions, zero counts', read('c08-exit.txt').trim() === '0' && open['status'] === 'original-not-abandoned' && open['dryRun'] === true && JSON.stringify(open['originals']) === '[{"number":107,"state":"open"}]' && JSON.stringify(open['suggestions']) === '[]' && JSON.stringify(open['counts']) === '{"candidates":0,"checked":0,"labeled":0,"conforming":0}', open);
+check('c08 guard: open #107', 'exactly one note, original-pull-request-not-abandoned, about mike-north/doc-linter#107, with the §2.12 message', JSON.stringify(open['diagnostics'].map((d: Json) => [d['severity'], d['code'], d['subject'], d['message']])) === JSON.stringify([['note', 'original-pull-request-not-abandoned', 'mike-north/doc-linter#107', '#107 is open, not closed without merging, so nothing was checked or closed.']]), open['diagnostics']);
+check('c09 guard: open #107 (human)', 'exit 0; stdout is the skip title and "Nothing was checked or closed."; the note is on stderr', read('c09-exit.txt').trim() === '0' && read('c09-open-107-guarded-dry-run.md') === '## Suggestion pull request cleanup skipped: the original is not closed without merging\n\nNothing was checked or closed.\n' && read('c09-open-107-guarded-dry-run.stderr.txt').startsWith('ℹ note  The original pull request is not closed without merging  [original-pull-request-not-abandoned]\n  mike-north/doc-linter#107\n'));
+const closed = json('c10-closed-57-guarded-dry-run.json');
+check('c10 guard: closed #57', 'exit 0, complete, dry run, #57 closed (without merging), #59 already-closed, counts 1/1/1/1, no diagnostics', read('c10-exit.txt').trim() === '0' && closed['status'] === 'complete' && closed['dryRun'] === true && JSON.stringify(closed['originals']) === '[{"number":57,"state":"closed"}]' && JSON.stringify(closed['suggestions'].map((s: Json) => [s['number'], s['original'], s['result']])) === '[[59,57,"already-closed"]]' && JSON.stringify(closed['counts']) === '{"candidates":1,"checked":1,"labeled":1,"conforming":1}' && closed['diagnostics'].length === 0, closed);
+check('c11 guard: closed #57 (human)', 'exit 0; "- #57: closed without merging", "- #59 (for #57): already closed", "This was a dry run: nothing was closed."; stderr empty', read('c11-exit.txt').trim() === '0' && ['- #57: closed without merging', '- #59 (for #57): already closed', 'This was a dry run: nothing was closed.'].every((t) => read('c11-closed-57-guarded-dry-run.md').includes(t)) && read('c11-closed-57-guarded-dry-run.stderr.txt') === '');
+check('c07/c12 states', '#107, #108, #57 and #59 have identical states before and after the guarded runs', read('c07-states-before.jsonl') === read('c12-states-after.jsonl'));
+
+const out = { checks, total: checks.length, passed: checks.filter((x) => x.pass).length, failed: checks.filter((x) => !x.pass).length };
+fs.writeFileSync(path.join(DIR, 'checks.json'), `${JSON.stringify(out, null, 2)}\n`);
+process.stdout.write(`${String(out.total)} checks, ${String(out.passed)} passed, ${String(out.failed)} failed\n`);
+for (const x of checks.filter((y) => !y.pass)) process.stdout.write(`FAIL ${x.step}: ${x.name}\n  ${x.detail ?? ''}\n`);

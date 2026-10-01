@@ -1,0 +1,417 @@
+# 072 --label bug: the label does not mark suggestion pull requests (early exit)
+feature: close-suggestion-prs
+
+$ GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/cleanup-3pVsIL/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment close-suggestion-prs --repo octo/cleanup-uat --label bug --format json
+exit status: 2
+
+checks:
+  PASS  the token never appears in stdout or stderr
+  PASS  exit 2, label-not-suggestion-prs
+
+--- stdout
+{
+  "command": "close-suggestion-prs",
+  "status": "label-not-suggestion-prs",
+  "dryRun": false,
+  "owner": "me",
+  "originals": [],
+  "suggestions": [],
+  "counts": {
+    "candidates": 25,
+    "checked": 0,
+    "labeled": 0,
+    "conforming": 0
+  },
+  "message": "## Suggestion pull request cleanup stopped: the label does not mark suggestion pull requests\n\nNone of the first 20 of the 25 open pull requests labeled `bug` in octo/cleanup-uat has a suggestion marker or a `suggestion-pr/` branch, so the label does not look like a suggestion label, and nothing was checked or closed.",
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "code": "label-not-suggestion-prs",
+      "title": "The label does not seem to mark suggestion pull requests",
+      "message": "None of the first 20 of the 25 open pull requests labeled `bug` in octo/cleanup-uat has a suggestion marker or a `suggestion-pr/` branch, so the label does not look like a suggestion label, and nothing was checked or closed.",
+      "subject": "octo/cleanup-uat",
+      "remedies": [
+        "Check the label: `--label` names the label suggestion pull requests were left under.",
+        "If the label is right, run again with `--force` (library: `force: true`) to check every pull request carrying it."
+      ]
+    }
+  ]
+}
+
+--- stderr
+
+--- fake host after the command (writes so far, review requests, pull requests)
+{
+  "writesSoFar": [],
+  "reviews": [],
+  "pulls": [
+    {
+      "number": 36,
+      "title": "Original 36",
+      "head": "feature-36",
+      "base": "main",
+      "draft": false,
+      "state": "open",
+      "labels": [],
+      "body": ""
+    },
+    {
+      "number": 37,
+      "title": "Original 37",
+      "head": "feature-37",
+      "base": "main",
+      "draft": false,
+      "state": "closed",
+      "labels": [],
+      "body": ""
+    },
+    {
+      "number": 38,
+      "title": "Suggestion for #36",
+      "head": "suggestion-pr/36/00000000-0000-4000-8000-000000000038",
+      "base": "feature-36",
+      "draft": true,
+      "state": "open",
+      "labels": [
+        "uat-suggestion"
+      ],
+      "body": "Suggested in a review of #36 at commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed.\n\n<!-- suggestion-pr {\"version\":1,\"original\":{\"owner\":\"octo\",\"repo\":\"cleanup-uat\",\"pullNumber\":36},\"reviewedCommit\":\"feedfeedfeedfeedfeedfeedfeedfeedfeedfeed\",\"id\":\"00000000-0000-4000-8000-000000000038\",\"batch\":\"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb\"} -->"
+    },
+    {
+      "number": 39,
+      "title": "Suggestion for #36",
+      "head": "suggestion-pr/36/00000000-0000-4000-8000-000000000039",
+      "base": "feature-36",
+      "draft": true,
+      "state": "open",
+      "labels": [
+        "uat-suggestion"
+      ],
+      "body": "Suggested in a review of #36 at commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed.\n\n<!-- suggestion-pr {\"version\":1,\"original\":{\"owner\":\"octo\",\"repo\":\"cleanup-uat\",\"pullNumber\":36},\"reviewedCommit\":\"feedfeedfeedfeedfeedfeedfeedfeedfeedfeed\",\"id\":\"00000000-0000-4000-8000-000000000039\",\"batch\":\"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb\"} -->"
+    },
+    {
+      "number": 40,
+      "title": "Suggestion for #37",
+      "head": "suggestion-pr/37/00000000-0000-4000-8000-000000000040",
+      "base": "feature-37",
+      "draft": true,
+      "state": "open",
+      "labels": [
+        "uat-suggestion"
+      ],
+      "body": "Suggested in a review of #37 at commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed.\n\n<!-- suggestion-pr {\"version\":1,\"original\":{\"owner\":\"octo\",\"repo\":\"cleanup-uat\",\"pullNumber\":37},\"reviewedCommit\":\"feedfeedfeedfeedfeedfeedfeedfeedfeedfeed\",\"id\":\"00000000-0000-4000-8000-000000000040\",\"batch\":\"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb\"} -->"
+    },
+    {
+      "number": 41,
+      "title": "Suggestion for #37",
+      "head": "suggestion-pr/37/00000000-0000-4000-8000-000000000041",
+      "base": "feature-37",
+      "draft": true,
+      "state": "open",
+      "labels": [
+        "uat-suggestion"
+      ],
+      "body": "Suggested in a review of #37 at commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed.\n\n<!-- suggestion-pr {\"version\":1,\"original\":{\"owner\":\"octo\",\"repo\":\"cleanup-uat\",\"pullNumber\":37},\"reviewedCommit\":\"feedfeedfeedfeedfeedfeedfeedfeedfeedfeed\",\"id\":\"00000000-0000-4000-8000-000000000041\",\"batch\":\"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb\"} -->"
+    },
+    {
+      "number": 100,
+      "title": "Fix 100",
+      "head": "fix/100",
+      "base": "main",
+      "draft": false,
+      "state": "open",
+      "labels": [
+        "bug"
+      ],
+      "body": "Fixes a bug."
+    },
+    {
+      "number": 101,
+      "title": "Fix 101",
+      "head": "fix/101",
+      "base": "main",
+      "draft": false,
+      "state": "open",
+      "labels": [
+        "bug"
+      ],
+      "body": "Fixes a bug."
+    },
+    {
+      "number": 102,
+      "title": "Fix 102",
+      "head": "fix/102",
+      "base": "main",
+      "draft": false,
+      "state": "open",
+      "labels": [
+        "bug"
+      ],
+      "body": "Fixes a bug."
+    },
+    {
+      "number": 103,
+      "title": "Fix 103",
+      "head": "fix/103",
+      "base": "main",
+      "draft": false,
+      "state": "open",
+      "labels": [
+        "bug"
+      ],
+      "body": "Fixes a bug."
+    },
+    {
+      "number": 104,
+      "title": "Fix 104",
+      "head": "fix/104",
+      "base": "main",
+      "draft": false,
+      "state": "open",
+      "labels": [
+        "bug"
+      ],
+      "body": "Fixes a bug."
+    },
+    {
+      "number": 105,
+      "title": "Fix 105",
+      "head": "fix/105",
+      "base": "main",
+      "draft": false,
+      "state": "open",
+      "labels": [
+        "bug"
+      ],
+      "body": "Fixes a bug."
+    },
+    {
+      "number": 106,
+      "title": "Fix 106",
+      "head": "fix/106",
+      "base": "main",
+      "draft": false,
+      "state": "open",
+      "labels": [
+        "bug"
+      ],
+      "body": "Fixes a bug."
+    },
+    {
+      "number": 107,
+      "title": "Fix 107",
+      "head": "fix/107",
+      "base": "main",
+      "draft": false,
+      "state": "open",
+      "labels": [
+        "bug"
+      ],
+      "body": "Fixes a bug."
+    },
+    {
+      "number": 108,
+      "title": "Fix 108",
+      "head": "fix/108",
+      "base": "main",
+      "draft": false,
+      "state": "open",
+      "labels": [
+        "bug"
+      ],
+      "body": "Fixes a bug."
+    },
+    {
+      "number": 109,
+      "title": "Fix 109",
+      "head": "fix/109",
+      "base": "main",
+      "draft": false,
+      "state": "open",
+      "labels": [
+        "bug"
+      ],
+      "body": "Fixes a bug."
+    },
+    {
+      "number": 110,
+      "title": "Fix 110",
+      "head": "fix/110",
+      "base": "main",
+      "draft": false,
+      "state": "open",
+      "labels": [
+        "bug"
+      ],
+      "body": "Fixes a bug."
+    },
+    {
+      "number": 111,
+      "title": "Fix 111",
+      "head": "fix/111",
+      "base": "main",
+      "draft": false,
+      "state": "open",
+      "labels": [
+        "bug"
+      ],
+      "body": "Fixes a bug."
+    },
+    {
+      "number": 112,
+      "title": "Fix 112",
+      "head": "fix/112",
+      "base": "main",
+      "draft": false,
+      "state": "open",
+      "labels": [
+        "bug"
+      ],
+      "body": "Fixes a bug."
+    },
+    {
+      "number": 113,
+      "title": "Fix 113",
+      "head": "fix/113",
+      "base": "main",
+      "draft": false,
+      "state": "open",
+      "labels": [
+        "bug"
+      ],
+      "body": "Fixes a bug."
+    },
+    {
+      "number": 114,
+      "title": "Fix 114",
+      "head": "fix/114",
+      "base": "main",
+      "draft": false,
+      "state": "open",
+      "labels": [
+        "bug"
+      ],
+      "body": "Fixes a bug."
+    },
+    {
+      "number": 115,
+      "title": "Fix 115",
+      "head": "fix/115",
+      "base": "main",
+      "draft": false,
+      "state": "open",
+      "labels": [
+        "bug"
+      ],
+      "body": "Fixes a bug."
+    },
+    {
+      "number": 116,
+      "title": "Fix 116",
+      "head": "fix/116",
+      "base": "main",
+      "draft": false,
+      "state": "open",
+      "labels": [
+        "bug"
+      ],
+      "body": "Fixes a bug."
+    },
+    {
+      "number": 117,
+      "title": "Fix 117",
+      "head": "fix/117",
+      "base": "main",
+      "draft": false,
+      "state": "open",
+      "labels": [
+        "bug"
+      ],
+      "body": "Fixes a bug."
+    },
+    {
+      "number": 118,
+      "title": "Fix 118",
+      "head": "fix/118",
+      "base": "main",
+      "draft": false,
+      "state": "open",
+      "labels": [
+        "bug"
+      ],
+      "body": "Fixes a bug."
+    },
+    {
+      "number": 119,
+      "title": "Fix 119",
+      "head": "fix/119",
+      "base": "main",
+      "draft": false,
+      "state": "open",
+      "labels": [
+        "bug"
+      ],
+      "body": "Fixes a bug."
+    },
+    {
+      "number": 120,
+      "title": "Fix 120",
+      "head": "fix/120",
+      "base": "main",
+      "draft": false,
+      "state": "open",
+      "labels": [
+        "bug"
+      ],
+      "body": "Fixes a bug."
+    },
+    {
+      "number": 121,
+      "title": "Fix 121",
+      "head": "fix/121",
+      "base": "main",
+      "draft": false,
+      "state": "open",
+      "labels": [
+        "bug"
+      ],
+      "body": "Fixes a bug."
+    },
+    {
+      "number": 122,
+      "title": "Fix 122",
+      "head": "fix/122",
+      "base": "main",
+      "draft": false,
+      "state": "open",
+      "labels": [
+        "bug"
+      ],
+      "body": "Fixes a bug."
+    },
+    {
+      "number": 123,
+      "title": "Fix 123",
+      "head": "fix/123",
+      "base": "main",
+      "draft": false,
+      "state": "open",
+      "labels": [
+        "bug"
+      ],
+      "body": "Fixes a bug."
+    },
+    {
+      "number": 124,
+      "title": "Fix 124",
+      "head": "fix/124",
+      "base": "main",
+      "draft": false,
+      "state": "open",
+      "labels": [
+        "bug"
+      ],
+      "body": "Fixes a bug."
+    }
+  ]
+}

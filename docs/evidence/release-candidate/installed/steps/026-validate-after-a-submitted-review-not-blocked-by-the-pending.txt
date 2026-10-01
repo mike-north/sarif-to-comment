@@ -1,0 +1,48 @@
+# 026 validate after a SUBMITTED review: not blocked by the pending-review check
+feature: validate
+
+$ GH_TOKEN=<fake-host-token> FAKE_HTTP_GITHUB_DIR=<tmp>/delivery-composition-Be3lHK/host NODE_OPTIONS=--require=<repo>/test/fixtures/docs/fake-fetch-preload.mts sarif-to-comment validate --sarif <tmp>/delivery-composition-Be3lHK/review.sarif --repo octo/widgets --pull 7 --commit feedfeedfeedfeedfeedfeedfeedfeedfeedfeed --format json
+exit status: 0
+
+checks:
+  PASS  the token never appears in stdout or stderr
+  PASS  exit 0, ready
+
+--- stdout
+{
+  "command": "validate",
+  "status": "ready",
+  "message": "## Ready to publish\n\nThe complete document can be published faithfully to octo/widgets#7 at commit `feedfeedfeedfeedfeedfeedfeedfeedfeedfeed`.\n\n**Review prepared:** 1 inline comment(s) and 0 general section(s) for commit `feedfeedfeedfeedfeedfeedfeedfeedfeedfeed`.\n\nNothing was published and no publication state was written.\n\nNo pending review of this account was found on the pull request. This is not an approval: publication repeats every check against the pull request as it is then. GitHub can still refuse the review, for example if this account starts a pending review on the pull request before publication.",
+  "diagnostics": []
+}
+
+--- stderr
+
+--- input SARIF (as given to --sarif, before the command)
+{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"Review bot","version":"1.0.0"}},"columnKind":"utf16CodeUnits","versionControlProvenance":[{"repositoryUri":"https://github.com/octo/widgets","revisionId":"feedfeedfeedfeedfeedfeedfeedfeedfeedfeed"}],"artifacts":[],"results":[{"message":{"text":"Fix the typo."},"locations":[{"physicalLocation":{"artifactLocation":{"uri":"README.md"},"region":{"startLine":2}}}],"fixes":[{"artifactChanges":[{"artifactLocation":{"uri":"README.md"},"replacements":[{"deletedRegion":{"startLine":2},"insertedContent":{"text":"The widget client."}}]}]}]}]}]}
+--- fake host after the command (writes so far, review requests, pull requests)
+{
+  "writesSoFar": [
+    "POST /repos/octo/widgets/pulls/7/reviews"
+  ],
+  "reviews": [
+    {
+      "id": 5000,
+      "state": "COMMENTED",
+      "request": {
+        "commit_id": "feedfeedfeedfeedfeedfeedfeedfeedfeedfeed",
+        "body": "\n\n<!-- sarif-to-comment:review:047de3cd-b487-45fd-8206-2244be2c7cec -->",
+        "event": "COMMENT",
+        "comments": [
+          {
+            "path": "README.md",
+            "body": "Fix the typo.\n\n<sub>— Review bot 1.0.0</sub>\n\n```suggestion\nThe widget client.\n```",
+            "line": 2,
+            "side": "RIGHT"
+          }
+        ]
+      }
+    }
+  ],
+  "pulls": []
+}

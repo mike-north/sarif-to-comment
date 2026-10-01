@@ -1,0 +1,34 @@
+# Clean-clone identity of the 0.3.0 candidate (part A)
+
+Clone: git clone https://github.com/mike-north/sarif-to-comment.git, then git checkout --detach 99b461d599d58d4bcca7fc7cfdad5d4b0076343b
+git rev-parse HEAD:          99b461d599d58d4bcca7fc7cfdad5d4b0076343b
+git rev-parse HEAD^{tree}:   8e967698c25eed18d7050bfeb11f683ed2322b2d
+git rev-parse origin/main:   99b461d599d58d4bcca7fc7cfdad5d4b0076343b
+node --version:              v24.14.0
+npm --version:               11.18.0
+pnpm --version:              11.12.0
+platform:                    Darwin arm64
+
+Environment: GITHUB_TOKEN unset for every command; FORCE_COLOR and NO_COLOR were set in the shell (Node prints a warning about them).
+
+pnpm install --frozen-lockfile: exit 0
+Lockfile is up to date, resolution step is skipped
+Packages: +234
+Done in 802ms using pnpm v11.12.0
+
+pnpm run build: exit 0
+Regenerated api-report/sarif-to-comment.api.md and docs/api/. Commit both.
+Built dist/ (54 modules compiled, declarations rolled up).
+git status --short after the build: (empty: the build changed no tracked file)
+
+pnpm run check (lint, types, API report and reference, release plan, full test suite): exit 0
+Release plan allowed: sarif-to-comment 0.2.1 -> 0.3.0 (minor).
+ℹ tests 4073
+ℹ suites 458
+ℹ pass 4073
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 71385.765
+git status --short after the check: (empty)

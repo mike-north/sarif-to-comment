@@ -1,0 +1,36 @@
+# 018 library: inspectSarif, groupSarifFixes, ungroupSarifFixes (a lone member refused; the whole group restores the document), removeSarifComment in memory
+feature: inspect / group-fixes / ungroup-fixes / remove-comment
+
+$ SARIF='{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"Review…(1275 chars)' node <consumer>/u8-authoring.mjs
+exit status: 0
+
+checks:
+  PASS  exit 0 (every in-script assertion held)
+
+--- script
+import assert from 'node:assert/strict';
+import { inspectSarif, groupSarifFixes, ungroupSarifFixes, removeSarifComment } from 'sarif-to-comment';
+const sarif = JSON.parse(process.env.SARIF);
+const inspected = inspectSarif(sarif);
+assert.equal(inspected.status, 'inspected');
+const [a, b, c] = inspected.view.findings.map((f) => f.selector);
+const grouped = groupSarifFixes(sarif, { findings: [a, b], group: 'lib-group' });
+assert.equal(grouped.status, 'grouped');
+assert.equal(grouped.changes, 2);
+const again = inspectSarif(grouped.sarif).view.findings.map((f) => f.selector);
+const lone = ungroupSarifFixes(grouped.sarif, { findings: [again[0]] });
+assert.equal(lone.status, 'refused');
+assert.match(lone.markdown, /^\*\*Cannot ungroup the fixes:\*\*/);
+const ungrouped = ungroupSarifFixes(grouped.sarif, { findings: [again[0], again[1]] });
+assert.equal(ungrouped.status, 'ungrouped');
+assert.deepEqual(ungrouped.sarif, sarif);
+const stale = removeSarifComment(grouped.sarif, c);
+assert.equal(stale.status, 'stale');
+const removed = removeSarifComment(grouped.sarif, again[2]);
+assert.equal(removed.status, 'removed');
+assert.equal(removed.sarif.runs[0].results.length, 2);
+process.stdout.write(JSON.stringify({ grouped: grouped.status, lone: lone.status, ungrouped: ungrouped.status, stale: stale.status, removed: removed.status }));
+
+--- stdout
+{"grouped":"grouped","lone":"refused","ungrouped":"ungrouped","stale":"stale","removed":"removed"}
+--- stderr

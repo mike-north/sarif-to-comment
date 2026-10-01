@@ -1,0 +1,28 @@
+{
+  "format": "sarif-to-comment.publication-state",
+  "version": 1,
+  "phase": "completed",
+  "marker": "<!-- sarif-to-comment:review:d23e5c99-a5b5-47a4-912a-1d9d05d6df4d -->",
+  "destination": {
+    "owner": "mike-north",
+    "repo": "doc-linter",
+    "pullNumber": 107
+  },
+  "reviewedCommit": "920fc63ae2fde7a398dd63c1d80dad425c7fc085",
+  "inputFingerprint": "sha256:c4796940a182078f58f444ca67b0896af38226095bad3d5363cb5312cb4f5914",
+  "authorId": 558005,
+  "request": {
+    "owner": "mike-north",
+    "repo": "doc-linter",
+    "pullNumber": 107,
+    "commitId": "920fc63ae2fde7a398dd63c1d80dad425c7fc085",
+    "body": "**Companion pull requests of this review:**\n\n- [#108](https://github.com/mike-north/doc-linter/pull/108): `Suggestion for #107: edit docs/experiments/rc030/crlf.txt` — created with this review\n\n---\n\nA general remark on the rc030 fixture.\n\n<sub>— rc030 acceptance 1.0.0</sub>\n\n---\n\n**Suggestion pull request:** [#108](https://github.com/mike-north/doc-linter/pull/108)\n\nMerging it into `sarif-rc030-crlf-20261001` applies this change:\n\n- Edited [docs/experiments/rc030/crlf.txt line 1 at 920fc63](https://github.com/mike-north/doc-linter/blob/920fc63ae2fde7a398dd63c1d80dad425c7fc085/docs/experiments/rc030/crlf.txt?plain=1#L1)\n\n**Source:** [docs/experiments/rc030/crlf.txt line 1 at 920fc63](https://github.com/mike-north/doc-linter/blob/920fc63ae2fde7a398dd63c1d80dad425c7fc085/docs/experiments/rc030/crlf.txt?plain=1#L1)\n\n```\nOnly line, with CRLF.\n```\n\nEnd this line with LF, and join its words with a zero-width space.\n\n<sub>— rc030 acceptance 1.0.0</sub>\n\n<!-- sarif-to-comment:review:d23e5c99-a5b5-47a4-912a-1d9d05d6df4d -->",
+    "comments": []
+  },
+  "requestFingerprint": "sha256:cfbac9fd8b995cfc7688fa8195f7ab9e0074eec0d0ab7aa66d47ce04e0dcdce2",
+  "receipt": {
+    "reviewId": 5378749555,
+    "htmlUrl": "https://github.com/mike-north/doc-linter/pull/107#pullrequestreview-5378749555",
+    "via": "created"
+  }
+}

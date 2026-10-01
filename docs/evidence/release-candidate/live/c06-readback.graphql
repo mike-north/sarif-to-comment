@@ -1,0 +1,16 @@
+query {
+  repository(owner: "mike-north", name: "doc-linter") {
+    original: pullRequest(number: 107) {
+      number state isDraft baseRefName headRefName headRefOid
+      reviews(first: 10) { nodes { databaseId state body commit { oid } comments(first: 10) { nodes { path line originalLine body } } } }
+      timelineItems(first: 20, itemTypes: [HEAD_REF_FORCE_PUSHED_EVENT]) { nodes { ... on HeadRefForcePushedEvent { beforeCommit { oid } afterCommit { oid } } } }
+    }
+    companion: pullRequest(number: 108) {
+      number state isDraft mergeable mergeStateStatus baseRefName headRefName headRefOid body
+      labels(first: 5) { nodes { name } }
+      commits(first: 5) { nodes { commit { oid parents(first: 2) { nodes { oid } } } } }
+    }
+    blobAtCompanion: object(expression: "suggestion-pr/107/7e5f9d0c-d206-4fa4-b752-7daa9659ede1:docs/experiments/rc030/crlf.txt") { ... on Blob { oid byteSize isBinary text } }
+    blobAtReviewed: object(expression: "920fc63ae2fde7a398dd63c1d80dad425c7fc085:docs/experiments/rc030/crlf.txt") { ... on Blob { oid byteSize isBinary text } }
+  }
+}

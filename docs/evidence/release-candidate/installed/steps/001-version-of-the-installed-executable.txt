@@ -1,0 +1,15 @@
+# 001 version of the installed executable
+feature: --version
+
+$ sarif-to-comment --version
+exit status: 0
+
+checks:
+  PASS  exit status 0
+  PASS  prints the installed package.json version (0.2.1) and nothing else
+  PASS  stderr empty
+
+--- stdout
+0.2.1
+
+--- stderr
