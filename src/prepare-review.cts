@@ -79,6 +79,13 @@
  *                                     // body and for the review body
  *     maxPayloadBytes?: number,       // default 1,000,000 bytes of UTF-8 JSON
  *                                     // of { body, comments }
+ *     presentation?: { finding?, attribution?, alternatives?, fileAddition?,
+ *       fileDeletion?, lifecycleNote? } // caller callbacks returning the
+ *                                     // Markdown of named components; each
+ *                                     // result is checked by the core
+ *                                     // (src/presentation/customization.cts),
+ *                                     // and a refused one rejects with
+ *                                     // TypeError
  *   }
  *   The defaults are conservative product limits, not verified host maxima.
  *   Exceeding one blocks; nothing is truncated or split.
@@ -96,7 +103,7 @@
  *       (the preparedReview shape accepted by publication)
  *     evidence: Evidence[],   // one per SARIF result, in SARIF order
  *     warnings: Diagnostic[], markdown: string,
- *     suggestions?: { companions, sections } }  // only when suggestion pull
+ *     suggestions?: { companions, sections, lifecycleNote } }  // only when suggestion pull
  *       // requests are created: each companion's exact changes (re-applied
  *       // onto the rewritten head when there is one), title, commit message and rendered
  *       // parts, and the body's sections (text, or a companion index
@@ -293,14 +300,16 @@ import type { IPlacementSourceRange, PlacementAnchorSide } from './placement.cjs
 import { applyReplacement as productionApplyReplacement } from './replacements.cjs';
 import { formatSuggestionMarker } from './suggestion-marker.cjs';
 import { isSuggestionGroupName, namesRepository } from './sarif-common.cjs';
-import { renderAlternatives } from './presentation/alternatives.cjs';
+import { renderAlternative, renderAlternativeChanges, renderAlternatives } from './presentation/alternatives.cjs';
 import type { IAlternative } from './presentation/alternatives.cjs';
 import { renderAttribution } from './presentation/attribution.cjs';
 import type { IProducerAttribution, IProducerComponent } from './presentation/attribution.cjs';
 import { renderCompanionChange } from './presentation/companion-changes.cjs';
 import { renderCompanionDescription } from './presentation/companion-description.cjs';
 import { renderCompanionReference } from './presentation/companion-reference.cjs';
-import { renderFileAddition, renderProposedFileFinding } from './presentation/file-addition.cjs';
+import { present, presentationOptionProblem } from './presentation/customization.cjs';
+import type { CapturedPresentation } from './presentation/customization.cjs';
+import { fileDetails, proposedContentBlock, renderFileAddition, renderProposedFileFinding } from './presentation/file-addition.cjs';
 import type { ProposedFileMode } from './presentation/file-addition.cjs';
 import { renderFileDeletion } from './presentation/file-deletion.cjs';
 import { renderFinding, renderFindingSection } from './presentation/finding.cjs';
@@ -576,6 +585,13 @@ interface IPrepareReviewOptions {
   readonly maxCommentBodyChars?: number | undefined;
   readonly maxPayloadBytes?: number | undefined;
   readonly suggestionPullRequests?: ISuggestionPullRequestsOption | undefined;
+  /**
+   * The caller's presentation callbacks (src/presentation/customization.cts):
+   * each replaces the Markdown of one named component, and the core refuses
+   * a result that drops required content or could disturb a suggestion block
+   * or marker. Omitted components keep their built-in presentation.
+   */
+  readonly presentation?: CapturedPresentation | undefined;
 }
 
 /** The caller input once validateCallerInput accepted it (see the module documentation). */
@@ -615,6 +631,7 @@ interface IEffectiveOptions {
   readonly maxPayloadBytes: number | undefined;
   readonly ignoreApprovalHold: boolean | undefined;
   readonly suggestionPullRequests?: ISuggestionPullRequestsOption | undefined;
+  readonly presentation?: CapturedPresentation | undefined;
 }
 
 /** A diagnostic before it is recorded: `[code, message]`. */
@@ -877,6 +894,12 @@ export interface IPreparedSuggestions {
    * companion whose section is rendered once its pull request exists.
    */
   readonly sections: readonly (string | number)[];
+  /**
+   * The lifecycle note every suggestion pull request's body carries, as
+   * presented (built in, or the caller's lifecycleNote callback) during
+   * preparation, so publication never calls a presentation callback.
+   */
+  readonly lifecycleNote: string;
 }
 
 /** A complete review, ready for publication. */
@@ -932,6 +955,8 @@ interface IPreparationState {
   /** Present exactly when suggestions may have to be re-applied onto a rewritten head. */
   readonly readEntry: ((commit: string, path: string) => Promise<PathEntry>) | null;
   readonly sourceRoot: ParsedReference | null;
+  /** Renders prepared findings and proposals, with the caller's presentation callbacks. */
+  readonly renderer: ReviewRenderer;
 }
 
 /** One entry of proposedFileChanges: its operation name and every field as written. */
@@ -1243,6 +1268,7 @@ async function prepareReview(input: unknown, internals: IPrepareReviewInternals 
     fileExists: existenceCheck(input.fileExists === undefined ? undefined : cachedReader(input.fileExists), cachedSource),
     readEntry: input.readEntry === undefined ? null : entryReader(cachedReader(input.readEntry)),
     sourceRoot: context.sourceRootUri === undefined ? null : parseBaseUri(context.sourceRootUri),
+    renderer: new ReviewRenderer(context, options.presentation ?? {}),
   };
 
   if (Array.isArray(sarif.inlineExternalProperties) && sarif.inlineExternalProperties.length > 0) {
@@ -1352,6 +1378,9 @@ function validateCallerInput(input: unknown): asserts input is IPrepareReviewInp
     if (resolve !== undefined && typeof resolve !== 'function') {
       fail('`options.suggestionPullRequests.resolveRewrittenHead` must be a function () => Promise<commit | undefined>.');
     }
+    const presentation = options['presentation'];
+    const presentationProblem = presentation === undefined ? null : presentationOptionProblem(presentation);
+    if (presentationProblem !== null) fail(`options.presentation${presentationProblem}.`);
   }
 }
 
@@ -3009,15 +3038,16 @@ function assemble(
     }
   }
 
+  const { renderer } = state;
   const rendered = sections.map((section) => (section.kind === 'item'
-    ? renderSection(section.item, context)
-    : renderProposalSection(section.operation, section.items, context)));
+    ? renderer.section(section.item)
+    : renderer.proposal(section.operation, section.items)));
   const proposals = sections.flatMap((section, i): IRenderedProposal[] => (section.kind === 'operation'
     ? [{ path: section.operation.path, characters: itemAt(rendered, i).length }] : []));
 
   // Each comment's body follows its coordinates, once every item it presents is known.
   const comments: PreparedComment[] = commentItems.map((entry) => {
-    const body = entry.items.map(renderItem).join(SEPARATOR);
+    const body = entry.items.map((item) => renderer.finding(item)).join(SEPARATOR);
     return {
       ...entry.coordinates,
       body: entry.suggestion
@@ -3193,7 +3223,7 @@ class ChangeRegistry {
  * first finding carrying one of its changes.
  */
 async function assembleWithSuggestions(items: readonly IPreparedItem[], state: IPreparationState): Promise<IUnitAssembly> {
-  const { context, report, options } = state;
+  const { context, report, options, renderer } = state;
   const enabled = options.suggestionPullRequests;
   const registry = new ChangeRegistry(report);
   const commentItems: ICommentEntry[] = [];
@@ -3292,7 +3322,7 @@ async function assembleWithSuggestions(items: readonly IPreparedItem[], state: I
     }
   }
   const comments: PreparedComment[] = commentItems.map((entry) => {
-    const body = entry.items.map(renderItem).join(SEPARATOR);
+    const body = entry.items.map((item) => renderer.finding(item)).join(SEPARATOR);
     return { ...entry.coordinates, body: entry.suggestion ? `${body}\n\n\`\`\`suggestion\n${entry.suggestion.payload}\`\`\`` : body };
   });
   const blockedAssembly: IUnitAssembly = { review: { commitId: context.reviewedCommit, body: '', comments }, evidence, sectionCount: sections.length, proposals: [] };
@@ -3316,6 +3346,8 @@ async function assembleWithSuggestions(items: readonly IPreparedItem[], state: I
   const obstacles: Obstacle[][] = [];
   const companionsByUnit = new Map<number, IPreparedCompanion>();
   const sizingMarker = formatSuggestionMarker({ ...target, id: SIZING_UUID, batch: SIZING_UUID });
+  /** The lifecycle note every suggestion pull request carries, presented once, when the first is prepared. */
+  let lifecycleNote: string | undefined;
   const { maxCommentBodyChars } = options;
   for (const [i, unit] of units.entries()) {
     const found: Obstacle[] = unavailable.map((reason): Obstacle => ({ kind: 'target', reason }));
@@ -3331,8 +3363,9 @@ async function assembleWithSuggestions(items: readonly IPreparedItem[], state: I
       if (bytes > MAX_SUGGESTION_FILE_BYTES) found.push({ kind: 'file-size', path: change.operation.path, bytes });
     }
     if (found.length === 0) {
-      const companion = prepareCompanion(unit, target, context, headTexts);
-      const characters = renderSuggestionPullBody(companion, sizingMarker, target).length;
+      const companion = prepareCompanion(unit, target, renderer, headTexts);
+      lifecycleNote ??= renderer.lifecycleNote(target);
+      const characters = renderSuggestionPullBody(companion, sizingMarker, target, lifecycleNote).length;
       if (maxCommentBodyChars !== undefined && characters > maxCommentBodyChars) found.push({ kind: 'description-size', characters, limit: maxCommentBodyChars });
       else companionsByUnit.set(i, companion);
     }
@@ -3379,12 +3412,12 @@ async function assembleWithSuggestions(items: readonly IPreparedItem[], state: I
   const fallbackSections = new Map<number, string>();
   const proposals: IRenderedProposal[] = [];
   for (const [i, operation] of fallbacks) {
-    const section = renderProposalSection(operation, itemAt(units, i).items, context);
+    const section = renderer.proposal(operation, itemAt(units, i).items);
     fallbackSections.set(i, section);
     proposals.push({ path: operation.path, characters: section.length });
   }
   const parts = sections.map((section): string | number => {
-    if (section.kind === 'item') return renderSection(section.item, context);
+    if (section.kind === 'item') return renderer.section(section.item);
     const part = companionOf.get(section.unit) ?? fallbackSections.get(section.unit);
     if (part === undefined) throw new Error(`Internal error: suggestion unit ${String(section.unit)} is neither created nor presented as a proposal.`);
     return part;
@@ -3400,7 +3433,9 @@ async function assembleWithSuggestions(items: readonly IPreparedItem[], state: I
     const body = parts.map(String).join(SEPARATOR);
     return { review: { commitId: context.reviewedCommit, body, comments }, evidence: renumbered, sectionCount: sections.length, proposals };
   }
-  const suggestions: IPreparedSuggestions = { companions, sections: parts };
+  // A created companion always had its lifecycle note presented when it was prepared.
+  if (lifecycleNote === undefined) throw new Error('Internal error: a suggestion pull request was prepared without its lifecycle note.');
+  const suggestions: IPreparedSuggestions = { companions, sections: parts, lifecycleNote };
   return {
     review: { commitId: context.reviewedCommit, body: renderReviewBody(suggestions, companions.map(() => LARGEST_PULL_NUMBER), target), comments },
     evidence: renumbered,
@@ -3603,7 +3638,7 @@ function sourceLines(text: string): string[] {
 function prepareCompanion(
   unit: ISuggestionUnit,
   target: ISuggestionContext,
-  context: IPreparationContext,
+  renderer: ReviewRenderer,
   headTexts: ReadonlyMap<string, string>,
 ): IPreparedCompanion {
   const changes = [...unit.changes.values()];
@@ -3631,8 +3666,8 @@ function prepareCompanion(
       + `${target.reappliedOnto === undefined ? '' : `, and re-applied onto commit ${target.reappliedOnto} after the pull request's history was rewritten`}.`,
     changes: commitChanges,
     changeCount: count,
-    changeLines: changes.map((change) => changeLine(change, context)).join('\n'),
-    items: unit.items.map((item) => renderSuggestionItem(item, context)).join(SEPARATOR),
+    changeLines: changes.map((change) => renderer.changeLine(change)).join('\n'),
+    items: unit.items.map((item) => renderer.suggestionItem(item)).join(SEPARATOR),
   };
 }
 
@@ -3649,31 +3684,12 @@ function combineEdits(sourceText: string, fileEdits: readonly IPreparedEdit[]): 
   return lines.join('');
 }
 
-/** One line of a suggestion's change list (contract §2.11; src/presentation/companion-changes.cts). */
-function changeLine(change: UnitChange, context: IPreparationContext): string {
-  if (change.kind === 'edit') {
-    const { edit } = change;
-    return renderCompanionChange({
-      kind: 'edit', path: edit.path, startLine: edit.startLine, endLine: edit.endLine, commit: edit.source.commit, url: permalink(context, edit.source),
-    });
-  }
-  const { operation } = change;
-  if (operation.operation === 'create') return renderCompanionChange({ kind: 'create', path: operation.path, text: operation.text, fileMode: operation.fileMode });
-  const source: IWholeFileSource = { commit: operation.commit, path: operation.path };
-  return renderCompanionChange({ kind: 'delete', path: operation.path, commit: operation.commit, url: permalink(context, source) });
-}
-
-/** A finding in a suggestion's section: its lines of a proposed file, or its quoted reviewed source. */
-function renderSuggestionItem(item: IPreparedItem, context: IPreparationContext): string {
-  return item.proposedLines ? renderProposedFileFinding(item.proposedLines, renderItem(item)) : renderSection(item, context);
-}
-
 /**
  * The review body: its sections in order, each suggestion's section rendered
  * with its pull request number (`numbers[i]` for companion i) as the
  * companion-reference component (src/presentation/companion-reference.cts).
  */
-function renderReviewBody(suggestions: IPreparedSuggestions, numbers: readonly number[], target: ISuggestionContext): string {
+function renderReviewBody(suggestions: Pick<IPreparedSuggestions, 'companions' | 'sections'>, numbers: readonly number[], target: ISuggestionContext): string {
   return suggestions.sections
     .map((part) => {
       if (typeof part === 'string') return part;
@@ -3685,11 +3701,12 @@ function renderReviewBody(suggestions: IPreparedSuggestions, numbers: readonly n
 
 /**
  * A suggestion pull request's body, ending with its structured marker line
- * (src/presentation/companion-description.cts), with the lifecycle note
- * every suggestion pull request carries (src/presentation/lifecycle-note.cts).
+ * (src/presentation/companion-description.cts), carrying the lifecycle note
+ * every suggestion pull request carries, as presented during preparation
+ * (IPreparedSuggestions.lifecycleNote).
  */
-function renderSuggestionPullBody(companion: IPreparedCompanion, marker: string, target: ISuggestionContext): string {
-  return renderCompanionDescription(companion, target, renderLifecycleNote(target), marker);
+function renderSuggestionPullBody(companion: IPreparedCompanion, marker: string, target: ISuggestionContext, lifecycleNote: string): string {
+  return renderCompanionDescription(companion, target, lifecycleNote, marker);
 }
 
 /** The identity of a proposal: equal proposals share one section (R8). */
@@ -3766,28 +3783,143 @@ function enforceLimits(review: IPreparedReview, proposals: readonly IRenderedPro
 // components (src/presentation). Preparation decides what is published and
 // where; the components decide only how each element reads.
 
-/** A prepared finding as the finding component presents it, with its alternatives and attribution. */
-function renderItem(item: IPreparedItem): string {
-  const primaryPath = item.suggestion ? item.suggestion.path : singlePath(item.edits);
-  return renderFinding({
-    classification: item.classification,
-    message: item.message,
-    locationMessage: item.locationMessage,
-    fixDescription: item.fixDescription,
-    alternatives: renderAlternatives(item.alternatives.map(alternativeOf), primaryPath),
-    attribution: renderAttribution(item.attribution),
-  });
+/**
+ * Renders prepared findings and proposals for one review: each element
+ * through its presentation component, or through the caller's callback for
+ * that component, which `present` checks (src/presentation/customization.cts).
+ * The renderer composes what the core owns — a finding section's source link
+ * and quote, the location line of a finding in a proposed file, separators —
+ * around the presented elements; suggestion blocks and markers are appended
+ * later still, by assembly and publication.
+ */
+class ReviewRenderer {
+  readonly #context: IPreparationContext;
+  readonly #presentation: CapturedPresentation;
+
+  constructor(context: IPreparationContext, presentation: CapturedPresentation) {
+    this.#context = context;
+    this.#presentation = presentation;
+  }
+
+  /** A prepared finding, with its alternatives and attribution. */
+  finding(item: IPreparedItem): string {
+    const primaryPath = item.suggestion ? item.suggestion.path : singlePath(item.edits);
+    const attribution = this.#attribution(item.attribution);
+    const alternatives = this.#alternatives(item.alternatives, primaryPath);
+    const c: IClassification = item.classification || {};
+    return present('finding', this.#presentation.finding, {
+      ...(c.level === undefined ? {} : { level: c.level }),
+      ...(c.kind === undefined ? {} : { kind: c.kind }),
+      ...(c.baselineState === undefined ? {} : { baselineState: c.baselineState }),
+      message: item.message,
+      ...(item.locationMessage === undefined ? {} : { locationMessage: item.locationMessage }),
+      ...(item.fixDescription === undefined ? {} : { fixDescription: item.fixDescription }),
+      ...(alternatives === undefined ? {} : { alternatives }),
+      attribution,
+      markdown: renderFinding({
+        classification: item.classification,
+        message: item.message,
+        locationMessage: item.locationMessage,
+        fixDescription: item.fixDescription,
+        alternatives,
+        attribution,
+      }),
+      required: alternatives === undefined ? [attribution] : [attribution, alternatives],
+    });
+  }
+
+  /** A general body section: exact-revision link and literal source quote when the finding has a location. */
+  section(item: IPreparedItem): string {
+    const source = item.placement && item.placement.source;
+    return renderFindingSection(this.finding(item), source ? quotedSource(this.#context, source) : undefined);
+  }
+
+  /** A finding in a suggestion's section: its lines of a proposed file, or its quoted reviewed source. */
+  suggestionItem(item: IPreparedItem): string {
+    return item.proposedLines ? renderProposedFileFinding(item.proposedLines, this.finding(item)) : this.section(item);
+  }
+
+  /**
+   * A whole-file proposal's body section (contract §2): the proposal once,
+   * then each finding carrying it — after its lines of the proposed file for
+   * a creation, or as a section with its quoted reviewed source for a deletion.
+   */
+  proposal(operation: PreparedFileOperation, items: readonly IPreparedItem[]): string {
+    if (operation.operation === 'delete') {
+      const url = permalink(this.#context, { commit: operation.commit, path: operation.path });
+      const findings = items.map((item) => this.section(item)).join(SEPARATOR);
+      const deletion = { path: operation.path, commit: operation.commit, url };
+      return present('fileDeletion', this.#presentation.fileDeletion, {
+        ...deletion, findings, markdown: renderFileDeletion(deletion, findings), required: [url, findings],
+      });
+    }
+    const findings = items.map((item) => renderProposedFileFinding(item.proposedLines, this.finding(item))).join(SEPARATOR);
+    const details = fileDetails(operation.text, operation.fileMode);
+    const content = proposedContentBlock(operation.text);
+    return present('fileAddition', this.#presentation.fileAddition, {
+      path: operation.path,
+      fileMode: operation.fileMode,
+      byteLength: Buffer.byteLength(operation.text, 'utf8'),
+      details,
+      content,
+      findings,
+      markdown: renderFileAddition(operation, findings),
+      required: [codeSpan(operation.path), details, ...(content === undefined ? [] : [content]), findings],
+    });
+  }
+
+  /** One line of a suggestion pull request's change list (contract §2.11). */
+  changeLine(change: UnitChange): string {
+    if (change.kind === 'edit') {
+      const { edit } = change;
+      return renderCompanionChange({
+        kind: 'edit', path: edit.path, startLine: edit.startLine, endLine: edit.endLine, commit: edit.source.commit, url: permalink(this.#context, edit.source),
+      });
+    }
+    const { operation } = change;
+    if (operation.operation === 'create') return renderCompanionChange({ kind: 'create', path: operation.path, text: operation.text, fileMode: operation.fileMode });
+    const url = permalink(this.#context, { commit: operation.commit, path: operation.path });
+    return renderCompanionChange({ kind: 'delete', path: operation.path, commit: operation.commit, url });
+  }
+
+  /** The lifecycle note of a suggestion pull request into `target`'s head branch. */
+  lifecycleNote(target: ISuggestionContext): string {
+    return present('lifecycleNote', this.#presentation.lifecycleNote, {
+      pullNumber: target.pullNumber, headRef: target.headRef, ready: target.ready, markdown: renderLifecycleNote(target), required: [],
+    });
+  }
+
+  /** A finding's producer attribution; the producers' names are required provenance. */
+  #attribution(attribution: IAttribution): string {
+    const { tool, version, component, ruleId } = attribution;
+    return present('attribution', this.#presentation.attribution, {
+      tool,
+      ...(version === undefined ? {} : { version }),
+      ...(component === undefined ? {} : { component }),
+      ...(ruleId === undefined ? {} : { ruleId }),
+      markdown: renderAttribution(attribution),
+      required: [escapePlainInline(tool), ...(component === undefined ? [] : [escapePlainInline(component.name)])],
+    });
+  }
+
+  /** A finding's alternatives, or undefined when it has none; each alternative's exact changes are required. */
+  #alternatives(prepared: readonly IPreparedAlternative[], primaryPath: string | undefined): string | undefined {
+    const alternatives = prepared.map(alternativeOf);
+    const markdown = renderAlternatives(alternatives, primaryPath);
+    if (markdown === undefined) return undefined;
+    const listed = alternatives.map((alternative, i) => ({
+      number: i + 1,
+      ...(alternative.description === undefined ? {} : { description: alternative.description }),
+      changes: renderAlternativeChanges(alternative, primaryPath),
+      markdown: renderAlternative(alternative, i + 1, primaryPath),
+    }));
+    return present('alternatives', this.#presentation.alternatives, { alternatives: listed, markdown, required: listed.map((a) => a.changes) });
+  }
 }
 
 /** A prepared alternative as the alternatives component lists it. */
 function alternativeOf(alternative: IPreparedAlternative): IAlternative {
   return { description: alternative.description, changes: alternative.parts };
-}
-
-/** A general body section: exact-revision link and literal source quote when the finding has a location. */
-function renderSection(item: IPreparedItem, context: IPreparationContext): string {
-  const source = item.placement && item.placement.source;
-  return renderFindingSection(renderItem(item), source ? quotedSource(context, source) : undefined);
 }
 
 /** A finding's own location as a finding section quotes it, with its permalink. */
@@ -3796,21 +3928,6 @@ function quotedSource(context: IPreparationContext, source: EvidenceSource): Quo
   return source.startLine === undefined
     ? { path: source.path, commit: source.commit, url }
     : { path: source.path, commit: source.commit, url, lines: { startLine: source.startLine, endLine: source.endLine, text: source.text } };
-}
-
-/**
- * A whole-file proposal's body section (contract §2): the proposal once,
- * then each finding carrying it — after its lines of the proposed file for a
- * creation (src/presentation/file-addition.cts), or as a section with its
- * quoted reviewed source for a deletion (src/presentation/file-deletion.cts).
- */
-function renderProposalSection(operation: PreparedFileOperation, items: readonly IPreparedItem[], context: IPreparationContext): string {
-  if (operation.operation === 'delete') {
-    const source: IWholeFileSource = { commit: operation.commit, path: operation.path };
-    return renderFileDeletion({ path: operation.path, commit: operation.commit, url: permalink(context, source) },
-      items.map((item) => renderSection(item, context)).join(SEPARATOR));
-  }
-  return renderFileAddition(operation, items.map((item) => renderProposedFileFinding(item.proposedLines, renderItem(item))).join(SEPARATOR));
 }
 
 /** GitHub permalink to an exact revision, path and optional line range (src/github-urls.cts). */

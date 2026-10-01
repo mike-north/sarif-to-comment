@@ -567,7 +567,7 @@ export async function startCompanionPublication(input: IStartCompanionInput, int
       items: companion.items,
       id,
       branch: suggestionPrBranch(pullNumber, id),
-      body: renderSuggestionPullBody(companion, marker, target),
+      body: renderSuggestionPullBody(companion, marker, target, input.suggestions.lifecycleNote),
     };
   });
   const unsigned = {

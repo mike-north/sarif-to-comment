@@ -23,14 +23,18 @@
  *     sarif, destination { owner, repo, pullNumber }, reviewedCommit, token,
  *     sourceRootUri?, oldSourceCommit?, options? { ignoreApprovalHold?, submit?,
  *     allowSuggestionPullRequests?, pullRequestLabels?,
- *     markSuggestionPullRequestsReady? } — the last two only with
+ *     markSuggestionPullRequestsReady?, presentation? } — pullRequestLabels and
+ *     markSuggestionPullRequestsReady only with
  *     allowSuggestionPullRequests: true (docs/companion-suggestion-pr-contract.md
  *     §2.2); enabled, the captured suggestionPullRequests holds the extra
  *     labels (deduplicated case-insensitively, first spelling kept) and
  *     whether to create them ready, otherwise it is undefined
  *   The SARIF, destination and options are deep JSON copies of own data
  *   properties only: caller getters never run, and cycles and non-JSON values
- *   are refused rather than dropped or coerced. Fields are checked in a fixed
+ *   are refused rather than dropped or coerced. The one exception is
+ *   options.presentation, the caller's presentation callbacks
+ *   (src/presentation/customization.cts): functions, captured as a frozen
+ *   snapshot of the component callbacks it names (data properties only). Fields are checked in a fixed
  *   order; spec.captureOwn checks the operation's own fields after the commits
  *   and before the token. Every refusal is a TypeError whose message begins
  *   "Invalid <spec.operation> input: ".
@@ -64,6 +68,8 @@ import * as util from 'node:util';
 
 import type { CommitComparison, IDefaultBranchFile, IFetchContextRequest, IPullRequestDestination, ISuggestionTarget } from './github.cjs';
 import { blockedBy, codeSpan, prepareReview } from './prepare-review.cjs';
+import { capturePresentation } from './presentation/customization.cjs';
+import type { CapturedPresentation } from './presentation/customization.cjs';
 import type { IBlockedOutcome, IReadyOutcome } from './prepare-review.cjs';
 import { createDiagnostic } from './diagnostics.cjs';
 import type { DiagnosticCode, IDiagnostic } from './diagnostics.cjs';
@@ -109,6 +115,12 @@ export interface ICapturedReview {
    * disabled, as they are unless allowed.
    */
   readonly suggestionPullRequests: ICapturedSuggestionSettings | undefined;
+  /**
+   * The caller's presentation callbacks, when supplied: they change how
+   * review elements read, never readiness or publication identity, so they
+   * are passed to preparation and nowhere else.
+   */
+  readonly presentation: CapturedPresentation | undefined;
 }
 
 /** The caller's suggestion pull request settings, once allowed. */
@@ -192,14 +204,22 @@ export type DestinationOutcome = IDestinationReady | IBlockedOutcome;
 /** Every accepted shared top-level input field. */
 const SHARED_KEYS: readonly string[] = ['sarif', 'destination', 'reviewedCommit', 'token', 'sourceRootUri', 'oldSourceCommit', 'options'];
 
-/** Every accepted option: the approval-hold override, the explicit submitted mode, and suggestion pull requests. */
+/**
+ * Every accepted option: the approval-hold override, the explicit submitted
+ * mode, suggestion pull requests, and the presentation callbacks (captured
+ * separately, since they are functions rather than JSON).
+ */
 const OPTION_KEYS: ReadonlySet<string> = new Set([
   'ignoreApprovalHold',
   'submit',
   'allowSuggestionPullRequests',
   'pullRequestLabels',
   'markSuggestionPullRequestsReady',
+  'presentation',
 ]);
+
+/** The option that holds functions, captured apart from the JSON options. */
+const PRESENTATION_OPTION = 'presentation';
 
 /** A full, immutable, lowercase Git commit id. */
 const COMMIT_PATTERN = /^[0-9a-f]{40}$/;
@@ -412,9 +432,10 @@ export function captureReviewInput<Own extends object>(input: unknown, spec: IRe
   let ignoreApprovalHold: boolean | undefined;
   let submit: boolean | undefined;
   let suggestionPullRequests: ICapturedSuggestionSettings | undefined;
+  let presentation: CapturedPresentation | undefined;
   if (optionsValue !== undefined) {
     if (!isPlainObject(optionsValue)) throw invalid('options must be a plain object');
-    const options = refusals.captureRoot(optionsValue, 'options');
+    const options = refusals.captureRoot(withoutOwnProperty(optionsValue, PRESENTATION_OPTION), 'options');
     for (const key of Object.keys(options)) if (!OPTION_KEYS.has(key)) throw invalid(`unknown option ${key}`);
     const ignoreHold = options['ignoreApprovalHold'];
     if (ignoreHold !== undefined && typeof ignoreHold !== 'boolean') {
@@ -425,12 +446,28 @@ export function captureReviewInput<Own extends object>(input: unknown, spec: IRe
     if (submitValue !== undefined && typeof submitValue !== 'boolean') throw invalid('options.submit must be a boolean');
     submit = submitValue;
     suggestionPullRequests = captureSuggestionSettings(options, invalid);
+    const presentationValue = refusals.dataValue(optionsValue, PRESENTATION_OPTION, `options.${PRESENTATION_OPTION}`);
+    if (presentationValue !== undefined) presentation = capturePresentation(presentationValue, invalid);
   }
 
   const shared: ICapturedReview = {
-    sarif, destination, reviewedCommit, oldSourceCommit, token, sourceRootUri, ignoreApprovalHold, submit, suggestionPullRequests,
+    sarif, destination, reviewedCommit, oldSourceCommit, token, sourceRootUri, ignoreApprovalHold, submit, suggestionPullRequests, presentation,
   };
   return { ...own, ...shared };
+}
+
+/**
+ * A plain object with every own property of `value` except `key`, copied by
+ * descriptor so that no getter runs and an accessor is still refused where
+ * the copy is captured.
+ */
+function withoutOwnProperty(value: IPlainObject, key: string): IPlainObject {
+  const copy: IPlainObject = {};
+  for (const own of Reflect.ownKeys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, own);
+    if (own !== key && descriptor !== undefined) Object.defineProperty(copy, own, descriptor);
+  }
+  return copy;
 }
 
 /**
@@ -537,6 +574,7 @@ export async function prepareForDestination(captured: ICapturedReview, client: I
   const unavailable = target === undefined ? [] : unsupportedReasons(target, captured);
   const options = {
     ...(captured.ignoreApprovalHold === undefined ? {} : { ignoreApprovalHold: captured.ignoreApprovalHold }),
+    ...(captured.presentation === undefined ? {} : { presentation: captured.presentation }),
     ...(target === undefined || settings === undefined ? {} : {
       suggestionPullRequests: { headRef: target.headRef, ready: settings.markReady, resolveRewrittenHead, ...(unavailable.length === 0 ? {} : { unavailable }) },
     }),

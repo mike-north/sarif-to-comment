@@ -40,6 +40,8 @@ The whole file is removed; this is not a proposal to empty it.
 ITEMS
 ```
 
+These are the built-in presentations of the file-addition and file-deletion components (`src/presentation/file-addition.cts`, `src/presentation/file-deletion.cts`; [D60](design-decisions.md#d60-use-reusable-markdown-components-for-a-rich-github-review-experience--owner-selected-presentation-direction)). A library caller may replace either through `options.presentation` (README, "Customizing how the review reads"). A replacement must keep, verbatim, a creation's path as a code span, its `FACTS`, its content block and its `ITEMS`, or a deletion's `PERMALINK` and its `ITEMS`; otherwise it is refused before anything is written. The CLI always uses the built-in sections.
+
 - `PERMALINK` is `https://github.com/OWNER/REPO/blob/REVIEWED_COMMIT/PATH`, the exact file at the reviewed commit. Each path segment is percent-encoded, including `(`, `)`, `!`, `'` and `*`, so the link destination can never end early; `/` separators are kept. `SHORT` is the commit's first seven characters. No permalink is ever produced for a created path.
 - `ITEMS` are the findings joined by `\n\n---\n\n`, as in a shared suggestion comment. Each item is the ordinary rendered finding (message, location message, status and attribution). It is preceded by its location when the finding has a region:
   - on a created file: `**Location:** line N of the proposed file` (or `lines N-M`), then a blank line. The content is already shown, so it is not quoted again.
