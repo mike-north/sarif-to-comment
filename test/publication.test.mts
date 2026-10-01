@@ -1819,7 +1819,8 @@ describe('existing state is authoritative and fails closed', () => {
     'truncated JSON': JSON.stringify(valid).slice(0, 57),
     'JSON null': 'null',
     'JSON array': '[]',
-    'unknown version': JSON.stringify({ ...valid, version: 2 }),
+    // Versions 1 and 2 (which adds `warnings`, issue #42) are known; 3 is not.
+    'unknown version': JSON.stringify({ ...valid, version: 3 }),
     'unknown format': JSON.stringify({ ...valid, format: 'something-else' }),
     'unknown phase': JSON.stringify({ ...valid, phase: 'mystery' }),
     'unknown extra field': JSON.stringify({ ...valid, note: 'unexpected' }),

@@ -504,6 +504,7 @@ const STATE_FORMAT = 'sarif-to-comment.publication-state';
 /** The record version without warnings, byte for byte what 0.2.x wrote. */
 const STATE_VERSION = 1;
 
+// The companion plan (companion-publication.cts) numbers its versions independently: its version 2 means re-applied suggestions.
 /** The record version that adds preparation's `warnings` (issue #42); any other version is corrupt state. */
 const WARNED_STATE_VERSION = 2;
 
