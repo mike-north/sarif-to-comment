@@ -255,7 +255,10 @@
  *   for an unsupported pull request, a unit that cannot be re-applied onto a
  *   rewritten head, a created file over 1,000,000 bytes, or a description
  *   over the comment limit (under `single`, the bundle's). At most 10
- *   companion pull requests, after bundling.
+ *   companion pull requests, after bundling. Each obstacle carries the
+ *   remedy its retired refusal code gave (§8.9). A limit that blocks the
+ *   review after planning names the fallbacks that put proposals where it
+ *   looks (§10.1).
  *
  * Rendering. Each element is a presentation component in src/presentation/
  * (finding and finding section, attribution, alternatives, file addition,
@@ -337,9 +340,9 @@ import type { IComposedExpectation } from './presentation/markdown-tree.cjs';
 import { renderDiagnosticLine, renderWarningsList } from './presentation/warnings-list.cjs';
 import { createDiagnostic } from './diagnostics.cjs';
 import type { DiagnosticCode, IDiagnostic } from './diagnostics.cjs';
-import { deliveryRecordProblem, planDelivery, resolveDeliveryPolicy } from './delivery-policy.cjs';
+import { deliveryRecordProblem, nameFallbackCauses, planDelivery, resolveDeliveryPolicy } from './delivery-policy.cjs';
 import type {
-  DeliveryPlan, DeliveryUnit, ICompanionOptions, IEditGroupMember, IResolvedDeliveryPolicy, MechanismAvailability,
+  DeliveryPlan, DeliveryUnit, ICompanionOptions, IEditGroupMember, IFallbackDelivery, IResolvedDeliveryPolicy, MechanismAvailability,
 } from './delivery-policy.cjs';
 import type {
   ColumnKind, IAppliedReplacement, IReplacementRegion, IReplacementRequest, ReplacementDiagnostic, ReplacementOutcome,
@@ -962,6 +965,12 @@ export interface IReadyOutcome {
   readonly markdown: string;
   /** Present exactly when the plan has companion pull requests. */
   readonly suggestions?: IPreparedSuggestions;
+  /**
+   * The units delivered by a fallback, in plan order: a repository check
+   * that blocks the review after preparation names those that contributed
+   * to it (docs/delivery-policy-contract.md §10.1, nameFallbackCauses).
+   */
+  readonly fallbacks: readonly IFallbackDelivery[];
 }
 
 /** The whole review is blocked; nothing may be published. */
@@ -1090,6 +1099,8 @@ interface IUnitAssembly {
   readonly composed: readonly IComposedUnit[];
   /** The plan's `delivery-fallback` warnings and `companion-options-unused` note, reported only when the review is ready. */
   readonly deliveryDiagnostics: readonly IDiagnostic[];
+  /** The units the plan delivered by a fallback, which a later block names (docs/delivery-policy-contract.md §10.1). */
+  readonly fallbacks: readonly IFallbackDelivery[];
 }
 
 /** Whether one unit can be re-applied onto a rewritten head (with that head's edited files) or not, with every reason. */
@@ -1097,10 +1108,13 @@ type UnitDecision =
   | { readonly kind: 'created'; readonly headTexts: ReadonlyMap<string, string> }
   | { readonly kind: 'not-created'; readonly reasons: readonly string[] };
 
-/** Whether one edit can be a native suggestion: the suggestion, or every obstacle (docs/delivery-policy-contract.md §8.9). */
+/**
+ * Whether one edit can be a native suggestion: the suggestion, or every
+ * obstacle with its remedy (docs/delivery-policy-contract.md §8.9).
+ */
 type NativeEligibility =
   | { readonly available: true; readonly suggestion: IPreparedSuggestion }
-  | { readonly available: false; readonly obstacles: readonly [string, ...string[]] };
+  | { readonly available: false; readonly obstacles: readonly [string, ...string[]]; readonly remedies: readonly string[] };
 
 /** Source text read at a location's resolved repository path and revision. */
 interface ILocatedSource {
@@ -1356,7 +1370,12 @@ async function prepareReview(input: unknown, internals: IPrepareReviewInternals 
   const units = await assembleDelivery(items, state);
   if (units === null || report.errors.length > 0) return blocked(report);
   enforceLimits(units.review, units.proposals, state);
-  if (report.errors.length > 0) return blocked(report);
+  if (report.errors.length > 0) {
+    // A limit blocks a review the plan already routed; a fallback that put a
+    // proposal where the limit looks is named in the error (§10.1).
+    report.errors.splice(0, report.errors.length, ...nameFallbackCauses(report.errors, units.fallbacks));
+    return blocked(report);
+  }
   // The composed-text checkpoint reads only a review within its limits.
   checkComposed(units.composed, state);
   if (report.errors.length > 0) return blocked(report);
@@ -1370,6 +1389,7 @@ async function prepareReview(input: unknown, internals: IPrepareReviewInternals 
     warnings: report.warnings,
     markdown: readyMarkdown(units.review, units.sectionCount, report),
     ...(units.suggestions === undefined ? {} : { suggestions: units.suggestions }),
+    fallbacks: units.fallbacks,
   };
 }
 
@@ -2568,28 +2588,42 @@ async function prepareSingleFix(
 }
 
 /**
+ * The remedies of native suggestions' obstacles (docs/delivery-policy-contract.md
+ * §8.9): what each retired refusal code told the author to do, without its
+ * "enable suggestion pull requests", which listing another mechanism replaced.
+ */
+const NATIVE_REMEDIES = Object.freeze({
+  notHead: 'Review the pull request\'s head commit, and publish that review.',
+  unreproducible: 'Change the replacement.',
+  notInline: 'Remove the fix.',
+});
+
+/**
  * Whether one exact edit can be a native suggestion
  * (docs/delivery-policy-contract.md §8.9): the reviewed commit is the pull
  * request's head, GitHub's observed application of the suggestion reproduces
  * exactly the intended file, and the lines are on the new side of the diff,
  * checked in that order. The suggestion when it can; otherwise every
- * obstacle, each the sentence the condition always had.
+ * obstacle, each the sentence the condition always had, with its remedy.
  */
 function nativeEligibility(edit: IPreparedEdit, context: IPreparationContext): NativeEligibility {
-  const unavailable = (obstacle: string): NativeEligibility => ({ available: false, obstacles: [obstacle] });
+  const unavailable = (obstacle: string, remedy: string): NativeEligibility => ({ available: false, obstacles: [obstacle], remedies: [remedy] });
   if (context.reviewedCommit !== context.diff.headCommit) {
-    return unavailable('The reviewed commit is not the pull request head, so a native suggestion could not be applied to the reviewed text.');
+    return unavailable('The reviewed commit is not the pull request head, so a native suggestion could not be applied to the reviewed text.', NATIVE_REMEDIES.notHead);
   }
   const { path: filePath, startLine, endLine, originalText, replacementText } = edit;
   const payload = suggestionPayload(edit.sourceText, startLine, endLine, replacementText, edit.editedText);
-  if (payload.error !== undefined) return unavailable(payload.error);
+  if (payload.error !== undefined) return unavailable(payload.error, NATIVE_REMEDIES.unreproducible);
   const placed = classifyPlacement({
     source: { commit: edit.source.commit, path: filePath, text: edit.sourceText },
     range: { startLine, endLine },
     diff: context.diff,
   });
   if (placed.kind !== 'inline' || placed.anchor.side !== 'RIGHT' || placed.anchor.commit_id !== context.reviewedCommit) {
-    return unavailable(`Lines ${String(startLine)}-${String(endLine)} of ${filePath} cannot carry a native suggestion (${placed.kind === 'inline' ? placed.anchor.side : placed.reason}).`);
+    return unavailable(
+      `Lines ${String(startLine)}-${String(endLine)} of ${filePath} cannot carry a native suggestion (${placed.kind === 'inline' ? placed.anchor.side : placed.reason}).`,
+      NATIVE_REMEDIES.notInline,
+    );
   }
   return {
     available: true,
@@ -3239,11 +3273,11 @@ const NOT_YET_SUPPORTED = Object.freeze({
   jointFixBatch: 'Offering a fix with several changes as a native batch is not yet supported by this version.',
 });
 
-/** An unavailable mechanism with its obstacles (at least one). */
-function unavailableFor(obstacles: readonly string[]): MechanismAvailability {
+/** An unavailable mechanism with its obstacles (at least one) and their remedies, in obstacle order. */
+function unavailableFor(obstacles: readonly string[], remedies: readonly string[] = []): MechanismAvailability {
   const [first, ...rest] = obstacles;
   if (first === undefined) throw new Error('Internal error: an unavailable delivery mechanism must name an obstacle.');
-  return { available: false, obstacles: [first, ...rest] };
+  return { available: false, obstacles: [first, ...rest], ...(remedies.length === 0 ? {} : { remedies }) };
 }
 
 const AVAILABLE: MechanismAvailability = Object.freeze({ available: true });
@@ -3346,7 +3380,7 @@ class DeliveryAvailability {
     switch (`${unit.kind}:${mechanism}`) {
       case 'edit:native': {
         const native = this.#native(itemAt(unitEdits(unit), 0));
-        return native.available ? AVAILABLE : unavailableFor(native.obstacles);
+        return native.available ? AVAILABLE : unavailableFor(native.obstacles, native.remedies);
       }
       case 'edit:review-body': return unavailableFor([NOT_YET_SUPPORTED.reviewBody]);
       case 'edit-group:native-batch': return this.#batchObstacles(unit);
@@ -3397,7 +3431,7 @@ class DeliveryAvailability {
           native: () => {
             const native = this.#natives.get(changeKey({ kind: 'edit', edit }));
             if (native === undefined) throw new Error('Internal error: the planner asked for a member\'s native eligibility, which was never answered.');
-            return native.available ? AVAILABLE : unavailableFor(native.obstacles);
+            return native.available ? AVAILABLE : unavailableFor(native.obstacles, native.remedies);
           },
         }));
         return { ...base, kind: 'edit-group', members, availability: asked };
@@ -3407,6 +3441,17 @@ class DeliveryAvailability {
     }
   }
 }
+
+/**
+ * The remedies of a companion's obstacles (docs/delivery-policy-contract.md
+ * §8.9), as the retired `suggestion-group-pr-unavailable` gave them. A fork,
+ * another base and an unsupported mechanism have none of their own.
+ */
+const COMPANION_REMEDIES = Object.freeze({
+  rewritten: 'Review the pull request\'s current head again, and publish that review.',
+  fileSize: `Reduce the proposed file to at most ${MAX_SUGGESTION_FILE_BYTES.toLocaleString('en-US')} bytes.`,
+  description: 'Shorten the findings\' messages.',
+});
 
 /** A unit whose companion is available: its rendered content and the head's text of each file it edits, when re-applied. */
 interface ICompanionDraft {
@@ -3465,6 +3510,7 @@ class CompanionPlanner {
     const target = this.#target ?? await this.#resolveTarget(facts);
     const unit = itemAt(this.#units, index);
     const obstacles: string[] = [...(facts.unavailable ?? [])];
+    const remedies: string[] = [];
     let headTexts: ReadonlyMap<string, string> = new Map();
     if (obstacles.length === 0 && target.reappliedOnto !== undefined) {
       const decision = await reapplication(unit, target.reappliedOnto, state);
@@ -3473,6 +3519,7 @@ class CompanionPlanner {
         const subject = unit.changes.size === 1 ? 'it' : `its ${String(unit.changes.size)} changes`;
         obstacles.push(`The history of #${String(target.pullNumber)} was rewritten after the reviewed commit, and ${subject} cannot be re-applied onto commit `
           + `${codeSpan(target.reappliedOnto)} because ${decision.reasons.join('; ')}.`);
+        remedies.push(COMPANION_REMEDIES.rewritten);
       }
     }
     for (const change of unit.changes.values()) {
@@ -3480,6 +3527,7 @@ class CompanionPlanner {
       const bytes = Buffer.byteLength(change.operation.text, 'utf8');
       if (bytes > MAX_SUGGESTION_FILE_BYTES) {
         obstacles.push(`${codeSpan(change.operation.path)} is ${String(bytes)} bytes, and a suggestion pull request carries at most ${String(MAX_SUGGESTION_FILE_BYTES)} bytes per file.`);
+        remedies.push(COMPANION_REMEDIES.fileSize);
       }
     }
     if (obstacles.length === 0) {
@@ -3493,11 +3541,12 @@ class CompanionPlanner {
       const limit = state.options.maxCommentBodyChars;
       if (limit !== undefined && characters > limit) {
         obstacles.push(`Its suggestion pull request's description would be ${String(characters)} characters, and the limit is ${String(limit)}.`);
+        remedies.push(COMPANION_REMEDIES.description);
       } else {
         this.#drafts.set(index, { unit, content, headTexts });
       }
     }
-    return obstacles.length === 0 ? AVAILABLE : unavailableFor(obstacles);
+    return obstacles.length === 0 ? AVAILABLE : unavailableFor(obstacles, [...new Set(remedies)]);
   }
 
   /** The companions of the plan, each holding its units in order (§9). */
@@ -3748,6 +3797,7 @@ function renderDelivery(
       proposals,
       composed: composedFor(body, []),
       deliveryDiagnostics: plan.diagnostics,
+      fallbacks: plan.fallbacks,
     };
   }
   const lifecycleNote = companions.lifecycleNote();
@@ -3773,6 +3823,7 @@ function renderDelivery(
     suggestions,
     composed: composedFor(body, descriptions),
     deliveryDiagnostics: plan.diagnostics,
+    fallbacks: plan.fallbacks,
   };
 }
 

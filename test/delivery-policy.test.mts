@@ -36,6 +36,7 @@ import {
   deliveryConfigurationNeeded,
   deliveryRecordProblem,
   isResolvedDeliveryPolicy,
+  nameFallbackCauses,
   planDelivery,
   readDeliveryConfiguration,
   resolveDeliveryPolicy,
@@ -51,6 +52,7 @@ import type {
   IDeliveryPolicyInputs,
   IDeliveryPolicyLayer,
   IEditGroupMember,
+  IFallbackDelivery,
   IResolvedDeliveryPolicy,
   MechanismAvailability,
   UnitDelivery,
@@ -744,7 +746,7 @@ describe('routing each unit (contract §8)', () => {
   });
 
   test('no units: an empty plan', () => {
-    assert.deepEqual(planDelivery(policy(), []), { status: 'planned', policy: policy(), deliveries: [], companions: [], alternatives: [], diagnostics: [] });
+    assert.deepEqual(planDelivery(policy(), []), { status: 'planned', policy: policy(), deliveries: [], companions: [], alternatives: [], diagnostics: [], fallbacks: [] });
   });
 });
 
@@ -1511,5 +1513,46 @@ describe('an obstacle\'s remedy travels with it into the diagnostic (§8.7, §8.
       ], { nativeBatch: fixable(['Not head.'], ['Review the head.']) }),
     ]);
     assert.deepEqual(plan.diagnostics[0]?.remedies, ['Review the head.', 'Change the replacement.', 'Remove the fix.', ...UNAVAILABLE.remedies]);
+  });
+});
+
+describe('a block after planning names the fallbacks that contributed to it (§10.1)', () => {
+  const CAUSE = 'This includes a proposal delivered by a fallback: the creation of `a.md` is delivered as `manual`, '
+    + 'because `fileOperations` is `[companion, manual]` and the mechanisms listed before it (`companion`) are unavailable.';
+  const error = (code: IDiagnostic['code'], message: string): IDiagnostic => ({ severity: 'error', code, title: 'T', message });
+
+  test('a planned fallback is recorded with its cause, in plan order; a first choice is not', () => {
+    const plan = planDelivery(policy({ caller: { fileOperations: ['companion', 'manual'] } }), [
+      fileOperation('f', 'The creation of `a.md`', { companion: no('Too big.') }),
+      fileOperation('g', 'The creation of `b.md`'),
+    ]);
+    assert.equal(plan.status, 'planned');
+    assert.deepEqual(plan.fallbacks, [{ unitId: 'f', mechanism: 'manual', cause: CAUSE }]);
+  });
+
+  test('each error the fallback\'s mechanism contributes to ends with its paragraph; others are unchanged', () => {
+    const fallbacks: IFallbackDelivery[] = [{ unitId: 'f', mechanism: 'manual', cause: CAUSE }];
+    const named = nameFallbackCauses([
+      error('body-too-large', 'Too large.'),
+      error('payload-too-large', 'Too many bytes.'),
+      error('too-many-comments', 'Too many comments.'),
+      error('suggestion-label-missing', 'No label.'),
+    ], fallbacks);
+    assert.deepEqual(named.map((d) => d.message), [
+      `Too large.\n\n${CAUSE}`, `Too many bytes.\n\n${CAUSE}`, 'Too many comments.', 'No label.',
+    ]);
+  });
+
+  test('a companion fallback is named by the repository checks; several in plan order; a warning never', () => {
+    const one: IFallbackDelivery = { unitId: '1', mechanism: 'companion', cause: 'One.' };
+    const two: IFallbackDelivery = { unitId: '2', mechanism: 'companion', cause: 'Two.' };
+    const warning: IDiagnostic = { severity: 'warning', code: 'delivery-fallback', title: 'T', message: 'W.' };
+    const named = nameFallbackCauses([error('suggestion-pr-permission-missing', 'No push.'), warning, error('body-too-large', 'Big.')], [one, two]);
+    assert.deepEqual(named.map((d) => d.message), ['No push.\n\nOne.\n\nTwo.', 'W.', 'Big.']);
+  });
+
+  test('without fallbacks, every diagnostic is returned unchanged', () => {
+    const diagnostics = [error('comment-too-large', 'Long.')];
+    assert.deepEqual(nameFallbackCauses(diagnostics, []), diagnostics);
   });
 });

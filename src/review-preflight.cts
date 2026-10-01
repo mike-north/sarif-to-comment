@@ -60,7 +60,10 @@
  *   repository — push permission, the label configuration read through
  *   readDefaultBranchFile (docs/suggestion-pr-convention.md §4), and every
  *   label (canonical and extra) read through findLabel — all reported
- *   together as a block. Ready carries the resolved policy and, with
+ *   together as a block, each naming the units a fallback delivered by
+ *   companion (§10.1), and carrying no fallback warning. The client reads
+ *   the repository once per call, so the target reuses the delivery
+ *   configuration read's answer. Ready carries the resolved policy and, with
  *   companions, the head branch, the labels as GitHub names them (the
  *   canonical label first), whether to create them ready for review, and
  *   the commit they are re-applied onto, if they are.
@@ -76,6 +79,7 @@ import {
   DELIVERY_CONFIGURATION_PATH,
   deliveryConfigurationDiagnostics,
   deliveryConfigurationNeeded,
+  nameFallbackCauses,
   readDeliveryConfiguration,
   resolveDeliveryPolicy,
   validateDeliveryPolicyLayer,
@@ -782,7 +786,13 @@ async function checkSuggestionTarget(
   }
   // A blocked review delivers nothing, so it carries no warning or note about
   // how a proposal would have been delivered (docs/delivery-policy-contract.md §10.1).
-  if (problems.length > 0) return blockedBy(problems, prepared.warnings.filter((w) => w.code !== 'delivery-fallback' && w.code !== 'companion-options-unused'));
+  // A companion that a fallback chose is named in the check that refuses it.
+  if (problems.length > 0) {
+    return blockedBy(
+      nameFallbackCauses(problems, prepared.fallbacks),
+      prepared.warnings.filter((w) => w.code !== 'delivery-fallback' && w.code !== 'companion-options-unused'),
+    );
+  }
   return {
     ...prepared,
     suggestionPullRequests: {

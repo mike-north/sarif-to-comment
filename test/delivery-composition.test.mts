@@ -664,11 +664,13 @@ describe('a block after a fallback names the fallback that contributed to it (§
     const world = makeWorld();
     const outcome = await publish(world, bigCreation(), { delivery: { fileOperations: ['companion', 'manual'] } });
     assert.equal(status(outcome), 'blocked', markdown(outcome));
-    const [tooLarge, ...others] = diagnostics(outcome);
-    assert.deepEqual(others, [], 'no delivery-fallback warning: nothing is delivered');
-    assert.equal(tooLarge?.['code'], 'body-too-large');
-    assert.ok(String(tooLarge?.['message']).endsWith(`Nothing is truncated or split.${paragraph('the creation of `docs/big.md`', 'manual', 'fileOperations', 'companion, manual', '`companion`')}`),
-      String(tooLarge?.['message']));
+    // The file in the body also puts the review over the payload limit; both limits name the fallback.
+    assert.deepEqual(diagnostics(outcome).map((d) => [d['severity'], d['code']]), [['error', 'body-too-large'], ['error', 'payload-too-large']],
+      'no delivery-fallback warning: nothing is delivered');
+    for (const blocking of diagnostics(outcome)) {
+      assert.ok(String(blocking['message']).endsWith(`Nothing is truncated or split.${paragraph('the creation of `docs/big.md`', 'manual', 'fileOperations', 'companion, manual', '`companion`')}`),
+        String(blocking['message']));
+    }
     assert.deepEqual(diagnostics(await validate(world, bigCreation(), { delivery: { fileOperations: ['companion', 'manual'] } })), diagnostics(outcome));
     assert.deepEqual(writes(world), []);
   });
@@ -678,7 +680,7 @@ describe('a block after a fallback names the fallback that contributed to it (§
     assert.equal(status(outcome), 'blocked', markdown(outcome));
     const [tooLarge] = diagnostics(outcome);
     assert.equal(tooLarge?.['code'], 'body-too-large');
-    assert.ok(String(tooLarge?.['message']).endsWith('Nothing is truncated or split.'), String(tooLarge?.['message']));
+    assert.ok(String(tooLarge['message']).endsWith('Nothing is truncated or split.'), String(tooLarge['message']));
   });
 
   test('a fallback to a companion that a repository check then refuses: the check names the fallback', async () => {
@@ -688,7 +690,7 @@ describe('a block after a fallback names the fallback that contributed to it (§
     const [refused, ...others] = diagnostics(outcome);
     assert.deepEqual(others, []);
     assert.equal(refused?.['code'], 'suggestion-pr-permission-missing');
-    assert.equal(refused?.['message'], `The authenticated account cannot push to ${OWNER}/${REPO}, which creating proposal branches requires.`
+    assert.equal(refused['message'], `The authenticated account cannot push to ${OWNER}/${REPO}, which creating proposal branches requires.`
       + paragraph('the edit of `src/client.ts` line 2', 'companion', 'edits', 'native, companion', '`native`'));
     assert.deepEqual(writes(world), []);
   });

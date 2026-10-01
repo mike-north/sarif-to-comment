@@ -24,12 +24,16 @@
  *     {@link readDeliveryConfiguration}, {@link deliveryConfigurationDiagnostics};
  *   - planning one destination per unit, the companion bundles and their
  *     limit, the blocked and fallback diagnostics, and the note for unused
- *     companion options (§8-§10, §12): {@link planDelivery}.
+ *     companion options (§8-§10, §12): {@link planDelivery};
+ *   - naming the fallbacks that contributed to a block found after planning
+ *     (§10.1): {@link nameFallbackCauses}.
  *
- * It does not present anything, persist anything or choose remedies; how a
+ * It does not present anything or persist anything; its diagnostics carry
+ * the remedies the obstacles came with, ahead of the catalogued ones. How a
  * mechanism is rendered belongs to the presentation contracts.
  */
 
+import { DIAGNOSTIC_CATALOG } from './diagnostic-catalog.cjs';
 import { createDiagnostic, orderDiagnostics } from './diagnostics.cjs';
 import type { ILocationInput } from './diagnostics.cjs';
 import type { IDiagnostic } from './public-types.cjs';
@@ -510,11 +514,14 @@ export function deliveryConfigurationDiagnostics(invalid: { readonly branch: str
 /**
  * Whether one mechanism can deliver one unit, as preparation decided it
  * (§8.7). An unavailable mechanism always says why: each obstacle is one
- * Markdown sentence.
+ * Markdown sentence. Obstacles that the author can remove come with what
+ * to do about them (§8.9): `remedies`, each one sentence, in the order of
+ * the obstacles they relate to. The planner puts them ahead of the
+ * diagnostic's catalogued remedies (§10.1, §10.2).
  */
 export type MechanismAvailability =
   | { readonly available: true }
-  | { readonly available: false; readonly obstacles: readonly [string, ...string[]] };
+  | { readonly available: false; readonly obstacles: readonly [string, ...string[]]; readonly remedies?: readonly string[] | undefined };
 
 /** What every delivery unit carries, whatever its kind. */
 interface IDeliveryUnitBase {
@@ -599,6 +606,18 @@ export type UnitDelivery =
       readonly mechanism: FileOperationMechanism;
     };
 
+/**
+ * A unit delivered by a mechanism that is not the first of its list (§10.2),
+ * kept so that a block found after planning can name the fallback that
+ * contributed to it (§10.1, {@link nameFallbackCauses}).
+ */
+export interface IFallbackDelivery {
+  readonly unitId: string;
+  readonly mechanism: UnitDelivery['mechanism'];
+  /** The paragraph a blocking error ends with: "This includes a proposal delivered by a fallback: …". */
+  readonly cause: string;
+}
+
 /** One companion pull request: the units it holds, each its own section, in order (§9). */
 export interface ICompanionPlan {
   readonly sections: readonly string[];
@@ -621,6 +640,8 @@ export type DeliveryPlan =
       readonly alternatives: readonly string[];
       /** The `delivery-fallback` warnings, then any `companion-options-unused` note. */
       readonly diagnostics: readonly IDiagnostic[];
+      /** The units delivered by a fallback, in input order, one per `delivery-fallback` warning. */
+      readonly fallbacks: readonly IFallbackDelivery[];
     }
   | {
       readonly status: 'blocked';
@@ -659,18 +680,26 @@ function sourcePhrase(dimension: DeliveryDimension, setting: ResolvedDeliverySet
   }
 }
 
-/** A mechanism that could not deliver a unit, with why. */
-interface IObstructed<M extends string> {
-  readonly mechanism: M;
+/** Why a mechanism cannot deliver a unit: its obstacle sentences and their remedies, both in obstacle order. */
+interface IObstacles {
   readonly obstacles: readonly string[];
+  readonly remedies: readonly string[];
 }
 
-/** The obstacles of one availability, empty when it is available. */
-function obstaclesOf(availability: MechanismAvailability): readonly string[] {
-  if (availability.available) return [];
+/** No obstacle: the mechanism is available. */
+const NO_OBSTACLES: IObstacles = { obstacles: [], remedies: [] };
+
+/** A mechanism that could not deliver a unit, with why. */
+interface IObstructed<M extends string> extends IObstacles {
+  readonly mechanism: M;
+}
+
+/** The obstacles of one availability, none when it is available. */
+function obstaclesOf(availability: MechanismAvailability): IObstacles {
+  if (availability.available) return NO_OBSTACLES;
   // The type requires an obstacle; a JavaScript caller could still omit it, and §8.7 never reports no reason.
   if (availability.obstacles.length === 0) throw new TypeError('An unavailable delivery mechanism must name at least one obstacle.');
-  return availability.obstacles;
+  return { obstacles: availability.obstacles, remedies: availability.remedies ?? [] };
 }
 
 /**
@@ -679,29 +708,40 @@ function obstaclesOf(availability: MechanismAvailability): readonly string[] {
  */
 function firstAvailable<M extends string>(
   list: readonly M[],
-  obstacles: (mechanism: M) => readonly string[],
+  obstacles: (mechanism: M) => IObstacles,
 ): { readonly mechanism: M | undefined; readonly obstructed: readonly IObstructed<M>[] } {
   const obstructed: IObstructed<M>[] = [];
   for (const mechanism of list) {
     const found = obstacles(mechanism);
-    if (found.length === 0) return { mechanism, obstructed };
-    obstructed.push({ mechanism, obstacles: found });
+    if (found.obstacles.length === 0) return { mechanism, obstructed };
+    obstructed.push({ mechanism, ...found });
   }
   return { mechanism: undefined, obstructed };
 }
 
 /**
  * An edit group's obstacles for `native-batch`: the group's own, then each
- * ineligible member named with its obstacles. Any member's obstacle makes
- * the whole batch unavailable (§8.3).
+ * ineligible member named with its obstacles, with their remedies in the
+ * same order. Any member's obstacle makes the whole batch unavailable
+ * (§8.3).
  */
-function nativeBatchObstacles(unit: IEditGroupUnit): readonly string[] {
+function nativeBatchObstacles(unit: IEditGroupUnit): IObstacles {
   const group = obstaclesOf(unit.availability('native-batch'));
-  const members = unit.members.flatMap((member) => {
-    const obstacles = obstaclesOf(member.native());
-    return obstacles.length === 0 ? [] : [`${member.description}: ${obstacles.join(' ')}`];
-  });
-  return [...group, ...members];
+  const members = unit.members.map((member) => ({ member, found: obstaclesOf(member.native()) }))
+    .filter(({ found }) => found.obstacles.length > 0);
+  return {
+    obstacles: [...group.obstacles, ...members.map(({ member, found }) => `${member.description}: ${found.obstacles.join(' ')}`)],
+    remedies: [...group.remedies, ...members.flatMap(({ found }) => found.remedies)],
+  };
+}
+
+/**
+ * A diagnostic's remedies (§10.1, §10.2): the obstructed mechanisms'
+ * remedies in obstacle order, each once, then the code's catalogued
+ * remedies.
+ */
+function remediesFor(code: 'delivery-unavailable' | 'delivery-fallback', obstructed: readonly IObstructed<string>[]): readonly string[] {
+  return [...new Set([...obstructed.flatMap((o) => o.remedies), ...DIAGNOSTIC_CATALOG[code].remedies])];
 }
 
 /** The `- \`mechanism\`: obstacles` lines of a message (§10.1, §10.2). */
@@ -716,8 +756,13 @@ function listSpan(list: readonly string[]): string {
 
 /** The routing of one non-alternative unit: its delivery, or that it is blocked, and its diagnostic if any. */
 type Routing =
-  | { readonly delivery: UnitDelivery; readonly warning: IDiagnostic | undefined }
+  | { readonly delivery: UnitDelivery; readonly fallback: { readonly warning: IDiagnostic; readonly cause: string } | undefined }
   | { readonly blocked: IDiagnostic };
+
+/** `text` with its first letter in lower case, as a unit's description reads mid-sentence (§10.1). */
+function lowerFirst(text: string): string {
+  return `${text.charAt(0).toLowerCase()}${text.slice(1)}`;
+}
 
 /**
  * Routes one unit by `setting`'s list (§8.1): the first available mechanism,
@@ -728,30 +773,31 @@ function route<M extends string>(
   unit: Exclude<DeliveryUnit, IAlternativeUnit>,
   dimension: DeliveryDimension,
   setting: ResolvedDeliverySetting<readonly M[]>,
-  obstacles: (mechanism: M) => readonly string[],
+  obstacles: (mechanism: M) => IObstacles,
   deliver: (mechanism: M) => UnitDelivery,
 ): Routing {
   const list = setting.value;
   const { mechanism, obstructed } = firstAvailable(list, obstacles);
-  const details = { location: unit.location };
   const listed = `\`${dimension}\` is ${listSpan(list)}, ${sourcePhrase(dimension, setting)}`;
   if (mechanism === undefined) {
     return {
       blocked: createDiagnostic(
         'delivery-unavailable',
         `${unit.description} cannot be delivered. ${listed}, and no mechanism it lists is available:\n\n${obstacleLines(obstructed)}`,
-        details,
+        { location: unit.location, remedies: remediesFor('delivery-unavailable', obstructed) },
       ),
     };
   }
-  const warning = obstructed.length === 0
-    ? undefined
-    : createDiagnostic(
-        'delivery-fallback',
-        `${unit.description} is delivered as \`${mechanism}\`. ${listed}, and the mechanisms listed before it are unavailable:\n\n${obstacleLines(obstructed)}`,
-        details,
-      );
-  return { delivery: deliver(mechanism), warning };
+  if (obstructed.length === 0) return { delivery: deliver(mechanism), fallback: undefined };
+  const warning = createDiagnostic(
+    'delivery-fallback',
+    `${unit.description} is delivered as \`${mechanism}\`. ${listed}, and the mechanisms listed before it are unavailable:\n\n${obstacleLines(obstructed)}`,
+    { location: unit.location, remedies: remediesFor('delivery-fallback', obstructed) },
+  );
+  const earlier = obstructed.map((o) => `\`${o.mechanism}\``).join(', ');
+  const cause = `This includes a proposal delivered by a fallback: ${lowerFirst(unit.description)} is delivered as \`${mechanism}\`, `
+    + `because \`${dimension}\` is ${listSpan(list)} and the mechanisms listed before it (${earlier}) are unavailable.`;
+  return { delivery: deliver(mechanism), fallback: { warning, cause } };
 }
 
 /** Routes one unit by the dimension that governs its kind (§2, §8.2-§8.5). */
@@ -839,6 +885,7 @@ export function planDelivery(
   const blocked: string[] = [];
   const errors: IDiagnostic[] = [];
   const warnings: IDiagnostic[] = [];
+  const fallbacks: IFallbackDelivery[] = [];
   for (const unit of units) {
     if (unit.kind === 'alternative') {
       alternatives.push(unit.id);
@@ -850,7 +897,10 @@ export function planDelivery(
       errors.push(routing.blocked);
     } else {
       deliveries.push(routing.delivery);
-      if (routing.warning !== undefined) warnings.push(routing.warning);
+      if (routing.fallback !== undefined) {
+        warnings.push(routing.fallback.warning);
+        fallbacks.push({ unitId: unit.id, mechanism: routing.delivery.mechanism, cause: routing.fallback.cause });
+      }
     }
   }
   const companions = bundle(policy.companionBundle.value, deliveries.filter((d) => d.mechanism === 'companion').map((d) => d.unitId));
@@ -859,7 +909,39 @@ export function planDelivery(
   if (errors.length > 0) return { status: 'blocked', policy, blocked, diagnostics: errors };
   const unused = companions.length === 0 ? unusedCompanionOptions(companionOptions) : undefined;
   const diagnostics = unused === undefined ? warnings : [...warnings, unused];
-  return { status: 'planned', policy, deliveries, companions, alternatives, diagnostics: orderDiagnostics(diagnostics) };
+  return { status: 'planned', policy, deliveries, companions, alternatives, diagnostics: orderDiagnostics(diagnostics), fallbacks };
+}
+
+/**
+ * Where each mechanism puts a unit, as the checks made after planning see it
+ * (§10.1): the blocking codes a unit delivered by that mechanism contributes
+ * to. `manual` is a review-body section; `native` and `native-batch` are
+ * inline comments; `companion` is a companion pull request, which the
+ * repository checks govern. Both bodies and comments count toward the
+ * review's payload.
+ */
+const CONTRIBUTES_TO: Readonly<Record<UnitDelivery['mechanism'], ReadonlySet<string>>> = {
+  'manual': new Set(['body-too-large', 'payload-too-large']),
+  'native': new Set(['too-many-comments', 'comment-too-large', 'payload-too-large']),
+  'native-batch': new Set(['too-many-comments', 'comment-too-large', 'payload-too-large']),
+  'companion': new Set(['suggestion-pr-permission-missing', 'suggestion-pr-configuration-invalid', 'suggestion-label-missing']),
+  'review-body': new Set(['body-too-large', 'payload-too-large']),
+  'manual-group': new Set(['body-too-large', 'payload-too-large']),
+};
+
+/**
+ * A block found after planning, naming its causes (§10.1): each error a
+ * fallback-delivered unit contributed to ends with one paragraph per such
+ * unit, in plan order. Other diagnostics, and every diagnostic when nothing
+ * fell back, are returned unchanged. The block itself carries no
+ * `delivery-fallback` warning; the caller leaves those out.
+ */
+export function nameFallbackCauses<D extends IDiagnostic>(diagnostics: readonly D[], fallbacks: readonly IFallbackDelivery[]): D[] {
+  return diagnostics.map((diagnostic) => {
+    if (diagnostic.severity !== 'error') return diagnostic;
+    const causes = fallbacks.filter((f) => CONTRIBUTES_TO[f.mechanism].has(diagnostic.code)).map((f) => `\n\n${f.cause}`);
+    return causes.length === 0 ? diagnostic : { ...diagnostic, message: `${diagnostic.message}${causes.join('')}` };
+  });
 }
 
 // ---------------------------------------------------------------------------
