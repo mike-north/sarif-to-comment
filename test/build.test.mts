@@ -173,16 +173,18 @@ describe('the build', () => {
     // Every runtime module is TypeScript; a JavaScript file in src/ would be
     // neither compiled nor shipped, so it is refused rather than ignored.
     fs.writeFileSync(path.join(dir, 'src', 'stray-probe.cjs'), "'use strict';\n");
+    fs.writeFileSync(path.join(dir, 'src', 'presentation', 'nested-probe.cjs'), "'use strict';\n");
     const build = spawnSync(process.execPath, ['scripts/build.mts'], { cwd: dir, encoding: 'utf8' });
     assert.notEqual(build.status, 0);
     assert.match(build.stderr, /stray-probe\.cjs/);
+    assert.match(build.stderr, /nested-probe\.cjs/, 'a JavaScript file in src/presentation/ is refused too');
     assert.equal(fs.existsSync(path.join(dir, 'dist')), false, 'nothing was built');
   });
 });
 
 describe('the built package', () => {
   test('src/ holds no JavaScript and the hand-written declarations are gone', () => {
-    assert.deepEqual(fs.readdirSync(path.join(ROOT, 'src')).filter((f) => f.endsWith('.cjs') || f.endsWith('.js')), []);
+    assert.deepEqual(fs.readdirSync(path.join(ROOT, 'src'), { recursive: true, encoding: 'utf8' }).filter((f) => f.endsWith('.cjs') || f.endsWith('.js')), []);
     assert.equal(fs.existsSync(path.join(ROOT, 'types')), false);
   });
 

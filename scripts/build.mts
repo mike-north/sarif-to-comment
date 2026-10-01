@@ -4,8 +4,9 @@
  * documentation (`pnpm run build`).
  *
  * Steps, in order:
- *   1. Refuse JavaScript in src/: every runtime module is TypeScript (.cts),
- *      and a stray .cjs there would neither be compiled nor shipped.
+ *   1. Refuse JavaScript anywhere in src/ (including src/presentation/):
+ *      every runtime module is TypeScript (.cts), and a stray .cjs there
+ *      would neither be compiled nor shipped.
  *   2. Remove dist/. Neither `tsc -b` nor `tsc -b --clean` deletes the output
  *      of a source that no longer exists, and such an orphan would ship.
  *   3. Compile the TypeScript runtime (src/*.cts -> dist/*.cjs, with
@@ -34,7 +35,7 @@ function run(args: readonly string[]): void {
   execFileSync(process.execPath, args, { cwd: root, stdio: 'inherit' });
 }
 
-const sources = readdirSync(src);
+const sources = readdirSync(src, { recursive: true, encoding: 'utf8' });
 const typescriptModules = sources.filter((file) => file.endsWith('.cts') && !file.endsWith('.d.cts'));
 const javascriptModules = sources.filter((file) => file.endsWith('.cjs'));
 

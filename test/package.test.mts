@@ -72,14 +72,15 @@ function present<T>(value: T | undefined, what: string): T {
 /**
  * The package.json `files` whitelist: the intended distribution boundary.
  * dist/ is build output; the negations keep build by-products out of the
- * package: per-module declarations (only the rolled-up public declaration
- * ships), TypeScript build info, the build-freshness manifest, and the runtime
+ * package: per-module declarations, including the presentation components'
+ * (only the rolled-up public declaration ships), TypeScript build info, the build-freshness manifest, and the runtime
  * output of the declaration-only entry and of the type-only public types
  * module (neither has runtime content).
  */
 const EXPECTED_FILES_FIELD = [
   'dist/',
   '!dist/*.d.cts',
+  '!dist/presentation/*.d.cts',
   '!dist/*.tsbuildinfo',
   '!dist/.build-inputs.json',
   '!dist/public-api.cjs',
@@ -103,7 +104,7 @@ function distributable(file: string): boolean {
     file === 'README.md' ||
     file === 'CHANGELOG.md' ||
     /^LICENSE(\.md|\.txt)?$/.test(file) ||
-    (/^dist\/[^/]+\.cjs$/.test(file) && !NON_RUNTIME_OUTPUTS.includes(file)) ||
+    (/^dist\/(?:presentation\/)?[^/]+\.cjs$/.test(file) && !NON_RUNTIME_OUTPUTS.includes(file)) ||
     file === 'dist/sarif-to-comment.d.ts' ||
     /^vendor\/[^/]+$/.test(file) ||
     file === 'docs/getting-started.md' ||
@@ -113,12 +114,13 @@ function distributable(file: string): boolean {
   );
 }
 
-/** The shipped runtime files: every dist/*.cjs the package includes. */
+/** The shipped runtime files: every dist/*.cjs and dist/presentation/*.cjs the package includes. */
 function shippedRuntimeFiles(): string[] {
   const dist = path.join(ROOT, 'dist');
   if (!fs.existsSync(dist)) return [];
   return fs
-    .readdirSync(dist)
+    .readdirSync(dist, { recursive: true, encoding: 'utf8' })
+    .map((f) => f.split(path.sep).join('/'))
     .filter((f) => f.endsWith('.cjs'))
     .map((f) => `dist/${f}`)
     .filter((f) => !NON_RUNTIME_OUTPUTS.includes(f))
@@ -289,11 +291,13 @@ describe('packed distributable', () => {
     const files = requirePackedProject().result.files.map((f) => f.path).sort();
     assert.deepEqual(files.filter((f) => !distributable(f)), [], 'unexpected files in the package');
     const apiPages = fs.readdirSync(path.join(ROOT, 'docs', 'api')).map((f) => `docs/api/${f}`);
-    // Every runtime module in src/ ships as dist/<name>.cjs. The module list
-    // comes from the sources (transitional .cjs and TypeScript .cts alike), so
-    // a build that silently drops a module fails here.
+    // Every runtime module in src/ (and src/presentation/) ships as
+    // dist/<name>.cjs (dist/presentation/<name>.cjs). The module list comes
+    // from the sources (transitional .cjs and TypeScript .cts alike), so a
+    // build that silently drops a module fails here.
     const runtimeModules = fs
-      .readdirSync(path.join(ROOT, 'src'))
+      .readdirSync(path.join(ROOT, 'src'), { recursive: true, encoding: 'utf8' })
+      .map((f) => f.split(path.sep).join('/'))
       .filter((f) => /\.c[jt]s$/.test(f) && !f.endsWith('.d.cts'))
       .map((f) => `dist/${f.replace(/\.c[jt]s$/, '.cjs')}`)
       .filter((f) => !NON_RUNTIME_OUTPUTS.includes(f))

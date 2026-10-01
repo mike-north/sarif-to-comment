@@ -38,6 +38,7 @@
 import * as crypto from 'node:crypto';
 import * as path from 'node:path';
 
+import { repositoryUrl } from './github-urls.cjs';
 import { applyReplacement } from './replacements.cjs';
 import type { ColumnKind, IReplacementRegion, ReplacementOutcome } from './replacements.cjs';
 import {
@@ -1248,7 +1249,7 @@ function incorporate(captured: ICapturedInput, sarif: IStagedSarifLog, changes: 
 }
 
 function canonicalRepositoryUri(repository: IRepositoryIdentity): string {
-  return `https://github.com/${repository.owner}/${repository.repo}`;
+  return repositoryUrl(repository);
 }
 
 /**

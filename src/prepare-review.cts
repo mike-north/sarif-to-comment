@@ -245,7 +245,11 @@
  *   blocks (`suggestion-group-pr-unavailable`), since nothing else keeps its
  *   changes together.
  *
- * Rendering:
+ * Rendering. Each element is a presentation component in src/presentation/
+ * (finding and finding section, attribution, alternatives, file addition,
+ * file deletion, companion reference, companion description, lifecycle
+ * note), with links from src/github-urls.cts; this module decides what is
+ * published and where, and composes them as follows:
  *   item      = message [ "\n\n**Fix:** " fix description ]
  *               [ "\n\n**Alternatives to consider:**" { "\n\n" alternative } ]
  *               "\n\n<sub>— " attribution "</sub>"
@@ -283,11 +287,26 @@ import type { SchemaObject, ValidateFunction } from 'ajv';
 import type AjvDraft04Module = require('ajv-draft-04');
 import type AjvFormatsModule = require('ajv-formats');
 import type { IReviewContext, PathEntry, ProposalChange } from './github.cjs';
+import { blobUrl, pullRequestUrl } from './github-urls.cjs';
 import { classifyPlacement } from './placement.cjs';
 import type { IPlacementSourceRange, PlacementAnchorSide } from './placement.cjs';
 import { applyReplacement as productionApplyReplacement } from './replacements.cjs';
 import { formatSuggestionMarker } from './suggestion-marker.cjs';
-import { isSuggestionGroupName } from './sarif-common.cjs';
+import { isSuggestionGroupName, namesRepository } from './sarif-common.cjs';
+import { renderAlternatives } from './presentation/alternatives.cjs';
+import type { IAlternative } from './presentation/alternatives.cjs';
+import { renderAttribution } from './presentation/attribution.cjs';
+import type { IProducerAttribution, IProducerComponent } from './presentation/attribution.cjs';
+import { renderCompanionChange } from './presentation/companion-changes.cjs';
+import { renderCompanionDescription } from './presentation/companion-description.cjs';
+import { renderCompanionReference } from './presentation/companion-reference.cjs';
+import { renderFileAddition, renderProposedFileFinding } from './presentation/file-addition.cjs';
+import type { ProposedFileMode } from './presentation/file-addition.cjs';
+import { renderFileDeletion } from './presentation/file-deletion.cjs';
+import { renderFinding, renderFindingSection } from './presentation/finding.cjs';
+import type { QuotedSource } from './presentation/finding.cjs';
+import { renderLifecycleNote } from './presentation/lifecycle-note.cjs';
+import { SEPARATOR, codeSpan, escapePlain, escapePlainInline, fenceProblem, unbalancedHtml } from './presentation/markdown.cjs';
 import { createDiagnostic } from './diagnostics.cjs';
 import type { DiagnosticCode, IDiagnostic } from './diagnostics.cjs';
 import type {
@@ -651,18 +670,10 @@ type PreparedPlacement =
   | { readonly treatment: 'general'; readonly source: EvidenceSource };
 
 /** A tool component beside the driver: an extension that defines the rule. */
-interface IComponentIdentity {
-  readonly name: string;
-  readonly version?: string;
-}
+type IComponentIdentity = IProducerComponent;
 
-/** Who produced a finding: tool, optional version, defining extension and rule. */
-export interface IAttribution {
-  readonly tool: string;
-  readonly version?: string;
-  readonly component?: IComponentIdentity;
-  readonly ruleId?: string;
-}
+/** Who produced a finding: tool, optional version, defining extension and rule (src/presentation/attribution.cts). */
+export type IAttribution = IProducerAttribution;
 
 /** The producer's explicit classification of a result; only stated fields are present. */
 interface IClassification {
@@ -676,9 +687,6 @@ type DeclaredApproval = 'hold' | 'ready';
 
 /** A result's approval as recorded in evidence. */
 export type EvidenceApproval = 'none' | 'declared-ready' | 'hold-overridden';
-
-/** The Git modes a proposed new file may have. */
-type ProposedFileMode = '100644' | '100755';
 
 /**
  * A validated whole-file proposal (docs/file-operation-publication-contract.md):
@@ -1162,21 +1170,6 @@ const DEFAULT_NEWLINE_SEQUENCES: readonly string[] = ['\r\n', '\n'];
 const EXTERNAL_PROPERTIES_MESSAGE = 'The log keeps SARIF content in external properties, which this profile does not load; '
   + 'publishing without it could lose findings or their meaning. Inline the content into the log.';
 
-/** Separator between rendered items and between general body sections. */
-const SEPARATOR = '\n\n---\n\n';
-
-/**
- * A GitHub-style @mention in plain text: a user or org/team handle not
- * preceded by a word character (so email addresses are excluded).
- */
-const MENTION = /(?<![A-Za-z0-9_`])(@[A-Za-z0-9][A-Za-z0-9-]*(?:\/[A-Za-z0-9][A-Za-z0-9._-]*)?)/;
-
-/** Characters that CommonMark/GFM may interpret anywhere in a line of plain text. */
-const INLINE_MARKDOWN = /[\\`*_[\]<>#!|~{}&]/g;
-
-/** GitHub web host for exact-revision permalinks and repository identity. */
-const GITHUB_HOST = 'github.com';
-
 /**
  * A CommonJS module as `require()` returns it when the package exposes its
  * main value directly and also as `default`: either may be the one to use.
@@ -1630,22 +1623,6 @@ function versionOf(driver: ISarifComponent): string | undefined {
   return driver.version !== undefined ? driver.version : driver.semanticVersion;
 }
 
-/** Whether a provenance repositoryUri names this GitHub repository (https, http, ssh or git forms). */
-function namesRepository(uri: string, context: IPreparationContext): boolean {
-  let url: URL;
-  try {
-    url = new URL(uri);
-  } catch {
-    return false;
-  }
-  if (!['https:', 'http:', 'ssh:', 'git:'].includes(url.protocol) || url.hostname.toLowerCase() !== GITHUB_HOST) return false;
-  const parts = url.pathname.replace(/\/+$/, '').replace(/\.git$/, '').split('/').filter(Boolean);
-  const [owner, repo] = parts;
-  return parts.length === 2 && owner !== undefined && repo !== undefined
-    && owner.toLowerCase() === context.owner.toLowerCase()
-    && repo.toLowerCase() === context.repo.toLowerCase();
-}
-
 /**
  * Validates an owned property namespace. Returns the declared approval
  * ('hold' | 'ready' | undefined) and proposed operations; records
@@ -1985,116 +1962,42 @@ function resolveMessage(
     return { markdown: '' };
   }
   const markdown = useMarkdown ? substituted.text : escapePlain(substituted.text);
-  const fenceProblem = producerFenceProblem(markdown) || producerHtmlProblem(markdown);
-  if (fenceProblem) {
-    state.report.error(fenceProblem[0], pointer, fenceProblem[1]);
+  const markupProblem = producerFenceProblem(markdown) || producerHtmlProblem(markdown);
+  if (markupProblem) {
+    state.report.error(markupProblem[0], pointer, markupProblem[1]);
     return { markdown: '' };
   }
   return { markdown };
 }
 
-/** HTML elements that never take a closing tag. */
-const VOID_ELEMENTS: ReadonlySet<string> = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr']);
-
 /**
- * A conservative, hand-written raw-HTML profile for producer Markdown (not an
- * HTML parser). Outside fenced code and code spans, every comment, processing
- * instruction, CDATA section, declaration and tag must be terminated, and
- * non-void elements must be closed in order within the same producer string.
- * Anything left open could hide later findings, attribution or a validated
- * suggestion when rendered, so it blocks. Backslash-escaped `<` is literal.
+ * Producer Markdown that leaves raw HTML open (src/presentation/markdown.cts,
+ * unbalancedHtml): anything left open could hide later findings, attribution
+ * or a validated suggestion when rendered, so it blocks.
  */
 function producerHtmlProblem(markdown: string): Problem | null {
-  const unbalanced = (what: string): Problem => ['producer-html-unbalanced',
+  const what = unbalancedHtml(markdown);
+  return what === null ? null : ['producer-html-unbalanced',
     `Producer Markdown leaves ${what} open, which could hide the attribution, later findings or a suggestion that follows.`];
-  const text = markdownOutsideCode(markdown);
-  const stack: string[] = [];
-  const token = /<!--|<\?|<!\[CDATA\[|<![A-Za-z]|<(\/?)([A-Za-z][A-Za-z0-9-]*)(?=[\s/>])/g;
-  for (let match = token.exec(text); match; match = token.exec(text)) {
-    let backslashes = 0;
-    for (let i = match.index - 1; i >= 0 && text[i] === '\\'; i -= 1) backslashes += 1;
-    if (backslashes % 2 === 1) continue;
-    // Groups 1 and 2 participate only in the tag alternative.
-    const [opener, slash, name] = match;
-    const terminator = opener === '<!--' ? '-->' : opener === '<?' ? '?>' : opener === '<![CDATA[' ? ']]>' : '>';
-    const end = text.indexOf(terminator, match.index + opener.length);
-    if (end === -1) return unbalanced(name ? `a <${String(slash)}${name}> tag` : `an HTML ${opener} construct`);
-    token.lastIndex = end + terminator.length;
-    if (!name) continue;
-    const element = name.toLowerCase();
-    if (slash) {
-      if (stack.pop() !== element) return unbalanced(`an unmatched </${element}> tag`);
-    } else if (!VOID_ELEMENTS.has(element) && !text.slice(match.index, end).endsWith('/')) {
-      stack.push(element);
-    }
-  }
-  return stack.length > 0 ? unbalanced(`a <${String(stack[stack.length - 1])}> element`) : null;
 }
 
 /**
- * Producer Markdown with fenced code blocks and code spans blanked out, since
- * their contents are literal. Fence recognition matches producerFenceProblem.
- */
-function markdownOutsideCode(markdown: string): string {
-  const kept: string[] = [];
-  let open: string | null = null;
-  for (const line of markdown.split(/\r\n|\n|\r/)) {
-    let core = line;
-    for (let previous: string | undefined; previous !== core;) {
-      previous = core;
-      core = core.replace(/^[ \t]*(?:>[ \t]?|[-*+][ \t]+|\d{1,9}[.)][ \t]+)/, '');
-    }
-    const fence = /^[ \t]*(`{3,}|~{3,})(.*)$/.exec(core);
-    if (fence) {
-      const marker = groupOf(fence, 1);
-      const rest = groupOf(fence, 2);
-      if (open) {
-        if (marker[0] === open[0] && marker.length >= open.length && rest.trim() === '') open = null;
-      } else if (!(marker[0] === '`' && rest.includes('`'))) {
-        open = marker;
-      }
-      continue;
-    }
-    if (!open) kept.push(line);
-  }
-  return kept.join('\n').replace(/(?<!`)(`+)(?!`)[\s\S]*?(?<!`)\1(?!`)/g, ' ');
-}
-
-/**
- * A conservative, hand-written fence profile for producer Markdown (not a
- * complete Markdown parser). Only a validated SARIF fix may create a native
- * suggestion, so any line that could open a `suggestion` fence — after
- * blockquote markers, list markers and indentation, with backticks or tildes
- * of any length and any fence state — blocks. Fences must also be balanced
- * (a closing fence uses the opening character, is at least as long and has
- * no info string); an unclosed fence would swallow the attribution and any
- * generated suggestion that follows.
+ * Producer Markdown that could open a native suggestion block or leaves a
+ * fence open (src/presentation/markdown.cts, fenceProblem). Only a validated
+ * SARIF fix may create a native suggestion; an unclosed fence would swallow
+ * the attribution and any generated suggestion that follows.
  */
 function producerFenceProblem(markdown: string): Problem | null {
-  let open: string | null = null;
-  for (const line of markdown.split(/\r\n|\n|\r/)) {
-    let core = line;
-    for (let previous: string | undefined; previous !== core;) {
-      previous = core;
-      core = core.replace(/^[ \t]*(?:>[ \t]?|[-*+][ \t]+|\d{1,9}[.)][ \t]+)/, '');
-    }
-    const fence = /^[ \t]*(`{3,}|~{3,})(.*)$/.exec(core);
-    if (!fence) continue;
-    const marker = groupOf(fence, 1);
-    const rest = groupOf(fence, 2);
-    const info = rest.trim();
-    if (/^suggestion/i.test(info)) {
+  switch (fenceProblem(markdown)) {
+    case 'suggestion-fence':
       return ['producer-suggestion-fence',
         'Producer Markdown opens a suggestion block; only a validated SARIF fix may create a native suggestion.'];
-    }
-    if (open) {
-      if (marker[0] === open[0] && marker.length >= open.length && info === '') open = null;
-    } else if (!(marker[0] === '`' && rest.includes('`'))) {
-      open = marker;
-    }
+    case 'unclosed-fence':
+      return ['producer-fence-unclosed',
+        'Producer Markdown leaves a code fence open, which would swallow the attribution and any suggestion that follows.'];
+    case null:
+      return null;
   }
-  return open ? ['producer-fence-unclosed',
-    'Producer Markdown leaves a code fence open, which would swallow the attribution and any suggestion that follows.'] : null;
 }
 
 /** SARIF 3.11.5 placeholder substitution: {n} arguments, {{ and }} literal braces. */
@@ -3746,82 +3649,47 @@ function combineEdits(sourceText: string, fileEdits: readonly IPreparedEdit[]): 
   return lines.join('');
 }
 
-/** One line of a suggestion's change list (contract §2.11). */
+/** One line of a suggestion's change list (contract §2.11; src/presentation/companion-changes.cts). */
 function changeLine(change: UnitChange, context: IPreparationContext): string {
   if (change.kind === 'edit') {
     const { edit } = change;
-    const lines = edit.startLine === edit.endLine ? `line ${String(edit.startLine)}` : `lines ${String(edit.startLine)}-${String(edit.endLine)}`;
-    return `- Edited [${escapePlainInline(edit.path)} ${lines} at ${edit.source.commit.slice(0, 7)}](${permalink(context, edit.source)})`;
+    return renderCompanionChange({
+      kind: 'edit', path: edit.path, startLine: edit.startLine, endLine: edit.endLine, commit: edit.source.commit, url: permalink(context, edit.source),
+    });
   }
   const { operation } = change;
-  if (operation.operation === 'create') return `- New file ${codeSpan(operation.path)}: ${fileFacts(operation.text, operation.fileMode)}`;
+  if (operation.operation === 'create') return renderCompanionChange({ kind: 'create', path: operation.path, text: operation.text, fileMode: operation.fileMode });
   const source: IWholeFileSource = { commit: operation.commit, path: operation.path };
-  return `- Deleted file [${escapePlainInline(operation.path)} at ${operation.commit.slice(0, 7)}](${permalink(context, source)}): the whole file is removed`;
+  return renderCompanionChange({ kind: 'delete', path: operation.path, commit: operation.commit, url: permalink(context, source) });
 }
 
 /** A finding in a suggestion's section: its lines of a proposed file, or its quoted reviewed source. */
 function renderSuggestionItem(item: IPreparedItem, context: IPreparationContext): string {
-  const lines = item.proposedLines;
-  if (!lines) return renderSection(item, context);
-  const named = lines.startLine === lines.endLine ? `line ${String(lines.startLine)}` : `lines ${String(lines.startLine)}-${String(lines.endLine)}`;
-  return `**Location:** ${named} of the proposed file\n\n${renderItem(item)}`;
-}
-
-/** "Merging … into HEAD applies this change:" or "… these N changes together:". */
-function mergeSentence(companion: IPreparedCompanion, subject: string, headRef: string): string {
-  const what = companion.changeCount === 1 ? 'this change' : `these ${String(companion.changeCount)} changes together`;
-  return `Merging ${subject} into ${codeSpan(headRef)} applies ${what}:`;
-}
-
-/**
- * The paragraph that says a suggestion was re-applied onto a rewritten head
- * (contract §2.11), naming what it was rewritten after: "that commit" in the
- * suggestion's own body, whose first line names it, "the reviewed commit" in
- * the review. Empty when it was not re-applied.
- */
-function reappliedParagraph(target: ISuggestionContext, after: string): string {
-  if (target.reappliedOnto === undefined) return '';
-  const pull = `#${String(target.pullNumber)}`;
-  return `The history of ${pull} was rewritten after ${after}, so this change is re-applied onto commit ${target.reappliedOnto}, `
-    + `the head of ${pull} when it was proposed, where everything it changes is still exactly as reviewed.\n\n`;
-}
-
-/** A suggestion pull request's section of the review body, once its number is known. */
-function renderSuggestionSection(companion: IPreparedCompanion, number: number, target: ISuggestionContext): string {
-  const link = `https://${GITHUB_HOST}/${encodeLinkSegment(target.owner)}/${encodeLinkSegment(target.repo)}/pull/${String(number)}`;
-  return `**Suggestion pull request:** [#${String(number)}](${link})\n\n${reappliedParagraph(target, 'the reviewed commit')}`
-    + `${mergeSentence(companion, 'it', target.headRef)}\n\n${companion.changeLines}\n\n${companion.items}`;
+  return item.proposedLines ? renderProposedFileFinding(item.proposedLines, renderItem(item)) : renderSection(item, context);
 }
 
 /**
  * The review body: its sections in order, each suggestion's section rendered
- * with its pull request number (`numbers[i]` for companion i).
+ * with its pull request number (`numbers[i]` for companion i) as the
+ * companion-reference component (src/presentation/companion-reference.cts).
  */
 function renderReviewBody(suggestions: IPreparedSuggestions, numbers: readonly number[], target: ISuggestionContext): string {
   return suggestions.sections
-    .map((part) => (typeof part === 'string' ? part : renderSuggestionSection(itemAt(suggestions.companions, part), itemAt(numbers, part), target)))
+    .map((part) => {
+      if (typeof part === 'string') return part;
+      const number = itemAt(numbers, part);
+      return renderCompanionReference(itemAt(suggestions.companions, part), { number, url: pullRequestUrl(target, number) }, target);
+    })
     .join(SEPARATOR);
 }
 
 /**
- * The brief lifecycle note every suggestion pull request body carries
- * (docs/companion-suggestion-pr-contract.md §2.11; docs/suggestion-pr-convention.md §8):
- * how a draft becomes mergeable, who decides, and when it can be closed.
+ * A suggestion pull request's body, ending with its structured marker line
+ * (src/presentation/companion-description.cts), with the lifecycle note
+ * every suggestion pull request carries (src/presentation/lifecycle-note.cts).
  */
-function lifecycleNote(target: ISuggestionContext): string {
-  const pull = `#${String(target.pullNumber)}`;
-  const branch = codeSpan(target.headRef);
-  const accepted = target.ready
-    ? `it is a pull request into ${branch}, the branch of ${pull}. The author of ${pull} decides whether to merge it`
-    : `it is a draft pull request into ${branch}, the branch of ${pull}. A draft cannot be merged: someone with write access first marks it ready for review. The author of ${pull} then decides whether to merge it`;
-  return `**How this suggestion is accepted:** ${accepted}, and ${pull} carries the change to its base. Once ${pull} is merged or closed, this pull request can be closed.`;
-}
-
-/** A suggestion pull request's body, ending with its structured marker line. */
 function renderSuggestionPullBody(companion: IPreparedCompanion, marker: string, target: ISuggestionContext): string {
-  return `Suggested in a review of #${String(target.pullNumber)} at commit ${target.reviewedCommit}.`
-    + `\n\n${reappliedParagraph(target, 'that commit')}${mergeSentence(companion, 'this pull request', target.headRef)}\n\n${companion.changeLines}\n\n${lifecycleNote(target)}`
-    + `${SEPARATOR}${companion.items}\n\n${marker}`;
+  return renderCompanionDescription(companion, target, renderLifecycleNote(target), marker);
 }
 
 /** The identity of a proposal: equal proposals share one section (R8). */
@@ -3894,202 +3762,60 @@ function enforceLimits(review: IPreparedReview, proposals: readonly IRenderedPro
 }
 
 // ---------------------------------------------------------------------------
-// Rendering
+// Rendering: prepared findings and proposals through the presentation
+// components (src/presentation). Preparation decides what is published and
+// where; the components decide only how each element reads.
 
+/** A prepared finding as the finding component presents it, with its alternatives and attribution. */
 function renderItem(item: IPreparedItem): string {
-  const c: IClassification = item.classification || {};
-  const stated: readonly (readonly [label: string, value: string | undefined])[] = [['Level', c.level], ['Kind', c.kind], ['Baseline', c.baselineState]];
-  const status = stated
-    .filter((entry): entry is readonly [string, string] => entry[1] !== undefined).map(([label, value]) => `**${label}:** ${value}`).join(' · ');
-  const location = item.locationMessage === undefined ? '' : `\n\n**At this location:** ${item.locationMessage}`;
-  const fix = item.fixDescription === undefined ? '' : `\n\n**Fix:** ${item.fixDescription}`;
   const primaryPath = item.suggestion ? item.suggestion.path : singlePath(item.edits);
-  const alternatives = item.alternatives.length === 0 ? ''
-    : `\n\n**Alternatives to consider:**${item.alternatives.map((a, i) => `\n\n${renderAlternative(a, i + 1, primaryPath)}`).join('')}`;
-  return `${status === '' ? '' : `${status}\n\n`}${item.message}${location}${fix}${alternatives}\n\n<sub>— ${renderAttribution(item.attribution)}</sub>`;
+  return renderFinding({
+    classification: item.classification,
+    message: item.message,
+    locationMessage: item.locationMessage,
+    fixDescription: item.fixDescription,
+    alternatives: renderAlternatives(item.alternatives.map(alternativeOf), primaryPath),
+    attribution: renderAttribution(item.attribution),
+  });
 }
 
-/**
- * One listed alternative (see the module's rendering grammar): its number,
- * its description, and its whole-line changes of reviewed files. A one-part
- * alternative names its file only when it is not the first fix's; each part
- * of a several-part alternative is labelled with its file.
- */
-function renderAlternative(alternative: IPreparedAlternative, number: number, primaryPath: string | undefined): string {
-  const { parts, description } = alternative;
-  const lead = `(${String(number)}) ${description === undefined ? '' : `${description}\n\n`}`;
-  const [only] = parts;
-  if (parts.length === 1 && only !== undefined) {
-    const lines = partLines(only);
-    const where = only.path === primaryPath ? lines : `${lines} of ${codeSpan(only.path)}`;
-    return `${lead}${only.replacementText === '' ? `Delete ${where}.` : `Replace ${where} with${partBlock(only)}`}`;
-  }
-  const files = new Set(parts.map((p) => p.path)).size;
-  const heading = files > 1 ? `Changes ${String(files)} files together:` : `Makes ${String(parts.length)} changes together:`;
-  const labelled = parts.map((p) => `${codeSpan(p.path)} — ${p.replacementText === '' ? `delete ${partLines(p)}.` : `replace ${partLines(p)} with${partBlock(p)}`}`);
-  return `${lead}${heading}${labelled.map((part) => `\n\n${part}`).join('')}`;
-}
-
-/** "line N" or "lines N-M" of a part's reviewed file. */
-function partLines(part: IAlternativePart): string {
-  return part.startLine === part.endLine ? `line ${String(part.startLine)}` : `lines ${String(part.startLine)}-${String(part.endLine)}`;
-}
-
-/** The end of "replace … with": the stated line-ending style, if CRLF, and the fenced lines. */
-function partBlock(part: IAlternativePart): string {
-  return `${part.crlf ? ' (CRLF line endings)' : ''}:\n\n${fenced(part.shownText)}`;
-}
-
-function renderAttribution({ tool, version, component, ruleId }: IAttribution): string {
-  const named = (name: string, v: string | undefined): string => `${escapePlainInline(name)}${v === undefined ? '' : ` ${escapePlainInline(v)}`}`;
-  return `${named(tool, version)}${component === undefined ? '' : ` · ${named(component.name, component.version)}`}`
-    + (ruleId === undefined ? '' : ` · rule ${codeSpan(ruleId)}`);
+/** A prepared alternative as the alternatives component lists it. */
+function alternativeOf(alternative: IPreparedAlternative): IAlternative {
+  return { description: alternative.description, changes: alternative.parts };
 }
 
 /** A general body section: exact-revision link and literal source quote when the finding has a location. */
 function renderSection(item: IPreparedItem, context: IPreparationContext): string {
   const source = item.placement && item.placement.source;
-  if (!source) return renderItem(item);
-  const short = source.commit.slice(0, 7);
-  const link = permalink(context, source);
-  if (source.startLine === undefined) {
-    return `**Source:** [${escapePlainInline(source.path)} at ${short}](${link})\n\n${renderItem(item)}`;
-  }
-  const lines = source.startLine === source.endLine ? `line ${String(source.startLine)}` : `lines ${String(source.startLine)}-${String(source.endLine)}`;
-  return `**Source:** [${escapePlainInline(source.path)} ${lines} at ${short}](${link})\n\n${fenced(source.text)}\n\n${renderItem(item)}`;
+  return renderFindingSection(renderItem(item), source ? quotedSource(context, source) : undefined);
+}
+
+/** A finding's own location as a finding section quotes it, with its permalink. */
+function quotedSource(context: IPreparationContext, source: EvidenceSource): QuotedSource {
+  const url = permalink(context, source);
+  return source.startLine === undefined
+    ? { path: source.path, commit: source.commit, url }
+    : { path: source.path, commit: source.commit, url, lines: { startLine: source.startLine, endLine: source.endLine, text: source.text } };
 }
 
 /**
  * A whole-file proposal's body section (contract §2): the proposal once,
- * then each finding carrying it. A creation shows its content in a fence
- * longer than any backtick run inside, with details that, together with the
- * block, determine its exact bytes; a deletion links the file at the reviewed
- * commit and never shows or narrows it.
+ * then each finding carrying it — after its lines of the proposed file for a
+ * creation (src/presentation/file-addition.cts), or as a section with its
+ * quoted reviewed source for a deletion (src/presentation/file-deletion.cts).
  */
 function renderProposalSection(operation: PreparedFileOperation, items: readonly IPreparedItem[], context: IPreparationContext): string {
   if (operation.operation === 'delete') {
     const source: IWholeFileSource = { commit: operation.commit, path: operation.path };
-    return `**Proposed file deletion:** [${escapePlainInline(operation.path)} at ${operation.commit.slice(0, 7)}](${permalink(context, source)})\n\n`
-      + `The whole file is removed; this is not a proposal to empty it.\n\n${items.map((item) => renderSection(item, context)).join(SEPARATOR)}`;
+    return renderFileDeletion({ path: operation.path, commit: operation.commit, url: permalink(context, source) },
+      items.map((item) => renderSection(item, context)).join(SEPARATOR));
   }
-  const { text, fileMode } = operation;
-  const hasBom = text.startsWith(BOM);
-  const body = hasBom ? text.slice(BOM.length) : text;
-  const finalTerminator = body.endsWith('\r\n') ? '\r\n' : body.endsWith('\n') ? '\n' : '';
-  const displayed = body.slice(0, body.length - finalTerminator.length);
-  const block = body === '' ? '' : `\n\n${fenced(displayed)}`;
-  const rendered = items.map((item) => {
-    const lines = item.proposedLines;
-    if (!lines) return renderItem(item);
-    const named = lines.startLine === lines.endLine ? `line ${String(lines.startLine)}` : `lines ${String(lines.startLine)}-${String(lines.endLine)}`;
-    return `**Location:** ${named} of the proposed file\n\n${renderItem(item)}`;
-  });
-  return `**Proposed new file:** ${codeSpan(operation.path)}\n\n**File details:** ${fileFacts(text, fileMode)}${block}\n\n${rendered.join(SEPARATOR)}`;
+  return renderFileAddition(operation, items.map((item) => renderProposedFileFinding(item.proposedLines, renderItem(item))).join(SEPARATOR));
 }
 
-/**
- * The details of a proposed new file that, with its displayed content,
- * determine its exact bytes (docs/file-operation-publication-contract.md §2).
- */
-function fileFacts(text: string, fileMode: ProposedFileMode): string {
-  const bytes = Buffer.byteLength(text, 'utf8');
-  const hasBom = text.startsWith(BOM);
-  const body = hasBom ? text.slice(BOM.length) : text;
-  const finalTerminator = body.endsWith('\r\n') ? '\r\n' : body.endsWith('\n') ? '\n' : '';
-  const facts: string[] = [];
-  if (bytes === 0) {
-    facts.push('empty file (0 bytes)');
-  } else {
-    facts.push(`${String(bytes)} byte${bytes === 1 ? '' : 's'} of UTF-8 text`);
-    if (hasBom) facts.push('begins with a byte-order mark');
-    if (body === '') {
-      facts.push('no content after the byte-order mark');
-    } else {
-      facts.push(body.includes('\r\n') ? 'CRLF line endings' : body.includes('\n') ? 'LF line endings' : 'no line breaks');
-      facts.push(finalTerminator === '' ? 'no newline at end of file' : 'ends with a newline');
-    }
-  }
-  facts.push(fileMode === '100755' ? 'mode 100755 (executable)' : 'mode 100644');
-  return facts.join(' · ');
-}
-
-/**
- * One URL path segment for a Markdown link destination: encodeURIComponent
- * leaves ( ) ! ' * unencoded, and an unbalanced parenthesis would end the
- * destination early, so those are percent-encoded too (RFC 3986 permits it).
- */
-function encodeLinkSegment(segment: string): string {
-  return encodeURIComponent(segment).replace(/[()!'*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
-}
-
-/** GitHub permalink to an exact revision, path and optional line range. */
+/** GitHub permalink to an exact revision, path and optional line range (src/github-urls.cts). */
 function permalink(context: IPreparationContext, source: EvidenceSource): string {
-  const encodedPath = source.path.split('/').map(encodeLinkSegment).join('/');
-  const base = `https://${GITHUB_HOST}/${encodeLinkSegment(context.owner)}/${encodeLinkSegment(context.repo)}/blob/${source.commit}/${encodedPath}`;
-  if (source.startLine === undefined) return base;
-  return `${base}#L${String(source.startLine)}${source.endLine !== source.startLine ? `-L${String(source.endLine)}` : ''}`;
-}
-
-/**
- * Plain text rendered literally: Markdown-significant characters are
- * backslash-escaped, line-start block markers neutralized, line breaks kept
- * as hard breaks and blank-line paragraph breaks kept.
- */
-function escapePlain(text: string): string {
-  return text.replace(/\r\n/g, '\n').replace(/^\n+|\n+$/g, '').split(/\n[ \t]*\n+/)
-    .map((paragraph) => paragraph.split('\n').map(escapeLine).join('\\\n'))
-    .join('\n\n');
-}
-
-/**
- * Plain text embedded within a rendered line (never at a line start), so only
- * inline Markdown syntax needs escaping.
- */
-function escapePlainInline(text: unknown): string {
-  return escapeInline(String(text).replace(/\r?\n/g, ' '));
-}
-
-function escapeLine(line: string): string {
-  return escapeInline(line)
-    .replace(/^(\s*)([-+=])/, '$1\\$2')
-    .replace(/^(\s*\d+)([.)])/, '$1\\$2');
-}
-
-/**
- * Escapes inline Markdown syntax in plain text and renders plain-text
- * @mentions as code spans: the characters stay exact, but plain text never
- * turns into a notification when a person later submits the draft. (Host
- * mention handling inside code spans is not live-verified.)
- */
-function escapeInline(text: string): string {
-  return text.split(MENTION).map((part, i) => (i % 2 === 1 ? codeSpan(part) : part.replace(INLINE_MARKDOWN, '\\$&'))).join('');
-}
-
-/**
- * A fenced code block showing `text` literally: its backtick fence is one
- * longer than the longest backtick run inside, and never shorter than three,
- * so no line of the text can close it (GFM §4.5).
- */
-function fenced(text: string): string {
-  const fence = '`'.repeat(Math.max(3, longestRun(text, '`') + 1));
-  return `${fence}\n${text}\n${fence}`;
-}
-
-/** A CommonMark code span whose delimiter is longer than any backtick run inside. */
-function codeSpan(text: string): string {
-  const fence = '`'.repeat(longestRun(text, '`') + 1);
-  const pad = text.startsWith('`') || text.endsWith('`') ? ' ' : '';
-  return `${fence}${pad}${text}${pad}${fence}`;
-}
-
-function longestRun(text: string, character: string): number {
-  let longest = 0;
-  let current = 0;
-  for (const c of text) {
-    current = c === character ? current + 1 : 0;
-    longest = Math.max(longest, current);
-  }
-  return longest;
+  return blobUrl(context, source.commit, source.path, source.startLine === undefined ? undefined : { startLine: source.startLine, endLine: source.endLine });
 }
 
 // ---------------------------------------------------------------------------

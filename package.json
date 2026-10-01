@@ -34,6 +34,7 @@
   "files": [
     "dist/",
     "!dist/*.d.cts",
+    "!dist/presentation/*.d.cts",
     "!dist/*.tsbuildinfo",
     "!dist/.build-inputs.json",
     "!dist/public-api.cjs",
