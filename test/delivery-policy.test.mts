@@ -34,6 +34,8 @@ import {
   DELIVERY_PRESET_SETTINGS,
   deliveryConfigurationDiagnostics,
   deliveryConfigurationNeeded,
+  deliveryRecordProblem,
+  isResolvedDeliveryPolicy,
   planDelivery,
   readDeliveryConfiguration,
   resolveDeliveryPolicy,
@@ -1434,4 +1436,42 @@ describe('properties over generated policies and units (contract §4, §8, §9, 
       assert.deepEqual(severities, [...severities].sort((a, b) => (a === b ? 0 : a === 'error' ? -1 : 1)));
     }
   });
+});
+
+describe('the recorded form of a resolved policy is checked when it is read back (§13)', () => {
+  const recorded = (): Record<string, unknown> => ({ ...asRecord(parseJson(JSON.stringify(resolveDeliveryPolicy({
+    caller: { preset: 'companion', fileOperations: ['companion', 'manual'] },
+    configuration: { companionBundle: 'single' },
+  })))) });
+
+  test('every resolution, as JSON, is a valid record, in the §13 order', () => {
+    for (const inputs of [{}, { caller: { preset: 'original-pr' as const } }, { configuration: { preset: 'companion' as const, edits: ['native' as const] } }]) {
+      const value: unknown = JSON.parse(JSON.stringify(resolveDeliveryPolicy(inputs)));
+      assert.equal(deliveryRecordProblem(value), null);
+      assert.equal(isResolvedDeliveryPolicy(value), true);
+    }
+    assert.equal(deliveryRecordProblem(recorded()), null);
+  });
+
+  const broken: readonly (readonly [string, (r: Record<string, unknown>) => unknown, string])[] = [
+    ['not an object', () => [], 'the delivery policy is not an object'],
+    ['a missing setting', (r) => ({ edits: r['edits'], groupedEdits: r['groupedEdits'], fileOperations: r['fileOperations'] }), 'the delivery policy does not hold exactly its four settings, in order'],
+    ['settings out of order', (r) => ({ groupedEdits: r['groupedEdits'], edits: r['edits'], fileOperations: r['fileOperations'], companionBundle: r['companionBundle'] }),
+      'the delivery policy does not hold exactly its four settings, in order'],
+    ['an unknown source', (r) => ({ ...r, edits: { value: ['native'], source: 'environment' } }), 'the delivery policy\'s edits has an unknown source'],
+    ['a preset layer without its preset', (r) => ({ ...r, edits: { value: ['companion'], source: 'caller-preset' } }), 'the delivery policy\'s edits does not hold exactly its fields'],
+    ['a preset on a specific layer', (r) => ({ ...r, edits: { value: ['native'], source: 'caller', preset: 'companion' } }), 'the delivery policy\'s edits does not hold exactly its fields'],
+    ['an unknown preset', (r) => ({ ...r, edits: { value: ['companion'], source: 'caller-preset', preset: 'all' } }), 'the delivery policy\'s edits names an unknown preset'],
+    ['a mechanism of another dimension', (r) => ({ ...r, edits: { value: ['native-batch'], source: 'caller' } }), 'the delivery policy\'s edits is not a list of its mechanisms'],
+    ['an empty list', (r) => ({ ...r, fileOperations: { value: [], source: 'caller' } }), 'the delivery policy\'s fileOperations is not a list of its mechanisms'],
+    ['a repeated mechanism', (r) => ({ ...r, groupedEdits: { value: ['companion', 'companion'], source: 'caller' } }), 'the delivery policy\'s groupedEdits is not a list of its mechanisms'],
+    ['a bundle list', (r) => ({ ...r, companionBundle: { value: ['single'], source: 'configuration' } }), 'the delivery policy\'s companionBundle is not a bundle setting'],
+  ];
+  for (const [name, change, problem] of broken) {
+    test(`refused: ${name}`, () => {
+      const value = change(recorded());
+      assert.equal(deliveryRecordProblem(value), problem);
+      assert.equal(isResolvedDeliveryPolicy(value), false);
+    });
+  }
 });

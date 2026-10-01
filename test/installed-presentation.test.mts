@@ -57,7 +57,7 @@ describe('the installed package accepts presentation callbacks', () => {
         finding: (c) => c.message + ' (' + c.attribution + ')',
       };
       const input = { sarif, destination: { owner: 'octo', repo: 'widgets', pullNumber: 7 }, reviewedCommit: process.env.REVIEW_COMMIT, token: process.env.GH_TOKEN };
-      const options = { allowSuggestionPullRequests: true, presentation };
+      const options = { delivery: { groupedEdits: ['companion'], fileOperations: ['companion', 'manual'] }, presentation };
       const assessed = await validateSarifReview({ ...input, options });
       assert.equal(assessed.status, 'ready', assessed.markdown);
       await assert.rejects(

@@ -10,10 +10,12 @@
  * file details), docs/companion-suggestion-pr-contract.md §2.11 (companion
  * change lists, references, descriptions and lifecycle notes) and the
  * alternatives grammar of issue #30; docs/diagnostics.md for the warnings
- * list of an outcome report.
+ * list of an outcome report; docs/delivery-policy-contract.md §8.8 and §9
+ * (a native batch's guidance and note, and a companion bundle).
  *
  * @see ../docs/review-presentation-contract.md
  * @see ../docs/file-operation-publication-contract.md
+ * @see ../docs/delivery-policy-contract.md
  * @see ../docs/companion-suggestion-pr-contract.md
  * @see ../docs/diagnostics.md
  * @see https://github.com/mike-north/sarif-to-comment/issues/30
@@ -28,12 +30,13 @@ import { renderAlternativeChanges, renderAlternatives } from '../dist/presentati
 import type { IAlternative, IAlternativeChange } from '../dist/presentation/alternatives.cjs';
 import { renderAttribution } from '../dist/presentation/attribution.cjs';
 import { mergeSentence, reappliedParagraph, renderCompanionChange } from '../dist/presentation/companion-changes.cjs';
-import { renderCompanionDescription } from '../dist/presentation/companion-description.cjs';
-import { renderCompanionReference } from '../dist/presentation/companion-reference.cjs';
+import { renderCompanionBundleDescription, renderCompanionDescription } from '../dist/presentation/companion-description.cjs';
+import { renderBundledCompanionReference, renderCompanionReference } from '../dist/presentation/companion-reference.cjs';
 import { fileDetails, proposedContentBlock, renderFileAddition, renderProposedFileFinding } from '../dist/presentation/file-addition.cjs';
 import { renderFileDeletion } from '../dist/presentation/file-deletion.cjs';
 import { renderFinding, renderFindingSection } from '../dist/presentation/finding.cjs';
 import { renderLifecycleNote } from '../dist/presentation/lifecycle-note.cjs';
+import { renderNativeBatchGuidance, renderNativeBatchMemberNote } from '../dist/presentation/native-batch.cjs';
 import { renderDiagnosticLine, renderWarningsList } from '../dist/presentation/warnings-list.cjs';
 import { codeSpan, escapePlain, escapePlainInline, fenced, lineSpan } from '../dist/presentation/markdown.cjs';
 import { fenceProblem, loadMarkdownParser, unbalancedHtml } from '../dist/presentation/markdown-tree.cjs';
@@ -258,6 +261,75 @@ describe('companion pieces', () => {
       '**How this suggestion is accepted:** it is a draft pull request into `feature/x`, the branch of #7. A draft cannot be merged: someone with write access first marks it ready for review. The author of #7 then decides whether to merge it, and #7 carries the change to its base. Once #7 is merged or closed, this pull request can be closed.');
     assert.equal(renderLifecycleNote({ ...target, ready: true }),
       '**How this suggestion is accepted:** it is a pull request into `feature/x`, the branch of #7. The author of #7 decides whether to merge it, and #7 carries the change to its base. Once #7 is merged or closed, this pull request can be closed.');
+  });
+});
+
+describe('companion bundles (delivery policy §9; companion contract §2.11)', () => {
+  const target = { pullNumber: 7, reviewedCommit: C, headRef: 'feature/x', ready: false } as const;
+  const group = { changeCount: 2, changeLines: '- one\n- two', items: 'GROUP' };
+  const single = { changeCount: 1, changeLines: '- three', items: 'EDIT' };
+
+  test('a bundle of one proposal is described and referenced exactly as a companion of its own', () => {
+    assert.equal(renderCompanionBundleDescription([group], target, 'NOTE', '<!-- m -->'), renderCompanionDescription(group, target, 'NOTE', '<!-- m -->'));
+    assert.equal(renderBundledCompanionReference(group, { number: 12, url: 'U' }, target, 1, 1), renderCompanionReference(group, { number: 12, url: 'U' }, target));
+  });
+
+  test('a bundle of several proposals: one section each, under a sentence that claims no dependency, then the marker', () => {
+    assert.equal(renderCompanionBundleDescription([group, single], target, 'NOTE', '<!-- m -->'), [
+      `Suggested in a review of #7 at commit ${C}.`,
+      '',
+      'This pull request bundles 2 proposals, each in its own section below. Merging it into `feature/x` applies all of them; bundling them does not mean they depend on one another.',
+      '',
+      'NOTE',
+      '',
+      '---',
+      '',
+      '**Proposal 1 of 2:** these 2 changes together:',
+      '',
+      '- one',
+      '- two',
+      '',
+      'GROUP',
+      '',
+      '---',
+      '',
+      '**Proposal 2 of 2:** this change:',
+      '',
+      '- three',
+      '',
+      'EDIT',
+      '',
+      '<!-- m -->',
+    ].join('\n'));
+  });
+
+  test('a re-applied bundle states it once, after the reference', () => {
+    assert.ok(renderCompanionBundleDescription([group, single], { ...target, reappliedOnto: 'H' }, 'NOTE', 'M').startsWith(
+      `Suggested in a review of #7 at commit ${C}.\n\nThe history of #7 was rewritten after that commit, so this change is re-applied onto commit H,`));
+  });
+
+  test('each proposal of a bundle keeps its own section of the review, naming which proposal it is', () => {
+    assert.equal(renderBundledCompanionReference(single, { number: 12, url: 'U' }, target, 2, 2),
+      '**Suggestion pull request:** [#12](U), proposal 2 of 2\n\nMerging it into `feature/x` applies this change, with the 1 other proposal it bundles:\n\n- three\n\nEDIT');
+    assert.equal(renderBundledCompanionReference(group, { number: 12, url: 'U' }, target, 1, 3),
+      '**Suggestion pull request:** [#12](U), proposal 1 of 3\n\nMerging it into `feature/x` applies these 2 changes together, with the 2 other proposals it bundles:\n\n- one\n- two\n\nGROUP');
+  });
+});
+
+describe('a native batch (delivery policy §8.8)', () => {
+  test('the guidance lists every member by path and line, in order', () => {
+    assert.equal(renderNativeBatchGuidance('retry', [{ path: 'src/a.ts', startLine: 2, endLine: 2 }, { path: 'docs/b.md', startLine: 4, endLine: 6 }]), [
+      '**Suggestion group `retry`:** apply these 2 suggestions together, in one commit: add each of them to one batch of suggestions on the pull request, then commit the batch.',
+      '',
+      '- `src/a.ts` line 2',
+      '- `docs/b.md` lines 4-6',
+    ].join('\n'));
+  });
+
+  test('the member note points to the guidance; a group name with backticks stays one code span', () => {
+    assert.equal(renderNativeBatchMemberNote('retry'),
+      '**Suggestion group `retry`:** apply this suggestion together with the group\'s other suggestions, listed in the review body.');
+    assert.ok(renderNativeBatchMemberNote('a`b').startsWith('**Suggestion group ``a`b``:**'));
   });
 });
 

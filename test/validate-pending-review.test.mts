@@ -333,8 +333,8 @@ describe('a pending review of the authenticated account blocks; nothing else abo
     const methods = world.remote.calls().map((c) => c.method);
     assert.deepEqual(
       methods.filter((m) => m !== 'adapter:create' && m !== 'adapter:fetchContext'),
-      ['getAuthenticatedUser', 'listReviews'],
-      'one user lookup, then one review page; no readback of any review',
+      ['adapter:readDefaultBranchFile', 'getAuthenticatedUser', 'listReviews'],
+      'the delivery configuration (docs/delivery-policy-contract.md §11.1), then one user lookup and one review page; no readback of any review',
     );
     const [list] = world.remote.calls('listReviews');
     assert.deepEqual(list?.args, { ...DESTINATION, cursor: null });

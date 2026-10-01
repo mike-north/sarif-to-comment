@@ -34,6 +34,13 @@
  *                                     read fails operationally (HTTP 502)
  *   network: 'up' | 'down'   // 'down': every host method throws
  *   user:    { id, login }   // authenticated identity
+ *   deliveryConfiguration?: string | 'fail'
+ *                            // readDefaultBranchFile's answer for the
+ *                            // repository's .github/sarif-to-comment.json
+ *                            // on the default branch `main`: absent unless
+ *                            // given; a string is the file's text; 'fail'
+ *                            // answers HTTP 502 (an operational failure)
+ *                            // (docs/delivery-policy-contract.md §11)
  *
  * This is not evidence of real GitHub behavior; real adapter integration is a
  * separate obligation.
@@ -75,6 +82,7 @@ export interface IAdapterConfig {
   readonly context: ContextMode;
   readonly network: 'up' | 'down';
   readonly user: IFakeUser;
+  readonly deliveryConfiguration?: string | undefined;
 }
 
 /** One changed file of a fixture diff; `patch` is the patch text split into lines (terminators kept). */
@@ -156,6 +164,14 @@ export interface IFakeGitHubClient {
   readonly listReviews: IFakeTransport['listReviews'];
   readonly listReviewComments: IFakeTransport['listReviewComments'];
   readonly fetchContext: (request: IFakeContextRequest) => Promise<IFakeFetchedContext>;
+  readonly readDefaultBranchFile: (request: { readonly owner: string; readonly repo: string; readonly path: string; readonly branch?: string }) => Promise<IFakeDefaultBranchFile>;
+}
+
+/** readDefaultBranchFile's answer (the GitHub client's IDefaultBranchFile). */
+export interface IFakeDefaultBranchFile {
+  readonly branch: string;
+  readonly commit: string;
+  readonly content: { readonly kind: 'absent' } | { readonly kind: 'file'; readonly bytes: Uint8Array };
 }
 
 /** The options the product passes to createGitHubClient. */
@@ -199,6 +215,7 @@ const isStoredAdapterConfig: Guard<IAdapterConfig> = isShape({
   ),
   network: isOneOf('up', 'down'),
   user: isShape({ id: isNumber, login: isOptional(isString) }),
+  deliveryConfiguration: isOptional(isString),
 });
 
 export const REPOSITORY: IAdapterRepository = expectType(
@@ -287,6 +304,21 @@ export function createFakeClientFactory(remoteDir: string): FakeClientFactory {
       createReview: down ? unreachable('createReview') : transport.createReview,
       listReviews: down ? unreachable('listReviews') : transport.listReviews,
       listReviewComments: down ? unreachable('listReviewComments') : transport.listReviewComments,
+      readDefaultBranchFile: async (request) => {
+        remote.logCall('adapter:readDefaultBranchFile', { path: request.path });
+        if (down) {
+          remote.logCall('adapter:network-attempt', { method: 'readDefaultBranchFile' });
+          throw networkError();
+        }
+        const configured = config.deliveryConfiguration;
+        if (configured === 'fail') {
+          throw new GitHubError('http-status', `GitHub answered HTTP 502 (Bad Gateway) reading ${request.path} on the default branch main.`, { status: 502 });
+        }
+        const content = configured === undefined || request.path !== '.github/sarif-to-comment.json'
+          ? { kind: 'absent' as const }
+          : { kind: 'file' as const, bytes: new Uint8Array(Buffer.from(configured)) };
+        return { branch: 'main', commit: REPOSITORY.commits.base, content };
+      },
       fetchContext: async (request) => {
         remote.logCall('adapter:fetchContext', request);
         if (config.network === 'down') {
