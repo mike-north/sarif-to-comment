@@ -70,6 +70,6 @@ Each `<pre>` text equals the shown lines plus the final newline GitHub's rendere
 
 ## Does not establish
 
-- **The web interface.** The browser tools were not available to the agent that ran this check, so the GitHub UI was not inspected. `body_html` is GitHub's own rendering of the body, but it is not a view of the page.
+- **The web interface.** The browser tools were not available to the agent that ran this check, so the GitHub UI was not inspected here. `body_html` is GitHub's own rendering of the body, but it is not a view of the page. A later browser check of the same pending review is recorded in [`ui-check.md`](ui-check.md). It found that line permalinks into Markdown files opened the rendered preview, which has no line anchors; line permalinks now add `?plain=1`. The links in this record are historical, from before that change.
 - **Manual assembly.** Whether an author can assemble the group locally and commit it once is not shown. Nothing was applied.
 - **Other content.** CRLF or missing-final-newline details, other content shapes, the body size limit, forks and other accounts were not run live. Each is covered against the simulated host only.

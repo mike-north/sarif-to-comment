@@ -6,8 +6,8 @@ Choose where each proposed change goes. Every proposal is delivered by the first
 
 - **The defaults** are `edits: [native]`, `groupedEdits: [native-batch]`, `fileOperations: [manual]` and `companionBundle: per-unit`. They never create a companion pull request.
 - **No silent substitution.** A later mechanism of a list is an announced fallback (`delivery-fallback` warning, exit status 0). When no listed mechanism can deliver a proposal, nothing is published: the review is blocked with one `delivery-unavailable` error per proposal, naming the list, where it was set and every obstacle (CLI exit status 2; the library's `blocked` outcome). A one-entry list is strict. The remedies of both diagnostics start with each obstacle's own remedy, deduplicated, in obstacle order. A blocked review carries no fallback warning; when a review-size limit or a companion pull request check blocks a review that a fallback contributed to, the error ends naming that fallback.
-- **Groups stay whole.** A group of edits each making one change is offered by default as a **native batch**: every member is a native suggestion in the review, noting its group, and the review body lists them by path and line to add to one batch and commit together. A group with a whole-file operation follows `fileOperations` as a whole. A group is never split.
-- **Not yet supported by this version:** `review-body`, `manual-group`, `manual` for a group with a whole-file operation, and a native batch for a fix with several changes. They are always reported unavailable with that reason, never imitated, so a group with a new file and a fix with several changes are still blocked under the defaults, as before.
+- **Groups stay whole.** A group of edits, or one fix with several changes, is offered by default as a **native batch** when every change can be a native suggestion: each change is a native suggestion in the review, noting its group, and the review body lists them by path and line to add to one batch and commit together. A group with a whole-file operation follows `fileOperations` as a whole. A group is never split.
+- **Proposals made by hand.** `review-body`, `manual-group`, and `manual` for a group with a whole-file operation (the default for such a group) put proposals in the review body for the author to make by hand, never as suggestions. See the entry on proposals made by hand.
 - **Bundles and the limit.** With `--companion-bundle single`, every companion-delivered proposal goes into one companion pull request, each in its own section. One review creates at most 10 companion pull requests; the `too-many-suggestion-prs` error now names `--companion-bundle single` first.
 - **Companion options.** `--pr-labels` and `--mark-suggestion-prs-ready` are valid with any policy; with no companion planned they have no effect, and a `companion-options-unused` note says so.
 - **Validation and recording.** An invalid caller setting is a usage error (exit status 1) or a `TypeError`, before anything is read. An invalid configuration file blocks the review (`delivery-configuration-invalid`, one per problem); a file that can't be read is an error, never a silent default; when your settings decide every dimension, the file is not read. Your settings are part of the publication's identity, and the resolved policy, with where each value came from, is recorded in the state file before the first write (a state record without companion pull requests is now version 3; records of 0.2.x are still continued). A retry never reads the configuration again.
@@ -33,9 +33,10 @@ Choose where each proposed change goes. Every proposal is delivered by the first
 +names that can deliver it. Flags override the repository's
 +.github/sarif-to-comment.json on the default branch, which overrides the
 +defaults; the defaults never create a companion pull request. When no listed
-+mechanism can deliver a proposal, nothing is published. review-body and
-+manual-group, and manual for a group with a whole-file operation, are not yet
-+supported by this version.
++mechanism can deliver a proposal, nothing is published. review-body,
++manual-group and manual show proposals in the review body for the author to make
++by hand, never as suggestions; review-body and manual-group are used only when
++listed.
 +
  Options:
 @@
