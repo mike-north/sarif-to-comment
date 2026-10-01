@@ -147,12 +147,12 @@ Blocks are separated by a blank line. The summary line counts each severity pres
 
 **Streams.** Human output keeps the CLI's conventions: the primary result (what was created, written, inspected, checked, published or closed, and what happened to each file) goes to stdout, and diagnostics go to stderr. A refusal or an operational error writes only its file notes, such as ``… was not changed.``, to stdout. `inspect` no longer lists its warnings in its text, and `add-staged-changes` no longer prints `Warning:` lines: both are diagnostics on stderr. `validate`, `publish` and `close-suggestion-prs` print their outcome text on stdout (the heading, the review and pull request links, the state path, and the retry and next-step guidance) without repeating their problems and warnings: the diagnostic blocks on stderr are the single human rendering of them (owner decision, September 30, 2026). What stdout leaves out is exactly what a diagnostic says: the lists of problems and warnings, the detail of a failure, and, for cleanup, the pull requests that were refused, failed, could not be verified or do not follow the convention. The library's `markdown` fields and the JSON and TOON `message` are unchanged: they remain the full report.
 
-**Headline.** A successful `publish` or `validate` outcome with warnings states them directly under its heading, in the library's `markdown`, the JSON and TOON `message` and the human stdout alike, so that no warning is only at the end of the output ([issue #37](https://github.com/mike-north/sarif-to-comment/issues/37)): `**Published with N warning(s):**` or `**Ready to publish with N warning(s):**`, then one sentence per code, in the order first found. `suggestion-pr-fallback` has its own sentence (`1 suggestion pull request was not created; its change is shown in the review.`, or `… would not be created; its change would be shown in the review.` for `validate`, and the plural `2 suggestion pull requests were not created; their changes are shown in the review.`); any other code is its title, followed by `(N times)` when it occurs more than once. For example:
+**Headline.** A successful `publish` or `validate` outcome with warnings states them directly under its heading, in the library's `markdown`, the JSON and TOON `message` and the human stdout alike, so that no warning is only at the end of the output ([issue #37](https://github.com/mike-north/sarif-to-comment/issues/37)): `**Published with N warning(s):**` or `**Ready to publish with N warning(s):**`, then one sentence per code, in the order first found: the code's title, followed by `(N times)` when it occurs more than once. For example:
 
 ```text
 ## Draft review published
 
-**Published with 1 warning:** 1 suggestion pull request was not created; its change is shown in the review.
+**Published with 1 warning:** A proposal is delivered by a later mechanism of its delivery list.
 
 Created the draft [review 42](https://github.com/acme/widgets/pull/7#pullrequestreview-42) on acme/widgets#7 at commit `…`. It stays a draft until someone submits it on GitHub.
 ```
@@ -182,7 +182,7 @@ The library's `markdown` fields and the JSON `message` are Markdown rendered fro
 
 ## Renamed codes
 
-These internal codes were unclear. They were renamed before their first release as public codes; every other code keeps the name it had in Markdown. `suggestion-pr-not-reapplied` became `suggestion-pr-fallback` when a suggestion pull request that cannot be re-applied stopped being skipped and started falling back as if suggestion pull requests were not allowed ([issue #37](https://github.com/mike-north/sarif-to-comment/issues/37)); a group in that situation is refused as `suggestion-group-pr-unavailable`. Since the same decision, a fork, a base other than the default branch, a created file over the size limit and a description over the body limit are fallbacks too, so `suggestion-pr-fork-unsupported`, `suggestion-pr-base-unsupported`, `suggestion-file-too-large` and `suggestion-body-too-large`, never released, are no longer reported.
+These internal codes were unclear. They were renamed before their first release as public codes; every other code keeps the name it had in Markdown. `suggestion-pr-not-reapplied` became `suggestion-pr-fallback` when a suggestion pull request that cannot be re-applied stopped being skipped and started falling back as if suggestion pull requests were not allowed ([issue #37](https://github.com/mike-north/sarif-to-comment/issues/37)). Since the same decision, a fork, a base other than the default branch, a created file over the size limit and a description over the body limit are fallbacks too, so `suggestion-pr-fork-unsupported`, `suggestion-pr-base-unsupported`, `suggestion-file-too-large` and `suggestion-body-too-large`, never released, are no longer reported. Two of the new names, `suggestion-reviewed-commit-not-head` and `suggestion-pr-fallback`, were later retired too (see [Retired codes](#retired-codes)).
 
 | Before | After |
 |---|---|
@@ -193,6 +193,23 @@ These internal codes were unclear. They were renamed before their first release 
 | `provenance-conflict` | `provenance-revision-conflict` |
 | `suggestion-historical-unsupported` | `suggestion-reviewed-commit-not-head` |
 | `suggestion-pr-not-reapplied` | `suggestion-pr-fallback` |
+
+## Retired codes
+
+These codes were never released. The [delivery policy](delivery-policy-contract.md#103-diagnostic-codes) replaced them, so they are no longer reported:
+
+| Retired | Reported instead |
+|---|---|
+| `suggestion-pr-fallback` | `delivery-fallback`: every fallback a delivery list authorizes, whatever its mechanisms. |
+| `suggestion-group-pr-unavailable` | `delivery-unavailable`: a group or fix with several changes that no listed mechanism can deliver. |
+| `suggestion-group-requires-suggestion-prs` | `delivery-unavailable` |
+| `fix-changes-require-suggestion-prs` | `delivery-unavailable` |
+| `suggestion-reviewed-commit-not-head` | `delivery-unavailable`, whose `native` obstacle states the condition. |
+| `suggestion-not-inline` | `delivery-unavailable`, whose `native` obstacle states the condition. |
+| `suggestion-fence-unverified` | `delivery-unavailable`, whose `native` obstacle states the condition. |
+| `suggestion-blank-only-unverified` | `delivery-unavailable`, whose `native` obstacle states the condition. |
+| `suggestion-crlf-unverified` | `delivery-unavailable`, whose `native` obstacle states the condition. |
+| `suggestion-final-newline-unverified` | `delivery-unavailable`, whose `native` obstacle states the condition. |
 
 ## Code catalog
 
@@ -333,16 +350,9 @@ One entry per code: its severity, its title, what it means and its typical remed
 | `fix-replacements-unlocatable` | error | A fix's replacements cannot be located together | The replacements of one file cannot be located together in its text. | Correct the fix against the reviewed source. |
 | `replacement-invalid` | error | A fix's replacement cannot be applied | Its region or inserted text is not valid for the file it edits; the message gives the reason. | Correct the fix against the reviewed source. |
 | `replacement-unsupported` | error | A fix's replacement form is not supported | For example a byte region, which cannot be applied as text. | Express the replacement in lines and columns or character offsets. |
-| `replacement-unanchored` | error | A fix edits an empty file | A replacement in an empty file has no line to anchor a suggestion on. | Propose the content as a new file, or enable suggestion pull requests. |
-| `fix-changes-require-suggestion-prs` | error | A fix with several changes needs suggestion pull requests | A SARIF fix is accepted whole; a fix with several changes is published as one suggestion pull request, never split. | Enable suggestion pull requests (`--allow-suggestion-prs`, `allowSuggestionPullRequests`). |
+| `replacement-unanchored` | error | A fix edits an empty file | A replacement in an empty file has no line to anchor a suggestion on. | Propose the content as a new file. |
 | `overlapping-replacements` | error | Replacements of different findings overlap | Two findings propose different replacements for overlapping lines; no winner is chosen. | Reconcile the findings' fixes. |
 | `suggestion-source-not-reviewed` | error | A fix edits another revision than the reviewed commit | Its applicability to the reviewed commit is unverified. | Derive the fix from the reviewed commit. |
-| `suggestion-reviewed-commit-not-head` | error | A native suggestion needs the reviewed commit to be the pull request head | GitHub applies a native suggestion to the head, so a suggestion on an older reviewed commit could not be applied to the reviewed text. | Review the pull request's head commit, or enable suggestion pull requests. |
-| `suggestion-not-inline` | error | The lines cannot carry a native suggestion | The fix's lines are not on the new side of the pull request's diff. | Enable suggestion pull requests, or remove the fix. |
-| `suggestion-fence-unverified` | error | The replacement contains a suggestion fence | GitHub applied a nested ``` suggestion as a deletion, so this replacement cannot be a native suggestion. | Enable suggestion pull requests, or change the replacement. |
-| `suggestion-blank-only-unverified` | error | The replacement is blank lines only | GitHub applied a blank-only suggestion as zero lines, so this replacement cannot be a native suggestion. | Enable suggestion pull requests, or change the replacement. |
-| `suggestion-crlf-unverified` | error | The replacement's line endings would not be reproduced | GitHub doubles a CR in suggestion text, so this replacement cannot be a native suggestion. | Enable suggestion pull requests, or change the replacement. |
-| `suggestion-final-newline-unverified` | error | The replacement's end of file would not be reproduced | GitHub's observed application would not reproduce the intended end of the file. | Enable suggestion pull requests, or change the replacement. |
 | `alternative-path-unrepresentable` | error | An alternative fix's file path cannot be shown exactly | Alternatives are listed with their paths; this path cannot be shown faithfully. | Remove the alternative, or rename the file. |
 | `alternative-content-unrepresentable` | error | An alternative fix's content cannot be shown exactly | Its text contains characters a review cannot show faithfully, such as an unpaired surrogate or invisible formatting. | Remove the alternative, or correct its content. |
 | `alternative-suggestion-fence` | error | An alternative fix could open a suggestion block | Only a validated first fix may create a native suggestion. | Remove the alternative, or change its content. |
@@ -369,20 +379,17 @@ One entry per code: its severity, its title, what it means and its typical remed
 
 | Code | Severity | Title | Meaning | Typical remedies |
 |---|---|---|---|---|
-| `suggestion-group-requires-suggestion-prs` | error | A suggestion group needs suggestion pull requests | A group is accepted as one unit through one suggestion pull request; it is never split or published in part. | Enable suggestion pull requests (`--allow-suggestion-prs`, `allowSuggestionPullRequests`).<br>Or ungroup the findings (`ungroup-fixes`). |
 | `suggestion-group-member-without-change` | error | A grouped finding proposes no change | A group joins changes; a member without a fix or file operation has none to join. | Remove the finding from the group, or give it its change. |
 | `suggestion-group-single-change` | error | A suggestion group holds fewer than two distinct changes | A group needs at least two distinct changes to accept together; identical changes count once. | Remove the group, and the change is published on its own; or add another change to it. |
 | `suggestion-group-change-shared` | error | A group's change is also proposed outside the group | A finding outside a suggestion group carries a change identical to one of the group's changes (the same replacement, or the same whole-file operation), so the group's delivery and the other finding's own presentation would each propose it, and neither could be accepted after the other. Publication refuses the review, naming the group and both findings; `group-fixes` and `ungroup-fixes` refuse to write such a document, naming the findings with their current selectors. Findings that carry the identical change are grouped, or left out, together. When the other finding is in another group, one of them must leave its group, since groups are never joined. | Name the finding outside the group in it too (`group-fixes`).<br>Or take the group's findings that carry the change out of the group (`ungroup-fixes`). |
 | `too-many-suggestion-prs` | error | The review would create too many suggestion pull requests | The number of suggestion pull requests one review creates is bounded. | Bundle them into one companion pull request (`--companion-bundle single`, `delivery.companionBundle: 'single'`).<br>Publish fewer proposals in one review, or group related changes. |
-| `suggestion-pr-fallback` | warning | A change is handled as if suggestion pull requests were not allowed | Suggestion pull requests are allowed, but this whole-file creation or deletion cannot become one, so it is published exactly as it would be without them: the review body proposes it, and the limits of that form apply. The reasons: the history was rewritten after the review and the change cannot be re-applied onto the head; the pull request is from a fork, or its head repository was deleted; its base is not the default branch; a created file is over 1,000,000 bytes; or the suggestion pull request's description would be over the body limit. The message names the change and each reason; the remedies are the ways to make the suggestion pull request, if any. Presenting a small edit as a native suggestion is intended, not a fallback. | To propose the change as a suggestion pull request, review the pull request's current head again and publish that review. |
-| `suggestion-group-pr-unavailable` | error | A group's suggestion pull request cannot be made | Suggestion pull requests are allowed, but an explicit group or a fix with several changes cannot become one, and without a suggestion pull request its changes cannot be kept together, so the whole review is refused before anything is written, as it is when suggestion pull requests are not allowed. The reasons are those of `suggestion-pr-fallback`. The message names the group or fix and each reason; the remedies address each reason, then removing the group (for a fix, splitting it into separate findings). | Review the pull request's current head again, and publish that review.<br>Or remove the group (`ungroup-fixes`), so that its changes are published on their own. |
-| `suggestion-pr-permission-missing` | error | The account cannot push to the repository | Creating proposal branches needs push access. | Use a token of an account with push access, or publish without suggestion pull requests. |
+| `suggestion-pr-permission-missing` | error | The account cannot push to the repository | Creating proposal branches needs push access. | Use a token of an account with push access, or publish with delivery lists that do not name `companion`. |
 | `suggestion-pr-configuration-invalid` | error | The suggestion pull request configuration is not valid | `.github/suggestion-prs.json` on the default branch cannot be used. | Fix the file on the default branch. |
 | `suggestion-label-missing` | error | A suggestion label does not exist | Every label must already exist; the tool never creates one. | Create the label in the repository, or choose an existing one. |
 
 ### Delivery policy
 
-These codes belong to the [delivery policy contract](delivery-policy-contract.md), which supersedes `suggestion-pr-fallback`, `suggestion-group-pr-unavailable`, `suggestion-group-requires-suggestion-prs` and `fix-changes-require-suggestion-prs` ([§10.3](delivery-policy-contract.md#103-diagnostic-codes)). Publication reports them once it follows that contract; until then it reports the codes above.
+These codes belong to the [delivery policy contract](delivery-policy-contract.md), which retired the codes listed under [Retired codes](#retired-codes) ([§10.3](delivery-policy-contract.md#103-diagnostic-codes)). `publish` and `validate` report them alike.
 
 | Code | Severity | Title | Meaning | Typical remedies |
 |---|---|---|---|---|
@@ -397,7 +404,7 @@ These codes belong to the [delivery policy contract](delivery-policy-contract.md
 |---|---|---|---|---|
 | `too-many-comments` | error | The review needs too many inline comments | Nothing is split or dropped. | Publish fewer findings in one review. |
 | `comment-too-large` | error | An inline comment would be too long | Nothing is truncated. | Shorten the finding's message or its fix. |
-| `body-too-large` | error | The review body would be too long | Nothing is truncated; the message lists the whole-file proposals in the body. | Publish fewer general findings, or enable suggestion pull requests for whole-file proposals. |
+| `body-too-large` | error | The review body would be too long | Nothing is truncated; the message lists the whole-file proposals in the body. | Publish fewer general findings, or deliver whole-file proposals as companion pull requests (`--file-operations companion`). |
 | `payload-too-large` | error | The review would be too large to send | Nothing is truncated or split. | Publish fewer findings in one review. |
 
 ### Readiness assessment

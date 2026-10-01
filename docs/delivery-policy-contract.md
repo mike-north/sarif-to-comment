@@ -2,7 +2,7 @@
 
 Draft contract · September 30, 2026. It turns the owner's delivery decisions of September 30, 2026 into a normative policy: [D48](design-decisions.md#d48-make-publication-policy-caller-controlled--accepted-product-direction-implementation-design-open) (caller control and precedence), [D49](design-decisions.md#d49-keep-each-supplied-group-available-for-collective-application-in-one-pr--owner-selected-direction-host-verification-open) (a group stays whole), [D50](design-decisions.md#d50-use-one-delivery-setting-for-whole-file-additions-and-deletions--owner-selected-direction) (one setting for whole-file additions and deletions), [D51](design-decisions.md#d51-propagate-whole-file-delivery-over-its-explicit-group--owner-selected-precedence) (a group follows its whole-file operation), [D52](design-decisions.md#d52-organize-companion-prs-around-caller-selected-acceptance-choices--owner-scenarios-representation-design-open) (companion bundles), [D53](design-decisions.md#d53-offer-alternative-remedies-as-a-related-family-of-companion-prs--owner-scenario-cleanup-mechanism-unverified) (alternatives stay separate), [D55](design-decisions.md#d55-report-unavailable-explicit-delivery-requests-without-silently-substituting--owner-selected-direction) (no silent substitution) and [D56](design-decisions.md#d56-make-each-review-an-explicit-index-of-its-companion-proposals--owner-selected-scope-extension) (the review indexes its companions). The value marked **owner confirmation** is an engineering choice that the owner confirms or replaces at release review (§15).
 
-**Status.** The resolution and planning rules of §3–§10 and the configuration validation of §11 are implemented as an internal module, `src/delivery-policy.cts`. Publication, readiness assessment and the command line do not use it yet: until they do, the [companion contract](companion-suggestion-pr-contract.md) (its single `allowSuggestionPullRequests` setting, §2.1–§2.5) describes what the tool does. Where the two differ, this contract is the target.
+**Status.** Implemented. Publication, readiness assessment and the command line follow this contract: the resolution and planning rules of §3–§10 and the configuration validation of §11 live in `src/delivery-policy.cts`, and preparation classifies every proposal into a delivery unit and routes it by the plan. The single `allowSuggestionPullRequests` setting and its implicit fallback are removed. Some mechanisms are not yet supported by this version; they are reported unavailable, with the obstacle §8.8 states, and never imitated.
 
 **Sources.** [Decisions](design-decisions.md) D22, D43, D44, D46 and D48–D56; [specification](specification.md) R8, R9, R12 and R16; the [companion contract](companion-suggestion-pr-contract.md) §2.2–§2.5 and §2.7; the [file-operation publication contract](file-operation-publication-contract.md); the [suggestion pull request convention](suggestion-pr-convention.md) §4; [Diagnostics](diagnostics.md).
 
@@ -93,9 +93,9 @@ Every dimension has an explicit default. The defaults never create a companion p
 | `fileOperations` | `[manual]` |
 | `companionBundle` | `per-unit` |
 
-- `edits`: a native suggestion, strictly. An edit that cannot be a native suggestion is blocked, exactly as it is refused without this policy (for example `suggestion-not-inline`). The review body and companion pull requests are the caller's to list.
+- `edits`: a native suggestion, strictly. An edit that cannot be a native suggestion is blocked, as it was refused without this policy, now as one `delivery-unavailable` whose `native` obstacle is the refusal's sentence (§8.9; for example the lines are not on the new side of the diff, formerly `suggestion-not-inline`). The review body and companion pull requests are the caller's to list.
 - `groupedEdits`: a group whose members are all eligible for native suggestions is offered as one native batch. Any other edit group is blocked. The manual group is never a default (§8.4).
-- `fileOperations`: the review-body section, as the file-operation contract has always published it. A group containing a whole-file operation follows it as a whole (§8.5), so under the defaults such a group is delivered as the **mixed manual group** on the original pull request. Without this policy that group is refused (`suggestion-group-requires-suggestion-prs`). The owner authorized this route: D49's manual route, subsequently confirmed, and D51's no-companion workflow. It is part of the release-review note in §15, item 1.
+- `fileOperations`: the review-body section, as the file-operation contract has always published it. A group containing a whole-file operation follows it as a whole (§8.5), so under the defaults such a group is delivered as the **mixed manual group** on the original pull request. Without this policy that group is refused (`suggestion-group-requires-suggestion-prs`). The owner authorized this route: D49's manual route, subsequently confirmed, and D51's no-companion workflow. It is part of the release-review note in §15, item 1. This version does not yet support the mixed manual group (§8.8), so under the defaults such a group is blocked with `delivery-unavailable`, as it was refused before.
 
 ## 6. Presets
 
@@ -166,7 +166,49 @@ Alternatives (§2) are presented with their finding (D44). They are never placed
 
 Whether each mechanism is available for each unit is decided by preparation and validation: the native-suggestion eligibility rules (R8, [companion contract §2.4](companion-suggestion-pr-contract.md#24-presentation-form-selection)), what prevents a companion pull request ([companion contract §2.5](companion-suggestion-pr-contract.md#25-repository-target-branch-and-revision): a fork, another base, a size limit, a description limit, …), and the limits of the review-body forms. An unavailable mechanism always carries at least one **obstacle**: a concrete Markdown sentence saying what prevents it. A mechanism is never reported unavailable without one.
 
-Availability is asked for **lazily**, so preparation never works out obstacles nobody needs (for example a companion body under the defaults, which list no companion). For each unit, it is asked only for mechanisms the resolved list names, in list order, at most once each, and never after the first available one. A group member's native eligibility is asked only when `native-batch` is asked for.
+Availability is asked for **lazily**, so preparation never works out obstacles nobody needs (for example a companion body under the defaults, which list no companion). For each unit, it is asked only for mechanisms the resolved list names, in list order, at most once each, and never after the first available one. A group member's native eligibility is asked only when `native-batch` is asked for. In particular, the pull request's branches and repositories are read for companion pull requests only when a unit's `companion` availability is first asked, and the ancestry of a moved head only then too ([companion contract §2.8](companion-suggestion-pr-contract.md#28-readiness)): a publication whose lists never reach `companion` never reads them, so their failure can never refuse it.
+
+### 8.8 What this version supports
+
+Every mechanism of §3 is accepted in every layer. Some are **not yet supported by this version**: they are always unavailable, with the obstacle below, so a list that names them falls back past them or blocks exactly as §10 says. Nothing is imitated by another mechanism.
+
+| Mechanism | Unit | This version |
+| --- | --- | --- |
+| `native` | edit | Supported. Unavailable when the edit cannot be a native suggestion; each obstacle is the condition's sentence (§8.9). |
+| `review-body` | edit | Not yet supported. Obstacle: `Delivering an edit in the review body is not yet supported by this version.` |
+| `companion` | edit | Supported: a companion pull request holding the one edit. |
+| `native-batch` | edit group | Supported for an explicit group whose every member's primary fix makes one change. Unavailable, with the group's obstacle ``The finding at `POINTER` makes K changes with one fix; a fix with several changes is not yet offered in a native batch by this version.`` for each such member, or ``Offering a fix with several changes as a native batch is not yet supported by this version.`` for a fix with several changes that is not in a group. A member that cannot be a native suggestion adds its own obstacles (§8.3). |
+| `companion` | edit group | Supported. |
+| `manual-group` | edit group | Not yet supported. Obstacle: `Delivering a group in the review body for manual application is not yet supported by this version.` |
+| `manual` | file operation | Supported: the file-operation contract's review-body section. |
+| `manual` | file-operation group | Not yet supported (the mixed manual group). Obstacle: `Delivering a group with a whole-file creation or deletion on the original pull request is not yet supported by this version.` |
+| `companion` | file operation, file-operation group | Supported. |
+
+So, in this version, the defaults deliver an explicit group of one-change edits as a native batch, and block a group containing a whole-file operation and a fix with several changes (`delivery-unavailable`), as they were refused before this policy.
+
+**A native batch** is presented on the original pull request as follows. Each distinct change of the group is one inline comment on its replaced lines, holding the findings that carry it (rendered as for any native suggestion), the line ``**Suggestion group `NAME`:** apply this suggestion together with the group's other suggestions, listed in the review body.`` and its native suggestion block. The review body holds, at the position of the group's first finding in SARIF order, the guidance section:
+
+```text
+**Suggestion group `NAME`:** apply these K suggestions together, in one commit: add each of them to one batch of suggestions on the pull request, then commit the batch.
+
+- `PATH` line N
+- `PATH` lines A-B
+```
+
+with one line per change, in the order the changes first appear. The tool communicates that the suggestions are applied together; GitHub does not enforce it (D49). Neither text is customizable.
+
+### 8.9 Native eligibility of an edit
+
+An edit can be a native suggestion exactly when the rules that previously refused it hold: the reviewed commit is the pull request's head, its replacement can be reproduced exactly by GitHub's application of a suggestion, and its lines are on the new side of the pull request's diff. Each failed rule is an obstacle of `native` with the sentence it always had:
+
+- `The reviewed commit is not the pull request head, so a native suggestion could not be applied to the reviewed text.`
+- ``GitHub applied a nested ``` suggestion as a deletion; this replacement cannot be a native suggestion.``
+- `GitHub applied a blank-only suggestion as zero lines; this replacement cannot be a native suggestion.`
+- `A CR in suggestion text is doubled by GitHub; this replacement cannot be a native suggestion.`, or `GitHub's observed application would not reproduce the intended line endings.`
+- `GitHub's observed application would not reproduce the intended end of the file.`
+- `Lines A-B of PATH cannot carry a native suggestion (REASON).`, where REASON is the placement's reason.
+
+A problem with the fix itself (a replacement that does not apply, a fix of another revision, a diff inconsistent with the source) is not an obstacle: it blocks the review with its own code, whatever the policy.
 
 ## 9. Companion bundles
 
@@ -189,6 +231,10 @@ and its remedies, which are the code's catalogued remedies ([Diagnostics](diagno
 2. `Publish fewer proposals in one review, or group related changes.`
 
 Under `single` there is at most one companion pull request, so the limit never blocks it.
+
+**The description limit under `single`.** A companion pull request's description is held to the 60,000-character limit ([companion contract §2.8](companion-suggestion-pr-contract.md#28-readiness)). Under `single`, a unit's `companion` availability is judged against the bundle as planned so far: the bundle's description with the units already delivered by `companion` and this one. When it would exceed the limit, `companion` is unavailable for this unit with the description obstacle, and the unit falls back or blocks (§10).
+
+**Presentation.** A companion pull request holding one unit is presented exactly as before ([companion contract §2.11](companion-suggestion-pr-contract.md#211-presentation)). A `single` bundle holding several units is presented as the companion contract's §2.11 bundle form: one section per unit, each with its own change list and findings, introduced by a sentence that says merging applies all of them and that bundling does not mean they depend on one another; the review body keeps one section per unit, at that unit's position, each linking the bundle.
 
 ## 10. Blocking and announced fallback
 
@@ -249,8 +295,9 @@ with one bullet per earlier mechanism, in list order, and the other parts as in 
 
 - **`suggestion-pr-fallback` is retired in favour of `delivery-fallback`.** Its case (a whole-file operation whose companion pull request cannot be made, published in the review body) is, under this contract, `fileOperations: [companion, manual]` falling back to `manual`. Every list-driven fallback has one code, whatever the mechanisms; a separate code for one pair would describe the mechanism instead of the condition.
 - **`suggestion-group-pr-unavailable`**, **`suggestion-group-requires-suggestion-prs`** and **`fix-changes-require-suggestion-prs`** are retired in favour of `delivery-unavailable`: a group, or a fix with several changes, that no listed mechanism can deliver is one case of §10.1.
+- The native-suggestion eligibility codes **`suggestion-reviewed-commit-not-head`**, **`suggestion-not-inline`**, **`suggestion-fence-unverified`**, **`suggestion-blank-only-unverified`**, **`suggestion-crlf-unverified`** and **`suggestion-final-newline-unverified`** are retired in favour of `delivery-unavailable` too: each condition is an obstacle of `native` (§8.9), so an edit that no listed mechanism can deliver is one `delivery-unavailable` whose bullet for `native` carries the condition's sentence. Reporting the condition under its own code as well would report one unit twice.
 
-Until publication adopts this contract, the implemented behavior keeps reporting the retired codes, as [Diagnostics](diagnostics.md) catalogues them.
+Publication reports only the codes of this section; [Diagnostics](diagnostics.md#retired-codes) lists the retired ones. None of them was released.
 
 ## 11. The configuration file
 
@@ -261,7 +308,7 @@ A repository MAY set its delivery policy in **`.github/sarif-to-comment.json`**.
 - It is read from the **current commit of the repository's default branch**, never from the pull request's branch, so a pull request cannot change its own delivery policy.
 - It is read through Git objects (the default branch's reference, its commit, the trees on the path and the blob), never the Contents API, which would follow a symbolic link to another path's text. This is the same read, with the same trust rules, as `.github/suggestion-prs.json` ([companion contract §2.7](companion-suggestion-pr-contract.md#27-relationship-reference-marker-and-labels)).
 - It is optional, read-only and maintained by hand. The tool never writes it.
-- It is read once when a publication is planned, by `publish` and `validate` alike, **unless the caller layers decide every setting**. When the caller's specific settings and the caller's preset together set `edits`, `groupedEdits`, `fileOperations` and `companionBundle`, nothing in the file could change the policy (§7), so it is not read: its content, valid or not, has no effect, and no read can fail. Otherwise it is read. For example, `--delivery companion` alone leaves `companionBundle` to lower layers, so the file is read; `--delivery companion --companion-bundle single` decides everything, so it is not.
+- It is read once when a publication is planned, by `publish` and `validate` alike, after the review context is verified and before the document is prepared, **unless the caller layers decide every setting**. When the caller's specific settings and the caller's preset together set `edits`, `groupedEdits`, `fileOperations` and `companionBundle`, nothing in the file could change the policy (§7), so it is not read: its content, valid or not, has no effect, and no read can fail. Otherwise it is read. For example, `--delivery companion` alone leaves `companionBundle` to lower layers, so the file is read; `--delivery companion --companion-bundle single` decides everything, so it is not.
 - A failed read is operational (§11.4), never a silent default.
 
 ### 11.2 Distinct from the convention file
@@ -382,7 +429,7 @@ The caller layer has the same members as the configuration's `delivery` object.
 No companion pull request is planned, so these options have no effect: OPTIONS.
 ```
 
-where `OPTIONS` names each given option as its flag and its library name, in this order, joined by `, `: `` `--pr-labels` (`pullRequestLabels`) ``, `` `--mark-suggestion-prs-ready` (`markSuggestionPullRequestsReady`) ``. For example: ``No companion pull request is planned, so these options have no effect: `--pr-labels` (`pullRequestLabels`), `--mark-suggestion-prs-ready` (`markSuggestionPullRequestsReady`).`` A blocked publication does not carry the note. The note changes nothing else: the exit status stays 0.
+where `OPTIONS` names each given option as its flag and its library name, in this order, joined by `, `: `` `--pr-labels` (`pullRequestLabels`) ``, `` `--mark-suggestion-prs-ready` (`markSuggestionPullRequestsReady`) ``. For example: ``No companion pull request is planned, so these options have no effect: `--pr-labels` (`pullRequestLabels`), `--mark-suggestion-prs-ready` (`markSuggestionPullRequestsReady`).`` A blocked publication does not carry the note. The note changes nothing else: the exit status stays 0. Like preparation's warnings, it is recorded with the publication and reported by every later call for its state path.
 
 ## 13. Recording the resolved policy
 
@@ -392,6 +439,13 @@ The resolved policy is part of the publication's identity, in two places:
 - **The resolution is recorded when the publication is planned.** The resolved value of every dimension and of `companionBundle`, each with its source layer (§7, and for a preset layer the preset's name), is persisted with the publication's state before its first write. The configuration is read once, when planning; a retry continues with the recorded resolution and never reads the configuration again, so a later change to the file never changes a publication already planned. This is how the canonical label is already treated ([companion contract §2.2](companion-suggestion-pr-contract.md#22-options)).
 
 The recorded form of each dimension is `{ "value": <list or value>, "source": "<layer>" }`, plus `"preset": "<name>"` when the source is a preset layer. Members appear in the order `edits`, `groupedEdits`, `fileOperations`, `companionBundle`.
+
+Where it is recorded:
+
+- **A review without companion pull requests** is the publication record at the state path ([companion contract §2.9](companion-suggestion-pr-contract.md#29-durable-identity-and-the-order-of-writes)). It is **version 3**: version 1's fields plus `delivery`, the recorded policy, and `warnings` when preparation reported any. Records of versions 1 (written by 0.2.x) and 2 (version 1 plus `warnings`) are still read and continued exactly as before; they record no policy.
+- **A review with companion pull requests** is the companion plan at the state path, whose `delivery` member is the recorded policy.
+
+The caller's identity document never holds the configuration's values, so a changed configuration never turns a retry into a `state-mismatch`: the retry finds the record and continues it.
 
 ## 14. Acceptance examples
 
