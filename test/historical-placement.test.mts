@@ -237,7 +237,10 @@ describe('native suggestions at a reviewed commit that is not the head (R13.1; G
     const world = makeWorld('discarded');
     const outcome = await publish(world, DISCARDED_R, document([suggestion(15, 'Line 15: suggested.')]));
     assert.equal(status(outcome), 'blocked', markdown(outcome));
-    assert.deepEqual(codes(outcome), [['error', 'suggestion-not-inline']]);
+    // Delivery policy §8.9: the lines' placement is the obstacle of `native`,
+    // the default `edits` list's only mechanism, so the edit is undeliverable.
+    assert.deepEqual(codes(outcome), [['error', 'delivery-unavailable']]);
+    assert.match(markdown(outcome), /- `native`: Lines 15-15 of \S+ cannot carry a native suggestion \(/);
     assert.deepEqual(writes(world), []);
   });
 
