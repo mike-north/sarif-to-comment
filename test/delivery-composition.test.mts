@@ -2,7 +2,7 @@
  * The delivery policy end to end: the real public library with the real
  * GitHub client, talking HTTP to the fake GitHub host, with the repository's
  * delivery configuration read from the default branch through Git objects.
- * Each test is one of the contract's acceptance examples (D-A1 to D-A21) or
+ * Each test is one of the contract's acceptance examples (D-A1 to D-A26) or
  * one of its rules, and every expected value is written by hand from
  * docs/delivery-policy-contract.md and docs/companion-suggestion-pr-contract.md:
  * which mechanism delivers each proposal, the exact `delivery-unavailable`,
@@ -30,6 +30,9 @@ import {
 } from './support/delivery-world.mts';
 import type { IWorld, Json } from './support/delivery-world.mts';
 import { asArray, asRecord } from './support/runtime-types.mts';
+import { composedProblem, fenceProblem, loadMarkdownParser } from '../dist/presentation/markdown-tree.cjs';
+
+await loadMarkdownParser();
 
 // ---------------------------------------------------------------------------
 // Hand-written expectations (contract §10.1, §10.2, §8.8)
@@ -40,12 +43,14 @@ const CALLER_PRESET = (preset: string): string => `set by the caller's preset \`
 const CONFIGURATION = (dimension: string): string => `set by \`.github/sarif-to-comment.json\` on the default branch (\`delivery.${dimension}\`)`;
 const DEFAULT = 'the default';
 
-const NOT_YET = {
-  reviewBody: 'Delivering an edit in the review body is not yet supported by this version.',
-  manualGroup: 'Delivering a group in the review body for manual application is not yet supported by this version.',
-  mixedGroup: 'Delivering a group with a whole-file creation or deletion on the original pull request is not yet supported by this version.',
-  jointFix: 'Offering a fix with several changes as a native batch is not yet supported by this version.',
-};
+/** The first paragraph of a group's guidance when it is made by hand (§8.10), for `label` (§8.8's LABEL). */
+const MANUAL_GUIDANCE = (label: string, count: number): string =>
+  `**${label}:** apply these ${String(count)} changes together, by hand, in one commit: make every change below in a local copy of the pull request's branch, then commit them together. They are not offered as suggestions, and nothing checks that they are applied together.`;
+/** A change's label in a group made by hand (§8.10). */
+const PART = (label: string, n: number, count: number): string => `**${label} — change ${String(n)} of ${String(count)}**`;
+/** An edit made by hand (§8.10): its exact replacement of one line, linked at the reviewed commit, then its findings. */
+const MANUAL_EDIT = (file: string, line: number, shown: string, findings: string): string =>
+  `**Proposed edit, to make by hand:** replace [${file} line ${String(line)} at ${SHORT}](${blobUrl(file, `#L${String(line)}`)}) with:\n\n\`\`\`\n${shown}\n\`\`\`\n\n${findings}`;
 
 const HEADLINE_FALLBACK = '**Published with 1 warning:** A proposal is delivered by a later mechanism of its delivery list.';
 
@@ -120,6 +125,48 @@ function onlyPull(world: IWorld): ReturnType<IWorld['host']['pulls']>[number] {
   assert.ok(pull);
   return pull;
 }
+
+/**
+ * The published review body, read back from the host with its publication
+ * marker, passes the composed-text checkpoint (review presentation contract
+ * §7): nothing open, the marker its own final node, and no `suggestion` code
+ * block; and no line of it could open one (delivery policy §8.10).
+ */
+function assertNoSuggestionInBody(world: IWorld): void {
+  const [review] = world.host.reviews();
+  assert.ok(review);
+  const marker = /<!-- sarif-to-comment:review:[0-9a-f-]{36} -->$/.exec(review.request.body)?.[0];
+  assert.ok(marker !== undefined, 'the body ends with its publication marker');
+  assert.equal(composedProblem(review.request.body, { marker }), null, review.request.body);
+  assert.equal(fenceProblem(review.request.body), null, 'no line could open a suggestion block');
+}
+
+/** A README finding's section in a group made by hand: its edit of `line` made by hand, with the finding. */
+const readmeEdit = (line: number, shown: string, message: string): string => MANUAL_EDIT('README.md', line, shown, readmeItem(line, message));
+
+/** D-A8: the helper group made by hand, as §8.10 presents it. */
+const HELPER_SECTION = [
+  `${MANUAL_GUIDANCE('Suggestion group `helper`', 3)}\n\n- \`src/helper.ts\`: new file\n- \`README.md\` line 2\n- \`README.md\` line 3`,
+  [
+    PART('Suggestion group `helper`', 1, 3),
+    '',
+    '**Proposed new file:** `src/helper.ts`',
+    '',
+    '**File details:** 26 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644',
+    '',
+    '```',
+    'export const retries = 1;',
+    '```',
+    '',
+    '**Location:** line 1 of the proposed file',
+    '',
+    'Add the helper.',
+    '',
+    ATTRIBUTION,
+  ].join('\n'),
+  `${PART('Suggestion group `helper`', 2, 3)}\n\n${readmeEdit(2, 'The widget client.', 'Fix the typo.')}`,
+  `${PART('Suggestion group `helper`', 3, 3)}\n\n${readmeEdit(3, 'Receive updates.', 'Fix the spelling.')}`,
+].join('\n\n---\n\n');
 
 // ---------------------------------------------------------------------------
 
@@ -325,44 +372,145 @@ describe('groups stay whole (D49, D51; §8.3–§8.5, §8.8)', () => {
     assert.ok(comments[0]?.body.endsWith('```suggestion\nLicense: MIT.\n```'));
   });
 
-  test('D-A8 (F6): under the defaults, a group with a whole-file operation is a file-operation group, whatever its edits\' eligibility; this version does not yet support the mixed manual group', async () => {
-    const line = `- \`delivery-unavailable\` at \`/runs/0/results/0\`: The group \`helper\` cannot be delivered. \`fileOperations\` is \`[manual]\`, ${DEFAULT}, and no mechanism it lists is available:\n\n- \`manual\`: ${NOT_YET.mixedGroup}`;
-    await assertBlockedEverywhere(makeWorld(), helperGroup(), undefined, [line]);
-    // groupedEdits never governs it: not even a list that names native-batch, which its edits could use, or companion.
-    await assertBlockedEverywhere(makeWorld(), helperGroup(), { delivery: { groupedEdits: ['native-batch'] } }, [line]);
-    await assertBlockedEverywhere(makeWorld(), helperGroup(), { delivery: { groupedEdits: ['companion'] } }, [line]);
+  test('D-A8: under the defaults, a group with a whole-file operation is delivered whole as the mixed manual group; no companion, no warning', async () => {
+    const world = makeWorld();
+    const assessed = await validate(world, helperGroup());
+    assert.equal(status(assessed), 'ready', markdown(assessed));
+    const outcome = await publish(world, helperGroup());
+    assert.equal(status(outcome), 'published', markdown(outcome));
+    assert.deepEqual(diagnostics(outcome), [], 'the first listed mechanism: no fallback');
+    assert.deepEqual(diagnostics(assessed), diagnostics(outcome));
+    assert.deepEqual(pulls(world), [], 'the no-companion workflow (D51)');
+    const review = onlyReview(world);
+    assert.equal(review.body, HELPER_SECTION, 'every member, in order of first appearance, made by hand');
+    assert.equal(review.comments.length, 1, 'only the unrelated edit is an inline comment');
+    assert.deepEqual([review.comments[0]?.path, review.comments[0]?.line], ['README.md', 4]);
+    assert.ok(review.comments[0]?.body.endsWith('```suggestion\nLicense: MIT.\n```'));
+    assertNoSuggestionInBody(world);
+    assert.deepEqual(asRecord(recordedPolicy(world))['fileOperations'], recorded(['manual'], 'default'));
   });
 
-  test('D-A11: the manual group is used only when listed; the original-pr preset lists it, and this version reports it unavailable', async () => {
+  test('D-A8: groupedEdits never governs a group with a whole-file operation, even when its edits could be a native batch', async () => {
+    for (const groupedEdits of [['native-batch'], ['companion']]) {
+      const world = makeWorld();
+      const outcome = await publish(world, helperGroup(), { delivery: { groupedEdits } });
+      assert.equal(status(outcome), 'published', markdown(outcome));
+      assert.equal(onlyReview(world).body, HELPER_SECTION);
+      assert.deepEqual(pulls(world), []);
+    }
+  });
+
+  test('the mixed manual group presents a deletion with the file-operation section, as one of its changes', async () => {
+    const world = makeWorld();
+    const sarif = document([TYPO('cleanup'), result({ text: 'Remove the obsolete file.', group: 'cleanup', location: at('obsolete.txt'), operation: remove(0) })], [deleted('obsolete.txt')]);
+    const outcome = await publish(world, sarif);
+    assert.equal(status(outcome), 'published', markdown(outcome));
+    assert.equal(onlyReview(world).body, [
+      `${MANUAL_GUIDANCE('Suggestion group `cleanup`', 2)}\n\n- \`README.md\` line 2\n- \`obsolete.txt\`: file deletion`,
+      `${PART('Suggestion group `cleanup`', 1, 2)}\n\n${readmeEdit(2, 'The widget client.', 'Fix the typo.')}`,
+      `${PART('Suggestion group `cleanup`', 2, 2)}\n\n**Proposed file deletion:** [obsolete.txt at ${SHORT}](${blobUrl('obsolete.txt')})\n\nThe whole file is removed; this is not a proposal to empty it.\n\nRemove the obsolete file.\n\n${ATTRIBUTION}`,
+    ].join('\n\n---\n\n'));
+    assert.deepEqual(onlyReview(world).comments, []);
+    assertNoSuggestionInBody(world);
+  });
+
+  test('D-A11: the manual group is used only when listed; the original-pr preset lists it, announced as a fallback', async () => {
     await assertBlockedEverywhere(makeWorld(), mixedPair(), undefined, [
       `- \`delivery-unavailable\` at \`/runs/0/results/0\`: The group \`pair\` cannot be delivered. \`groupedEdits\` is \`[native-batch]\`, ${DEFAULT}, and no mechanism it lists is available:\n\n- \`native-batch\`: The edit of \`src/client.ts\` line 2: ${RETRY_NOT_INLINE}`,
     ]);
-    await assertBlockedEverywhere(makeWorld(), mixedPair(), { delivery: { preset: 'original-pr' } }, [
-      `- \`delivery-unavailable\` at \`/runs/0/results/0\`: The group \`pair\` cannot be delivered. \`groupedEdits\` is \`[native-batch, manual-group]\`, ${CALLER_PRESET('original-pr')}, and no mechanism it lists is available:\n\n`
-        + `- \`native-batch\`: The edit of \`src/client.ts\` line 2: ${RETRY_NOT_INLINE}\n- \`manual-group\`: ${NOT_YET.manualGroup}`,
-    ]);
-  });
-
-  test('a fix with several changes is an edit group; this version does not offer it as a native batch, so the defaults block it', async () => {
-    const joint = document([result({ text: 'Fix both lines.', location: at('README.md', 2), fixes: [linesFix('README.md', { 2: 'The widget client.', 3: 'Receive updates.' })] })]);
-    await assertBlockedEverywhere(makeWorld(), joint, undefined, [
-      `- \`delivery-unavailable\` at \`/runs/0/results/0\`: The fix with 2 changes at \`/runs/0/results/0\` cannot be delivered. \`groupedEdits\` is \`[native-batch]\`, ${DEFAULT}, and no mechanism it lists is available:\n\n- \`native-batch\`: ${NOT_YET.jointFix}`,
-    ]);
     const world = makeWorld();
-    const outcome = await publish(world, joint, { delivery: { groupedEdits: ['companion'] } });
+    const options = { delivery: { preset: 'original-pr' } };
+    const assessed = await validate(world, mixedPair(), options);
+    const outcome = await publish(world, mixedPair(), options);
     assert.equal(status(outcome), 'published', markdown(outcome));
-    assert.equal(onlyPull(world).title, 'Suggestion for #7: edit README.md');
+    assert.deepEqual(coded(outcome), [[
+      'delivery-fallback',
+      `The group \`pair\` is delivered as \`manual-group\`. \`groupedEdits\` is \`[native-batch, manual-group]\`, ${CALLER_PRESET('original-pr')}, and the mechanisms listed before it are unavailable:\n\n- \`native-batch\`: The edit of \`src/client.ts\` line 2: ${RETRY_NOT_INLINE}`,
+    ]]);
+    assert.deepEqual(diagnostics(assessed), diagnostics(outcome), 'validate reports what publish does');
+    assert.ok(markdown(outcome).startsWith(`## Draft review published\n\n${HEADLINE_FALLBACK}\n\n`), markdown(outcome));
+    const retryItem = [`**Source:** [src/client.ts line 2 at ${SHORT}](${blobUrl('src/client.ts', '#L2')})`, '', '```', '  const response = await request(id);', '```', '', 'Retry once on timeout.', '', ATTRIBUTION].join('\n');
+    const review = onlyReview(world);
+    assert.equal(review.body, [
+      `${MANUAL_GUIDANCE('Suggestion group `pair`', 2)}\n\n- \`README.md\` line 2\n- \`src/client.ts\` line 2`,
+      `${PART('Suggestion group `pair`', 1, 2)}\n\n${readmeEdit(2, 'The widget client.', 'Fix the typo.')}`,
+      `${PART('Suggestion group `pair`', 2, 2)}\n\n${MANUAL_EDIT('src/client.ts', 2, '  const response = await request(id).catch(() => request(id));', retryItem)}`,
+    ].join('\n\n---\n\n'));
+    assert.deepEqual(review.comments, [], 'neither member is an inline comment, though the first could be a native suggestion');
+    assert.deepEqual(pulls(world), []);
+    assertNoSuggestionInBody(world);
   });
 
-  test('a group member whose fix makes several changes keeps the group out of a native batch, naming that member', async () => {
+  test('D-A23: under the defaults, a fix with several changes is a native batch: each change a suggestion holding the finding, with the fix\'s note', async () => {
+    const joint = document([result({ text: 'Fix both lines.', location: at('README.md', 2), fixes: [linesFix('README.md', { 2: 'The widget client.', 3: 'Receive updates.' })] })]);
+    const world = makeWorld();
+    const outcome = await publish(world, joint);
+    assert.equal(status(outcome), 'published', markdown(outcome));
+    assert.deepEqual(diagnostics(outcome), []);
+    const note = '**Fix with 2 changes:** apply this suggestion together with the fix\'s other suggestions, listed in the review body.';
+    const review = onlyReview(world);
+    assert.deepEqual(review.comments, [
+      { path: 'README.md', line: 2, side: 'RIGHT', body: ['Fix both lines.', '', ATTRIBUTION, '', note, '', '```suggestion', 'The widget client.', '```'].join('\n') },
+      { path: 'README.md', line: 3, side: 'RIGHT', body: ['Fix both lines.', '', ATTRIBUTION, '', note, '', '```suggestion', 'Receive updates.', '```'].join('\n') },
+    ]);
+    assert.equal(review.body, [
+      '**Fix with 2 changes:** apply these 2 suggestions together, in one commit: add each of them to one batch of suggestions on the pull request, then commit the batch.',
+      '',
+      '- `README.md` line 2',
+      '- `README.md` line 3',
+    ].join('\n'));
+    assert.deepEqual(pulls(world), []);
+
+    const companion = makeWorld();
+    const sent = await publish(companion, joint, { delivery: { groupedEdits: ['companion'] } });
+    assert.equal(status(sent), 'published', markdown(sent));
+    assert.equal(onlyPull(companion).title, 'Suggestion for #7: edit README.md');
+  });
+
+  test('D-A23: a fix with a change outside the diff is not a native batch; under the defaults it is blocked, naming that change', async () => {
+    const joint = document([result({ text: 'Fix both.', location: at('README.md', 2), fixes: [{ artifactChanges: [
+      { artifactLocation: { uri: 'README.md' }, replacements: [{ deletedRegion: { startLine: 2 }, insertedContent: { text: 'The widget client.' } }] },
+      { artifactLocation: { uri: 'src/client.ts' }, replacements: [{ deletedRegion: { startLine: 2 }, insertedContent: { text: '  const response = await request(id).catch(() => request(id));' } }] },
+    ] }] })]);
+    await assertBlockedEverywhere(makeWorld(), joint, undefined, [
+      `- \`delivery-unavailable\` at \`/runs/0/results/0\`: The fix with 2 changes at \`/runs/0/results/0\` cannot be delivered. \`groupedEdits\` is \`[native-batch]\`, ${DEFAULT}, and no mechanism it lists is available:\n\n- \`native-batch\`: The edit of \`src/client.ts\` line 2: ${RETRY_NOT_INLINE}`,
+    ]);
+    // Listed, the manual group delivers it whole by hand: both changes, the finding with each.
+    const world = makeWorld();
+    const outcome = await publish(world, joint, { delivery: { groupedEdits: ['manual-group'] } });
+    assert.equal(status(outcome), 'published', markdown(outcome));
+    const item = readmeItem(2, 'Fix both.');
+    assert.equal(onlyReview(world).body, [
+      `${MANUAL_GUIDANCE('Fix with 2 changes', 2)}\n\n- \`README.md\` line 2\n- \`src/client.ts\` line 2`,
+      `${PART('Fix with 2 changes', 1, 2)}\n\n${MANUAL_EDIT('README.md', 2, 'The widget client.', item)}`,
+      `${PART('Fix with 2 changes', 2, 2)}\n\n${MANUAL_EDIT('src/client.ts', 2, '  const response = await request(id).catch(() => request(id));', item)}`,
+    ].join('\n\n---\n\n'));
+    assertNoSuggestionInBody(world);
+  });
+
+  test('D-A24: a group member whose fix makes several changes contributes each of them to the native batch, in order', async () => {
     const sarif = document([
       result({ text: 'Fix both lines.', group: 'pair', location: at('README.md', 2), fixes: [linesFix('README.md', { 2: 'The widget client.', 3: 'Receive updates.' })] }),
       LICENSE('pair'),
     ]);
-    await assertBlockedEverywhere(makeWorld(), sarif, undefined, [
-      `- \`delivery-unavailable\` at \`/runs/0/results/0\`: The group \`pair\` cannot be delivered. \`groupedEdits\` is \`[native-batch]\`, ${DEFAULT}, and no mechanism it lists is available:\n\n`
-        + '- `native-batch`: The finding at `/runs/0/results/0` makes 2 changes with one fix; a fix with several changes is not yet offered in a native batch by this version.',
+    const world = makeWorld();
+    const outcome = await publish(world, sarif);
+    assert.equal(status(outcome), 'published', markdown(outcome));
+    assert.deepEqual(diagnostics(outcome), []);
+    const note = '**Suggestion group `pair`:** apply this suggestion together with the group\'s other suggestions, listed in the review body.';
+    const review = onlyReview(world);
+    assert.deepEqual(review.comments.map((c) => [c.line, c.body]), [
+      [2, ['Fix both lines.', '', ATTRIBUTION, '', note, '', '```suggestion', 'The widget client.', '```'].join('\n')],
+      [3, ['Fix both lines.', '', ATTRIBUTION, '', note, '', '```suggestion', 'Receive updates.', '```'].join('\n')],
+      [4, ['Use the American spelling.', '', ATTRIBUTION, '', note, '', '```suggestion', 'License: MIT.', '```'].join('\n')],
     ]);
+    assert.equal(review.body, [
+      '**Suggestion group `pair`:** apply these 3 suggestions together, in one commit: add each of them to one batch of suggestions on the pull request, then commit the batch.',
+      '',
+      '- `README.md` line 2',
+      '- `README.md` line 3',
+      '- `README.md` line 4',
+    ].join('\n'));
   });
 });
 
@@ -410,11 +558,58 @@ describe('strict lists and announced fallback (D55; §10)', () => {
     assert.equal(onlyReview(world).comments.length, 1, 'the eligible edit stays native');
   });
 
-  test('a mechanism this version does not support is reported unavailable, never imitated', async () => {
-    await assertBlockedEverywhere(makeWorld(), document([RETRY()]), { delivery: { edits: ['native', 'review-body'] } }, [
-      `- \`delivery-unavailable\` at \`/runs/0/results/0\`: The edit of \`src/client.ts\` line 2 cannot be delivered. \`edits\` is \`[native, review-body]\`, ${CALLER('--edits', 'edits')}, and no mechanism it lists is available:\n\n`
-        + `- \`native\`: ${RETRY_NOT_INLINE}\n- \`review-body\`: ${NOT_YET.reviewBody}`,
+  test('D-A22: an edit is put in the review body only when listed; after `native`, it is an announced fallback', async () => {
+    const world = makeWorld();
+    const options = { delivery: { edits: ['native', 'review-body'] } };
+    const assessed = await validate(world, document([TYPO(), RETRY()]), options);
+    const outcome = await publish(world, document([TYPO(), RETRY()]), options);
+    assert.equal(status(outcome), 'published', markdown(outcome));
+    assert.deepEqual(coded(outcome), [[
+      'delivery-fallback',
+      `The edit of \`src/client.ts\` line 2 is delivered as \`review-body\`. \`edits\` is \`[native, review-body]\`, ${CALLER('--edits', 'edits')}, and the mechanisms listed before it are unavailable:\n\n- \`native\`: ${RETRY_NOT_INLINE}`,
+    ]]);
+    assert.deepEqual(diagnostics(assessed), diagnostics(outcome));
+    const retryItem = [`**Source:** [src/client.ts line 2 at ${SHORT}](${blobUrl('src/client.ts', '#L2')})`, '', '```', '  const response = await request(id);', '```', '', 'Retry once on timeout.', '', ATTRIBUTION].join('\n');
+    const review = onlyReview(world);
+    assert.equal(review.body, MANUAL_EDIT('src/client.ts', 2, '  const response = await request(id).catch(() => request(id));', retryItem));
+    assert.equal(review.comments.length, 1, 'the eligible edit stays a native suggestion');
+    assertNoSuggestionInBody(world);
+
+    // Listed alone, it is the requested delivery, even for an edit that could be native: no warning.
+    const only = makeWorld();
+    const requested = await publish(only, document([TYPO()]), { delivery: { edits: ['review-body'] } });
+    assert.equal(status(requested), 'published', markdown(requested));
+    assert.deepEqual(diagnostics(requested), []);
+    assert.equal(onlyReview(only).body, readmeEdit(2, 'The widget client.', 'Fix the typo.'));
+    assert.deepEqual(onlyReview(only).comments, []);
+  });
+
+  test('D-A25: a replacement that cannot be shown exactly makes `review-body` unavailable, with its reason and remedy', async () => {
+    const hidden = result({ text: 'Mark the direction.', location: at('notes.txt', 2), fixes: [lineFix('notes.txt', 2, 'Note 2,\u200E revised.')] });
+    const blocked = await assertBlockedEverywhere(makeWorld(), document([hidden]), { delivery: { edits: ['review-body'] } }, [
+      `- \`delivery-unavailable\` at \`/runs/0/results/0\`: The edit of \`notes.txt\` line 2 cannot be delivered. \`edits\` is \`[review-body]\`, ${CALLER('--edits', 'edits')}, and no mechanism it lists is available:\n\n`
+        + '- `review-body`: The replacement of `notes.txt` line 2 cannot be shown exactly in the review body: replacement line 1 contains U+200E, which a code block does not show.',
     ]);
+    assert.deepEqual(diagnostics(blocked)[0]?.['remedies'], ['Change the replacement.', ...UNAVAILABLE_REMEDIES]);
+  });
+
+  test('D-A26: a group made by hand that makes the body too large is blocked whole, naming the group; nothing is written', async () => {
+    const big = 'x'.repeat(31_000);
+    const sarif = document([
+      result({ text: 'First half.', group: 'big', location: at('notes.txt', 1), fixes: [lineFix('notes.txt', 1, big)] }),
+      result({ text: 'Second half.', group: 'big', location: at('notes.txt', 2), fixes: [lineFix('notes.txt', 2, big)] }),
+    ]);
+    const options = { delivery: { groupedEdits: ['manual-group'] } };
+    const world = makeWorld();
+    const published = await publish(world, sarif, options);
+    assert.equal(status(published), 'blocked', markdown(published));
+    const [problem, ...rest] = diagnostics(published);
+    assert.deepEqual(rest, []);
+    assert.ok(problem);
+    assert.equal(problem['code'], 'body-too-large');
+    assert.match(String(problem['message']), /^The review body is (\d+) characters; the limit is 60000\. Proposals to make by hand in the body: the group `big` \(\1 characters\)\. Nothing is truncated or split\.$/);
+    assert.deepEqual(writes(world), [], 'no write of any kind: no member is published');
+    assert.deepEqual(diagnostics(await validate(world, sarif, options)), diagnostics(published));
   });
 });
 

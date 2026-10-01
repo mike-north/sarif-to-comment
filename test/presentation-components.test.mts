@@ -11,8 +11,9 @@
  * change lists, references, descriptions, the projection section and
  * lifecycle notes) and the
  * alternatives grammar of issue #30; docs/diagnostics.md for the warnings
- * list of an outcome report; docs/delivery-policy-contract.md §8.8 and §9
- * (a native batch's guidance and note, and a companion bundle).
+ * list of an outcome report; docs/delivery-policy-contract.md §8.8, §8.10
+ * and §9 (a native batch's guidance and note, a replacement and a group made
+ * by hand, and a companion bundle).
  *
  * @see ../docs/review-presentation-contract.md
  * @see ../docs/file-operation-publication-contract.md
@@ -39,6 +40,9 @@ import { fileDetails, proposedContentBlock, renderFileAddition, renderProposedFi
 import { renderFileDeletion } from '../dist/presentation/file-deletion.cjs';
 import { renderFinding, renderFindingSection } from '../dist/presentation/finding.cjs';
 import { renderLifecycleNote } from '../dist/presentation/lifecycle-note.cjs';
+import { renderGroupLabel } from '../dist/presentation/group-label.cjs';
+import { manualEditBlock, manualEditDetails, manualEditLocation, renderManualEdit, renderManualReplacement } from '../dist/presentation/manual-edit.cjs';
+import { renderManualGroup, renderManualGroupGuidance, renderManualGroupPartLabel } from '../dist/presentation/manual-group.cjs';
 import { renderNativeBatchGuidance, renderNativeBatchMemberNote } from '../dist/presentation/native-batch.cjs';
 import { renderDiagnosticLine, renderWarningsList } from '../dist/presentation/warnings-list.cjs';
 import { codeSpan, escapePlain, escapePlainInline, fenced, lineSpan } from '../dist/presentation/markdown.cjs';
@@ -362,8 +366,11 @@ describe('the projection section of a companion\'s description (companion contra
 });
 
 describe('a native batch (delivery policy §8.8)', () => {
-  test('the guidance lists every member by path and line, in order', () => {
-    assert.equal(renderNativeBatchGuidance('retry', [{ path: 'src/a.ts', startLine: 2, endLine: 2 }, { path: 'docs/b.md', startLine: 4, endLine: 6 }]), [
+  const RETRY = { kind: 'group', name: 'retry' } as const;
+  const FIX = { kind: 'fix', changeCount: 2 } as const;
+
+  test('the guidance lists every change by path and line, in order', () => {
+    assert.equal(renderNativeBatchGuidance(RETRY, [{ path: 'src/a.ts', startLine: 2, endLine: 2 }, { path: 'docs/b.md', startLine: 4, endLine: 6 }]), [
       '**Suggestion group `retry`:** apply these 2 suggestions together, in one commit: add each of them to one batch of suggestions on the pull request, then commit the batch.',
       '',
       '- `src/a.ts` line 2',
@@ -372,9 +379,124 @@ describe('a native batch (delivery policy §8.8)', () => {
   });
 
   test('the member note points to the guidance; a group name with backticks stays one code span', () => {
-    assert.equal(renderNativeBatchMemberNote('retry'),
+    assert.equal(renderNativeBatchMemberNote(RETRY),
       '**Suggestion group `retry`:** apply this suggestion together with the group\'s other suggestions, listed in the review body.');
-    assert.ok(renderNativeBatchMemberNote('a`b').startsWith('**Suggestion group ``a`b``:**'));
+    assert.ok(renderNativeBatchMemberNote({ kind: 'group', name: 'a`b' }).startsWith('**Suggestion group ``a`b``:**'));
+  });
+
+  test('a fix with several changes in no group is labelled by its change count, and its note names the fix', () => {
+    assert.equal(renderGroupLabel(FIX), 'Fix with 2 changes');
+    assert.equal(renderGroupLabel(RETRY), 'Suggestion group `retry`');
+    assert.equal(renderNativeBatchGuidance(FIX, [{ path: 'README.md', startLine: 2, endLine: 2 }, { path: 'README.md', startLine: 3, endLine: 3 }]), [
+      '**Fix with 2 changes:** apply these 2 suggestions together, in one commit: add each of them to one batch of suggestions on the pull request, then commit the batch.',
+      '',
+      '- `README.md` line 2',
+      '- `README.md` line 3',
+    ].join('\n'));
+    assert.equal(renderNativeBatchMemberNote(FIX),
+      '**Fix with 2 changes:** apply this suggestion together with the fix\'s other suggestions, listed in the review body.');
+  });
+});
+
+describe('a replacement made by hand (delivery policy §8.10)', () => {
+  const url = (anchor: string): string => `https://github.com/acme/widgets/blob/${C}/README.md${anchor}`;
+  const line2 = { path: 'README.md', startLine: 2, endLine: 2, commit: C, url: url('#L2') };
+
+  test('a one-line replacement links the replaced line at the reviewed commit and shows the new line in a block', () => {
+    const edit = { ...line2, replacement: { shownText: 'The widget client.', crlf: false, finalNewline: true } };
+    assert.equal(manualEditLocation(edit), `[README.md line 2 at 2222222](${url('#L2')})`);
+    assert.equal(manualEditBlock(edit), '```\nThe widget client.\n```');
+    assert.equal(manualEditDetails(edit), undefined, 'LF lines ending with a newline need no details');
+    assert.equal(renderManualReplacement(edit), `replace [README.md line 2 at 2222222](${url('#L2')}) with:\n\n\`\`\`\nThe widget client.\n\`\`\``);
+  });
+
+  test('CRLF line endings and a missing final newline are stated beside the block, in that order', () => {
+    const edit = { ...line2, startLine: 2, endLine: 3, url: url('#L2-L3'), replacement: { shownText: 'x\ny', crlf: true, finalNewline: false } };
+    assert.equal(manualEditDetails(edit), 'CRLF line endings, no newline at end of file');
+    assert.equal(renderManualReplacement(edit),
+      `replace [README.md lines 2-3 at 2222222](${url('#L2-L3')}) with (CRLF line endings, no newline at end of file):\n\n\`\`\`\nx\ny\n\`\`\``);
+    assert.equal(manualEditDetails({ ...edit, replacement: { shownText: 'x', crlf: false, finalNewline: false } }), 'no newline at end of file');
+    assert.equal(manualEditDetails({ ...edit, replacement: { shownText: 'x', crlf: true, finalNewline: true } }), 'CRLF line endings');
+  });
+
+  test('removed lines have no block: "delete … ."', () => {
+    const edit = { ...line2, endLine: 3, url: url('#L2-L3'), replacement: undefined };
+    assert.equal(manualEditBlock(edit), undefined);
+    assert.equal(manualEditDetails(edit), undefined);
+    assert.equal(renderManualReplacement(edit), `delete [README.md lines 2-3 at 2222222](${url('#L2-L3')}).`);
+  });
+
+  test('a replacement of one empty line is a block holding one empty line, distinct from deleting it', () => {
+    const edit = { ...line2, replacement: { shownText: '', crlf: false, finalNewline: true } };
+    assert.equal(manualEditBlock(edit), '```\n\n```');
+  });
+
+  test('the fence is one backtick longer than any run inside, so no line of the replacement can close it', () => {
+    const edit = { ...line2, replacement: { shownText: 'Use ```` here\n```', crlf: false, finalNewline: true } };
+    assert.equal(manualEditBlock(edit), '`````\nUse ```` here\n```\n`````');
+  });
+
+  test('the path in the link text is literal: Markdown characters are escaped', () => {
+    const edit = { ...line2, path: 'docs/_a_*b*.md', url: 'U', replacement: undefined };
+    assert.equal(manualEditLocation(edit), '[docs/\\_a\\_\\*b\\*.md line 2 at 2222222](U)');
+  });
+
+  test('the manual edit section says it is made by hand, then the replacement, then its findings', () => {
+    const edit = { ...line2, replacement: { shownText: 'The widget client.', crlf: false, finalNewline: true } };
+    assert.equal(renderManualEdit(edit, 'FINDINGS'),
+      `**Proposed edit, to make by hand:** replace [README.md line 2 at 2222222](${url('#L2')}) with:\n\n\`\`\`\nThe widget client.\n\`\`\`\n\nFINDINGS`);
+    assert.equal(fenceProblem(renderManualEdit(edit, 'FINDINGS')), null, 'never a suggestion block, and nothing left open');
+  });
+});
+
+describe('a group made by hand (delivery policy §8.10)', () => {
+  const PAIR = { kind: 'group', name: 'pair' } as const;
+  const members = [
+    { kind: 'edit', path: 'README.md', startLine: 2, endLine: 2 },
+    { kind: 'create', path: 'src/helper.ts' },
+    { kind: 'delete', path: 'obsolete.txt' },
+    { kind: 'edit', path: 'notes.txt', startLine: 4, endLine: 6 },
+  ] as const;
+  const GUIDANCE = [
+    '**Suggestion group `pair`:** apply these 4 changes together, by hand, in one commit: make every change below in a local copy of the pull request\'s branch, then commit them together. They are not offered as suggestions, and nothing checks that they are applied together.',
+    '',
+    '- `README.md` line 2',
+    '- `src/helper.ts`: new file',
+    '- `obsolete.txt`: file deletion',
+    '- `notes.txt` lines 4-6',
+  ].join('\n');
+
+  test('the guidance names every change by path (and line, for an edit), in order, and claims no enforcement', () => {
+    assert.equal(renderManualGroupGuidance(PAIR, members), GUIDANCE);
+    assert.doesNotMatch(GUIDANCE, /enforc|GitHub applies|batch/i);
+  });
+
+  test('each change is labelled with the group and its place', () => {
+    assert.equal(renderManualGroupPartLabel(PAIR, 2, 4), '**Suggestion group `pair` — change 2 of 4**');
+    assert.equal(renderManualGroupPartLabel({ kind: 'fix', changeCount: 2 }, 1, 2), '**Fix with 2 changes — change 1 of 2**');
+  });
+
+  test('the section is the guidance, then each labelled change, separated as body sections are', () => {
+    const fix = { kind: 'fix', changeCount: 2 } as const;
+    const two = [{ kind: 'edit', path: 'a.md', startLine: 1, endLine: 1 }, { kind: 'edit', path: 'a.md', startLine: 3, endLine: 3 }] as const;
+    assert.equal(renderManualGroup(fix, two.map((member, i) => ({ member, part: `PART ${String(i + 1)}` }))), [
+      '**Fix with 2 changes:** apply these 2 changes together, by hand, in one commit: make every change below in a local copy of the pull request\'s branch, then commit them together. They are not offered as suggestions, and nothing checks that they are applied together.',
+      '',
+      '- `a.md` line 1',
+      '- `a.md` line 3',
+      '',
+      '---',
+      '',
+      '**Fix with 2 changes — change 1 of 2**',
+      '',
+      'PART 1',
+      '',
+      '---',
+      '',
+      '**Fix with 2 changes — change 2 of 2**',
+      '',
+      'PART 2',
+    ].join('\n'));
   });
 });
 

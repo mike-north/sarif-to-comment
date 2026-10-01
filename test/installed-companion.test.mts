@@ -178,11 +178,12 @@ describe('the installed package publishes grouped changes as a companion suggest
     assert.deepEqual(asArray(view['findings']).map((f) => asRecord(f)['suggestionGroup']), ['retry-with-test', 'retry-with-test']);
 
     const flags = ['--sarif', enriched, '--repo', repoFlag, '--pull', String(DESTINATION.pullNumber), '--commit', w.head];
-    // Under the default delivery policy the group (a code edit and a new test file) follows `fileOperations: [manual]`,
-    // whose mixed manual group this version does not yet support (docs/delivery-policy-contract.md §8.8).
-    const refused = cli(['validate', ...flags], 2);
-    assert.match(asString(refused['message']), /delivery-unavailable/);
-    assert.match(asString(refused['message']), /`fileOperations` is `\[manual\]`, the default/);
+    // Under the default delivery policy the group (a code edit and a new test file) follows `fileOperations: [manual]`:
+    // the mixed manual group, one review-body section to make by hand (docs/delivery-policy-contract.md §8.10).
+    const manual = cli(['validate', ...flags]);
+    assert.equal(manual['status'], 'ready');
+    assert.deepEqual(manual['diagnostics'], []);
+    assert.ok(asString(manual['message']).includes('**Review prepared:** 0 inline comment(s) and 1 general section(s) for commit'), asString(manual['message']));
     const suggestionFlags = ['--grouped-edits', 'companion', '--file-operations', 'companion,manual', '--pr-labels', 'team-a', '--mark-suggestion-prs-ready'];
     const ready = cli(['validate', ...flags, ...suggestionFlags]);
     assert.equal(ready['status'], 'ready');
@@ -215,8 +216,9 @@ describe('the installed package publishes grouped changes as a companion suggest
       assert.equal(grouped.status, 'grouped', grouped.markdown);
       assert.equal(grouped.changes, 2);
       const input = { sarif: grouped.sarif, destination: { owner, repo, pullNumber: 45 }, reviewedCommit, token: process.env.GH_TOKEN };
-      const refused = await validateSarifReview(input);
-      assert.equal(refused.status, 'blocked', refused.markdown);
+      const manual = await validateSarifReview(input);
+      assert.equal(manual.status, 'ready', manual.markdown);
+      assert.deepEqual(manual.diagnostics, []);
       const options = { delivery: { groupedEdits: ['companion'], fileOperations: ['companion', 'manual'] }, pullRequestLabels: ['team-a'] };
       const assessed = await validateSarifReview({ ...input, options });
       assert.equal(assessed.status, 'ready', assessed.markdown);
@@ -242,7 +244,7 @@ describe('the installed package publishes grouped changes as a companion suggest
 describe('the installed package publishes a native multi-change fix as one suggestion pull request', () => {
   const skip = packProject().error || false;
 
-  test('CLI: an upstream fix editing two files is refused under the default policy, and is one pull request with a companion list', { skip, timeout: 300_000 }, () => {
+  test('CLI: an upstream fix editing a file outside the diff is refused under the default policy, and is one pull request with a companion list', { skip, timeout: 300_000 }, () => {
     const { consumer, bin } = installIntoConsumer();
     const w = world('installed-native-group');
     const repoFlag = `${DESTINATION.owner}/${DESTINATION.repo}`;
@@ -276,11 +278,13 @@ describe('the installed package publishes a native multi-change fix as one sugge
     assert.equal(asArray(asRecord(asArray(asRecord(inspected[0])['fixes'])[0])['changes']).length, 2, 'inspection shows the one fix with both file changes');
 
     const flags = ['--sarif', upstream, '--repo', repoFlag, '--pull', String(DESTINATION.pullNumber), '--commit', w.head];
-    // A fix with several changes follows `groupedEdits`, whose default native batch this version
-    // does not yet offer for such a fix (docs/delivery-policy-contract.md §8.8).
+    // A fix with several changes follows `groupedEdits`, whose default native batch needs every
+    // change to be a native suggestion; src/client.ts is outside the diff
+    // (docs/delivery-policy-contract.md §8.3, §8.8).
     const refused = cli(['validate', ...flags], 2);
     assert.match(asString(refused['message']), /delivery-unavailable/);
     assert.match(asString(refused['message']), /`groupedEdits` is `\[native-batch\]`, the default/);
+    assert.match(asString(refused['message']), /- `native-batch`: The edit of `src\/client\.ts` line 2: Lines 2-2 of src\/client\.ts cannot carry a native suggestion/);
     const published = cli(['publish', ...flags, '--state', path.join(w.root, 'native-state.json'), '--grouped-edits', 'companion', '--file-operations', 'companion,manual']);
     assert.equal(published['status'], 'published');
     const pulls = w.host.pulls();

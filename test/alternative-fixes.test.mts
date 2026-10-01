@@ -538,9 +538,18 @@ describe('a first fix with several changes (issue #29) keeps its alternatives', 
     ] }],
   };
 
-  test('under the default policy the first fix is refused as a single fix would be; its alternatives do not change that', async () => {
+  test('under the default policy the first fix is a native batch, each change a suggestion; its alternatives are listed with the finding, never applied', async () => {
+    // Delivery policy §8.8: lines 2 and 3 are in the reviewed diff's hunk, so each change can be a
+    // native suggestion; each change's comment holds the finding, alternatives included.
     const outcome = await prepare(log([finding([joint, CACHED])]));
-    assertBlocked(outcome, [['delivery-unavailable', POINTER]]);
+    assertReady(outcome);
+    const listed = item([CACHED_ALTERNATIVE(1)], 'Parsing with parseA is slow.', 'Use parseB and its limit.');
+    const note = '**Fix with 2 changes:** apply this suggestion together with the fix\'s other suggestions, listed in the review body.';
+    assert.deepEqual(outcome.review.comments.map((c) => [c.line, c.body]), [
+      [2, `${listed}\n\n${note}\n\n\`\`\`suggestion\nconst b = parseB(input);\n\`\`\``],
+      [3, `${listed}\n\n${note}\n\n\`\`\`suggestion\nconst c = 4;\n\`\`\``],
+    ]);
+    assert.equal(outcome.review.body, '**Fix with 2 changes:** apply these 2 suggestions together, in one commit: add each of them to one batch of suggestions on the pull request, then commit the batch.\n\n- `src/app.js` line 2\n- `src/app.js` line 3');
   });
 
   test('delivered by a companion, only the first fix is committed, and the alternatives are listed with the finding', async () => {

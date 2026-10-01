@@ -397,13 +397,26 @@ async function assertBlockedEverywhere(world: IWorld, sarif: Json, lines: readon
 }
 
 /**
- * Delivery policy §5, §8.5, §8.8: under the defaults a group with a whole-file
- * operation follows `fileOperations: [manual]`, whose mixed manual group this
- * version does not yet support, so it is blocked as it was before the policy.
+ * Delivery policy §5, §8.5, §8.10: under the defaults a group with a
+ * whole-file operation follows `fileOperations: [manual]`, which delivers it
+ * whole as the mixed manual group on the original pull request: one body
+ * section that lists every change (`members`, in order) and then presents
+ * each, with no companion pull request and no suggestion block. Returns the
+ * review body.
  */
-const GROUP_REQUIRES = (group: string, pointer: string): string =>
-  `- \`delivery-unavailable\` at \`${pointer}\`: The group \`${group}\` cannot be delivered. \`fileOperations\` is \`[manual]\`, the default, and no mechanism it lists is available:\n\n`
-  + '- `manual`: Delivering a group with a whole-file creation or deletion on the original pull request is not yet supported by this version.';
+async function assertMixedManualGroup(world: IWorld, sarif: Json, group: string, members: readonly string[]): Promise<string> {
+  const outcome = await publish(world, sarif, null);
+  assert.equal(status(outcome), 'published', markdown(outcome));
+  assert.deepEqual(world.host.pulls(), [], 'no companion pull request');
+  const [review] = world.host.reviews();
+  assert.ok(review);
+  const body = review.request.body.replace(REVIEW_MARKER, '');
+  assert.ok(body.startsWith(`**Suggestion group \`${group}\`:** apply these ${String(members.length)} changes together, by hand, in one commit: `
+    + 'make every change below in a local copy of the pull request\'s branch, then commit them together. They are not offered as suggestions, and nothing checks that they are applied together.'
+    + `\n\n${members.map((m) => `- ${m}`).join('\n')}\n\n---\n\n`), body);
+  assert.doesNotMatch(body, /```suggestion/, 'nothing in it is a suggestion block');
+  return body;
+}
 
 // ---------------------------------------------------------------------------
 
@@ -443,9 +456,16 @@ describe('grouped code and test changes (A29)', () => {
     ].sort());
   });
 
-  test('the defaults: blocked, naming the list, with nothing split or written (A30)', async () => {
+  test('the defaults: the mixed manual group on the original pull request, nothing split; the typo stays a native suggestion', async () => {
     const world = makeWorld();
-    await assertBlockedEverywhere(world, groupedCodeAndTest(), [GROUP_REQUIRES('retry-with-test', '/runs/0/results/0')], null);
+    const body = await assertMixedManualGroup(world, groupedCodeAndTest(), 'retry-with-test', ['`src/client.ts` line 2', '`test/client.test.ts`: new file']);
+    assert.ok(body.includes(`**Proposed edit, to make by hand:** replace [src/client.ts line 2 at ${SHORT}](${blob('src/client.ts', '#L2')}) with:\n\n\`\`\`\n${RETRY}\n\`\`\``), body);
+    assert.ok(body.includes('**Suggestion group `retry-with-test` — change 2 of 2**\n\n**Proposed new file:** `test/client.test.ts`'), body);
+    const [review] = world.host.reviews();
+    assert.ok(review);
+    const [comment, ...others] = review.request.comments;
+    assert.deepEqual(others, [], 'the typo is the only inline comment');
+    assert.ok(comment?.body.endsWith('```suggestion\nThe widget client.\n```'));
   });
 
   test('a group edit keeps an executable file\'s mode, and two edits of one file combine in line order', async () => {
@@ -502,8 +522,9 @@ describe('grouped additions (A32)', () => {
     ].join('\n'));
   });
 
-  test('the defaults: blocked, with no separate creation sections substituted', async () => {
-    await assertBlockedEverywhere(makeWorld(), groupedAdditions(), [GROUP_REQUIRES('docs-pair', '/runs/0/results/0')], null);
+  test('the defaults: one section holding both pages, never two separate creation sections', async () => {
+    const body = await assertMixedManualGroup(makeWorld(), groupedAdditions(), 'docs-pair', ['`docs/a.md`: new file', '`docs/b.md`: new file']);
+    assert.equal(body.split('**Proposed new file:**').length, 3, 'each page once, inside the group');
   });
 });
 
@@ -1255,13 +1276,15 @@ describe('CLI + real GitHub client over HTTP', () => {
     assert.deepEqual(onlyPull(world).pull.labels, ['suggestion-pr', 'proposal']);
   });
 
-  test('under the defaults a group with whole-file operations is blocked (exit 2), naming the list and the flag to change it', () => {
+  test('under the defaults a group with whole-file operations is published (exit 0) whole, made by hand in the review body, with no companion', () => {
     const world = makeWorld();
     const result = cli(world, ['publish', '--sarif', sarifFile(world, groupedAdditions()), ...target, '--state', world.statePath]);
-    assert.equal(result.status, 2, result.stdout + result.stderr);
-    assert.match(result.stdout, /^## Review blocked\n/);
-    assert.match(result.stderr, /\[delivery-unavailable\][\s\S]*`fileOperations` is `\[manual\]`, the default[\s\S]*`--file-operations`/, 'the problem, naming the flag, is on stderr');
-    assert.deepEqual(writes(world), []);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /^## Draft review published\n/);
+    assert.equal(result.stderr, '', 'the requested delivery: no diagnostic');
+    assert.equal(count(world, 'POST', PULLS), 0);
+    const [review] = world.host.reviews();
+    assert.ok(review?.request.body.startsWith('**Suggestion group `docs-pair`:** apply these 2 changes together, by hand, in one commit: '), review?.request.body);
   });
 
   test('an uncertain companion publication exits 3; its retry exits 0', () => {
@@ -1431,11 +1454,11 @@ describe('a native multi-change fix (one SARIF fix with several changes)', () =>
     assert.deepEqual(world.host.fileOnBranch(branch, 'docs/a.md'), Buffer.from(PAGE_A));
   });
 
-  test('the defaults: refused naming the list; nothing is split or written (A30)', async () => {
-    // Delivery policy §5, §8.8: a fix with several changes follows groupedEdits, whose
-    // default native batch this version does not yet offer for such a fix.
+  test('the defaults: refused naming the list and the change no native suggestion can carry; nothing is split or written (A30)', async () => {
+    // Delivery policy §5, §8.3: a fix with several changes follows groupedEdits, whose
+    // default native batch needs every change to be a native suggestion.
     const line = '- `delivery-unavailable` at `/runs/0/results/0`: The fix with 2 changes at `/runs/0/results/0` cannot be delivered. `groupedEdits` is `[native-batch]`, the default, and no mechanism it lists is available:\n\n'
-      + '- `native-batch`: Offering a fix with several changes as a native batch is not yet supported by this version.';
+      + '- `native-batch`: The edit of `src/client.ts` line 2: Lines 2-2 of src/client.ts cannot carry a native suggestion (file-not-in-diff).';
     await assertBlockedEverywhere(makeWorld(), document([multiFile()]), [line], null);
   });
 

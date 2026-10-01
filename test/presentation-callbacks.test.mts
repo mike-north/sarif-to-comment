@@ -126,7 +126,7 @@ describe('the presentation option value', () => {
       [null, /must be an object/],
       [[() => 'x'], /must be an object/],
       [new Map([['finding', () => 'x']]), /must be a plain object/],
-      [{ title: () => 'x' }, /unknown component title; the components are finding, attribution, alternatives, fileAddition, fileDeletion, lifecycleNote/],
+      [{ title: () => 'x' }, /unknown component title; the components are finding, attribution, alternatives, fileAddition, fileDeletion, manualEdit, lifecycleNote/],
       [{ finding: '**x**' }, /\.finding must be a function returning Markdown/],
       [accessor, /\.finding is an accessor property/],
     ] as const) {
