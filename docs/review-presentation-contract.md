@@ -1,6 +1,6 @@
 # Review presentation: contract
 
-Implemented behavior, written down September 30, 2026, from the rendering that the review presentation components produce. Not yet presented to the owner for acceptance. It describes the built-in presentation of the review elements that no other contract specifies: a finding, its attribution, its alternatives, the body section that quotes a finding's source, and the warnings list of an outcome report. Whole-file additions and deletions are specified by the [file-operation contract](file-operation-publication-contract.md) §2, suggestion pull requests, their lifecycle note and the review's reference to them by the [companion contract](companion-suggestion-pr-contract.md) §2.11, and a native batch's guidance and note by the [delivery policy contract](delivery-policy-contract.md) §8.8.
+Implemented behavior, written down September 30, 2026, from the rendering that the review presentation components produce. Not yet presented to the owner for acceptance. It describes the built-in presentation of the review elements that no other contract specifies: a finding, its attribution, its alternatives, the body section that quotes a finding's source, and the warnings list of an outcome report. Whole-file additions and deletions are specified by the [file-operation contract](file-operation-publication-contract.md) §2, suggestion pull requests, their lifecycle note and the review's reference to them by the [companion contract](companion-suggestion-pr-contract.md) §2.11, a native batch's guidance and note by the [delivery policy contract](delivery-policy-contract.md) §8.8, and proposals made by hand on the original pull request (an edit, and a group with its guidance) by that contract's §8.10.
 
 **Sources.** [D60](design-decisions.md#d60-use-reusable-markdown-components-for-a-rich-github-review-experience--owner-selected-presentation-direction) (components with clear semantic purposes, systematic links, customization that cannot drop provenance or identity); [D45](design-decisions.md#d45-model-diagnostics-once-and-render-them-per-audience--owner-decision) (diagnostics rendered per audience); [issue #30](https://github.com/mike-north/sarif-to-comment/issues/30) (alternative fixes); [issue #42](https://github.com/mike-north/sarif-to-comment/issues/42) (warnings on every call); [Diagnostics](diagnostics.md).
 
@@ -16,7 +16,9 @@ Each element with its own meaning is one component, in `src/presentation/`. A co
 | Finding section | A finding in the review body with its source association: an exact-revision link and, for lines, a literal quote. | §5 |
 | File addition, file deletion | A proposed new file, or the removal of a whole file, with the findings that carry it. | [File-operation contract](file-operation-publication-contract.md) §2 |
 | Companion reference, companion description, lifecycle note | A suggestion pull request as the review links it, its own body, and how it is accepted. | [Companion contract](companion-suggestion-pr-contract.md) §2.11 |
-| Native batch guidance, native batch note | An explicit group of edits offered as native suggestions to apply together: the review body's guidance listing every member, and the note in each member's inline comment. Neither is customizable. | [Delivery policy contract](delivery-policy-contract.md) §8.8 |
+| Native batch guidance, native batch note | A group of edits (an explicit group, or a fix with several changes) offered as native suggestions to apply together: the review body's guidance listing every change, and the note in each change's inline comment. Neither is customizable. | [Delivery policy contract](delivery-policy-contract.md) §8.8 |
+| Manual edit | One edit of a reviewed file for the author to make by hand, in the review body: its exact replacement (a location link, a code block and the details that make its bytes exact) with the findings that carry it. Never a suggestion. | [Delivery policy contract](delivery-policy-contract.md) §8.10 |
+| Manual group guidance | A group kept on the original pull request for the author to assemble by hand and commit once: the guidance listing every change by path and line, and each change's label. Not customizable. | [Delivery policy contract](delivery-policy-contract.md) §8.10 |
 | Warnings list | The diagnostics an outcome report lists. This is for the caller and is never posted to GitHub. | §6 |
 
 Links to GitHub (pull requests, reviews, review comments, blob permalinks, commits and comparisons) come from one builder, `src/github-urls.cts`, with one host and one percent-encoding.
@@ -81,14 +83,14 @@ A prepared review's report begins `**Review prepared:** C inline comment(s) and 
 
 ## 7. Customization
 
-A library caller may replace the Markdown of the finding, attribution, alternatives, file addition, file deletion and lifecycle note components with callbacks (`options.presentation`; README, "Customizing how the review reads"). The core keeps everything this contract and the two contracts it cites make independent of presentation:
+A library caller may replace the Markdown of the finding, attribution, alternatives, file addition, file deletion, manual edit and lifecycle note components with callbacks (`options.presentation`; README, "Customizing how the review reads"). The core keeps everything this contract and the two contracts it cites make independent of presentation:
 
 - placement, the finding section's source link and quote, and the location line of a finding in a proposed file;
 - native suggestion blocks, exactly as validated;
 - the review's publication marker and each suggestion pull request's structured marker;
 - the size limits.
 
-Each callback's context lists `required` fragments that its result must show as itself. These are the exact proposed content and file details, a deletion's permalink, a finding's attribution and alternatives, the producers' names, and the findings a proposal carries. The checks below refuse a result before anything is written. The companion reference is not customizable yet.
+Each callback's context lists `required` fragments that its result must show as itself. These are the exact proposed content and file details, a deletion's permalink, a manual edit's location link, replacement block and details, a finding's attribution and alternatives, the producers' names, and the findings a proposal carries. A manual group's guidance, member lines and change labels carry its membership and are the core's: a callback presents each change, never the group. The checks below refuse a result before anything is written. The companion reference is not customizable yet.
 
 **Parser basis.** Producer Markdown and callback results are read with a conformant CommonMark 0.31 + GFM parser: micromark with its GFM extension, through `mdast-util-from-markdown` and `mdast-util-gfm`. The parser decides what is code, text, raw HTML, a link, an image or a definition. Two checks remain hand-written, because a Markdown parser does not answer them:
 
