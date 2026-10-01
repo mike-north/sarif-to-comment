@@ -117,8 +117,13 @@ const listed = (number: number, extra: Record<string, unknown> = {}): Record<str
   ...extra,
 });
 
+/**
+ * A branch listing as GitHub answers it (docs/evidence/suggestion-cleanup/34):
+ * the count of branches under the prefix, and one page of the branches the
+ * name filter matches, named in full.
+ */
 const refsAnswer = (totalCount: number, refs: readonly unknown[], hasNextPage: boolean, endCursor: string | null): Answer =>
-  json({ data: { repository: { refs: { totalCount, pageInfo: { hasNextPage, endCursor }, nodes: refs } } } });
+  json({ data: { repository: { branchCount: { totalCount }, branches: { pageInfo: { hasNextPage, endCursor }, nodes: refs } } } });
 const ref = (name: string, pulls: readonly unknown[], more = false): Record<string, unknown> => ({
   name,
   associatedPullRequests: { pageInfo: { hasNextPage: more }, nodes: pulls },
@@ -131,9 +136,9 @@ describe('listOpenPullRequestsByBranchPrefix', () => {
 
   test('one GraphQL page of the branches under the prefix, each with its open pull requests of this repository, and the branch count', async () => {
     const script = new Script().on('POST', GRAPHQL, refsAnswer(3, [
-      ref('37/s40', [listedNode(40), listedNode(90, { repository: { nameWithOwner: 'upstream/widgets' } })]),
-      ref('37/stale', []),
-      ref('38/s41', [listedNode(41, { headRefName: 'suggestion-pr/38/s41', body: null, author: null, headRepository: null, labels: { pageInfo: { hasNextPage: false }, nodes: [{ name: 'Suggestion' }, { name: 'bug' }] } })]),
+      ref('suggestion-pr/37/s40', [listedNode(40), listedNode(90, { repository: { nameWithOwner: 'upstream/widgets' } })]),
+      ref('suggestion-pr/37/stale', []),
+      ref('suggestion-pr/38/s41', [listedNode(41, { headRefName: 'suggestion-pr/38/s41', body: null, author: null, headRepository: null, labels: { pageInfo: { hasNextPage: false }, nodes: [{ name: 'Suggestion' }, { name: 'bug' }] } })]),
     ], true, 'Y3Vyc29yOjM='));
     const page = await script.client().listOpenPullRequestsByBranchPrefix(request);
     assert.deepEqual(page, {
@@ -148,24 +153,37 @@ describe('listOpenPullRequestsByBranchPrefix', () => {
     const body = asRecord(sent.body);
     const query = asString(body['query']);
     assert.match(query, /^query /, 'a query, never a mutation');
-    assert.match(query, /refs\(refPrefix: \$prefix, first: \$first, after: \$after, orderBy: \{field: ALPHABETICAL, direction: ASC\}\)/);
-    assert.match(query, /totalCount/);
+    // The count is of the branches under the prefix (evidence 34).
+    assert.match(query, /branchCount: refs\(refPrefix: \$prefix, first: 0\) \{ totalCount \}/);
+    // The pull requests come from a listing under refs/heads/ itself: under a
+    // deeper prefix GitHub associates none (live defect of October 1, 2026; evidence 25, 27).
+    assert.match(query, /branches: refs\(refPrefix: "refs\/heads\/", query: \$contains, first: \$first, after: \$after, orderBy: \{field: ALPHABETICAL, direction: ASC\}\)/);
     assert.match(query, /associatedPullRequests\(states: OPEN, first: 10\)/);
     assert.match(query, /author \{ login \}/);
-    assert.deepEqual(body['variables'], { owner: 'octo', repo: 'widgets', prefix: 'refs/heads/suggestion-pr/', first: 100, after: null });
+    assert.deepEqual(body['variables'], { owner: 'octo', repo: 'widgets', prefix: 'refs/heads/suggestion-pr/', contains: 'suggestion-pr/', first: 100, after: null });
+  });
+
+  test('a listed branch not under the prefix (the name filter matches anywhere, ignoring case) is left out before its pull requests are read, and is not an item', async () => {
+    const script = new Script().on('POST', GRAPHQL, refsAnswer(1, [
+      ref('backport/suggestion-pr/37/x', [listedNode(50, { number: 'not read' })]),
+      ref('Suggestion-PR/37/y', [listedNode(51)]),
+      ref('suggestion-pr/37/s40', [listedNode(40)]),
+    ], false, null));
+    const page = await script.client().listOpenPullRequestsByBranchPrefix(request);
+    assert.deepEqual(page, { totalCount: 1, itemCount: 1, pullRequests: [listed(40)], nextCursor: null });
   });
 
   test('the last page has no next cursor, and a later page is asked for by its cursor', async () => {
-    const script = new Script().on('POST', GRAPHQL, refsAnswer(1, [ref('37/s40', [listedNode(40)])], false, 'Y3Vyc29yOjE='));
+    const script = new Script().on('POST', GRAPHQL, refsAnswer(1, [ref('suggestion-pr/37/s40', [listedNode(40)])], false, 'Y3Vyc29yOjE='));
     const page = await script.client().listOpenPullRequestsByBranchPrefix({ ...request, first: 20, after: 'Y3Vyc29yOjA=' });
     assert.equal(page.nextCursor, null);
-    assert.deepEqual(asRecord(script.sent[0]?.body)['variables'], { owner: 'octo', repo: 'widgets', prefix: 'refs/heads/suggestion-pr/', first: 20, after: 'Y3Vyc29yOjA=' });
+    assert.deepEqual(asRecord(script.sent[0]?.body)['variables'], { owner: 'octo', repo: 'widgets', prefix: 'refs/heads/suggestion-pr/', contains: 'suggestion-pr/', first: 20, after: 'Y3Vyc29yOjA=' });
   });
 
   test('a pull request with more than 100 labels has its labels read in full from the REST listing', async () => {
     const many = Array.from({ length: 100 }, (_, i) => ({ name: `label-${String(i)}` }));
     const script = new Script()
-      .on('POST', GRAPHQL, refsAnswer(1, [ref('37/s40', [listedNode(40, { labels: { pageInfo: { hasNextPage: true }, nodes: many } })])], false, null))
+      .on('POST', GRAPHQL, refsAnswer(1, [ref('suggestion-pr/37/s40', [listedNode(40, { labels: { pageInfo: { hasNextPage: true }, nodes: many } })])], false, null))
       .on('GET', `${REPO}/issues/40/labels?per_page=100&page=1`, json([...many, { name: 'suggestion' }]));
     const page = await script.client().listOpenPullRequestsByBranchPrefix(request);
     assert.equal(page.pullRequests[0]?.labels.length, 101);
@@ -173,14 +191,15 @@ describe('listOpenPullRequestsByBranchPrefix', () => {
 
   const malformed: readonly (readonly [string, Answer, string])[] = [
     ['GraphQL errors', json({ data: null, errors: [{ type: 'SERVICE_UNAVAILABLE', message: 'Something went wrong' }] }), 'graphql-errors'],
-    ['no refs connection', json({ data: { repository: {} } }), 'malformed-response'],
-    ['no total count', json({ data: { repository: { refs: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] } } } }), 'malformed-response'],
+    ['no branch listing', json({ data: { repository: { branchCount: { totalCount: 0 } } } }), 'malformed-response'],
+    ['no branch count', json({ data: { repository: { branches: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] } } } }), 'malformed-response'],
     ['a negative total count', refsAnswer(-1, [], false, null), 'malformed-response'],
-    ['a next page without a cursor', refsAnswer(2, [ref('37/s40', [])], true, null), 'pagination'],
-    ['more open pull requests on one branch than one page holds', refsAnswer(1, [ref('37/s40', [listedNode(40)], true)], false, null), 'pagination'],
-    ['a pull request without a number', refsAnswer(1, [ref('37/s40', [listedNode(40, { number: 'forty' })])], false, null), 'malformed-response'],
-    ['a pull request without a head branch', refsAnswer(1, [ref('37/s40', [listedNode(40, { headRefName: null })])], false, null), 'malformed-response'],
-    ['a pull request whose author has no login', refsAnswer(1, [ref('37/s40', [listedNode(40, { author: {} })])], false, null), 'malformed-response'],
+    ['a next page without a cursor', refsAnswer(2, [ref('suggestion-pr/37/s40', [])], true, null), 'pagination'],
+    ['a branch without a name', refsAnswer(1, [{ ...ref('suggestion-pr/37/s40', []), name: null }], false, null), 'malformed-response'],
+    ['more open pull requests on one branch than one page holds', refsAnswer(1, [ref('suggestion-pr/37/s40', [listedNode(40)], true)], false, null), 'pagination'],
+    ['a pull request without a number', refsAnswer(1, [ref('suggestion-pr/37/s40', [listedNode(40, { number: 'forty' })])], false, null), 'malformed-response'],
+    ['a pull request without a head branch', refsAnswer(1, [ref('suggestion-pr/37/s40', [listedNode(40, { headRefName: null })])], false, null), 'malformed-response'],
+    ['a pull request whose author has no login', refsAnswer(1, [ref('suggestion-pr/37/s40', [listedNode(40, { author: {} })])], false, null), 'malformed-response'],
   ];
   for (const [what, answer, code] of malformed) {
     test(`an answer with ${what} is refused (${code})`, async () => {

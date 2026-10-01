@@ -211,6 +211,38 @@ describe('owner scope: who opened the suggestion pull request (§2.2, §2.6)', (
 // ---------------------------------------------------------------------------
 
 describe('branch-prefix discovery (§2.4)', () => {
+  // Live defect of October 1, 2026 (docs/suggestion-cleanup-e2e-evidence.md):
+  // in mike-north/doc-linter the default sweep counted the 18 suggestion
+  // branches but found none of the 17 open pull requests on them, because
+  // GitHub answers no associated pull request for a ref listed under
+  // `refs/heads/suggestion-pr/` (evidence 25, 26). The host answers as GitHub
+  // was observed to, so a client relying on that listing finds nothing here.
+  test('live defect of October 1, 2026: the default sweep finds the open pull requests on suggestion branches, as GitHub lists them', async () => {
+    const world = makeWorld([original(37, 'closed'), original(38, 'open'), suggestion(40, 37), suggestion(41, 37), suggestion(42, 38), suggestion(43, 37, { state: 'closed' })]);
+    const outcome = await cleanup(world, { dryRun: true });
+    assert.equal(outcome['status'], 'complete');
+    assert.deepEqual(results(outcome), [[40, 37, 'would-close'], [41, 37, 'would-close'], [42, 38, 'left-open']]);
+    assert.deepEqual(outcome['counts'], { candidates: 4, checked: 3, labeled: 3, conforming: 3 }, 'four branches; their three open pull requests checked');
+    assert.equal(requests(world).filter((r) => r === 'POST /graphql').length, 1, 'one listing request for four branches');
+    assert.deepEqual(writes(world), []);
+  });
+
+  test('a branch whose name contains `suggestion-pr/` without starting with it is neither counted nor a candidate', async () => {
+    // GitHub's ref name filter matches anywhere in a name, ignoring case
+    // (evidence 30, 31), so such branches are listed; only the namespace is read.
+    const world = makeWorld([
+      original(37, 'closed'),
+      suggestion(40, 37),
+      suggestion(60, 37, { head: 'backport/suggestion-pr/37/x' }),
+      suggestion(61, 37, { head: 'Suggestion-PR/37/y' }),
+      suggestion(62, 37, { head: 'suggestion-pr-old/37/z' }),
+    ], { sweepPageSize: 2 });
+    const outcome = await cleanup(world, { dryRun: true });
+    assert.deepEqual(results(outcome), [[40, 37, 'would-close']]);
+    assert.deepEqual(outcome['counts'], { candidates: 1, checked: 1, labeled: 1, conforming: 1 }, 'only the branch under suggestion-pr/ counts');
+    assert.equal(requests(world).filter((r) => r === 'POST /graphql').length, 2, 'the listing pages through the three branches the name filter matches, two per page');
+  });
+
   test('pages through every suggestion branch, including branches whose pull requests are gone, and counts them', async () => {
     const world = makeWorld([original(37, 'closed'), suggestion(40, 37), suggestion(41, 37, { state: 'closed' }), suggestion(42, 37)], { sweepPageSize: 2 });
     world.host.seedBranches(staleBranches(3), BASE);

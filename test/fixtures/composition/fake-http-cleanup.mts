@@ -9,15 +9,22 @@
  *         number no pull request has)
  *   PATCH /repos/{o}/{r}/pulls/{n}   exactly { "state": "closed" }: closes it
  *   POST  /graphql                   three read-only queries:
- *     - a `refs(refPrefix: …)` query (the default sweep): this repository's
- *       branches under the prefix, in name order, each with its open
+ *     - a query of one or more `refs(refPrefix: …)` connections, each
+ *       optionally aliased (the default sweep), answered as GitHub was
+ *       observed to answer them (docs/evidence/suggestion-cleanup/25-34):
+ *       this repository's branches under `refPrefix`, in name order, each
+ *       `name` relative to `refPrefix`. `query` keeps the branches whose
+ *       relative name contains it, ignoring case (a substring match, never
+ *       anchored or fuzzy). `totalCount` counts what is kept; `first: 0`
+ *       answers the count with no branch. Each branch carries its open
  *       associated pull requests (`associatedPullRequests(states: OPEN)`):
- *       every open pull request, in any repository, whose head is that
- *       branch of this repository. A branch exists while a stored pull
- *       request of this repository has it as its head (whatever that pull
- *       request's state: closing never deletes a branch) or the companion
- *       state records it (created or seeded with seedBranches).
- *       `totalCount` counts the branches.
+ *       under exactly `refs/heads/`, every open pull request, in any
+ *       repository, whose head is that branch of this repository; under any
+ *       deeper prefix, none at all, as GitHub answers. A branch exists while
+ *       a stored pull request of this repository has it as its head
+ *       (whatever that pull request's state: closing never deletes a branch)
+ *       or the companion state records it (created or seeded with
+ *       seedBranches).
  *     - a `pullRequests(labels: […], states: OPEN)` query (a `--label`
  *       sweep): this repository's open pull requests carrying the label
  *       (case-insensitively), in creation (number) order; issues never.
@@ -41,8 +48,9 @@
  * Request bodies, query shapes and variables must be exactly as documented:
  * anything else answers 400, so a wire-format regression fails loudly.
  *
- * This models documented GitHub behavior; it is not evidence of live GitHub
- * behavior (see docs/suggestion-cleanup-e2e-evidence.md).
+ * This models documented GitHub behavior, and the ref listing as GitHub was
+ * observed to answer it; it is not evidence of live GitHub behavior (see
+ * docs/suggestion-cleanup-e2e-evidence.md).
  *
  * @see https://docs.github.com/en/graphql/reference/objects#repository
  * @see https://docs.github.com/en/graphql/reference/objects#ref
@@ -246,69 +254,120 @@ function branchesOf(host: ICompanionHost): string[] {
 }
 
 /**
- * The answer to a sweep query (a `refs(refPrefix: …)` query or a
- * `pullRequests(labels: …)` query), or null when the query is neither.
- * Variables must be exactly { owner, repo, prefix, first, after } or
- * { owner, repo, label, first, after }.
+ * A GraphQL argument as a query passes it: a `$variable` resolved from
+ * `vars`, a string or integer literal, `null`, or undefined when absent.
+ */
+function argumentOf(args: string, name: string, vars: UnknownRecord): unknown {
+  const match = new RegExp(`\\b${name}: (\\$\\w+|"[^"]*"|\\d+|null)`).exec(args);
+  const value = match?.[1];
+  if (value === undefined) return undefined;
+  if (value.startsWith('$')) return vars[value.slice(1)];
+  if (value.startsWith('"')) return value.slice(1, -1);
+  return value === 'null' ? null : Number(value);
+}
+
+/** The names of the variables a query declares (`query ($owner: String!, …)`), sorted and comma-joined. */
+function declaredVariables(query: string): string {
+  const header = /^query \(([^)]*)\)/.exec(query)?.[1] ?? '';
+  return [...header.matchAll(/\$(\w+):/g)].map((m) => m[1]).sort().join(',');
+}
+
+/**
+ * One `refs(…)` connection as GitHub was observed to answer it
+ * (docs/evidence/suggestion-cleanup/25-34), or the Response refusing
+ * arguments GitHub would not accept.
+ */
+function refsConnection(host: ICompanionHost, args: string, vars: UnknownRecord, json: Json): UnknownRecord | Response {
+  const { owner, repo } = host.repository();
+  const local = `${owner}/${repo}`;
+  const refPrefix = argumentOf(args, 'refPrefix', vars);
+  const filter = argumentOf(args, 'query', vars);
+  const first = argumentOf(args, 'first', vars);
+  const after = argumentOf(args, 'after', vars) ?? null;
+  if (typeof refPrefix !== 'string' || !refPrefix.startsWith('refs/heads/') || !refPrefix.endsWith('/')) {
+    return json({ message: 'fake host: unexpected ref prefix' }, 400);
+  }
+  if (filter !== undefined && (typeof filter !== 'string' || filter === '')) return json({ message: 'fake host: unexpected ref query' }, 400);
+  if (typeof first !== 'number' || !Number.isInteger(first) || first < 0 || first > MAX_FIRST || !(after === null || typeof after === 'string')) {
+    return json({ errors: [{ type: 'INVALID_ARGUMENTS', message: 'fake host: first must be 0-100 and after a cursor or null' }] });
+  }
+  const under = refPrefix.slice('refs/heads/'.length);
+  const names = branchesOf(host)
+    .filter((branch) => branch.startsWith(under))
+    .map((branch) => branch.slice(under.length))
+    .filter((name) => filter === undefined || name.toLowerCase().includes(filter.toLowerCase()));
+  if (first === 0) return { totalCount: names.length, pageInfo: { hasNextPage: names.length > 0, endCursor: null }, nodes: [] };
+  const config = host.config();
+  const { nodes, pageInfo } = page(names, first, after, config.sweepPageSize, 'refs', config.repeatSweepNode === true);
+  const pulls = host.state().pulls;
+  return {
+    totalCount: names.length,
+    pageInfo,
+    nodes: nodes.map((name) => ({
+      name,
+      associatedPullRequests: {
+        pageInfo: { hasNextPage: false },
+        // Observed live: a ref listed under a prefix deeper than refs/heads/
+        // answers no associated pull request, whatever pull requests its
+        // branch heads (evidence 25, 26 and 29).
+        nodes: under === ''
+          ? pulls.filter((pr) => pr.isIssue !== true && pr.state === 'open' && pr.head === name && headRepositoryOf(host, pr) === local).map((pr) => pullNode(host, pr))
+          : [],
+      },
+    })),
+  };
+}
+
+/**
+ * The answer to a sweep query (a query of `refs(refPrefix: …)` connections
+ * or a `pullRequests(labels: …)` query), or null when the query is neither.
+ * A ref query's variables must be exactly those it declares, among them
+ * owner and repo; a label query's exactly { owner, repo, label, first, after }.
  */
 export function sweepQuery(host: ICompanionHost, request: unknown, json: Json): Response | null {
   if (!isRecord(request) || typeof request['query'] !== 'string') return null;
   const query = request['query'];
-  const byBranch = query.includes('refs(refPrefix: $prefix');
+  const byBranch = query.includes('refs(refPrefix: ');
   const byLabel = query.includes('pullRequests(labels: [$label]');
   if (!byBranch && !byLabel) return null;
   const vars = request['variables'];
   const { owner, repo } = host.repository();
-  const keys = byBranch ? 'after,first,owner,prefix,repo' : 'after,first,label,owner,repo';
+  const keys = byBranch ? declaredVariables(query) : 'after,first,label,owner,repo';
   const shapeOk = byBranch
-    ? query.includes('associatedPullRequests(states: OPEN')
+    ? query.includes('associatedPullRequests(states: OPEN') && keys.split(',').includes('owner') && keys.split(',').includes('repo')
     : query.includes('states: OPEN') && query.includes('orderBy: {field: CREATED_AT, direction: ASC}');
   if (!query.startsWith('query') || !shapeOk || !isRecord(vars) || Object.keys(vars).sort().join(',') !== keys) {
     return json({ message: 'fake host: unexpected sweep query' }, 400);
+  }
+  const config = host.config();
+  if (byBranch) {
+    if (config.failSweep === true) return json({ data: null, errors: [{ type: 'SERVICE_UNAVAILABLE', message: 'Something went wrong' }] });
+    if (vars['owner'] !== owner || vars['repo'] !== repo) return repositoryNotFound(json);
+    const repository: UnknownRecord = {};
+    for (const [, alias, args] of query.matchAll(/(?:(\w+): )?refs\(([^)]*)\)/g)) {
+      const connection = refsConnection(host, args ?? '', vars, json);
+      if (connection instanceof Response) return connection;
+      repository[alias ?? 'refs'] = connection;
+    }
+    return json({ data: { repository } });
   }
   const first = vars['first'];
   const after = vars['after'];
   if (typeof first !== 'number' || !Number.isInteger(first) || first < 1 || first > MAX_FIRST || !(after === null || typeof after === 'string')) {
     return json({ errors: [{ type: 'INVALID_ARGUMENTS', message: 'fake host: first must be 1-100 and after a cursor or null' }] });
   }
-  const config = host.config();
   if (config.failSweep === true) return json({ data: null, errors: [{ type: 'SERVICE_UNAVAILABLE', message: 'Something went wrong' }] });
-  if (vars['owner'] !== owner || vars['repo'] !== repo) {
-    return json({ data: { repository: null }, errors: [{ type: 'NOT_FOUND', path: ['repository'], message: 'Could not resolve to a Repository.' }] });
-  }
-  const local = `${owner}/${repo}`;
-  const pulls = host.state().pulls;
-  if (byBranch) {
-    const prefix = vars['prefix'];
-    if (typeof prefix !== 'string' || !prefix.startsWith('refs/heads/')) return json({ message: 'fake host: unexpected ref prefix' }, 400);
-    const under = prefix.slice('refs/heads/'.length);
-    const refs = branchesOf(host).filter((branch) => branch.startsWith(under));
-    const { nodes, pageInfo } = page(refs, first, after, config.sweepPageSize, 'refs', config.repeatSweepNode === true);
-    return json({
-      data: {
-        repository: {
-          refs: {
-            totalCount: refs.length,
-            pageInfo,
-            nodes: nodes.map((branch) => ({
-              name: branch.slice(under.length),
-              associatedPullRequests: {
-                pageInfo: { hasNextPage: false },
-                nodes: pulls
-                  .filter((pr) => pr.isIssue !== true && pr.state === 'open' && pr.head === branch && headRepositoryOf(host, pr) === local)
-                  .map((pr) => pullNode(host, pr)),
-              },
-            })),
-          },
-        },
-      },
-    });
-  }
+  if (vars['owner'] !== owner || vars['repo'] !== repo) return repositoryNotFound(json);
   const label = vars['label'];
   if (typeof label !== 'string' || label === '') return json({ message: 'fake host: unexpected label' }, 400);
-  const labeled = pulls
+  const labeled = host.state().pulls
     .filter((pr) => isLocalPull(host, pr) && pr.state === 'open' && pr.labels.some((l) => l.toLowerCase() === label.toLowerCase()))
     .sort((a, b) => a.number - b.number);
   const { nodes, pageInfo } = page(labeled, first, after, config.sweepPageSize, 'pulls', config.repeatSweepNode === true);
   return json({ data: { repository: { pullRequests: { totalCount: labeled.length, pageInfo, nodes: nodes.map((pr) => pullNode(host, pr)) } } } });
+}
+
+/** GitHub's answer to a query of a repository that does not exist or that the token cannot see. */
+function repositoryNotFound(json: Json): Response {
+  return json({ data: { repository: null }, errors: [{ type: 'NOT_FOUND', path: ['repository'], message: 'Could not resolve to a Repository.' }] });
 }

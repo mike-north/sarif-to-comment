@@ -75,19 +75,41 @@ describe('harness controls', () => {
     assert.equal(suggestion(40, 37).head, 'suggestion-pr/37/00000000-0000-4000-8000-000000000040');
   });
 
-  test('the host closes only with the documented body, and lists the open pull requests of suggestion branches', async () => {
-    const world = makeWorld([original(37, 'closed'), suggestion(40, 37), suggestion(41, 37, { state: 'closed' }), suggestion(42, 37, { labels: [] })]);
-    const query = 'query ($owner: String!, $repo: String!, $prefix: String!, $first: Int!, $after: String) { repository(owner: $owner, name: $repo) { refs(refPrefix: $prefix, first: $first, after: $after) { totalCount nodes { name associatedPullRequests(states: OPEN, first: 10) { nodes { number } } } } } }';
-    const listing = await world.host.fetch('https://api.github.com/graphql', {
-      method: 'POST', headers: { authorization: `Bearer ${TOKEN}` },
-      body: JSON.stringify({ query, variables: { owner: OWNER, repo: REPO, prefix: 'refs/heads/suggestion-pr/', first: 100, after: null } }),
+  test('the host closes only with the documented body, and lists branches and their open pull requests as GitHub was observed to (evidence 25-31)', async () => {
+    const world = makeWorld([
+      original(37, 'closed'),
+      suggestion(40, 37),
+      suggestion(41, 37, { state: 'closed' }),
+      suggestion(42, 37, { labels: [] }),
+      { ...suggestion(43, 37), head: 'backport/Suggestion-PR/37/x' },
+    ]);
+    /** The branches a ref listing answers: each name, with the numbers of its open pull requests. */
+    const listRefs = async (args: string, variables: Record<string, unknown>): Promise<{ totalCount: unknown; nodes: [unknown, unknown[]][] }> => {
+      const query = `query ($owner: String!, $repo: String!, $value: String!) { repository(owner: $owner, name: $repo) { refs(${args}, first: 100) { totalCount nodes { name associatedPullRequests(states: OPEN, first: 10) { nodes { number } } } } } }`;
+      const listing = await world.host.fetch('https://api.github.com/graphql', {
+        method: 'POST', headers: { authorization: `Bearer ${TOKEN}` },
+        body: JSON.stringify({ query, variables: { owner: OWNER, repo: REPO, ...variables } }),
+      });
+      const refs = asRecord(asRecord(asRecord(asRecord(await listing.json())['data'])['repository'])['refs']);
+      return {
+        totalCount: refs['totalCount'],
+        nodes: asArray(refs['nodes']).map((n) => [asRecord(n)['name'], asArray(asRecord(asRecord(n)['associatedPullRequests'])['nodes']).map((pr) => asRecord(pr)['number'])]),
+      };
+    };
+    const b40 = `37/${idOf(40)}`;
+    const b41 = `37/${idOf(41)}`;
+    const b42 = `37/${idOf(42)}`;
+    // Evidence 25, 26: under a prefix deeper than refs/heads/, names are relative and no pull request is associated.
+    assert.deepEqual(await listRefs('refPrefix: $value', { value: 'refs/heads/suggestion-pr/' }), {
+      totalCount: 3,
+      nodes: [[b40, []], [b41, []], [b42, []]],
+    }, 'a closed pull request\'s branch is still a branch');
+    // Evidence 27, 30, 31: under refs/heads/, `query` keeps names containing it, ignoring case; each branch has its open pull requests.
+    assert.deepEqual(await listRefs('refPrefix: "refs/heads/", query: $value', { value: 'suggestion-pr/' }), {
+      totalCount: 4,
+      nodes: [['backport/Suggestion-PR/37/x', [43]], [`suggestion-pr/${b40}`, [40]], [`suggestion-pr/${b41}`, []], [`suggestion-pr/${b42}`, [42]]],
     });
-    const refs = asRecord(asRecord(asRecord(asRecord(await listing.json())['data'])['repository'])['refs']);
-    assert.equal(refs['totalCount'], 3, 'a closed pull request\'s branch is still a branch');
-    assert.deepEqual(
-      asArray(refs['nodes']).map((n) => asArray(asRecord(asRecord(n)['associatedPullRequests'])['nodes']).map((pr) => asRecord(pr)['number'])),
-      [[40], [], [42]],
-    );
+    assert.deepEqual((await listRefs('refPrefix: "refs/heads/", query: $value', { value: '^suggestion-pr/' })).totalCount, 0, 'never anchored');
     const wrong = await world.host.fetch(`https://api.github.com/repos/${OWNER}/${REPO}/pulls/40`, {
       method: 'PATCH', headers: { authorization: `Bearer ${TOKEN}` }, body: JSON.stringify({ state: 'closed', title: 'x' }),
     });
