@@ -505,6 +505,10 @@ function markdownProblem(name: PresentationComponent, result: string, context: I
   const html = unbalancedHtml(result);
   if (html !== null) return `leaves ${html} open, which could hide what follows, including a suggestion block or marker`;
   if (MARKER_TEXT.test(result)) return 'contains text that reads as a publication or suggestion marker, which only the core writes';
+  const invisible = addedInvisible(result, context);
+  if (invisible !== undefined) {
+    return `contains ${invisible}, an invisible character, outside the content it presents, where it could make a link or text read as something it is not`;
+  }
   const added = addedConstruct(result, context.markdown);
   if (added !== undefined) {
     return `adds ${added.kind === 'html' ? 'raw HTML' : 'a link reference definition'} of its own (${JSON.stringify(added.text)}), which could hide text; `
@@ -567,13 +571,56 @@ function sharedFragment(required: readonly string[], occurrences: readonly (read
 }
 
 /**
- * A link of `result` that carries an identity link's text to another
- * destination, or undefined. A link the built-in Markdown has exactly (text
- * and destination) passes through: it is the presented content's own.
+ * Link text as a reader reads it: Unicode-normalized (NFC), every run of
+ * whitespace (a no-break space included) one space, the ends trimmed.
+ */
+function readText(text: string): string {
+  return text.normalize('NFC').replace(/\s+/gu, ' ').trim();
+}
+
+/**
+ * A link of `result` whose text reads as an identity link's but leads
+ * elsewhere, or undefined. The identity links are every link of the
+ * component's built-in Markdown (its own, and those of the findings and
+ * content it presents) and those the core places around it (`identity`, such
+ * as a finding section's source link). When several share a text, the link
+ * must lead to one of their destinations.
  */
 function spoofedLink(result: string, builtIn: string, identity: readonly IIdentityLink[]): { readonly text: string; readonly url: string } | undefined {
-  if (identity.length === 0) return undefined;
-  const own = linksIn(builtIn);
-  return linksIn(result).find((link) => identity.some((id) => id.text === link.text && id.url !== link.url)
-    && !own.some((o) => o.text === link.text && o.url === link.url));
+  const identities = [...linksIn(builtIn), ...identity].map((link) => ({ text: readText(link.text), url: link.url }));
+  return linksIn(result).find((link) => {
+    const text = readText(link.text);
+    const same = identities.filter((id) => id.text === text);
+    return same.length > 0 && !same.some((id) => id.url === link.url);
+  });
+}
+
+/** Format characters (Unicode category Cf) and U+00A0, which a reader cannot see as themselves. */
+const INVISIBLE = /[\p{Cf}\u00A0]/gu;
+
+/** Every string a context holds, at any depth. */
+function contextStrings(value: unknown): string[] {
+  if (typeof value === 'string') return [value];
+  if (typeof value !== 'object' || value === null) return [];
+  return Object.values(value).flatMap(contextStrings);
+}
+
+/**
+ * The first invisible character of `result` (as `U+XXXX`) that is not part of
+ * the content it presents, or undefined. Presented content is a string the
+ * context gives the callback that the built-in Markdown carries verbatim (a
+ * producer's message, the findings, the built-in Markdown itself): an
+ * invisible character inside an occurrence of such a string passes through.
+ */
+function addedInvisible(result: string, context: IPresentationContext): string | undefined {
+  const found = [...result.matchAll(INVISIBLE)];
+  if (found.length === 0) return undefined;
+  const presented = contextStrings(context).filter((text) => /[\p{Cf}\u00A0]/u.test(text) && context.markdown.includes(text));
+  const covered: IOccurrence[] = [];
+  for (const text of presented) {
+    for (let at = result.indexOf(text); at !== -1; at = result.indexOf(text, at + 1)) covered.push({ start: at, end: at + text.length });
+  }
+  const added = found.find((match) => !covered.some((span) => span.start <= match.index && match.index < span.end));
+  if (added === undefined) return undefined;
+  return `U+${(added[0].codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(4, '0')}`;
 }

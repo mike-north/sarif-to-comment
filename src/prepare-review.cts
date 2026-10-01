@@ -337,7 +337,7 @@ import type { ICompanionProjectionView } from './presentation/companion-projecti
 import { renderBundledCompanionReference } from './presentation/companion-reference.cjs';
 import type { ICompanionContent } from './presentation/companion-changes.cjs';
 import { present, presentationOptionProblem } from './presentation/customization.cjs';
-import type { CapturedPresentation } from './presentation/customization.cjs';
+import type { CapturedPresentation, IIdentityLink } from './presentation/customization.cjs';
 import { fileDetails, proposedContentBlock, renderFileAddition, renderProposedFileFinding } from './presentation/file-addition.cjs';
 import type { ProposedFileMode } from './presentation/file-addition.cjs';
 import { renderFileDeletion } from './presentation/file-deletion.cjs';
@@ -4450,7 +4450,7 @@ class ReviewRenderer {
         attribution,
       }),
       required: alternatives === undefined ? [attribution] : [attribution, alternatives],
-    });
+    }, sourceLinkOf(this.#context, item));
   }
 
   /** A general body section: exact-revision link and literal source quote when the finding has a location. */
@@ -4572,6 +4572,20 @@ class ReviewRenderer {
     }));
     return present('alternatives', this.#presentation.alternatives, { alternatives: listed, markdown, required: listed.map((a) => a.changes) });
   }
+}
+
+/**
+ * The source link the core places before a finding in a body section (its
+ * text as a reader reads it, and its permalink), an identity link the finding
+ * callback may not point elsewhere (docs/review-presentation-contract.md §7).
+ * None for a finding without a location.
+ */
+function sourceLinkOf(context: IPreparationContext, item: IPreparedItem): IIdentityLink[] {
+  const source = item.placement && item.placement.source;
+  if (!source) return [];
+  const short = source.commit.slice(0, 7);
+  const text = source.startLine === undefined ? `${source.path} at ${short}` : `${source.path} ${lineSpan(source.startLine, source.endLine)} at ${short}`;
+  return [{ text, url: permalink(context, source) }];
 }
 
 /** A prepared alternative as the alternatives component lists it. */
