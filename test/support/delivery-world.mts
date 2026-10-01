@@ -61,7 +61,7 @@ export const HELPER = 'export const retries = 1;\n';
 const UNCHANGED: Readonly<Record<string, readonly string[]>> = { 'src/client.ts': CLIENT, 'notes.txt': NOTES, 'obsolete.txt': OBSOLETE };
 
 /** The repository; `configuration` puts `.github/sarif-to-comment.json` with that text on the default branch. */
-export function repository(options: { readonly configuration?: string; readonly fork?: boolean; readonly labels?: readonly string[] } = {}): IHttpRepository {
+export function repository(options: { readonly configuration?: string; readonly fork?: boolean; readonly labels?: readonly string[]; readonly push?: boolean } = {}): IHttpRepository {
   const base = { 'README.md': ['# Widgets\n'], ...UNCHANGED };
   return {
     destination: { owner: OWNER, repo: REPO, pullNumber: PULL },
@@ -79,6 +79,7 @@ export function repository(options: { readonly configuration?: string; readonly 
     defaultBranch: 'main',
     ...(options.configuration === undefined ? {} : { defaultBranchCommit: CONFIGURED }),
     labels: options.labels ?? ['bug', 'suggestion-pr', 'team-a'],
+    ...(options.push === undefined ? {} : { push: options.push }),
   };
 }
 
@@ -154,6 +155,11 @@ export const NOTE = (line: number, group?: string): Json => result({
 
 /** The obstacle a native suggestion of the src/client.ts edit has (contract §8.9). */
 export const RETRY_NOT_INLINE = 'Lines 2-2 of src/client.ts cannot carry a native suggestion (file-not-in-diff).';
+/** The catalogued remedies of `delivery-unavailable` (delivery policy §10.3). */
+export const UNAVAILABLE_REMEDIES = [
+  'Remove the obstacle the message names, then publish again.',
+  'Or list a mechanism that is available for this kind of proposal (`--edits`, `--grouped-edits`, `--file-operations`, the `delivery` option, or `.github/sarif-to-comment.json`).',
+];
 /** The obstacle every companion pull request of a pull request from a fork has (companion contract §2.5.1). */
 export const FORK_OBSTACLE = "The pull request's head branch `feature/retry` is in the fork someone/widgets, and suggestion pull requests are not yet supported for a pull request from a fork.";
 

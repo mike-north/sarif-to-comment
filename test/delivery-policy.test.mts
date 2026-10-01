@@ -1475,3 +1475,41 @@ describe('the recorded form of a resolved policy is checked when it is read back
     });
   }
 });
+
+describe('an obstacle\'s remedy travels with it into the diagnostic (§8.7, §8.9, §10.1, §10.2)', () => {
+  /** An unavailable mechanism whose obstacles come with remedies. */
+  const fixable = (obstacles: [string, ...string[]], remedies: readonly string[]): MechanismAvailability => ({ available: false, obstacles, remedies });
+
+  test('a blocked unit: the obstacles\' remedies, in obstacle order, each once, then the catalogued remedies', () => {
+    const plan = planDelivery(policy({ caller: { edits: ['native', 'review-body', 'companion'] } }), [
+      edit('e', 'The edit of `a.md` line 1', fixable(['Not inline.'], ['Remove the fix.']), no('Not yet.'), fixable(['Too big.', 'Rewritten.'], ['Reduce it.', 'Remove the fix.', 'Review again.'])),
+    ]);
+    assert.equal(plan.status, 'blocked');
+    const [blocked] = plan.diagnostics;
+    assert.deepEqual(blocked?.remedies, ['Remove the fix.', 'Reduce it.', 'Review again.', ...UNAVAILABLE.remedies]);
+  });
+
+  test('without any obstacle remedy, the catalogued remedies alone', () => {
+    const plan = planDelivery(policy(), [edit('e', 'The edit of `a.md` line 1', no('Not inline.'))]);
+    assert.deepEqual(plan.diagnostics[0]?.remedies, UNAVAILABLE.remedies);
+  });
+
+  test('an announced fallback: the earlier mechanisms\' remedies, then the catalogued remedies', () => {
+    const plan = planDelivery(policy({ caller: { fileOperations: ['companion', 'manual'] } }), [
+      fileOperation('f', 'The creation of `a.md`', { companion: fixable(['Too big.'], ['Reduce it.']) }),
+    ]);
+    assert.equal(plan.status, 'planned');
+    assert.deepEqual(plan.diagnostics[0]?.remedies, ['Reduce it.', ...FALLBACK.remedies]);
+  });
+
+  test('a native batch: the group\'s own remedies, then each ineligible member\'s, in order', () => {
+    const plan = planDelivery(policy(), [
+      editGroup('g', 'The group `g`', [
+        member('The edit of `a.md` line 1', fixable(['Fence.'], ['Change the replacement.'])),
+        member('The edit of `b.md` line 2', fixable(['Not inline.'], ['Remove the fix.'])),
+        member('The edit of `c.md` line 3', fixable(['CR.'], ['Change the replacement.'])),
+      ], { nativeBatch: fixable(['Not head.'], ['Review the head.']) }),
+    ]);
+    assert.deepEqual(plan.diagnostics[0]?.remedies, ['Review the head.', 'Change the replacement.', 'Remove the fix.', ...UNAVAILABLE.remedies]);
+  });
+});

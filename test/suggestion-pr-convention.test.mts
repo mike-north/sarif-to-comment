@@ -444,10 +444,10 @@ describe('label resolution (convention §4): publish, validate and cleanup resol
     await assert.rejects(cleanup(world), (err: unknown) => err instanceof Error && err.message === cleanupRefusal('`.github` is a symbolic link, which is never followed'));
   });
 
-  test('the repository is read once for the delivery configuration and once for the suggestion pull requests\' target, never more', async () => {
+  test('the repository is read once per call: the delivery configuration\'s read is reused for the suggestion pull requests\' target', async () => {
     const world = makeWorld();
     assert.equal(status(await validate(world)), 'ready');
-    assert.equal(world.host.log().filter((r) => r.method === 'GET' && r.path === `/repos/${OWNER}/${REPO}`).length, 2);
+    assert.equal(world.host.log().filter((r) => r.method === 'GET' && r.path === `/repos/${OWNER}/${REPO}`).length, 1);
     // With every delivery setting decided by the caller, the delivery configuration is not read (delivery policy §11.1).
     const decided = makeWorld();
     assert.equal(status(await validate(decided, { delivery: { preset: 'companion', companionBundle: 'per-unit' } })), 'ready');

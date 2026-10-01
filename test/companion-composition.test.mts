@@ -780,17 +780,24 @@ describe('group rules (§2.3–§2.4), identical in validate and publish', () =>
    * `[companion, manual]` it falls back to the review body and is then judged
    * exactly as without suggestion pull requests: here too large for the
    * review body, so validate and publish both block with that refusal and,
-   * delivering nothing, carry no fallback warning (delivery policy §10.1).
+   * delivering nothing, carry no fallback warning; the refusal names the
+   * fallback that put the file in the body instead (delivery policy §10.1).
    * With a strict `[companion]` they block naming the obstacle. Nothing is
    * written either way.
    */
-  async function assertFallsBackThenBlocked(sarif: Json, reason: RegExp): Promise<void> {
+  async function assertFallsBackThenBlocked(sarif: Json, reason: RegExp, filePath: string): Promise<void> {
     const disallowed = await publish(makeWorld(), sarif, null);
     assert.equal(status(disallowed), 'blocked', markdown(disallowed));
+    const cause = `\n\nThis includes a proposal delivered by a fallback: the creation of \`${filePath}\` is delivered as \`manual\`, `
+      + 'because `fileOperations` is `[companion, manual]` and the mechanisms listed before it (`companion`) are unavailable.';
+    const expected = asArray(disallowed['diagnostics']).map((d) => {
+      const diagnostic = asRecord(d);
+      return { ...diagnostic, message: `${asString(diagnostic['message'])}${cause}` };
+    });
     const world = makeWorld();
     for (const outcome of [await validate(world, sarif), await publish(world, sarif)]) {
       assert.equal(status(outcome), 'blocked', markdown(outcome));
-      assert.deepEqual(outcome['diagnostics'], disallowed['diagnostics'], 'the refusal without suggestion pull requests, and no warning');
+      assert.deepEqual(outcome['diagnostics'], expected, 'the refusal without suggestion pull requests, naming the fallback, and no warning');
     }
     const strict = { delivery: { fileOperations: ['companion'] } };
     for (const outcome of [await validate(world, sarif, strict), await publish(world, sarif, strict)]) {
@@ -808,7 +815,7 @@ describe('group rules (§2.3–§2.4), identical in validate and publish', () =>
   test('a suggestion pull request body over 60,000 characters falls back to the review body, which is then too large (issue #37); nothing is truncated', async () => {
     const message = 'x'.repeat(60_000);
     const sarif = document([result({ text: message, operation: createOp(0) })], [created('docs/guide.md', GUIDE)]);
-    await assertFallsBackThenBlocked(sarif, /- `companion`: Its suggestion pull request's description would be \d+ characters, and the limit is 60000\.$/);
+    await assertFallsBackThenBlocked(sarif, /- `companion`: Its suggestion pull request's description would be \d+ characters, and the limit is 60000\.$/, 'docs/guide.md');
   });
 
   test('more than ten suggestion pull requests', async () => {
@@ -822,7 +829,7 @@ describe('group rules (§2.3–§2.4), identical in validate and publish', () =>
   test('a created file over 1,000,000 bytes falls back to the review body, which is then too large (issue #37)', async () => {
     const big = `${'x'.repeat(1_000_000)}\n`;
     const sarif = document([result({ text: 'Big.', operation: createOp(0) })], [created('docs/big.md', big)]);
-    await assertFallsBackThenBlocked(sarif, /- `companion`: `docs\/big\.md` is 1000001 bytes, and a suggestion pull request carries at most 1000000 bytes per file\.$/);
+    await assertFallsBackThenBlocked(sarif, /- `companion`: `docs\/big\.md` is 1000001 bytes, and a suggestion pull request carries at most 1000000 bytes per file\.$/, 'docs/big.md');
   });
 });
 

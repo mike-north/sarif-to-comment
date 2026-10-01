@@ -472,6 +472,25 @@ describe('readDefaultBranchFile (docs/suggestion-pr-convention.md §4)', () => {
     ]);
   });
 
+  test('a client reads the repository once: the suggestion pull requests\' target reuses the configuration read\'s answer', async () => {
+    const script = defaultBranch(new Script(), null)
+      .on('GET', `${REPO}/pulls/7`, json({ head: { sha: PARENT, ref: 'feature', repo: { full_name: 'octo/widgets' } }, base: { sha: PARENT, ref: 'trunk', repo: { full_name: 'octo/widgets' } } }));
+    const c = script.client();
+    await c.readDefaultBranchFile(request);
+    const target = await c.readSuggestionTarget({ owner: 'octo', repo: 'widgets', pullNumber: 7 });
+    assert.equal(target.defaultBranch, 'trunk');
+    assert.equal(target.canPush, true);
+    assert.equal(script.sent.filter((r) => r.url === REPO).length, 1);
+  });
+
+  test('a failed repository read is not reused: the next read asks again', async () => {
+    const script = defaultBranch(new Script().on('GET', REPO, json({ message: 'Server Error' }, 502)), null);
+    const c = script.client();
+    await rejectsWith(c.readDefaultBranchFile(request), 'http-status');
+    assert.equal((await c.readDefaultBranchFile(request)).branch, 'trunk');
+    assert.equal(script.sent.filter((r) => r.url === REPO).length, 2);
+  });
+
   test('absent: a complete listing without the name', async () => {
     const read = await defaultBranch(new Script(), null).client().readDefaultBranchFile(request);
     assert.deepEqual(read, { branch: 'trunk', commit: DEFAULT_HEAD, content: { kind: 'absent' } });

@@ -24,7 +24,7 @@ import { describe, test } from 'node:test';
 
 import {
   ATTRIBUTION, CONFIGURATION_PATH, FORK_OBSTACLE, GUIDE, HEAD, HELPER, LICENSE, NOTE, OWNER, PULL, README, REPO,
-  RETRY, RETRY_NOT_INLINE, SHORT, SPELLING, TYPO,
+  RETRY, RETRY_NOT_INLINE, SHORT, SPELLING, TYPO, UNAVAILABLE_REMEDIES,
   assertBlockedEverywhere, at, blobUrl, coded, create, created, deleted, diagnostics, document, lineFix, linesFix,
   makeWorld, markdown, onlyReview, publish, pullUrl, readBlobOf, remove, repository, result, stateRecord, status, validate, writes,
 } from './support/delivery-world.mts';
@@ -218,6 +218,8 @@ describe('precedence and recording (§7, §13)', () => {
     assert.equal(problem['severity'], 'error');
     assert.equal(problem['title'], 'No delivery mechanism the policy lists is available for a proposal');
     assert.deepEqual(problem['location'], { pointer: '/runs/0/results/0' });
+    // §8.9: the retired `suggestion-not-inline`'s specific remedy comes first, then the catalogued ones.
+    assert.deepEqual(problem['remedies'], ['Remove the fix.', ...UNAVAILABLE_REMEDIES]);
   });
 
   test('a retry with the same state path never reads the configuration again and continues the recorded resolution', async () => {
@@ -371,6 +373,8 @@ describe('strict lists and announced fallback (D55; §10)', () => {
       `- \`delivery-unavailable\` at \`/runs/0/results/0\`: The deletion of \`obsolete.txt\` cannot be delivered. \`fileOperations\` is \`[companion]\`, ${CALLER('--file-operations', 'fileOperations')}, and no mechanism it lists is available:\n\n- \`companion\`: ${FORK_OBSTACLE}`,
     ]);
     assert.deepEqual(pulls(world), []);
+    // A fork has no remedy of its own (§8.9): only the catalogued remedies.
+    assert.deepEqual(diagnostics(await validate(world, document([OBSOLETE_RESULT()], [deleted('obsolete.txt')]), { delivery: { fileOperations: ['companion'] } }))[0]?.['remedies'], UNAVAILABLE_REMEDIES);
   });
 
   test('D-A10: a configured [companion, manual] list falls back to the body section, announced, and every later call reports the same warning', async () => {
@@ -648,4 +652,51 @@ describe('the configuration file (§11) and caller settings (§12)', () => {
     assert.deepEqual(diagnostics(blocked).map((d) => d['code']), ['delivery-unavailable']);
   });
 
+});
+
+describe('a block after a fallback names the fallback that contributed to it (§10.1)', () => {
+  const BIG = `${'x'.repeat(1_000_000)}\n`;
+  const bigCreation = (): Json => document([result({ text: 'Add a big file.', operation: create(0) })], [created('docs/big.md', BIG)]);
+  const paragraph = (unit: string, mechanism: string, dimension: string, list: string, earlier: string): string =>
+    `\n\nThis includes a proposal delivered by a fallback: ${unit} is delivered as \`${mechanism}\`, because \`${dimension}\` is \`[${list}]\` and the mechanisms listed before it (${earlier}) are unavailable.`;
+
+  test('a file too large for a companion falls back into the body, which is then too large: body-too-large names the fallback; no warning', async () => {
+    const world = makeWorld();
+    const outcome = await publish(world, bigCreation(), { delivery: { fileOperations: ['companion', 'manual'] } });
+    assert.equal(status(outcome), 'blocked', markdown(outcome));
+    const [tooLarge, ...others] = diagnostics(outcome);
+    assert.deepEqual(others, [], 'no delivery-fallback warning: nothing is delivered');
+    assert.equal(tooLarge?.['code'], 'body-too-large');
+    assert.ok(String(tooLarge?.['message']).endsWith(`Nothing is truncated or split.${paragraph('the creation of `docs/big.md`', 'manual', 'fileOperations', 'companion, manual', '`companion`')}`),
+      String(tooLarge?.['message']));
+    assert.deepEqual(diagnostics(await validate(world, bigCreation(), { delivery: { fileOperations: ['companion', 'manual'] } })), diagnostics(outcome));
+    assert.deepEqual(writes(world), []);
+  });
+
+  test('without a fallback, the same block names none', async () => {
+    const outcome = await publish(makeWorld(), bigCreation());
+    assert.equal(status(outcome), 'blocked', markdown(outcome));
+    const [tooLarge] = diagnostics(outcome);
+    assert.equal(tooLarge?.['code'], 'body-too-large');
+    assert.ok(String(tooLarge?.['message']).endsWith('Nothing is truncated or split.'), String(tooLarge?.['message']));
+  });
+
+  test('a fallback to a companion that a repository check then refuses: the check names the fallback', async () => {
+    const world = makeWorld(repository({ push: false }));
+    const outcome = await publish(world, document([TYPO(), RETRY()]), { delivery: { edits: ['native', 'companion'] } });
+    assert.equal(status(outcome), 'blocked', markdown(outcome));
+    const [refused, ...others] = diagnostics(outcome);
+    assert.deepEqual(others, []);
+    assert.equal(refused?.['code'], 'suggestion-pr-permission-missing');
+    assert.equal(refused?.['message'], `The authenticated account cannot push to ${OWNER}/${REPO}, which creating proposal branches requires.`
+      + paragraph('the edit of `src/client.ts` line 2', 'companion', 'edits', 'native, companion', '`native`'));
+    assert.deepEqual(writes(world), []);
+  });
+
+  test('a companion that was the first choice is no fallback: the repository check names none', async () => {
+    const world = makeWorld(repository({ push: false }));
+    const outcome = await publish(world, document([RETRY()]), { delivery: { edits: ['companion'] } });
+    assert.equal(status(outcome), 'blocked', markdown(outcome));
+    assert.equal(diagnostics(outcome)[0]?.['message'], `The authenticated account cannot push to ${OWNER}/${REPO}, which creating proposal branches requires.`);
+  });
 });
