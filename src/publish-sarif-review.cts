@@ -1039,11 +1039,14 @@ async function run(captured: ICapturedInput, createGitHubClient: CreatePublishin
     transport: client,
     submit: captured.submit === true,
   };
+  // A companion publication composes its review once its suggestion pull
+  // requests exist, with this call's companion callbacks (not identity).
+  const companionIdentity = { ...identity, ...(captured.presentation === undefined ? {} : { presentation: captured.presentation }) };
 
   // A companion plan is continued before anything else: its own identity
   // checks, then only the steps it still lacks.
   if (hasCompanionPlan(captured.statePath)) {
-    return presentCompanion(await continueCompanionPublication({ ...identity, transport: companionTransport(client) }, companionInternals), captured);
+    return presentCompanion(await continueCompanionPublication({ ...companionIdentity, transport: companionTransport(client) }, companionInternals), captured);
   }
   const existing = await recoverPublication(identity);
   if (existing.status !== 'missing') return present(existing, captured);
@@ -1061,7 +1064,7 @@ async function run(captured: ICapturedInput, createGitHubClient: CreatePublishin
   const warnings = prepared.warnings.map((w) => mapDiagnosticText(w, (text) => redact(text, captured.token)));
   if (prepared.suggestions !== undefined && prepared.suggestionPullRequests !== undefined) {
     const outcome = await startCompanionPublication({
-      ...identity,
+      ...companionIdentity,
       transport: companionTransport(client),
       suggestions: prepared.suggestions,
       comments: prepared.review.comments,

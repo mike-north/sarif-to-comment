@@ -361,7 +361,7 @@ import type { ICompanionIndexEntry } from './presentation/companion-index.cjs';
 import { renderBundledCompanionReference } from './presentation/companion-reference.cjs';
 import type { ICompanionContent } from './presentation/companion-changes.cjs';
 import { present, presentationOptionProblem } from './presentation/customization.cjs';
-import type { CapturedPresentation, IIdentityLink } from './presentation/customization.cjs';
+import type { CapturedPresentation, ICompanionPresentation, IIdentityLink } from './presentation/customization.cjs';
 import { fileDetails, proposedContentBlock, renderFileAddition, renderProposedFileFinding } from './presentation/file-addition.cjs';
 import type { ProposedFileMode } from './presentation/file-addition.cjs';
 import { renderFileDeletion } from './presentation/file-deletion.cjs';
@@ -374,7 +374,7 @@ import type { IManualEdit, IManualReplacement } from './presentation/manual-edit
 import { renderManualGroup } from './presentation/manual-group.cjs';
 import type { IManualGroupPart } from './presentation/manual-group.cjs';
 import { renderNativeBatchGuidance, renderNativeBatchMemberNote } from './presentation/native-batch.cjs';
-import { SEPARATOR, codeSpan, escapePlain, escapePlainInline, lineSpan } from './presentation/markdown.cjs';
+import { SEPARATOR, codePointName, codeSpan, escapePlain, escapePlainInline, lineSpan } from './presentation/markdown.cjs';
 import { composedProblem, fenceProblem, loadMarkdownParser, unbalancedHtml } from './presentation/markdown-tree.cjs';
 import type { IComposedExpectation } from './presentation/markdown-tree.cjs';
 import { renderDiagnosticLine, renderWarningsList } from './presentation/warnings-list.cjs';
@@ -2531,11 +2531,6 @@ function contentRepresentationProblem(text: string): string | null {
   return null;
 }
 
-/** "U+XXXX" for a character, as diagnostics name invisible characters. */
-function codePointName(character: string): string {
-  return `U+${(character.codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(4, '0')}`;
-}
-
 /**
  * Why an artifact's declared length or verifiable hashes disagree with the
  * proposed bytes, or null. A length of -1 means unknown (SARIF 3.24.9); hash
@@ -4064,35 +4059,38 @@ function renderDelivery(
   // The composed-text checkpoint (see checkComposed): every comment, every
   // section, every companion pull request's description and the body, each
   // with a way to compose it again with another renderer. A companion's
-  // reference is read with the largest pull request number, as the limits are.
+  // reference and the companion index are read with placeholder pull request
+  // numbers (placeholderNumbers), as large as any, as the limits are; a
+  // caller's companion callbacks are checked with them before any write.
   const target = prepared.length === 0 ? undefined : companions.target();
-  const referenceText = (reference: ICompanionSectionReference, content: ICompanionContent): string => {
+  const placeholders = placeholderNumbers(prepared.length);
+  const referenceText = (reference: ICompanionSectionReference, content: ICompanionContent, r: ReviewRenderer): string => {
     if (target === undefined) throw new Error('Internal error: a companion reference without a companion.');
-    const largest = { number: LARGEST_PULL_NUMBER, url: pullRequestUrl(target, LARGEST_PULL_NUMBER) };
-    const count = itemAt(prepared, reference.companion).sections.length;
-    return renderBundledCompanionReference(content, largest, target, reference.section + 1, count);
+    const number = itemAt(placeholders, reference.companion);
+    const companion = itemAt(prepared, reference.companion);
+    return r.companionReference(content, { number, url: pullRequestUrl(target, number) }, companion.title, target, reference.section + 1, companion.sections.length);
   };
   /** A section's text: a part as rendered, a companion's reference with its planned content or as `r` renders it. */
   const partText = (part: string | ICompanionSectionReference, r?: ReviewRenderer): string => {
     if (typeof part === 'string') return part;
-    if (r === undefined) return referenceText(part, itemAt(itemAt(prepared, part.companion).sections, part.section));
+    if (r === undefined) return referenceText(part, itemAt(itemAt(prepared, part.companion).sections, part.section), renderer);
     const unit = itemAt(units, Number(itemAt(itemAt(plan.companions, part.companion).sections, part.section)));
-    return referenceText(part, companionContent(unit, r));
+    return referenceText(part, companionContent(unit, r), r);
   };
   const sectionWith = (section: UnitSection, r: ReviewRenderer): string => partText(sectionPart(section, r), r);
 
   // The companion index (docs/companion-suggestion-pr-contract.md §2.13.3)
-  // comes first whenever the review creates or lists a companion. It is not
-  // customizable, so it reads the same with any renderer; with created
-  // companions it is read with the largest pull request number, like their
+  // comes first whenever the review creates or lists a companion; with
+  // created companions it is read with their placeholder numbers, like their
   // references. It is not one of the body's general sections.
   const existing = state.options.existingCompanions ?? [];
   const indexSection: ICompanionIndexSection | undefined = prepared.length === 0 && existing.length === 0
     ? undefined : { companionIndex: { existing } };
-  const indexText = indexSection === undefined ? undefined
-    : renderIndexSection(indexSection, prepared, prepared.map(() => LARGEST_PULL_NUMBER), context);
+  const indexEntries = indexSection === undefined ? undefined : companionIndexEntries(indexSection, prepared, placeholders, context);
+  const indexWith = (r: ReviewRenderer): string | undefined => (indexEntries === undefined ? undefined : r.companionIndex(indexEntries, context.pullNumber));
+  const indexText = indexWith(renderer);
   const indexUnits: IComposedUnit[] = indexText === undefined ? []
-    : [{ what: 'the companion index', text: indexText, expected: {}, items: [], compose: () => indexText }];
+    : [{ what: 'the companion index', text: indexText, expected: {}, items: [], compose: (r) => indexWith(r) ?? '' }];
   const sectionUnits = [...indexUnits, ...sections.map((section, i): IComposedUnit => ({
     what: `body section ${String(i + 1)}`,
     // Sections are read only to locate the culprit when the body fails.
@@ -4101,8 +4099,10 @@ function renderDelivery(
     items: section.kind === 'item' ? [section.item] : itemAt(units, section.unit).items,
     compose: (r) => sectionWith(section, r),
   }))];
-  const composedBody = (r: ReviewRenderer): string =>
-    [...(indexText === undefined ? [] : [indexText]), ...sections.map((section) => sectionWith(section, r))].join(SEPARATOR);
+  const composedBody = (r: ReviewRenderer): string => {
+    const index = indexWith(r);
+    return [...(index === undefined ? [] : [index]), ...sections.map((section) => sectionWith(section, r))].join(SEPARATOR);
+  };
   const composedFor = (body: string, descriptions: readonly IComposedUnit[]): IComposedUnit[] => [
     ...commentItems.map((entry, i) => commentUnit(entry, itemAt(comments, i).body, i)),
     ...descriptions,
@@ -4142,7 +4142,9 @@ function renderDelivery(
   const suggestions: IPreparedSuggestions = {
     companions: prepared, sections: indexSection === undefined ? parts : [indexSection, ...parts], lifecycleNote,
   };
-  const body = renderReviewBody(suggestions, prepared.map(() => LARGEST_PULL_NUMBER), target);
+  // The body as renderReviewBody composes it with the placeholder numbers,
+  // from the pieces already presented, so each callback runs once here.
+  const body = [...(indexText === undefined ? [] : [indexText]), ...parts.map((part) => partText(part))].join(SEPARATOR);
   return {
     review: { commitId: context.reviewedCommit, body, comments },
     evidence,
@@ -4283,13 +4285,13 @@ function combineEdits(sourceText: string, fileEdits: readonly IPreparedEdit[]): 
  * first, in order, then existing ones, in the order the caller gave. Every
  * link comes from the shared builder (src/github-urls.cts).
  */
-function renderIndexSection(
+function companionIndexEntries(
   section: ICompanionIndexSection,
   companions: readonly Pick<IPreparedCompanion, 'title'>[],
   numbers: readonly number[],
   repository: { readonly owner: string; readonly repo: string },
-): string {
-  const entries: ICompanionIndexEntry[] = [
+): ICompanionIndexEntry[] {
+  return [
     ...companions.map((companion, i): ICompanionIndexEntry => {
       const number = itemAt(numbers, i);
       return { number, url: pullRequestUrl(repository, number), title: companion.title, origin: 'created' };
@@ -4298,7 +4300,67 @@ function renderIndexSection(
       number: e.number, url: pullRequestUrl(repository, e.number), title: e.title, origin: 'existing', state: e.state,
     })),
   ];
-  return renderCompanionIndex(entries);
+}
+
+/**
+ * Distinct placeholder numbers for `count` companions that do not exist yet:
+ * the largest pull request number and those just below it, each as long as
+ * any real one, so the limits hold for every real number and a callback
+ * checked with them cannot confuse one companion with another.
+ */
+function placeholderNumbers(count: number): number[] {
+  return Array.from({ length: count }, (_, i) => LARGEST_PULL_NUMBER - i);
+}
+
+/** One companion as the companion callbacks receive it (src/presentation/customization.cts). */
+function companionPresentation(entry: ICompanionIndexEntry): ICompanionPresentation {
+  const link = `[#${String(entry.number)}](${entry.url})`;
+  return entry.origin === 'created'
+    ? { number: entry.number, url: entry.url, title: entry.title, origin: 'created', link }
+    : { number: entry.number, url: entry.url, title: entry.title, origin: 'reused', state: entry.state, link };
+}
+
+/**
+ * The companion index of `entries`: the built-in component, or the caller's
+ * `companionIndex` callback, whose result must show every entry's link as
+ * itself, at its own place, and may link nowhere else
+ * (docs/review-presentation-contract.md §7).
+ */
+function presentCompanionIndex(entries: readonly ICompanionIndexEntry[], pullNumber: number, callback: CapturedPresentation['companionIndex']): string {
+  const companions = entries.map(companionPresentation);
+  return present('companionIndex', callback, {
+    pullNumber, companions, markdown: renderCompanionIndex(entries), required: companions.map((c) => c.link),
+  }, companions.map((c) => ({ text: `#${String(c.number)}`, url: c.url })));
+}
+
+/**
+ * One proposal's section for the companion pull request `pull`: the built-in
+ * companion reference, or the caller's `companionReference` callback, whose
+ * result must show the companion's link, the change list and the findings,
+ * and may link only where those do.
+ */
+function presentCompanionReference(
+  content: ICompanionContent,
+  pull: { readonly number: number; readonly url: string },
+  title: string,
+  target: ISuggestionContext,
+  proposal: number,
+  proposals: number,
+  callback: CapturedPresentation['companionReference'],
+): string {
+  const link = `[#${String(pull.number)}](${pull.url})`;
+  return present('companionReference', callback, {
+    pullNumber: target.pullNumber,
+    headRef: target.headRef,
+    companion: { number: pull.number, url: pull.url, title, origin: 'created', link },
+    proposal,
+    proposals,
+    changeCount: content.changeCount,
+    changes: content.changeLines,
+    findings: content.items,
+    markdown: renderBundledCompanionReference(content, pull, target, proposal, proposals),
+    required: [link, content.changeLines, content.items],
+  }, [{ text: `#${String(pull.number)}`, url: pull.url }]);
 }
 
 /**
@@ -4307,20 +4369,57 @@ function renderIndexSection(
  * companion rendered with its pull request number (`numbers[i]` for
  * companion i) as the companion-reference component
  * (src/presentation/companion-reference.cts), naming which proposal of a
- * bundle it is. Sections planned before the index existed have none, and
- * are rendered as planned.
+ * bundle it is. `presentation`'s companionIndex and companionReference
+ * callbacks, when given, replace those two components, with every check of
+ * src/presentation/customization.cts (a TypeError when one is refused).
+ * Sections planned before the index existed have none, and are rendered as
+ * planned; so are a version-2 plan's re-applied sections, always built in.
  */
-function renderReviewBody(suggestions: Pick<IPreparedSuggestions, 'companions' | 'sections'>, numbers: readonly number[], target: ISuggestionContext): string {
+function renderReviewBody(
+  suggestions: Pick<IPreparedSuggestions, 'companions' | 'sections'>,
+  numbers: readonly number[],
+  target: ISuggestionContext,
+  presentation?: CapturedPresentation,
+): string {
+  const reference = target.reappliedOnto === undefined ? presentation?.companionReference : undefined;
   return suggestions.sections
     .map((part) => {
       if (typeof part === 'string') return part;
-      if (isCompanionIndexSection(part)) return renderIndexSection(part, suggestions.companions, numbers, target);
+      if (isCompanionIndexSection(part)) {
+        return presentCompanionIndex(companionIndexEntries(part, suggestions.companions, numbers, target), target.pullNumber, presentation?.companionIndex);
+      }
       const number = itemAt(numbers, part.companion);
       const companion = itemAt(suggestions.companions, part.companion);
       const pull = { number, url: pullRequestUrl(target, number) };
-      return renderBundledCompanionReference(itemAt(companion.sections, part.section), pull, target, part.section + 1, companion.sections.length);
+      return presentCompanionReference(itemAt(companion.sections, part.section), pull, companion.title, target, part.section + 1, companion.sections.length, reference);
     })
     .join(SEPARATOR);
+}
+
+/**
+ * The review body a companion publication sends, composed once its
+ * companion pull requests exist (docs/companion-suggestion-pr-contract.md
+ * §2.13.4): renderReviewBody with the real numbers and this call's companion
+ * callbacks, then — when a callback shaped it — the composed-text checkpoint
+ * the prepared body passed with placeholder numbers. A refused result is the
+ * presentation TypeError: nothing has been sent for the review.
+ */
+async function composeReviewBody(
+  suggestions: Pick<IPreparedSuggestions, 'companions' | 'sections'>,
+  numbers: readonly number[],
+  target: ISuggestionContext,
+  presentation: CapturedPresentation | undefined,
+): Promise<string> {
+  const customized = presentation !== undefined && (presentation.companionIndex !== undefined || presentation.companionReference !== undefined);
+  if (!customized) return renderReviewBody(suggestions, numbers, target);
+  await loadMarkdownParser();
+  const body = renderReviewBody(suggestions, numbers, target, presentation);
+  const problem = composedProblem(`${body}\n\n${SAMPLE_REVIEW_MARKER}`, { marker: SAMPLE_REVIEW_MARKER });
+  if (problem !== null) {
+    throw new TypeError(`Invalid presentation: the review body composed with options.presentation.companionIndex and companionReference ${problem}. `
+      + 'A presentation callback may change how an element reads, never what is published or how it is identified.');
+  }
+  return body;
 }
 
 /**
@@ -4650,6 +4749,18 @@ class ReviewRenderer {
     return renderCompanionChange({ kind: 'delete', path: operation.path, commit: operation.commit, url });
   }
 
+  /** The companion index listing `entries` (docs/companion-suggestion-pr-contract.md §2.13.3). */
+  companionIndex(entries: readonly ICompanionIndexEntry[], pullNumber: number): string {
+    return presentCompanionIndex(entries, pullNumber, this.#presentation.companionIndex);
+  }
+
+  /** One proposal's section for the companion pull request `pull` (§2.11). */
+  companionReference(
+    content: ICompanionContent, pull: { readonly number: number; readonly url: string }, title: string, target: ISuggestionContext, proposal: number, proposals: number,
+  ): string {
+    return presentCompanionReference(content, pull, title, target, proposal, proposals, this.#presentation.companionReference);
+  }
+
   /** The lifecycle note of a suggestion pull request into `target`'s head branch. */
   lifecycleNote(target: ISuggestionContext): string {
     return present('lifecycleNote', this.#presentation.lifecycleNote, {
@@ -4922,4 +5033,4 @@ function groupOf(match: RegExpExecArray, index: number): string {
   return group;
 }
 
-export { blockedBy, codeSpan, prepareReview, PRODUCT_LIMITS, renderReviewBody, renderSuggestionPullBody };
+export { blockedBy, codeSpan, composeReviewBody, prepareReview, PRODUCT_LIMITS, renderReviewBody, renderSuggestionPullBody };

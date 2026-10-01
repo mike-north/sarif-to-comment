@@ -158,6 +158,34 @@ export interface ICloseSuggestionPullRequestsOutcome {
 }
 
 // @public
+export interface ICompanionIndexPresentationContext extends IPresentationContext {
+    readonly companions: readonly ICompanionPresentation[];
+    readonly pullNumber: number;
+}
+
+// @public
+export interface ICompanionPresentation {
+    readonly link: string;
+    readonly number: number;
+    readonly origin: 'created' | 'reused';
+    readonly state?: 'open' | 'draft' | 'closed' | 'merged';
+    readonly title: string;
+    readonly url: string;
+}
+
+// @public
+export interface ICompanionReferencePresentationContext extends IPresentationContext {
+    readonly changeCount: number;
+    readonly changes: string;
+    readonly companion: ICompanionPresentation;
+    readonly findings: string;
+    readonly headRef: string;
+    readonly proposal: number;
+    readonly proposals: number;
+    readonly pullNumber: number;
+}
+
+// @public
 export interface ICreateSarifDocumentOptions {
     readonly source?: ISarifSourceBinding | undefined;
     readonly tool?: ISarifToolIdentity | undefined;
@@ -570,6 +598,8 @@ export interface IRemovedSarifCommentOutcome {
 export interface IReviewPresentation {
     readonly alternatives?: ((context: IAlternativesPresentationContext) => string) | undefined;
     readonly attribution?: ((context: IAttributionPresentationContext) => string) | undefined;
+    readonly companionIndex?: ((context: ICompanionIndexPresentationContext) => string) | undefined;
+    readonly companionReference?: ((context: ICompanionReferencePresentationContext) => string) | undefined;
     readonly fileAddition?: ((context: IFileAdditionPresentationContext) => string) | undefined;
     readonly fileDeletion?: ((context: IFileDeletionPresentationContext) => string) | undefined;
     readonly finding?: ((context: IFindingPresentationContext) => string) | undefined;

@@ -112,7 +112,8 @@ import { deliveryRecordProblem } from './delivery-policy.cjs';
 import type { IResolvedDeliveryPolicy } from './delivery-policy.cjs';
 import type { IDiagnostic } from './public-types.cjs';
 import type { IPreparedCompanion, IPreparedSuggestions, ISuggestionContext, PreparedComment, ReviewBodySection } from './prepare-review.cjs';
-import { isExistingCompanion, renderReviewBody, renderSuggestionPullBody } from './prepare-review.cjs';
+import { composeReviewBody, isExistingCompanion, renderSuggestionPullBody } from './prepare-review.cjs';
+import type { CapturedPresentation } from './presentation/customization.cjs';
 import {
   PublicationStateError,
   boundedRejectionMessage,
@@ -206,6 +207,14 @@ export interface ICompanionIdentity {
   readonly statePath: string;
   readonly submit: boolean;
   readonly transport: ICompanionTransport;
+  /**
+   * This call's presentation callbacks. Only companionIndex and
+   * companionReference are used here, to compose the review once its
+   * suggestion pull requests exist, when no earlier call recorded its body
+   * (docs/companion-suggestion-pr-contract.md §2.13.4). Not part of the
+   * identity.
+   */
+  readonly presentation?: CapturedPresentation | undefined;
 }
 
 /** A new publication's input. */
@@ -814,6 +823,11 @@ class Publication {
     return this.identity.transport;
   }
 
+  /** This call's presentation callbacks, for composing the review. */
+  get presentation(): CapturedPresentation | undefined {
+    return this.identity.presentation;
+  }
+
   /** The caller's state path: the plan's own file. */
   get statePath(): string {
     return this.identity.statePath;
@@ -1162,7 +1176,10 @@ async function review(publication: Publication, pulls: readonly { readonly numbe
       ...plan.destination, reviewedCommit: plan.reviewedCommit, headRef: plan.headRef, ready: plan.ready,
       ...(plan.reappliedOnto === undefined ? {} : { reappliedOnto: plan.reappliedOnto }),
     };
-    const body = renderReviewBody({ companions: plan.suggestions, sections: plan.review.sections }, pulls.map((p) => p.number), target);
+    // Composed only when no earlier call recorded the review: with the real
+    // numbers and this call's companion callbacks. A refused callback result
+    // rejects here, before the review's record exists or anything is sent.
+    const body = await composeReviewBody({ companions: plan.suggestions, sections: plan.review.sections }, pulls.map((p) => p.number), target, publication.presentation);
     result = await publishPreparedReview({ ...identity, preparedReview: { body, comments: plan.review.comments } });
   }
   const suggestions = plan.suggestions.map((s, i) => {

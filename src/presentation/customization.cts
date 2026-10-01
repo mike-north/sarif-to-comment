@@ -36,8 +36,10 @@
  *     guidance, member lines and change labels, around each change's
  *     component (docs/delivery-policy-contract.md §8.10);
  *   - the destination of an identity link — a manual edit's location, a
- *     deletion's link — which no link of the result may carry to anywhere
- *     else, unless the built-in Markdown has that exact link;
+ *     deletion's link, a companion pull request's `[#N](URL)` — which no link
+ *     of the result may carry to anywhere else, unless the built-in Markdown
+ *     has that exact link; the companion index and a companion's section may
+ *     add no link at all, an autolink literal included;
  *   - every size limit, which counts the customized Markdown.
  * A result is refused, before anything is written, when it is not a string,
  * is blank, omits a required fragment, could open a native suggestion block,
@@ -293,6 +295,79 @@ export interface ILifecycleNotePresentationContext extends IPresentationContext 
 }
 
 /**
+ * One companion suggestion pull request of the review, as the companion index
+ * and a companion's section name it.
+ *
+ * @public
+ */
+export interface ICompanionPresentation {
+  /** The pull request's number. */
+  readonly number: number;
+  /** Its web URL. */
+  readonly url: string;
+  /** Its title: as planned for one the review creates, as GitHub reported it for a reused one. Host text, shown by the built-in Markdown as a code span. */
+  readonly title: string;
+  /** Whether the review creates it, or lists an existing one the caller named (`existingCompanions`). */
+  readonly origin: 'created' | 'reused';
+  /** For a reused one, what it was when the review was prepared. Absent for one the review creates. */
+  readonly state?: 'open' | 'draft' | 'closed' | 'merged';
+  /** Its identity link, `[#N](URL)`: a required fragment wherever it is listed. */
+  readonly link: string;
+}
+
+/**
+ * The review body's companion index: every companion pull request the review
+ * creates, then every existing one the caller named, in that order.
+ *
+ * @remarks
+ * `required` holds every companion's `link`, so the result keeps every entry
+ * and each number leads to its own pull request; no link may lead elsewhere.
+ * When the review creates companion pull requests, the callback runs twice:
+ * during preparation with placeholder numbers (above 2,000,000,000), to check
+ * it before anything is written, and once more with the real numbers, when
+ * the review is composed after they exist.
+ *
+ * @public
+ */
+export interface ICompanionIndexPresentationContext extends IPresentationContext {
+  /** The reviewed pull request's number. */
+  readonly pullNumber: number;
+  /** The companions, created ones first. */
+  readonly companions: readonly ICompanionPresentation[];
+}
+
+/**
+ * The review body's section for one proposal a companion suggestion pull
+ * request carries: its link, what merging it applies and the findings that
+ * carry the proposal.
+ *
+ * @remarks
+ * `required` holds the companion's `link`, the change list and the findings.
+ * Like the index, it runs during preparation with a placeholder number and
+ * again with the real number.
+ *
+ * @public
+ */
+export interface ICompanionReferencePresentationContext extends IPresentationContext {
+  /** The reviewed pull request's number. */
+  readonly pullNumber: number;
+  /** The reviewed pull request's head branch, which the companion targets. */
+  readonly headRef: string;
+  /** The companion pull request (always one the review creates). */
+  readonly companion: ICompanionPresentation;
+  /** Which proposal of the companion this is (1-based): 1 of 1 unless it bundles several. */
+  readonly proposal: number;
+  /** How many proposals the companion bundles. */
+  readonly proposals: number;
+  /** How many changes this proposal makes. */
+  readonly changeCount: number;
+  /** The change list as Markdown, one line per change. */
+  readonly changes: string;
+  /** The findings that carry the proposal, as presented and joined. */
+  readonly findings: string;
+}
+
+/**
  * Functions that return the Markdown of named review presentation components,
  * for library callers who want a different look. Each is optional; a
  * component left out keeps its built-in presentation.
@@ -333,9 +408,13 @@ export interface ILifecycleNotePresentationContext extends IPresentationContext 
  * An exception a callback throws propagates unchanged.
  *
  * Callbacks run while the review is prepared, once per element, and must be
- * deterministic. They are not part of the publication identity: a retry with
- * the same state path never re-renders what an earlier call already planned
- * or sent.
+ * deterministic. The companion index and a companion's section also run once
+ * more, with the real pull request numbers, when the review is composed
+ * after its companion pull requests exist; a result refused then stops the
+ * publication before the review is sent, and a retry composes it with that
+ * call's callbacks. Callbacks are not part of the publication identity: a
+ * retry with the same state path never re-renders what an earlier call
+ * already planned, or a review body it already recorded.
  *
  * @public
  */
@@ -354,6 +433,10 @@ export interface IReviewPresentation {
   readonly manualEdit?: ((context: IManualEditPresentationContext) => string) | undefined;
   /** A suggestion pull request's lifecycle note (see {@link ILifecycleNotePresentationContext}). */
   readonly lifecycleNote?: ((context: ILifecycleNotePresentationContext) => string) | undefined;
+  /** The review's companion index (see {@link ICompanionIndexPresentationContext}). */
+  readonly companionIndex?: ((context: ICompanionIndexPresentationContext) => string) | undefined;
+  /** A companion's section in the review body (see {@link ICompanionReferencePresentationContext}). */
+  readonly companionReference?: ((context: ICompanionReferencePresentationContext) => string) | undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -364,8 +447,16 @@ export type PresentationComponent = keyof IReviewPresentation;
 
 /** Every customizable component, in documentation order. */
 export const PRESENTATION_COMPONENTS: readonly PresentationComponent[] = [
-  'finding', 'attribution', 'alternatives', 'fileAddition', 'fileDeletion', 'manualEdit', 'lifecycleNote',
+  'finding', 'attribution', 'alternatives', 'fileAddition', 'fileDeletion', 'manualEdit', 'lifecycleNote', 'companionIndex', 'companionReference',
 ];
+
+/**
+ * Components that present companion pull requests by their identity links:
+ * a result may link only where the built-in Markdown links (its companions,
+ * and the content it presents), so no link, an autolink literal included,
+ * leads a reader anywhere else.
+ */
+const LINK_BOUND_COMPONENTS: ReadonlySet<PresentationComponent> = new Set(['companionIndex', 'companionReference']);
 
 /** Components whose Markdown is embedded within a line, so a result must be one line. */
 const INLINE_COMPONENTS: ReadonlySet<PresentationComponent> = new Set(['attribution']);
@@ -441,6 +532,8 @@ export function capturePresentation(value: unknown, refuse: (message: string) =>
     fileDeletion: callbackAt(value, 'fileDeletion'),
     manualEdit: callbackAt(value, 'manualEdit'),
     lifecycleNote: callbackAt(value, 'lifecycleNote'),
+    companionIndex: callbackAt(value, 'companionIndex'),
+    companionReference: callbackAt(value, 'companionReference'),
   });
 }
 
@@ -527,6 +620,13 @@ function markdownProblem(name: PresentationComponent, result: string, context: I
   }
   const spoofed = spoofedLink(result, context.markdown, identity);
   if (spoofed !== undefined) return `links the text ${JSON.stringify(spoofed.text)} to ${JSON.stringify(spoofed.url)} rather than its permalink`;
+  if (LINK_BOUND_COMPONENTS.has(name)) {
+    const allowed = new Set([...linksIn(context.markdown), ...identity].map((link) => link.url));
+    const foreign = linksIn(result).find((link) => !allowed.has(link.url));
+    if (foreign !== undefined) {
+      return `adds a link to ${JSON.stringify(foreign.url)}, which is none of the links it presents; it may link only its companion pull requests and the content it presents`;
+    }
+  }
   if (INLINE_COMPONENTS.has(name) && /[\r\n]/.test(result)) return 'spans more than one line, but this component is inline';
   return null;
 }

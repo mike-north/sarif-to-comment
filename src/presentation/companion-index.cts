@@ -11,10 +11,14 @@
  * belong in it, or in which order (preparation and publication do).
  *
  * Each entry's link is an identity link, built from the pull request's
- * number by the shared builder (src/github-urls.cts). A title is shown as
- * literal text, so no title can re-point, hide or swallow a link. The
- * component is not customizable: the numbers of the pull requests a
- * publication creates exist only after every presentation callback has run.
+ * number by the shared builder (src/github-urls.cts). A title is host text,
+ * shown as a code span with every character a reader could not see written
+ * as a visible escape (src/presentation/markdown.cts, visibleText): in a code
+ * span nothing is Markdown, a mention or a link (GFM autolink literals
+ * included), so no title can re-point, hide, swallow or add a link, or read
+ * as an entry's origin. Library callers may replace this presentation
+ * (`options.presentation.companionIndex`); the core checks the result
+ * (src/presentation/customization.cts) and keeps every entry's link.
  *
  * Rendering:
  *
@@ -23,12 +27,13 @@
  *   origin = "created with this review"
  *          | "reused; it was " state " when this review was prepared"
  *   state  = "open" | "a draft" | "closed" | "merged"
- *   title  = the title as literal text: Markdown characters (and `$`, which
- *            GitHub reads as math) backslash-escaped, an @mention as a code
- *            span, line breaks as spaces
+ *   title  = a code span of the title, each invisible or bidirectional
+ *            character (Unicode Cf, U+00A0) written `{U+XXXX}` — a zero-width
+ *            joiner inside an emoji sequence is kept — and line breaks as
+ *            spaces
  */
 
-import { escapePlainInline } from './markdown.cjs';
+import { codeSpan, visibleText } from './markdown.cjs';
 
 /**
  * What an existing suggestion pull request was when the review was prepared:
@@ -60,9 +65,9 @@ export function existingStateWords(state: ExistingCompanionState): string {
   return STATE_WORDS[state];
 }
 
-/** A title as literal inline text; `$` is escaped too, so a title never becomes GitHub math. */
-function literalTitle(title: string): string {
-  return escapePlainInline(title).replace(/\$/g, '\\$');
+/** A title as the index shows it: a code span of its visible text. */
+export function indexTitle(title: string): string {
+  return codeSpan(visibleText(title));
 }
 
 /** The review body's companion index, listing `entries` in the order given (at least one). */
@@ -72,7 +77,7 @@ export function renderCompanionIndex(entries: readonly ICompanionIndexEntry[]): 
     const origin = entry.origin === 'created'
       ? 'created with this review'
       : `reused; it was ${existingStateWords(entry.state)} when this review was prepared`;
-    return `- [#${String(entry.number)}](${entry.url}): ${literalTitle(entry.title)} — ${origin}`;
+    return `- [#${String(entry.number)}](${entry.url}): ${indexTitle(entry.title)} — ${origin}`;
   });
   return `**Companion pull requests of this review:**\n\n${lines.join('\n')}`;
 }
