@@ -13,14 +13,18 @@ Prepared October 1, 2026. Everything merged since 0.2.1 is unreleased. The pendi
   - publication state files are written as version 3, which 0.2.1 refuses as an invalid record, so a publication started by 0.3.0 cannot be continued by 0.2.1 (0.2.1's version 1 files are still continued; [delivery policy §13](delivery-policy-contract.md#13-recording-the-resolved-policy));
   - five problem codes 0.2.1 named in its Markdown are renamed, and nine it reported are no longer reported ([Diagnostics](diagnostics.md#renamed-codes));
   - the human CLI output moves problems and warnings from stdout to diagnostic blocks on stderr.
-- **Verified for this candidate:**
-  - a clean-clone `pnpm install --frozen-lockfile`, `pnpm run build` and `pnpm run check` (lint, types, API report and reference, release plan and the full test suite), and the release guard's check of the packed file list;
-  - release acceptance of the packed candidate ([evidence](evidence/release-acceptance/README.md)): 93 steps against the installed package, all 227 checks passing, and live runs on fixture pull requests #102 to #106 (a refusal before any write for a base that is not the default branch, a consolidated review with a suggestion pull request, a historical review at a commit a force-push replaced with a projected suggestion pull request, an unrelated commit blocked, and a cleanup dry run);
-  - an independent final review, which found the candidate ready to release.
+- **Verified so far:**
+  - for the candidate's preparation commit: a clean-clone `pnpm install --frozen-lockfile`, `pnpm run build` and `pnpm run check` (lint, types, API report and reference, release plan and the full test suite), and the release guard's check of the packed file list;
+  - an independent final review of the release notes, documentation and final fixes, which found them ready.
+- **Earlier acceptance, not proof for the final candidate:** release acceptance of an earlier commit, `89826ad` ([evidence](evidence/release-acceptance/README.md)). It covers 93 steps against the installed package, all 227 checks passing, and live runs on fixture pull requests #102 to #106: a refusal before any write for a base that is not the default branch, a consolidated review with a suggestion pull request, a historical review at a commit a force-push replaced with a projected suggestion pull request, an unrelated commit blocked, and a cleanup dry run. Later changes are not covered by it: the projected-diff display, the nesting of outcome reports, the path rule and the help title.
 
   Live GitHub evidence for each feature is listed in the README's "Limitations".
-- **What remains:** the owner's review of the items below; then versioning (`pnpm run release:version`) and publishing through the version pull request and the publish workflow (README, "Releasing"). Neither is part of this preparation.
-- **Not in 0.3.0:** repository templates for the review's presentation (D60), alternative-remedy families (D53), the abandonment-cleanup workflow (D54), suggestion pull requests for forks or for pull requests into a base other than the default branch (the release acceptance recorded the refusal live: `validate` on doc-linter #102 answered `blocked`, exit status 2, before any write; [evidence](evidence/release-acceptance/README.md#b1-a-first-fixture-whose-base-is-not-the-default-branch-refused-before-any-write), [`b01-validate-102.json`](evidence/release-acceptance/live/b01-validate-102.json)), and an exact three-way projection beyond the documented limits.
+- **What remains before release readiness:**
+  - the optional abandonment-cleanup support (D54), prepared and verified;
+  - acceptance of the final candidate: its exact source commit and packed tarball, with the re-run areas and limits recorded;
+  - the owner's review of the items below;
+  - versioning (`pnpm run release:version`), then publishing through the version pull request and the publish workflow (README, "Releasing"). Neither versioning nor publishing is part of this preparation.
+- **Not in 0.3.0:** repository templates for the review's presentation (D60: no engine is selected; see the evaluation), alternative-remedy families (D53, an open scenario), suggestion pull requests for forks or for pull requests into a base other than the default branch (the release acceptance recorded the refusal live: `validate` on doc-linter #102 answered `blocked`, exit status 2, before any write; [evidence](evidence/release-acceptance/README.md#b1-a-first-fixture-whose-base-is-not-the-default-branch-refused-before-any-write), [`b01-validate-102.json`](evidence/release-acceptance/live/b01-validate-102.json)), and an exact three-way projection beyond the documented limits.
 
 ## Items for the owner's confirmation at release review
 
