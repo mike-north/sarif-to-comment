@@ -313,7 +313,7 @@ Results are read with a conformant CommonMark + GFM parser (`micromark`, as rema
 - spans several lines, for `attribution`;
 - once composed into its comment, body or suggestion pull request description, leaves something open there that the built-in presentation does not, or disturbs a suggestion block or marker. Every composed text is checked this way, with or without callbacks.
 
-The context your callback receives is a deeply frozen copy. An exception your callback throws propagates unchanged. Callbacks are not part of the publication identity: a retry with the same state path never re-renders what an earlier call already planned or sent. The review body's section linking each suggestion pull request is not customizable yet, and there is no command-line equivalent; repository-level templates are not supported.
+The context your callback receives is a deeply frozen copy. An exception your callback throws propagates unchanged. Callbacks are not part of the publication identity: a retry with the same state path never re-renders what an earlier call already planned or sent. The review body's companion index and its section linking each suggestion pull request are not customizable (they name pull request numbers that exist only once the pull requests are created, after every callback has run), and there is no command-line equivalent; repository-level templates are not supported.
 
 ## One pending review per account
 
@@ -386,6 +386,28 @@ Both are valid with any delivery policy; when no companion pull request is plann
 - **Retries.** The state path holds a plan, and each branch, pull request and set of labels gets its own record beside it (`<state>.suggestion-1-branch` and so on), written before that request is sent. A retry never sends a step twice: it finds a pull request whose response was lost by its branch and marker, continues the steps never sent, and only then publishes the review. Keep all of these files. Every delivery and suggestion setting is part of the publication's identity: retry with the same ones.
 - **People's changes are kept.** A branch someone moved before its pull request exists stops the publication as `uncertain`; nothing is recreated or overwritten. A suggestion pull request someone edited, closed or merged is left as it is.
 - The published outcome lists them in `suggestions` (`number`, `url`, `branch`), and the CLI's JSON adds the same array. The full contract is in the source repository (`docs/companion-suggestion-pr-contract.md`).
+
+### The review's companion index, and continuing earlier proposals
+
+Every review that has companion pull requests begins with an index of them, so you, or an agent, can find a review's proposals from the review itself:
+
+```markdown
+**Companion pull requests of this review:**
+
+- [#101](https://github.com/acme/widgets/pull/101): Suggestion for \#42: create docs/guide.md — created with this review
+- [#97](https://github.com/acme/widgets/pull/97): Suggestion for \#42: edit README.md — reused; it was a draft when this review was prepared
+```
+
+It lists every suggestion pull request the publication creates, then every **existing** one you name. Each created one also keeps its own section, with its changes and findings, where its first finding is. A later review can carry an earlier proposal forward without creating a copy:
+
+| Library (`options`) | CLI | Meaning |
+| --- | --- | --- |
+| `existingCompanions: [97, …]` | `--existing-companion 97`, repeatable | Existing suggestion pull requests of this pull request to list in the review's companion index, in that order. |
+
+- **Only what you name.** The tool never looks for earlier proposals or carries any forward by itself, and never creates, changes, reopens or closes one you name. It works with any delivery policy, including the defaults, which create none.
+- **Checked before anything is written.** Each must be a pull request of the repository whose head branch is in the repository and is its marker's `suggestion-pr/<pull>/<id>` branch, with exactly one suggestion marker naming *this* pull request as its original, written by any tool. Otherwise the review is blocked (`companion-not-reusable`, exit status 2), naming the pull request and the reason; `validate` says the same.
+- **Its state is reported, not enforced.** Open, a draft, closed or merged, it is listed, and a `companion-reused` note states which.
+- **Identity and retries.** The numbers you name are part of the publication's identity. Each is read once; a retry never reads it again, and a review whose response was lost is recovered with the identical body.
 
 ## Closing suggestion pull requests after the original ends
 
