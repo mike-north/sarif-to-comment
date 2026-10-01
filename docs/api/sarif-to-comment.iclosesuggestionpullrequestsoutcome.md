@@ -37,6 +37,27 @@ Description
 </th></tr></thead>
 <tbody><tr><td>
 
+[counts](./sarif-to-comment.iclosesuggestionpullrequestsoutcome.counts.md)
+
+
+</td><td>
+
+`readonly`
+
+
+</td><td>
+
+[ISuggestionCleanupCounts](./sarif-to-comment.isuggestioncleanupcounts.md)
+
+
+</td><td>
+
+How much was found and checked; see [ISuggestionCleanupCounts](./sarif-to-comment.isuggestioncleanupcounts.md)<!-- -->.
+
+
+</td></tr>
+<tr><td>
+
 [diagnostics](./sarif-to-comment.iclosesuggestionpullrequestsoutcome.diagnostics.md)
 
 
@@ -52,7 +73,7 @@ readonly [IDiagnostic](./sarif-to-comment.idiagnostic.md)<!-- -->\[\]
 
 </td><td>
 
-What was left undone or untouched: a failed read or close (error), an original that could not be verified or a close this account may not make (warning), and a pull request that does not follow the convention (note).
+What was left undone or untouched: a failed read or close, or a sweep stopped by the candidate limit (error); an original that could not be verified, a targeted original that does not exist, a close this account may not make, or a label sweep stopped because its label does not look like a suggestion label (warning); and a pull request that does not follow the convention (note).
 
 
 </td></tr>
@@ -121,6 +142,27 @@ Each original pull request resolved, by ascending number.
 </td></tr>
 <tr><td>
 
+[owner](./sarif-to-comment.iclosesuggestionpullrequestsoutcome.owner.md)
+
+
+</td><td>
+
+`readonly`
+
+
+</td><td>
+
+[SuggestionOwnerScope](./sarif-to-comment.suggestionownerscope.md)
+
+
+</td><td>
+
+Whose suggestion pull requests could be closed; see [SuggestionOwnerScope](./sarif-to-comment.suggestionownerscope.md)<!-- -->.
+
+
+</td></tr>
+<tr><td>
+
 [status](./sarif-to-comment.iclosesuggestionpullrequestsoutcome.status.md)
 
 
@@ -157,7 +199,7 @@ readonly [ICheckedSuggestionPullRequest](./sarif-to-comment.icheckedsuggestionpu
 
 </td><td>
 
-Each pull request checked, by ascending number. Ordinary references without a marker or the label are not listed.
+Each pull request checked, by ascending number. Ordinary references without a marker, the label or a suggestion branch are not listed.
 
 
 </td></tr>

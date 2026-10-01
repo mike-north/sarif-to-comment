@@ -24,7 +24,7 @@ A suggestion pull request is for a change that GitHub's native review suggestion
 
 The canonical label is the `label` of the repository configuration (§4) when present, otherwise **`suggestion-pr`**. The default avoids colliding with labels such as a product-suggestion label.
 
-- Every suggestion pull request MUST carry the canonical label. It is how consumers list a repository's suggestion pull requests.
+- Every suggestion pull request MUST carry the canonical label. Consumers confirm a suggestion pull request by it, and may list a repository's suggestion pull requests by it (§9).
 - A producer MAY add further labels (for example a team or campaign tag). They carry no meaning under this convention.
 - Every label a producer applies MUST already exist in the repository. Producers MUST NOT create labels: a missing label is a reason not to create the suggestion, so that a typo can never create a stray label and label administration stays with the repository.
 - There is no per-call override of the canonical label. It is a repository-wide convention, and consumers depend on it.
@@ -153,7 +153,7 @@ A pull request **conforms** to this convention when, read fresh from GitHub:
 
 Consumers act only on conforming pull requests, whichever tool produced them. A consumer that closes suggestions:
 
-- finds them by listing open pull requests with the canonical label, or by following the cross-references of one original;
+- finds them by listing the open pull requests of the branches under `suggestion-pr/` (§5) and confirming the canonical label, by listing open pull requests with the canonical label, or by following the cross-references of one original. Listing the branch namespace keeps the cost proportional to suggestion branches, however many other pull requests share a label;
 - closes a suggestion only after positively reading its original as merged or closed (a failed or unauthorized read is never evidence that it ended), and after reading the suggestion again and finding it still open, still conforming, and still carrying the canonical label;
 - never deletes or updates a branch, and never edits a body, title or label.
 

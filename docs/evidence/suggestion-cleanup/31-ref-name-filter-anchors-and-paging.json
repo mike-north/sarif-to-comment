@@ -1,0 +1,78 @@
+{
+  "recorded": "2026-10-01",
+  "endpoint": "POST https://api.github.com/graphql (read-only query)",
+  "note": "The refs query argument has no anchor (qualified names, ^ and * match nothing); a filtered listing pages by cursor.",
+  "query": "query ($owner: String!, $repo: String!) {\n  repository(owner: $owner, name: $repo) {\n    qualified: refs(refPrefix: \"refs/heads/\", query: \"refs/heads/suggestion-pr/\", first: 100) { totalCount }\n    heads: refs(refPrefix: \"refs/heads/\", query: \"heads/suggestion-pr/\", first: 100) { totalCount }\n    caret: refs(refPrefix: \"refs/heads/\", query: \"^suggestion-pr/\", first: 100) { totalCount }\n    glob: refs(refPrefix: \"refs/heads/\", query: \"suggestion-pr/*\", first: 100) { totalCount }\n    slashMid: refs(refPrefix: \"refs/heads/\", query: \"suggestions/36/\", first: 100) { totalCount nodes { name } }\n    page1: refs(refPrefix: \"refs/heads/\", query: \"suggestion-pr/\", first: 10, orderBy: {field: ALPHABETICAL, direction: ASC}) { totalCount pageInfo { hasNextPage endCursor } nodes { name } }\n  }\n}\n",
+  "variables": {
+    "owner": "mike-north",
+    "repo": "doc-linter"
+  },
+  "response": {
+    "data": {
+      "repository": {
+        "qualified": {
+          "totalCount": 0
+        },
+        "heads": {
+          "totalCount": 0
+        },
+        "caret": {
+          "totalCount": 0
+        },
+        "glob": {
+          "totalCount": 0
+        },
+        "slashMid": {
+          "totalCount": 2,
+          "nodes": [
+            {
+              "name": "sarif-to-comment/suggestions/36/ec69538b-1cf2-4801-b7e1-ae96d9076ff1"
+            },
+            {
+              "name": "sarif-to-comment/suggestions/36/5f72b5f4-8dd1-462a-948b-71b0767ecafe"
+            }
+          ]
+        },
+        "page1": {
+          "totalCount": 18,
+          "pageInfo": {
+            "hasNextPage": true,
+            "endCursor": "MTA"
+          },
+          "nodes": [
+            {
+              "name": "suggestion-pr/56/bb3b8acd-0bdf-4464-b341-8802383b6935"
+            },
+            {
+              "name": "suggestion-pr/57/81e4d9fe-25d2-48e4-b421-9115dce6f808"
+            },
+            {
+              "name": "suggestion-pr/60/d9f36f69-f1c8-47d9-8dd0-602daeb1d3b7"
+            },
+            {
+              "name": "suggestion-pr/61/eab22112-1bc3-4bbc-9d81-6570e7127f74"
+            },
+            {
+              "name": "suggestion-pr/61/0c3a1dc6-be06-4665-bd1b-e31ebaac81f2"
+            },
+            {
+              "name": "suggestion-pr/61/706c3c45-9ebf-4b47-942b-2e5ca6d8e44a"
+            },
+            {
+              "name": "suggestion-pr/62/addcbe41-ba68-4858-b41e-f7f0e1527112"
+            },
+            {
+              "name": "suggestion-pr/62/ca039fbc-33b7-45d2-b53f-33bbc71513e1"
+            },
+            {
+              "name": "suggestion-pr/62/8563a35a-b14d-41f5-9d97-372034e64b9d"
+            },
+            {
+              "name": "suggestion-pr/63/457b8f95-23ce-46fa-9dc9-9514b33ff700"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

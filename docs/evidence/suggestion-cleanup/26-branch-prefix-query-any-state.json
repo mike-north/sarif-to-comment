@@ -1,0 +1,166 @@
+{
+  "recorded": "2026-10-01",
+  "endpoint": "POST https://api.github.com/graphql (read-only query)",
+  "note": "The same listing without the states filter, with each ref's prefix: still no associated pull request of any state.",
+  "query": "query ($owner: String!, $repo: String!, $prefix: String!) {\n  repository(owner: $owner, name: $repo) {\n    refs(refPrefix: $prefix, first: 100, orderBy: {field: ALPHABETICAL, direction: ASC}) {\n      totalCount\n      nodes { name prefix associatedPullRequests(first: 10) { totalCount nodes { number state headRefName baseRefName } } }\n    }\n  }\n}\n",
+  "variables": {
+    "owner": "mike-north",
+    "repo": "doc-linter",
+    "prefix": "refs/heads/suggestion-pr/"
+  },
+  "response": {
+    "data": {
+      "repository": {
+        "refs": {
+          "totalCount": 18,
+          "nodes": [
+            {
+              "name": "56/bb3b8acd-0bdf-4464-b341-8802383b6935",
+              "prefix": "refs/heads/suggestion-pr/",
+              "associatedPullRequests": {
+                "totalCount": 0,
+                "nodes": []
+              }
+            },
+            {
+              "name": "57/81e4d9fe-25d2-48e4-b421-9115dce6f808",
+              "prefix": "refs/heads/suggestion-pr/",
+              "associatedPullRequests": {
+                "totalCount": 0,
+                "nodes": []
+              }
+            },
+            {
+              "name": "60/d9f36f69-f1c8-47d9-8dd0-602daeb1d3b7",
+              "prefix": "refs/heads/suggestion-pr/",
+              "associatedPullRequests": {
+                "totalCount": 0,
+                "nodes": []
+              }
+            },
+            {
+              "name": "61/eab22112-1bc3-4bbc-9d81-6570e7127f74",
+              "prefix": "refs/heads/suggestion-pr/",
+              "associatedPullRequests": {
+                "totalCount": 0,
+                "nodes": []
+              }
+            },
+            {
+              "name": "61/0c3a1dc6-be06-4665-bd1b-e31ebaac81f2",
+              "prefix": "refs/heads/suggestion-pr/",
+              "associatedPullRequests": {
+                "totalCount": 0,
+                "nodes": []
+              }
+            },
+            {
+              "name": "61/706c3c45-9ebf-4b47-942b-2e5ca6d8e44a",
+              "prefix": "refs/heads/suggestion-pr/",
+              "associatedPullRequests": {
+                "totalCount": 0,
+                "nodes": []
+              }
+            },
+            {
+              "name": "62/addcbe41-ba68-4858-b41e-f7f0e1527112",
+              "prefix": "refs/heads/suggestion-pr/",
+              "associatedPullRequests": {
+                "totalCount": 0,
+                "nodes": []
+              }
+            },
+            {
+              "name": "62/ca039fbc-33b7-45d2-b53f-33bbc71513e1",
+              "prefix": "refs/heads/suggestion-pr/",
+              "associatedPullRequests": {
+                "totalCount": 0,
+                "nodes": []
+              }
+            },
+            {
+              "name": "62/8563a35a-b14d-41f5-9d97-372034e64b9d",
+              "prefix": "refs/heads/suggestion-pr/",
+              "associatedPullRequests": {
+                "totalCount": 0,
+                "nodes": []
+              }
+            },
+            {
+              "name": "63/457b8f95-23ce-46fa-9dc9-9514b33ff700",
+              "prefix": "refs/heads/suggestion-pr/",
+              "associatedPullRequests": {
+                "totalCount": 0,
+                "nodes": []
+              }
+            },
+            {
+              "name": "64/db27ee45-de28-454c-b521-f46bdafef733",
+              "prefix": "refs/heads/suggestion-pr/",
+              "associatedPullRequests": {
+                "totalCount": 0,
+                "nodes": []
+              }
+            },
+            {
+              "name": "75/0acdfa96-3a0c-4ab6-8a75-aa99aeb7cdc5",
+              "prefix": "refs/heads/suggestion-pr/",
+              "associatedPullRequests": {
+                "totalCount": 0,
+                "nodes": []
+              }
+            },
+            {
+              "name": "82/a56530c0-b663-4610-b715-a021e0af7cee",
+              "prefix": "refs/heads/suggestion-pr/",
+              "associatedPullRequests": {
+                "totalCount": 0,
+                "nodes": []
+              }
+            },
+            {
+              "name": "82/ba598127-d81f-487f-b96b-005ad50ca678",
+              "prefix": "refs/heads/suggestion-pr/",
+              "associatedPullRequests": {
+                "totalCount": 0,
+                "nodes": []
+              }
+            },
+            {
+              "name": "82/257fb43e-f71e-4e8d-95ab-f23dc696d33a",
+              "prefix": "refs/heads/suggestion-pr/",
+              "associatedPullRequests": {
+                "totalCount": 0,
+                "nodes": []
+              }
+            },
+            {
+              "name": "82/01548a27-f254-4097-a864-590f46513bf4",
+              "prefix": "refs/heads/suggestion-pr/",
+              "associatedPullRequests": {
+                "totalCount": 0,
+                "nodes": []
+              }
+            },
+            {
+              "name": "83/497c74d7-f4da-42c8-9f60-2ab7498a5cb5",
+              "prefix": "refs/heads/suggestion-pr/",
+              "associatedPullRequests": {
+                "totalCount": 0,
+                "nodes": []
+              }
+            },
+            {
+              "name": "84/9d1c21c3-15d1-4a08-85ee-0a0502b89aca",
+              "prefix": "refs/heads/suggestion-pr/",
+              "associatedPullRequests": {
+                "totalCount": 0,
+                "nodes": []
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

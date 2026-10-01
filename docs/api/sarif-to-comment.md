@@ -775,6 +775,17 @@ A selector does not select a finding in this document as it is now, usually beca
 </td></tr>
 <tr><td>
 
+[ISuggestionCleanupCounts](./sarif-to-comment.isuggestioncleanupcounts.md)
+
+
+</td><td>
+
+How much a cleanup found and checked.
+
+
+</td></tr>
+<tr><td>
+
 [IUncertainOutcome](./sarif-to-comment.iuncertainoutcome.md)
 
 
@@ -874,7 +885,7 @@ Every outcome of [addStagedChangesToSarif()](./sarif-to-comment.addstagedchanges
 
 Whether cleanup established everything it set out to:
 
-- `complete`<!-- -->: every pull request checked has its final result (a dry run  too). - `permission-limited`<!-- -->: everything else is done, but some eligible  suggestion pull requests could not be closed with this account. - `incomplete`<!-- -->: an original could not be verified or an action failed;  running cleanup again is safe.
+- `complete`<!-- -->: every pull request checked has its final result (a dry run  too). - `permission-limited`<!-- -->: everything else is done, but some eligible  suggestion pull requests could not be closed with this account. - `incomplete`<!-- -->: an original could not be verified or an action failed;  running cleanup again is safe. - `too-many-candidates`<!-- -->: a sweep found more candidates than its limit  (`maxCandidates`<!-- -->), so nothing was evaluated. - `label-not-suggestion-prs`<!-- -->: a label sweep's first page shows no  suggestion pull request, so nothing was evaluated; `force` continues.
 
 
 </td></tr>
@@ -953,7 +964,18 @@ Every outcome of [removeSarifComment()](./sarif-to-comment.removesarifcomment.md
 
 What cleanup did with one pull request:
 
-- `closed`<!-- -->: it was closed now. - `would-close`<!-- -->: a dry run would close it. - `already-closed`<!-- -->: it is no longer open. - `left-open`<!-- -->: its original is still open. - `unverified`<!-- -->: its original could not be verified, so it was left open. - `permission-limited`<!-- -->: GitHub refused to let this account close it. - `failed`<!-- -->: reading or closing it failed; running cleanup again is safe. - `not-ours`<!-- -->: it does not conform to the suggestion pull request  convention (no, several or a changed marker, another repository or  original, an original that is not a pull request of the repository, a  fork, or another branch), so it was not touched. - `unlabeled`<!-- -->: it does not carry the label, so it was not touched.
+- `closed`<!-- -->: it was closed now. - `would-close`<!-- -->: a dry run would close it. - `already-closed`<!-- -->: it is no longer open. - `left-open`<!-- -->: its original is still open. - `unverified`<!-- -->: its original could not be verified, so it was left open. - `permission-limited`<!-- -->: GitHub refused to let this account close it. - `failed`<!-- -->: reading or closing it failed; running cleanup again is safe. - `not-conforming`<!-- -->: it does not conform to the suggestion pull request  convention (no, several or a changed marker, another repository or  original, an original that is not a pull request of the repository, a  fork, or another branch), so it was not touched. - `other-owner`<!-- -->: it conforms, but someone other than this account opened  it, and the owner scope is `me`<!-- -->; it was left open. - `unlabeled`<!-- -->: it does not carry the label, so it was not touched.
+
+
+</td></tr>
+<tr><td>
+
+[SuggestionOwnerScope](./sarif-to-comment.suggestionownerscope.md)
+
+
+</td><td>
+
+Whose suggestion pull requests a cleanup closes, by who opened the suggestion pull request (not the original): `'me'`<!-- -->, the authenticated account; `'all'`<!-- -->, anyone.
 
 
 </td></tr>

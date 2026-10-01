@@ -94,7 +94,7 @@ string
 
 </td><td>
 
-_(Optional)_ Why, for `unverified`<!-- -->, `permission-limited`<!-- -->, `failed` and `not-ours`<!-- -->.
+_(Optional)_ Why, for `unverified`<!-- -->, `permission-limited`<!-- -->, `failed` and `not-conforming`<!-- -->.
 
 
 </td></tr>

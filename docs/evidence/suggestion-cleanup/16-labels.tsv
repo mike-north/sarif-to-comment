@@ -1,0 +1,14 @@
+# gh label list --repo mike-north/doc-linter, with the open and all-state pull requests carrying each label (gh pr list --label). Read on 2026-10-01 at 01:24 UTC, before the runs, and again at 01:28 UTC, after them, with identical counts.
+# label<TAB>open pull requests<TAB>pull requests in any state
+accessibility	0	0
+bug	0	0
+documentation	4	5
+duplicate	0	0
+enhancement	0	0
+good first issue	0	0
+help wanted	0	0
+invalid	0	0
+question	0	0
+wontfix	0	0
+suggestion	2	7
+suggestion-pr	17	18

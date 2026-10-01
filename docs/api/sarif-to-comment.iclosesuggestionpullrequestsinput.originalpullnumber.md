@@ -4,7 +4,7 @@
 
 ## ICloseSuggestionPullRequestsInput.originalPullNumber property
 
-Check only the pull requests that reference this original pull request (its backlinks), instead of every open pull request with the label.
+Check only the pull requests that reference this original pull request (its backlinks), instead of sweeping the repository.
 
 **Signature:**
 

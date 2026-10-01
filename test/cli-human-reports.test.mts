@@ -218,7 +218,7 @@ describe('close-suggestion-prs: stdout lists what was done, stderr what was not'
     return { status: result.status, stdout: result.stdout, stderr: result.stderr };
   }
 
-  const SCOPE = 'Checked the open pull requests labeled `suggestion-pr` in octo/widgets (the default suggestion label).';
+  const SCOPE = 'Checked the open pull requests on `suggestion-pr/` branches in octo/widgets; the suggestion label is `suggestion-pr` (the default suggestion label). Only suggestion pull requests opened by this account are closed.';
   const BRANCHES = 'Closing never deletes a branch: each proposal branch is left in place.';
 
   test('complete: the whole report on stdout, nothing on stderr (exit 0)', () => {
@@ -226,6 +226,7 @@ describe('close-suggestion-prs: stdout lists what was done, stderr what was not'
     assert.equal(result.status, 0);
     assert.equal(result.stdout, [
       '## Suggestion pull request cleanup complete', '', SCOPE, '',
+      'Pull requests checked: 1 (1 labeled, 1 conforming).', '',
       'Original pull requests:', '', '- #37: merged', '',
       'Suggestion pull requests:', '', '- #40 (for #37): closed', '',
       BRANCHES, '',
@@ -238,6 +239,7 @@ describe('close-suggestion-prs: stdout lists what was done, stderr what was not'
     assert.equal(result.status, 2);
     assert.equal(result.stdout, [
       '## Suggestion pull request cleanup limited by permissions', '', SCOPE, '',
+      'Pull requests checked: 3 (3 labeled, 2 conforming).', '',
       'Original pull requests:', '', '- #37: merged', '',
       'Suggestion pull requests:', '', '- #40 (for #37): closed', '',
       'Someone allowed to close the pull requests left open can finish, for example by running this cleanup with their own token.', '',

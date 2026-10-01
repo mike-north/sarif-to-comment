@@ -1,0 +1,10 @@
+18-sweep-dry-run: exit 0; stderr bytes 0
+19-sweep-dry-run: exit 0; stderr bytes 0
+20-sweep-owner-all-dry-run: exit 0; stderr bytes 0
+21-sweep-owner-all-dry-run: exit 0; stderr bytes 0
+22-label-suggestion-dry-run: exit 2; stderr bytes 0
+23-label-suggestion-dry-run: exit 2; stderr bytes 566 (saved as 23-label-suggestion-dry-run.stderr.txt)
+24-label-suggestion-pr-dry-run: exit 0; stderr bytes 0
+35-sweep-dry-run-fixed: exit 0; stderr bytes 0
+36-sweep-dry-run-fixed: exit 0; stderr bytes 0
+37-sweep-owner-all-dry-run-fixed: exit 0; stderr bytes 0

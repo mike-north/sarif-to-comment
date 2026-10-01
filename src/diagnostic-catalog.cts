@@ -798,6 +798,22 @@ export const DIAGNOSTIC_CATALOG = {
     title: 'A pull request does not follow the suggestion pull request convention',
     remedies: [],
   },
+  'suggestion-pr-candidates-over-limit': {
+    severity: 'error',
+    title: 'The sweep found more candidates than its limit',
+    remedies: [
+      'Narrow the cleanup to one original pull request with `--original N` (library: `originalPullNumber`).',
+      'If the count is expected, raise the limit above it with `--max-candidates N` (library: `maxCandidates`). The branches under `suggestion-pr/` include those of suggestions already closed, because cleanup never deletes a branch, so the count grows over time.',
+    ],
+  },
+  'label-not-suggestion-prs': {
+    severity: 'warning',
+    title: 'The label does not seem to mark suggestion pull requests',
+    remedies: [
+      'Check the label: `--label` names the label suggestion pull requests were left under.',
+      'If the label is right, run again with `--force` (library: `force: true`) to check every pull request carrying it.',
+    ],
+  },
 } as const satisfies Readonly<Record<string, IDiagnosticCatalogEntry>>;
 
 /** A catalogued diagnostic code. */

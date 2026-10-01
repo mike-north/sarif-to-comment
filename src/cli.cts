@@ -50,8 +50,9 @@
  * statuses: 0 published, 2 blocked, 3 uncertain, 1 otherwise. `validate`
  * (docs/readiness-assessment-contract.md): 0 ready, 2 blocked, 1 incomplete
  * or otherwise. `close-suggestion-prs`: 0 complete (a dry run too), 2
- * permission-limited, 3 incomplete, 1 usage or operational error (before
- * anything was closed).
+ * permission-limited or a label that does not mark suggestion pull requests,
+ * 3 incomplete, 1 more candidates than the limit, or a usage or operational
+ * error (before anything was closed).
  *
  * Receipts name only files actually written, archived, or deliberately not
  * written (`written: false`). The GitHub token (GH_TOKEN, else GITHUB_TOKEN)
@@ -119,11 +120,19 @@ const EXIT: Readonly<{ ok: 0; usage: 1; error: 1; refused: 2 }> = Object.freeze(
 /** Exit statuses for readiness assessment (docs/readiness-assessment-contract.md). */
 const VALIDATE_EXIT: Readonly<{ ready: 0; blocked: 2; incomplete: 1 }> = Object.freeze({ ready: 0, blocked: 2, incomplete: 1 });
 
-/** Exit statuses for suggestion pull request cleanup (docs/suggestion-cleanup-contract.md §2.10). */
+/**
+ * Exit statuses for suggestion pull request cleanup
+ * (docs/suggestion-cleanup-contract.md §2.10): a sweep over its candidate
+ * limit is refused like any other failure before a write (1); a label that
+ * does not look like a suggestion label is a warning that needs a decision,
+ * like a permission limit (2).
+ */
 const CLEANUP_EXIT: Readonly<Record<CloseSuggestionPullRequestsStatus, number>> = Object.freeze({
   complete: 0,
   'permission-limited': 2,
   incomplete: 3,
+  'too-many-candidates': 1,
+  'label-not-suggestion-prs': 2,
 });
 
 /** Exit statuses for publication, unchanged from the flag-only publisher. */
@@ -261,11 +270,12 @@ Exit status:
   0  success; published (or already published); ready; cleanup complete
   2  refused content: blocked (nothing was published), invalid/failed input,
      a refused grouping, or a stale finding selector; cleanup left pull
-     requests it may not close
+     requests it may not close, or its --label does not mark suggestion
+     pull requests
   3  uncertain: delivery could not be confirmed; retry with the same --state;
      cleanup incomplete (safe to run again)
   1  usage error, unreadable file, refused request, incomplete validation,
-     or operational failure
+     cleanup candidates over the limit, or operational failure
 `,
   init: md`sarif-to-comment init — create a SARIF document for your own findings
 
@@ -552,32 +562,55 @@ Exit status:
   'close-suggestion-prs': md`sarif-to-comment close-suggestion-prs — close suggestions whose original ended
 
 Usage:
-  sarif-to-comment close-suggestion-prs --repo OWNER/REPO [--label NAME]
-                                        [--original N] [--dry-run]
+  sarif-to-comment close-suggestion-prs --repo OWNER/REPO [--owner me|all]
+                                        [--label NAME [--force]]
+                                        [--max-candidates N] [--dry-run]
                                         [--format human|json|toon]
+  sarif-to-comment close-suggestion-prs --repo OWNER/REPO --original N
+                                        [--owner me|all] [--label NAME]
+                                        [--dry-run] [--format human|json|toon]
 
 Closes open suggestion pull requests (made by publish --allow-suggestion-prs, or
 by any tool following the suggestion pull request convention) whose original
-pull request has merged or closed. They are recognized by the marker in their
-description, never by their title. They carry the repository's suggestion label:
-suggestion-pr, or the label in .github/suggestion-prs.json on the default
-branch; an invalid file stops the command. A suggestion is closed only after its
-original has been read and found merged or closed and the suggestion itself has
-been read again; an original that cannot be read is never treated as ended.
-Everything is read before anything is closed. Closing never deletes a branch,
-and nothing else is changed. Running it again is safe.
+pull request has merged or closed. They are found by their suggestion-pr/
+branches and recognized by the marker in their description, never by their
+title. They must carry the repository's suggestion label: suggestion-pr, or the
+label in .github/suggestion-prs.json on the default branch; an invalid file
+stops the command. By default only suggestion pull requests opened by the
+account of the token are closed. A suggestion is closed only after its original
+has been read and found merged or closed and the suggestion itself has been read
+again; an original that cannot be read is never treated as ended. Everything is
+read before anything is closed. Closing never deletes a branch, and nothing else
+is changed. Running it again is safe.
+
+A sweep first counts its candidates in one request. A --label sweep whose first
+20 pull requests show no suggestion marker and no suggestion-pr/ branch stops
+there. Then a sweep checks nothing when there are more candidates than the
+limit. The suggestion-pr/ branches counted include those of suggestions already
+closed, because closing never deletes a branch, so an active repository can
+reach the limit over time: raise it with --max-candidates.
 
 Options:
   --repo OWNER/REPO              Repository whose suggestion pull requests are
                                  checked.
-  --label NAME                   Check this label instead of the repository's
-                                 suggestion label, for suggestions left under a
-                                 previously configured label.
+  --owner me|all                 Whose suggestion pull requests may be closed,
+                                 by who opened them (default me: the account of
+                                 the token). Others are reported and left open.
+  --label NAME                   Check the open pull requests with this label
+                                 instead, for suggestions left under a
+                                 previously configured label. The repository's
+                                 suggestion label is then not read.
+  --force                        Requires --label: check every pull request even
+                                 when the first 20 do not look like suggestion
+                                 pull requests. The limit still applies.
   --original N                   Check only the pull requests that reference
-                                 original pull request N, instead of every open
-                                 pull request with the label. If N does not
-                                 exist, nothing can reference it: the cleanup is
-                                 complete, with a warning.
+                                 original pull request N, instead of sweeping.
+                                 If N does not exist, nothing can reference it:
+                                 the cleanup is complete, with a warning.
+  --max-candidates N             The most candidates a sweep checks: suggestion
+                                 branches, or pull requests with the --label
+                                 (default 500). More stops it before any check.
+                                 Not with --original, which has no limit.
   --dry-run                      Read and verify everything, close nothing.
 ${FORMAT_OPTION}
 ${CREDENTIALS}
@@ -585,10 +618,12 @@ Exit status:
   0  complete: nothing left to do (also a dry run, and an --original pull
      request that does not exist)
   2  permission-limited: some suggestion pull requests could not be closed with
-     this token; someone allowed to close them can finish
+     this token; someone allowed to close them can finish. Also: the --label
+     does not mark suggestion pull requests (nothing was checked; see --force)
   3  incomplete: an original could not be verified or an action failed; run
      it again later
-  1  usage error, missing token, or operational failure (nothing was closed)
+  1  usage error, missing token, more candidates than --max-candidates, or
+     operational failure (nothing was closed)
 `,
 };
 
@@ -1868,11 +1903,28 @@ async function publish(argv: readonly string[], { env }: IHandlerContext, intern
  */
 async function closeSuggestionPrs(argv: readonly string[], { env }: IHandlerContext, internals: CliInternals | undefined): Promise<IOutcome> {
   const command = 'close-suggestion-prs';
-  const { values, flags } = parseOptions(argv, { values: ['--repo', '--label', '--original'], booleans: ['--dry-run'], required: ['--repo'] });
+  const { values, flags } = parseOptions(argv, {
+    values: ['--repo', '--label', '--original', '--owner', '--max-candidates'],
+    booleans: ['--dry-run', '--force'],
+    required: ['--repo'],
+  });
   const repository = repositoryFlag(values);
   const label = values.get('--label');
   if (label !== undefined && !isLabelName(label)) throw new UsageError(`--label must be ${LABEL_RULE}`);
   const originalPullNumber = positiveFlag(values, '--original');
+  const owner = values.get('--owner');
+  if (owner !== undefined && owner !== 'me' && owner !== 'all') throw new UsageError('--owner must be me or all');
+  const maxCandidates = positiveFlag(values, '--max-candidates');
+  // An option that could change nothing is a usage error, never ignored
+  // (contract §2.2): only a --label sweep stops early, and only a sweep has a
+  // candidate limit.
+  if (flags.has('--force') && label === undefined) throw new UsageError('--force requires --label (only a --label sweep stops early)');
+  if (flags.has('--force') && originalPullNumber !== undefined) {
+    throw new UsageError('--force cannot be combined with --original (only a --label sweep stops early)');
+  }
+  if (maxCandidates !== undefined && originalPullNumber !== undefined) {
+    throw new UsageError('--max-candidates cannot be combined with --original (only a sweep has a candidate limit)');
+  }
   const token = tokenFrom(env);
   if (token === undefined) {
     return errorOutcome(command, tokenMissing());
@@ -1882,6 +1934,9 @@ async function closeSuggestionPrs(argv: readonly string[], { env }: IHandlerCont
     token,
     ...(label === undefined ? {} : { label }),
     ...(originalPullNumber === undefined ? {} : { originalPullNumber }),
+    ...(owner === undefined ? {} : { owner }),
+    ...(maxCandidates === undefined ? {} : { maxCandidates }),
+    ...(flags.has('--force') ? { force: true } : {}),
     ...(flags.has('--dry-run') ? { dryRun: true } : {}),
   };
   let outcome;
@@ -1895,8 +1950,10 @@ async function closeSuggestionPrs(argv: readonly string[], { env }: IHandlerCont
     command,
     status: outcome.status,
     dryRun: outcome.dryRun,
+    owner: outcome.owner,
     originals: outcome.originals,
     suggestions: outcome.suggestions,
+    counts: outcome.counts,
     message: outcome.markdown,
   };
   return { exit: CLEANUP_EXIT[outcome.status], doc, out: `${report}\n`, diagnostics: outcome.diagnostics };

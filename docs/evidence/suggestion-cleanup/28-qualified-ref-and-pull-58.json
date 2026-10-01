@@ -1,0 +1,40 @@
+{
+  "recorded": "2026-10-01",
+  "endpoint": "POST https://api.github.com/graphql (read-only query)",
+  "note": "One suggestion branch looked up by its qualified name: it answers its pull request #58, whose head it is.",
+  "query": "query ($owner: String!, $repo: String!) {\n  repository(owner: $owner, name: $repo) {\n    ref(qualifiedName: \"refs/heads/suggestion-pr/56/bb3b8acd-0bdf-4464-b341-8802383b6935\") {\n      name prefix\n      associatedPullRequests(first: 10) { totalCount nodes { number state headRefName baseRefName } }\n    }\n    pullRequest(number: 58) { number state headRefName baseRefName headRepository { nameWithOwner } }\n  }\n}\n",
+  "variables": {
+    "owner": "mike-north",
+    "repo": "doc-linter"
+  },
+  "response": {
+    "data": {
+      "repository": {
+        "ref": {
+          "name": "suggestion-pr/56/bb3b8acd-0bdf-4464-b341-8802383b6935",
+          "prefix": "refs/heads/",
+          "associatedPullRequests": {
+            "totalCount": 1,
+            "nodes": [
+              {
+                "number": 58,
+                "state": "OPEN",
+                "headRefName": "suggestion-pr/56/bb3b8acd-0bdf-4464-b341-8802383b6935",
+                "baseRefName": "sarif-issue27-20260929-a"
+              }
+            ]
+          }
+        },
+        "pullRequest": {
+          "number": 58,
+          "state": "OPEN",
+          "headRefName": "suggestion-pr/56/bb3b8acd-0bdf-4464-b341-8802383b6935",
+          "baseRefName": "sarif-issue27-20260929-a",
+          "headRepository": {
+            "nameWithOwner": "mike-north/doc-linter"
+          }
+        }
+      }
+    }
+  }
+}

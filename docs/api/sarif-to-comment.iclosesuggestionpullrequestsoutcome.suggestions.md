@@ -4,7 +4,7 @@
 
 ## ICloseSuggestionPullRequestsOutcome.suggestions property
 
-Each pull request checked, by ascending number. Ordinary references without a marker or the label are not listed.
+Each pull request checked, by ascending number. Ordinary references without a marker, the label or a suggestion branch are not listed.
 
 **Signature:**
 

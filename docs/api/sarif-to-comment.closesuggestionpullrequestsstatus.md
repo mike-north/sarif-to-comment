@@ -6,10 +6,10 @@
 
 Whether cleanup established everything it set out to:
 
-- `complete`<!-- -->: every pull request checked has its final result (a dry run  too). - `permission-limited`<!-- -->: everything else is done, but some eligible  suggestion pull requests could not be closed with this account. - `incomplete`<!-- -->: an original could not be verified or an action failed;  running cleanup again is safe.
+- `complete`<!-- -->: every pull request checked has its final result (a dry run  too). - `permission-limited`<!-- -->: everything else is done, but some eligible  suggestion pull requests could not be closed with this account. - `incomplete`<!-- -->: an original could not be verified or an action failed;  running cleanup again is safe. - `too-many-candidates`<!-- -->: a sweep found more candidates than its limit  (`maxCandidates`<!-- -->), so nothing was evaluated. - `label-not-suggestion-prs`<!-- -->: a label sweep's first page shows no  suggestion pull request, so nothing was evaluated; `force` continues.
 
 **Signature:**
 
 ```typescript
-export type CloseSuggestionPullRequestsStatus = 'complete' | 'permission-limited' | 'incomplete';
+export type CloseSuggestionPullRequestsStatus = 'complete' | 'permission-limited' | 'incomplete' | 'too-many-candidates' | 'label-not-suggestion-prs';
 ```

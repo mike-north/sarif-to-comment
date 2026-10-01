@@ -4,7 +4,7 @@
 
 ## ICheckedSuggestionPullRequest.reason property
 
-Why, for `unverified`<!-- -->, `permission-limited`<!-- -->, `failed` and `not-ours`<!-- -->.
+Why, for `unverified`<!-- -->, `permission-limited`<!-- -->, `failed` and `not-conforming`<!-- -->.
 
 **Signature:**
 

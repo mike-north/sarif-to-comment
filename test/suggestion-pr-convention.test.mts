@@ -22,7 +22,7 @@
  * @see https://docs.github.com/en/rest/pulls/pulls#create-a-pull-request
  * @see https://docs.github.com/en/rest/issues/labels#add-labels-to-an-issue
  * @see https://docs.github.com/en/rest/issues/labels#get-a-label
- * @see https://docs.github.com/en/rest/issues/issues#list-repository-issues
+ * @see https://docs.github.com/en/graphql/reference/objects#ref
  */
 
 import * as assert from 'node:assert/strict';
@@ -412,8 +412,8 @@ describe('label resolution (convention §4): publish, validate and cleanup resol
     const pull = onlyPull(world);
     assert.deepEqual(pull.labels, ['proposal']);
     const swept = await cleanup(world, { dryRun: true });
-    assert.ok(markdown(swept).includes('Checked the open pull requests labeled `proposal` in octo/widgets (the suggestion label set in `.github/suggestion-prs.json` on `main`).'), markdown(swept));
-    assert.ok(world.host.log().some((r) => r.method === 'GET' && r.path === `/repos/${OWNER}/${REPO}/issues`), 'the sweep lists the labeled issues');
+    assert.ok(markdown(swept).includes('Checked the open pull requests on `suggestion-pr/` branches in octo/widgets; the suggestion label is `proposal` (the suggestion label set in `.github/suggestion-prs.json` on `main`).'), markdown(swept));
+    assert.deepEqual(results(swept), [[pull.number, PULL, 'left-open']], 'the sweep finds the suggestion by its branch and confirms its label');
   });
 
   test('a pull request cannot change its own label: a configuration file only on its head branch is ignored', async () => {
@@ -467,11 +467,13 @@ describe('label resolution (convention §4): publish, validate and cleanup resol
       const assessed = await validate(world);
       assert.equal(status(assessed), 'incomplete', markdown(assessed));
       await assert.rejects(publish(world));
+      const beforeCleanup = world.host.log().length;
       await assert.rejects(cleanup(world));
       assert.deepEqual(writes(world), []);
       assert.equal(fs.existsSync(world.statePath), false);
       assert.deepEqual(world.host.pulls(), []);
-      assert.equal(world.host.log().some((r) => r.path === `/repos/${OWNER}/${REPO}/issues`), false, 'cleanup lists nothing without its label');
+      const cleanupReads = world.host.log().slice(beforeCleanup);
+      assert.equal(cleanupReads.some((r) => r.path === '/user' || /\/pulls\/\d+$/.test(r.path)), false, 'cleanup reads no account or pull request without its label');
     });
   }
 
@@ -771,17 +773,19 @@ function results(outcome: Json): (readonly [unknown, unknown, unknown])[] {
 const closes = (world: IWorld): readonly string[] => writes(world).filter((w) => w.startsWith('PATCH '));
 
 describe('cleanup under the convention (cleanup contract §2.2.1, §2.5, §2.8)', () => {
-  test('acts on conforming suggestion pull requests of any tool: another tool\'s ids and batch, another author', async () => {
+  test('acts on conforming suggestion pull requests of any tool: another tool\'s ids and batch, and, with owner all, another author', async () => {
     const world = cleanupWorld([
       original(37, 'merged'),
       conforming(40, 37, ID_OF(40), BATCH, ['suggestion-pr']),
       conforming(41, 37, 'other-tool_1', 'nightly-run', ['suggestion-pr', 'bot'], 999),
     ]);
-    const outcome = await cleanup(world);
+    const mine = await cleanup(world, { dryRun: true });
+    assert.deepEqual(results(mine), [[40, 37, 'would-close'], [41, 37, 'other-owner']], 'by default only this account\'s suggestions are closed');
+    const outcome = await cleanup(world, { owner: 'all' });
     assert.equal(status(outcome), 'complete', markdown(outcome));
     assert.deepEqual(results(outcome), [[40, 37, 'closed'], [41, 37, 'closed']]);
     assert.deepEqual(closes(world), ['PATCH /repos/octo/widgets/pulls/40', 'PATCH /repos/octo/widgets/pulls/41']);
-    assert.ok(markdown(outcome).includes('Checked the open pull requests labeled `suggestion-pr` in octo/widgets (the default suggestion label).'), markdown(outcome));
+    assert.ok(markdown(outcome).includes('Checked the open pull requests on `suggestion-pr/` branches in octo/widgets; the suggestion label is `suggestion-pr` (the default suggestion label). Suggestion pull requests are closed whoever opened them.'), markdown(outcome));
   });
 
   test('a pull request that does not conform is never closed: the tool-branded marker, or a branch outside the convention', async () => {
@@ -791,21 +795,23 @@ describe('cleanup under the convention (cleanup contract §2.2.1, §2.5, §2.8)'
       { ...branded, body: branded.body.replace('<!-- suggestion-pr {', '<!-- sarif-to-comment:suggestion {') },
       { ...conforming(43, 37, ID_OF(43), BATCH, ['suggestion-pr']), head: `sarif-to-comment/suggestions/37/${ID_OF(43)}` },
     ]);
-    const outcome = await cleanup(world);
-    assert.deepEqual(results(outcome), [[42, null, 'not-ours'], [43, 37, 'not-ours']]);
+    // A branch outside suggestion-pr/ is never among the suggestion branches, so a label sweep finds both.
+    const outcome = await cleanup(world, { label: 'suggestion-pr' });
+    assert.deepEqual(results(outcome), [[42, null, 'not-conforming'], [43, 37, 'not-conforming']]);
     assert.deepEqual(closes(world), []);
     assert.ok(markdown(outcome).includes('- #42: skipped, not a conforming suggestion pull request: it has the label but no suggestion marker'), markdown(outcome));
     assert.ok(markdown(outcome).includes(`- #43 (for #37): skipped, not a conforming suggestion pull request: its head branch is \`sarif-to-comment/suggestions/37/${ID_OF(43)}\`, not \`suggestion-pr/37/${ID_OF(43)}\``), markdown(outcome));
   });
 
-  test('the configured label is swept and verified; suggestions under another label are not listed', async () => {
+  test('the configured label confirms: a suggestion under another label is found by its branch but left unlabeled', async () => {
     const world = cleanupWorld([
       original(37, 'closed'),
       conforming(40, 37, ID_OF(40), BATCH, ['proposal']),
       conforming(41, 37, ID_OF(41), BATCH, ['suggestion-pr']),
     ], repository({}, '{"label":"proposal"}'));
     const outcome = await cleanup(world);
-    assert.deepEqual(results(outcome), [[40, 37, 'closed']]);
+    assert.deepEqual(results(outcome), [[40, 37, 'closed'], [41, 37, 'unlabeled']]);
+    assert.deepEqual(closes(world), ['PATCH /repos/octo/widgets/pulls/40']);
   });
 
   test('--label is a migration override: it sweeps the old label, verifies with it, and does not read the configuration', async () => {

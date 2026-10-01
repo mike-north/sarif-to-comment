@@ -1,0 +1,647 @@
+{
+  "recorded": "2026-10-01",
+  "endpoint": "POST https://api.github.com/graphql (read-only query)",
+  "note": "The query the fixed client sends: the exact branch count under the prefix, and the branches listed under refs/heads/ by name filter with their open pull requests: 18 branches, 17 open pull requests.",
+  "query": "query ($owner: String!, $repo: String!, $prefix: String!, $contains: String!, $first: Int!, $after: String) {\n  repository(owner: $owner, name: $repo) {\n    branchCount: refs(refPrefix: $prefix, first: 0) { totalCount }\n    branches: refs(refPrefix: \"refs/heads/\", query: $contains, first: $first, after: $after, orderBy: {field: ALPHABETICAL, direction: ASC}) {\n      pageInfo { hasNextPage endCursor }\n      nodes {\n        name\n        associatedPullRequests(states: OPEN, first: 10) {\n          pageInfo { hasNextPage }\n          nodes {\n            number\n            url\n            body\n            headRefName\n            headRepository { nameWithOwner }\n            repository { nameWithOwner }\n            author { login }\n            labels(first: 100) { pageInfo { hasNextPage } nodes { name } }\n          }\n        }\n      }\n    }\n  }\n}\n",
+  "variables": {
+    "owner": "mike-north",
+    "repo": "doc-linter",
+    "prefix": "refs/heads/suggestion-pr/",
+    "contains": "suggestion-pr/",
+    "first": 100,
+    "after": null
+  },
+  "response": {
+    "data": {
+      "repository": {
+        "branchCount": {
+          "totalCount": 18
+        },
+        "branches": {
+          "pageInfo": {
+            "hasNextPage": false,
+            "endCursor": "MTg"
+          },
+          "nodes": [
+            {
+              "name": "suggestion-pr/56/bb3b8acd-0bdf-4464-b341-8802383b6935",
+              "associatedPullRequests": {
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "number": 58,
+                    "url": "https://github.com/mike-north/doc-linter/pull/58",
+                    "body": "Suggested in a review of #56 at commit 37eaceec3431911c60692ff561d6c1afd91297fc.\n\nMerging this pull request into `sarif-issue27-20260929-a` applies this change:\n\n- New file `docs/experiments/sarif-issue27/a-guide.md`: 42 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644\n\n**How this suggestion is accepted:** it is a draft pull request into `sarif-issue27-20260929-a`, the branch of #56. A draft cannot be merged: someone with write access first marks it ready for review. The author of #56 then decides whether to merge it, and #56 carries the change to its base. Once #56 is merged or closed, this pull request can be closed.\n\n---\n\n**Location:** line 1 of the proposed file\n\nAdd a guide for fixture page a.\n\n<sub>— Review agent</sub>\n\n<!-- suggestion-pr {\"version\":1,\"original\":{\"owner\":\"mike-north\",\"repo\":\"doc-linter\",\"pullNumber\":56},\"reviewedCommit\":\"37eaceec3431911c60692ff561d6c1afd91297fc\",\"id\":\"bb3b8acd-0bdf-4464-b341-8802383b6935\",\"batch\":\"a0d34b4d-6f04-43f9-80d2-65631f902afd\"} -->",
+                    "headRefName": "suggestion-pr/56/bb3b8acd-0bdf-4464-b341-8802383b6935",
+                    "headRepository": {
+                      "nameWithOwner": "mike-north/doc-linter"
+                    },
+                    "repository": {
+                      "nameWithOwner": "mike-north/doc-linter"
+                    },
+                    "author": {
+                      "login": "mike-north"
+                    },
+                    "labels": {
+                      "pageInfo": {
+                        "hasNextPage": false
+                      },
+                      "nodes": [
+                        {
+                          "name": "suggestion-pr"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "name": "suggestion-pr/57/81e4d9fe-25d2-48e4-b421-9115dce6f808",
+              "associatedPullRequests": {
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": []
+              }
+            },
+            {
+              "name": "suggestion-pr/60/d9f36f69-f1c8-47d9-8dd0-602daeb1d3b7",
+              "associatedPullRequests": {
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "number": 72,
+                    "url": "https://github.com/mike-north/doc-linter/pull/72",
+                    "body": "Suggested in a review of #60 at commit ea29b3d4966ca71eabdcc422607ffe4dfd7d7177.\n\nMerging this pull request into `sarif-issue29-20260929-a` applies these 2 changes together:\n\n- Edited [docs/experiments/sarif-issue29/a-guide.md line 7 at ea29b3d](https://github.com/mike-north/doc-linter/blob/ea29b3d4966ca71eabdcc422607ffe4dfd7d7177/docs/experiments/sarif-issue29/a-guide.md#L7)\n- New file `docs/experiments/sarif-issue29/a-checklist.md`: 101 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644\n\n**How this suggestion is accepted:** it is a draft pull request into `sarif-issue29-20260929-a`, the branch of #60. A draft cannot be merged: someone with write access first marks it ready for review. The author of #60 then decides whether to merge it, and #60 carries the change to its base. Once #60 is merged or closed, this pull request can be closed.\n\n---\n\n**Source:** [docs/experiments/sarif-issue29/a-guide.md line 7 at ea29b3d](https://github.com/mike-north/doc-linter/blob/ea29b3d4966ca71eabdcc422607ffe4dfd7d7177/docs/experiments/sarif-issue29/a-guide.md#L7)\n\n```\nSee the checklist before you ship.\n```\n\nLink the checklist this page refers to.\n\n<sub>— Review agent</sub>\n\n---\n\n**Location:** line 1 of the proposed file\n\nAdd the checklist the link points to; the link and the page only make sense together.\n\n<sub>— Review agent</sub>\n\n<!-- suggestion-pr {\"version\":1,\"original\":{\"owner\":\"mike-north\",\"repo\":\"doc-linter\",\"pullNumber\":60},\"reviewedCommit\":\"ea29b3d4966ca71eabdcc422607ffe4dfd7d7177\",\"id\":\"d9f36f69-f1c8-47d9-8dd0-602daeb1d3b7\",\"batch\":\"ff132f49-8875-4101-93ba-d83d6abcfa3e\"} -->",
+                    "headRefName": "suggestion-pr/60/d9f36f69-f1c8-47d9-8dd0-602daeb1d3b7",
+                    "headRepository": {
+                      "nameWithOwner": "mike-north/doc-linter"
+                    },
+                    "repository": {
+                      "nameWithOwner": "mike-north/doc-linter"
+                    },
+                    "author": {
+                      "login": "mike-north"
+                    },
+                    "labels": {
+                      "pageInfo": {
+                        "hasNextPage": false
+                      },
+                      "nodes": [
+                        {
+                          "name": "suggestion-pr"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "name": "suggestion-pr/61/eab22112-1bc3-4bbc-9d81-6570e7127f74",
+              "associatedPullRequests": {
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "number": 66,
+                    "url": "https://github.com/mike-north/doc-linter/pull/66",
+                    "body": "Suggested in a review of #61 at commit 053186500ab453900b51b4ccc9fb75e40bd5d164.\n\nMerging this pull request into `exp-reapply-20260929-advanced` applies this change:\n\n- New file `docs/experiments/reapply/new-advanced.md`: 49 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644\n\n**How this suggestion is accepted:** it is a draft pull request into `exp-reapply-20260929-advanced`, the branch of #61. A draft cannot be merged: someone with write access first marks it ready for review. The author of #61 then decides whether to merge it, and #61 carries the change to its base. Once #61 is merged or closed, this pull request can be closed.\n\n---\n\n**Location:** line 1 of the proposed file\n\nAdd a page for the new behavior.\n\n<sub>— Re-application fixture 1.0.0</sub>\n\n<!-- suggestion-pr {\"version\":1,\"original\":{\"owner\":\"mike-north\",\"repo\":\"doc-linter\",\"pullNumber\":61},\"reviewedCommit\":\"053186500ab453900b51b4ccc9fb75e40bd5d164\",\"id\":\"eab22112-1bc3-4bbc-9d81-6570e7127f74\",\"batch\":\"0a9816e5-52b0-4ce0-9ee9-fda9acf44285\"} -->",
+                    "headRefName": "suggestion-pr/61/eab22112-1bc3-4bbc-9d81-6570e7127f74",
+                    "headRepository": {
+                      "nameWithOwner": "mike-north/doc-linter"
+                    },
+                    "repository": {
+                      "nameWithOwner": "mike-north/doc-linter"
+                    },
+                    "author": {
+                      "login": "mike-north"
+                    },
+                    "labels": {
+                      "pageInfo": {
+                        "hasNextPage": false
+                      },
+                      "nodes": [
+                        {
+                          "name": "suggestion-pr"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "name": "suggestion-pr/61/0c3a1dc6-be06-4665-bd1b-e31ebaac81f2",
+              "associatedPullRequests": {
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "number": 67,
+                    "url": "https://github.com/mike-north/doc-linter/pull/67",
+                    "body": "Suggested in a review of #61 at commit 053186500ab453900b51b4ccc9fb75e40bd5d164.\n\nMerging this pull request into `exp-reapply-20260929-advanced` applies this change:\n\n- Deleted file [docs/experiments/reapply/obsolete-advanced.txt at 0531865](https://github.com/mike-north/doc-linter/blob/053186500ab453900b51b4ccc9fb75e40bd5d164/docs/experiments/reapply/obsolete-advanced.txt): the whole file is removed\n\n**How this suggestion is accepted:** it is a draft pull request into `exp-reapply-20260929-advanced`, the branch of #61. A draft cannot be merged: someone with write access first marks it ready for review. The author of #61 then decides whether to merge it, and #61 carries the change to its base. Once #61 is merged or closed, this pull request can be closed.\n\n---\n\nThe obsolete note can go.\n\n<sub>— Re-application fixture 1.0.0</sub>\n\n<!-- suggestion-pr {\"version\":1,\"original\":{\"owner\":\"mike-north\",\"repo\":\"doc-linter\",\"pullNumber\":61},\"reviewedCommit\":\"053186500ab453900b51b4ccc9fb75e40bd5d164\",\"id\":\"0c3a1dc6-be06-4665-bd1b-e31ebaac81f2\",\"batch\":\"0a9816e5-52b0-4ce0-9ee9-fda9acf44285\"} -->",
+                    "headRefName": "suggestion-pr/61/0c3a1dc6-be06-4665-bd1b-e31ebaac81f2",
+                    "headRepository": {
+                      "nameWithOwner": "mike-north/doc-linter"
+                    },
+                    "repository": {
+                      "nameWithOwner": "mike-north/doc-linter"
+                    },
+                    "author": {
+                      "login": "mike-north"
+                    },
+                    "labels": {
+                      "pageInfo": {
+                        "hasNextPage": false
+                      },
+                      "nodes": [
+                        {
+                          "name": "suggestion-pr"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "name": "suggestion-pr/61/706c3c45-9ebf-4b47-942b-2e5ca6d8e44a",
+              "associatedPullRequests": {
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "number": 65,
+                    "url": "https://github.com/mike-north/doc-linter/pull/65",
+                    "body": "Suggested in a review of #61 at commit 053186500ab453900b51b4ccc9fb75e40bd5d164.\n\nMerging this pull request into `exp-reapply-20260929-advanced` applies these 2 changes together:\n\n- Edited [docs/experiments/reapply/sample-advanced.md line 6 at 0531865](https://github.com/mike-north/doc-linter/blob/053186500ab453900b51b4ccc9fb75e40bd5d164/docs/experiments/reapply/sample-advanced.md#L6)\n- Edited [docs/experiments/reapply/sample-advanced.md line 10 at 0531865](https://github.com/mike-north/doc-linter/blob/053186500ab453900b51b4ccc9fb75e40bd5d164/docs/experiments/reapply/sample-advanced.md#L10)\n\n**How this suggestion is accepted:** it is a draft pull request into `exp-reapply-20260929-advanced`, the branch of #61. A draft cannot be merged: someone with write access first marks it ready for review. The author of #61 then decides whether to merge it, and #61 carries the change to its base. Once #61 is merged or closed, this pull request can be closed.\n\n---\n\n**Source:** [docs/experiments/reapply/sample-advanced.md line 6 at 0531865](https://github.com/mike-north/doc-linter/blob/053186500ab453900b51b4ccc9fb75e40bd5d164/docs/experiments/reapply/sample-advanced.md#L6)\n\n```\nLine 06: reviewed change two.\n```\n\nSay what the second reviewed change means.\n\n<sub>— Re-application fixture 1.0.0</sub>\n\n---\n\n**Source:** [docs/experiments/reapply/sample-advanced.md line 10 at 0531865](https://github.com/mike-north/doc-linter/blob/053186500ab453900b51b4ccc9fb75e40bd5d164/docs/experiments/reapply/sample-advanced.md#L10)\n\n```\nLine 10: stable text of the re-application fixture.\n```\n\nReword line 10 with it.\n\n<sub>— Re-application fixture 1.0.0</sub>\n\n<!-- suggestion-pr {\"version\":1,\"original\":{\"owner\":\"mike-north\",\"repo\":\"doc-linter\",\"pullNumber\":61},\"reviewedCommit\":\"053186500ab453900b51b4ccc9fb75e40bd5d164\",\"id\":\"706c3c45-9ebf-4b47-942b-2e5ca6d8e44a\",\"batch\":\"0a9816e5-52b0-4ce0-9ee9-fda9acf44285\"} -->",
+                    "headRefName": "suggestion-pr/61/706c3c45-9ebf-4b47-942b-2e5ca6d8e44a",
+                    "headRepository": {
+                      "nameWithOwner": "mike-north/doc-linter"
+                    },
+                    "repository": {
+                      "nameWithOwner": "mike-north/doc-linter"
+                    },
+                    "author": {
+                      "login": "mike-north"
+                    },
+                    "labels": {
+                      "pageInfo": {
+                        "hasNextPage": false
+                      },
+                      "nodes": [
+                        {
+                          "name": "suggestion-pr"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "name": "suggestion-pr/62/addcbe41-ba68-4858-b41e-f7f0e1527112",
+              "associatedPullRequests": {
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "number": 69,
+                    "url": "https://github.com/mike-north/doc-linter/pull/69",
+                    "body": "Suggested in a review of #62 at commit 35a245786cfbca5df5264ac0756962b725fabc8c.\n\nThe history of #62 was rewritten after that commit, so this change is re-applied onto commit a27db7c7dfd4d55a15f119d970b93c403f8924fa, the head of #62 when it was proposed, where everything it changes is still exactly as reviewed.\n\nMerging this pull request into `exp-reapply-20260929-amended` applies this change:\n\n- New file `docs/experiments/reapply/new-amended.md`: 48 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644\n\n**How this suggestion is accepted:** it is a draft pull request into `exp-reapply-20260929-amended`, the branch of #62. A draft cannot be merged: someone with write access first marks it ready for review. The author of #62 then decides whether to merge it, and #62 carries the change to its base. Once #62 is merged or closed, this pull request can be closed.\n\n---\n\n**Location:** line 1 of the proposed file\n\nAdd a page for the new behavior.\n\n<sub>— Re-application fixture 1.0.0</sub>\n\n<!-- suggestion-pr {\"version\":2,\"original\":{\"owner\":\"mike-north\",\"repo\":\"doc-linter\",\"pullNumber\":62},\"reviewedCommit\":\"35a245786cfbca5df5264ac0756962b725fabc8c\",\"reappliedOnto\":\"a27db7c7dfd4d55a15f119d970b93c403f8924fa\",\"id\":\"addcbe41-ba68-4858-b41e-f7f0e1527112\",\"batch\":\"2a455821-bf2f-48e9-b296-0e2b3af00880\"} -->",
+                    "headRefName": "suggestion-pr/62/addcbe41-ba68-4858-b41e-f7f0e1527112",
+                    "headRepository": {
+                      "nameWithOwner": "mike-north/doc-linter"
+                    },
+                    "repository": {
+                      "nameWithOwner": "mike-north/doc-linter"
+                    },
+                    "author": {
+                      "login": "mike-north"
+                    },
+                    "labels": {
+                      "pageInfo": {
+                        "hasNextPage": false
+                      },
+                      "nodes": [
+                        {
+                          "name": "suggestion-pr"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "name": "suggestion-pr/62/ca039fbc-33b7-45d2-b53f-33bbc71513e1",
+              "associatedPullRequests": {
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "number": 70,
+                    "url": "https://github.com/mike-north/doc-linter/pull/70",
+                    "body": "Suggested in a review of #62 at commit 35a245786cfbca5df5264ac0756962b725fabc8c.\n\nThe history of #62 was rewritten after that commit, so this change is re-applied onto commit a27db7c7dfd4d55a15f119d970b93c403f8924fa, the head of #62 when it was proposed, where everything it changes is still exactly as reviewed.\n\nMerging this pull request into `exp-reapply-20260929-amended` applies this change:\n\n- Deleted file [docs/experiments/reapply/obsolete-amended.txt at 35a2457](https://github.com/mike-north/doc-linter/blob/35a245786cfbca5df5264ac0756962b725fabc8c/docs/experiments/reapply/obsolete-amended.txt): the whole file is removed\n\n**How this suggestion is accepted:** it is a draft pull request into `exp-reapply-20260929-amended`, the branch of #62. A draft cannot be merged: someone with write access first marks it ready for review. The author of #62 then decides whether to merge it, and #62 carries the change to its base. Once #62 is merged or closed, this pull request can be closed.\n\n---\n\nThe obsolete note can go.\n\n<sub>— Re-application fixture 1.0.0</sub>\n\n<!-- suggestion-pr {\"version\":2,\"original\":{\"owner\":\"mike-north\",\"repo\":\"doc-linter\",\"pullNumber\":62},\"reviewedCommit\":\"35a245786cfbca5df5264ac0756962b725fabc8c\",\"reappliedOnto\":\"a27db7c7dfd4d55a15f119d970b93c403f8924fa\",\"id\":\"ca039fbc-33b7-45d2-b53f-33bbc71513e1\",\"batch\":\"2a455821-bf2f-48e9-b296-0e2b3af00880\"} -->",
+                    "headRefName": "suggestion-pr/62/ca039fbc-33b7-45d2-b53f-33bbc71513e1",
+                    "headRepository": {
+                      "nameWithOwner": "mike-north/doc-linter"
+                    },
+                    "repository": {
+                      "nameWithOwner": "mike-north/doc-linter"
+                    },
+                    "author": {
+                      "login": "mike-north"
+                    },
+                    "labels": {
+                      "pageInfo": {
+                        "hasNextPage": false
+                      },
+                      "nodes": [
+                        {
+                          "name": "suggestion-pr"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "name": "suggestion-pr/62/8563a35a-b14d-41f5-9d97-372034e64b9d",
+              "associatedPullRequests": {
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "number": 68,
+                    "url": "https://github.com/mike-north/doc-linter/pull/68",
+                    "body": "Suggested in a review of #62 at commit 35a245786cfbca5df5264ac0756962b725fabc8c.\n\nThe history of #62 was rewritten after that commit, so this change is re-applied onto commit a27db7c7dfd4d55a15f119d970b93c403f8924fa, the head of #62 when it was proposed, where everything it changes is still exactly as reviewed.\n\nMerging this pull request into `exp-reapply-20260929-amended` applies these 2 changes together:\n\n- Edited [docs/experiments/reapply/sample-amended.md line 6 at 35a2457](https://github.com/mike-north/doc-linter/blob/35a245786cfbca5df5264ac0756962b725fabc8c/docs/experiments/reapply/sample-amended.md#L6)\n- Edited [docs/experiments/reapply/sample-amended.md line 10 at 35a2457](https://github.com/mike-north/doc-linter/blob/35a245786cfbca5df5264ac0756962b725fabc8c/docs/experiments/reapply/sample-amended.md#L10)\n\n**How this suggestion is accepted:** it is a draft pull request into `exp-reapply-20260929-amended`, the branch of #62. A draft cannot be merged: someone with write access first marks it ready for review. The author of #62 then decides whether to merge it, and #62 carries the change to its base. Once #62 is merged or closed, this pull request can be closed.\n\n---\n\n**Source:** [docs/experiments/reapply/sample-amended.md line 6 at 35a2457](https://github.com/mike-north/doc-linter/blob/35a245786cfbca5df5264ac0756962b725fabc8c/docs/experiments/reapply/sample-amended.md#L6)\n\n```\nLine 06: reviewed change two.\n```\n\nSay what the second reviewed change means.\n\n<sub>— Re-application fixture 1.0.0</sub>\n\n---\n\n**Source:** [docs/experiments/reapply/sample-amended.md line 10 at 35a2457](https://github.com/mike-north/doc-linter/blob/35a245786cfbca5df5264ac0756962b725fabc8c/docs/experiments/reapply/sample-amended.md#L10)\n\n```\nLine 10: stable text of the re-application fixture.\n```\n\nReword line 10 with it.\n\n<sub>— Re-application fixture 1.0.0</sub>\n\n<!-- suggestion-pr {\"version\":2,\"original\":{\"owner\":\"mike-north\",\"repo\":\"doc-linter\",\"pullNumber\":62},\"reviewedCommit\":\"35a245786cfbca5df5264ac0756962b725fabc8c\",\"reappliedOnto\":\"a27db7c7dfd4d55a15f119d970b93c403f8924fa\",\"id\":\"8563a35a-b14d-41f5-9d97-372034e64b9d\",\"batch\":\"2a455821-bf2f-48e9-b296-0e2b3af00880\"} -->",
+                    "headRefName": "suggestion-pr/62/8563a35a-b14d-41f5-9d97-372034e64b9d",
+                    "headRepository": {
+                      "nameWithOwner": "mike-north/doc-linter"
+                    },
+                    "repository": {
+                      "nameWithOwner": "mike-north/doc-linter"
+                    },
+                    "author": {
+                      "login": "mike-north"
+                    },
+                    "labels": {
+                      "pageInfo": {
+                        "hasNextPage": false
+                      },
+                      "nodes": [
+                        {
+                          "name": "suggestion-pr"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "name": "suggestion-pr/63/457b8f95-23ce-46fa-9dc9-9514b33ff700",
+              "associatedPullRequests": {
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "number": 73,
+                    "url": "https://github.com/mike-north/doc-linter/pull/73",
+                    "body": "Suggested in a review of #63 at commit 72b43d6f6f51d2bed9d8af061daf882932bf8fb2.\n\nMerging this pull request into `sarif-issue29-20260929-b` applies these 3 changes together:\n\n- Edited [docs/experiments/sarif-issue29/b-guide.md line 3 at 72b43d6](https://github.com/mike-north/doc-linter/blob/72b43d6f6f51d2bed9d8af061daf882932bf8fb2/docs/experiments/sarif-issue29/b-guide.md#L3)\n- Edited [docs/experiments/sarif-issue29/b-guide.md line 5 at 72b43d6](https://github.com/mike-north/doc-linter/blob/72b43d6f6f51d2bed9d8af061daf882932bf8fb2/docs/experiments/sarif-issue29/b-guide.md#L5)\n- Edited [docs/experiments/sarif-issue29/b-reference.md line 5 at 72b43d6](https://github.com/mike-north/doc-linter/blob/72b43d6f6f51d2bed9d8af061daf882932bf8fb2/docs/experiments/sarif-issue29/b-reference.md#L5)\n\n**How this suggestion is accepted:** it is a draft pull request into `sarif-issue29-20260929-b`, the branch of #63. A draft cannot be merged: someone with write access first marks it ready for review. The author of #63 then decides whether to merge it, and #63 carries the change to its base. Once #63 is merged or closed, this pull request can be closed.\n\n---\n\n**Source:** [docs/experiments/sarif-issue29/b-guide.md line 3 at 72b43d6](https://github.com/mike-north/doc-linter/blob/72b43d6f6f51d2bed9d8af061daf882932bf8fb2/docs/experiments/sarif-issue29/b-guide.md#L3)\n\n```\nRequests time out after 30 seconds.\n```\n\n**Level:** warning\n\nThe documented timeout disagrees with the client default of 10 seconds; update the guide and the reference together.\n\n**Fix:** Document the 10-second timeout everywhere.\n\n<sub>— Upstream docs linter 0.1.0 · rule `consistent-timeout`</sub>\n\n<!-- suggestion-pr {\"version\":1,\"original\":{\"owner\":\"mike-north\",\"repo\":\"doc-linter\",\"pullNumber\":63},\"reviewedCommit\":\"72b43d6f6f51d2bed9d8af061daf882932bf8fb2\",\"id\":\"457b8f95-23ce-46fa-9dc9-9514b33ff700\",\"batch\":\"15fb6f44-9a2f-4ea6-97cd-f9ae4b94091b\"} -->",
+                    "headRefName": "suggestion-pr/63/457b8f95-23ce-46fa-9dc9-9514b33ff700",
+                    "headRepository": {
+                      "nameWithOwner": "mike-north/doc-linter"
+                    },
+                    "repository": {
+                      "nameWithOwner": "mike-north/doc-linter"
+                    },
+                    "author": {
+                      "login": "mike-north"
+                    },
+                    "labels": {
+                      "pageInfo": {
+                        "hasNextPage": false
+                      },
+                      "nodes": [
+                        {
+                          "name": "suggestion-pr"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "name": "suggestion-pr/64/db27ee45-de28-454c-b521-f46bdafef733",
+              "associatedPullRequests": {
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "number": 71,
+                    "url": "https://github.com/mike-north/doc-linter/pull/71",
+                    "body": "Suggested in a review of #64 at commit 5ebfe7da336d6e1ad6de8b5a04f73924de5d0a5b.\n\nThe history of #64 was rewritten after that commit, so this change is re-applied onto commit 080ce5eb7dfa54049e44510f51fe41b83abb4ae3, the head of #64 when it was proposed, where everything it changes is still exactly as reviewed.\n\nMerging this pull request into `exp-reapply-20260929-rewritten` applies this change:\n\n- New file `docs/experiments/reapply/new-rewritten.md`: 50 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644\n\n**How this suggestion is accepted:** it is a draft pull request into `exp-reapply-20260929-rewritten`, the branch of #64. A draft cannot be merged: someone with write access first marks it ready for review. The author of #64 then decides whether to merge it, and #64 carries the change to its base. Once #64 is merged or closed, this pull request can be closed.\n\n---\n\n**Location:** line 1 of the proposed file\n\nAdd a page for the new behavior.\n\n<sub>— Re-application fixture 1.0.0</sub>\n\n<!-- suggestion-pr {\"version\":2,\"original\":{\"owner\":\"mike-north\",\"repo\":\"doc-linter\",\"pullNumber\":64},\"reviewedCommit\":\"5ebfe7da336d6e1ad6de8b5a04f73924de5d0a5b\",\"reappliedOnto\":\"080ce5eb7dfa54049e44510f51fe41b83abb4ae3\",\"id\":\"db27ee45-de28-454c-b521-f46bdafef733\",\"batch\":\"8972ea4f-4b00-43c0-af32-e011db8e3678\"} -->",
+                    "headRefName": "suggestion-pr/64/db27ee45-de28-454c-b521-f46bdafef733",
+                    "headRepository": {
+                      "nameWithOwner": "mike-north/doc-linter"
+                    },
+                    "repository": {
+                      "nameWithOwner": "mike-north/doc-linter"
+                    },
+                    "author": {
+                      "login": "mike-north"
+                    },
+                    "labels": {
+                      "pageInfo": {
+                        "hasNextPage": false
+                      },
+                      "nodes": [
+                        {
+                          "name": "suggestion-pr"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "name": "suggestion-pr/75/0acdfa96-3a0c-4ab6-8a75-aa99aeb7cdc5",
+              "associatedPullRequests": {
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "number": 78,
+                    "url": "https://github.com/mike-north/doc-linter/pull/78",
+                    "body": "Suggested in a review of #75 at commit a96870958463377e3a1fa9c455099a876961abd3.\n\nThe history of #75 was rewritten after that commit, so this change is re-applied onto commit 8c35033bf19c1d8c439a0bc287b3fa67f5f0ace2, the head of #75 when it was proposed, where everything it changes is still exactly as reviewed.\n\nMerging this pull request into `exp-fallback-20260930-deletion` applies this change:\n\n- New file `docs/experiments/fallback/new-deletion.md`: 6 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644\n\n**How this suggestion is accepted:** it is a draft pull request into `exp-fallback-20260930-deletion`, the branch of #75. A draft cannot be merged: someone with write access first marks it ready for review. The author of #75 then decides whether to merge it, and #75 carries the change to its base. Once #75 is merged or closed, this pull request can be closed.\n\n---\n\n**Location:** line 1 of the proposed file\n\nAdd a new page.\n\n<sub>— Review bot 1.0.0</sub>\n\n<!-- suggestion-pr {\"version\":2,\"original\":{\"owner\":\"mike-north\",\"repo\":\"doc-linter\",\"pullNumber\":75},\"reviewedCommit\":\"a96870958463377e3a1fa9c455099a876961abd3\",\"reappliedOnto\":\"8c35033bf19c1d8c439a0bc287b3fa67f5f0ace2\",\"id\":\"0acdfa96-3a0c-4ab6-8a75-aa99aeb7cdc5\",\"batch\":\"1b9490cd-f77a-4a01-8d2e-f6a85828def3\"} -->",
+                    "headRefName": "suggestion-pr/75/0acdfa96-3a0c-4ab6-8a75-aa99aeb7cdc5",
+                    "headRepository": {
+                      "nameWithOwner": "mike-north/doc-linter"
+                    },
+                    "repository": {
+                      "nameWithOwner": "mike-north/doc-linter"
+                    },
+                    "author": {
+                      "login": "mike-north"
+                    },
+                    "labels": {
+                      "pageInfo": {
+                        "hasNextPage": false
+                      },
+                      "nodes": [
+                        {
+                          "name": "suggestion-pr"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "name": "suggestion-pr/82/a56530c0-b663-4610-b715-a021e0af7cee",
+              "associatedPullRequests": {
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "number": 88,
+                    "url": "https://github.com/mike-north/doc-linter/pull/88",
+                    "body": "Suggested in a review of #82 at commit 876a1f901aba43d3234ee8686281931f4afc8e0f.\n\nMerging this pull request into `audit-030-c` applies this change:\n\n- Deleted file [docs/audit-030/c/obsolete.md at 876a1f9](https://github.com/mike-north/doc-linter/blob/876a1f901aba43d3234ee8686281931f4afc8e0f/docs/audit-030/c/obsolete.md): the whole file is removed\n\n**How this suggestion is accepted:** it is a draft pull request into `audit-030-c`, the branch of #82. A draft cannot be merged: someone with write access first marks it ready for review. The author of #82 then decides whether to merge it, and #82 carries the change to its base. Once #82 is merged or closed, this pull request can be closed.\n\n---\n\n**Source:** [docs/audit-030/c/obsolete.md line 1 at 876a1f9](https://github.com/mike-north/doc-linter/blob/876a1f901aba43d3234ee8686281931f4afc8e0f/docs/audit-030/c/obsolete.md#L1)\n\n```\n# Obsolete c\n```\n\nDelete this obsolete page.\n\n<sub>— Audit agent</sub>\n\n<!-- suggestion-pr {\"version\":1,\"original\":{\"owner\":\"mike-north\",\"repo\":\"doc-linter\",\"pullNumber\":82},\"reviewedCommit\":\"876a1f901aba43d3234ee8686281931f4afc8e0f\",\"id\":\"a56530c0-b663-4610-b715-a021e0af7cee\",\"batch\":\"cd9f8103-7075-46ec-b0cd-1fed37df98db\"} -->",
+                    "headRefName": "suggestion-pr/82/a56530c0-b663-4610-b715-a021e0af7cee",
+                    "headRepository": {
+                      "nameWithOwner": "mike-north/doc-linter"
+                    },
+                    "repository": {
+                      "nameWithOwner": "mike-north/doc-linter"
+                    },
+                    "author": {
+                      "login": "mike-north"
+                    },
+                    "labels": {
+                      "pageInfo": {
+                        "hasNextPage": false
+                      },
+                      "nodes": [
+                        {
+                          "name": "documentation"
+                        },
+                        {
+                          "name": "suggestion-pr"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "name": "suggestion-pr/82/ba598127-d81f-487f-b96b-005ad50ca678",
+              "associatedPullRequests": {
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "number": 86,
+                    "url": "https://github.com/mike-north/doc-linter/pull/86",
+                    "body": "Suggested in a review of #82 at commit 876a1f901aba43d3234ee8686281931f4afc8e0f.\n\nMerging this pull request into `audit-030-c` applies these 2 changes together:\n\n- Edited [docs/audit-030/c/guide.md line 3 at 876a1f9](https://github.com/mike-north/doc-linter/blob/876a1f901aba43d3234ee8686281931f4afc8e0f/docs/audit-030/c/guide.md#L3)\n- Edited [docs/audit-030/c/guide.md line 6 at 876a1f9](https://github.com/mike-north/doc-linter/blob/876a1f901aba43d3234ee8686281931f4afc8e0f/docs/audit-030/c/guide.md#L6)\n\n**How this suggestion is accepted:** it is a draft pull request into `audit-030-c`, the branch of #82. A draft cannot be merged: someone with write access first marks it ready for review. The author of #82 then decides whether to merge it, and #82 carries the change to its base. Once #82 is merged or closed, this pull request can be closed.\n\n---\n\n**Source:** [docs/audit-030/c/guide.md line 3 at 876a1f9](https://github.com/mike-north/doc-linter/blob/876a1f901aba43d3234ee8686281931f4afc8e0f/docs/audit-030/c/guide.md#L3)\n\n```\nThis page is used to recieve findings in fixture c.\n```\n\nSpelling: recieve -\\> receive.\n\n<sub>— Audit agent</sub>\n\n---\n\n**Source:** [docs/audit-030/c/guide.md line 6 at 876a1f9](https://github.com/mike-north/doc-linter/blob/876a1f901aba43d3234ee8686281931f4afc8e0f/docs/audit-030/c/guide.md#L6)\n\n```\nLine five mentions teh wrong spelling.\n```\n\nSpelling: teh -\\> the.\n\n<sub>— Audit agent</sub>\n\n<!-- suggestion-pr {\"version\":1,\"original\":{\"owner\":\"mike-north\",\"repo\":\"doc-linter\",\"pullNumber\":82},\"reviewedCommit\":\"876a1f901aba43d3234ee8686281931f4afc8e0f\",\"id\":\"ba598127-d81f-487f-b96b-005ad50ca678\",\"batch\":\"cd9f8103-7075-46ec-b0cd-1fed37df98db\"} -->",
+                    "headRefName": "suggestion-pr/82/ba598127-d81f-487f-b96b-005ad50ca678",
+                    "headRepository": {
+                      "nameWithOwner": "mike-north/doc-linter"
+                    },
+                    "repository": {
+                      "nameWithOwner": "mike-north/doc-linter"
+                    },
+                    "author": {
+                      "login": "mike-north"
+                    },
+                    "labels": {
+                      "pageInfo": {
+                        "hasNextPage": false
+                      },
+                      "nodes": [
+                        {
+                          "name": "documentation"
+                        },
+                        {
+                          "name": "suggestion-pr"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "name": "suggestion-pr/82/257fb43e-f71e-4e8d-95ab-f23dc696d33a",
+              "associatedPullRequests": {
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "number": 89,
+                    "url": "https://github.com/mike-north/doc-linter/pull/89",
+                    "body": "Suggested in a review of #82 at commit 876a1f901aba43d3234ee8686281931f4afc8e0f.\n\nMerging this pull request into `audit-030-c` applies this change:\n\n- New file `docs/audit-030/c/checklist.md`: 39 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644\n\n**How this suggestion is accepted:** it is a draft pull request into `audit-030-c`, the branch of #82. A draft cannot be merged: someone with write access first marks it ready for review. The author of #82 then decides whether to merge it, and #82 carries the change to its base. Once #82 is merged or closed, this pull request can be closed.\n\n---\n\nStaged creation of \\`docs/audit-030/c/checklist.md\\`. No supplied finding was associated with this change.\n\n<sub>— sarif-to-comment 0.2.1 · rule `staged-change`</sub>\n\n<!-- suggestion-pr {\"version\":1,\"original\":{\"owner\":\"mike-north\",\"repo\":\"doc-linter\",\"pullNumber\":82},\"reviewedCommit\":\"876a1f901aba43d3234ee8686281931f4afc8e0f\",\"id\":\"257fb43e-f71e-4e8d-95ab-f23dc696d33a\",\"batch\":\"cd9f8103-7075-46ec-b0cd-1fed37df98db\"} -->",
+                    "headRefName": "suggestion-pr/82/257fb43e-f71e-4e8d-95ab-f23dc696d33a",
+                    "headRepository": {
+                      "nameWithOwner": "mike-north/doc-linter"
+                    },
+                    "repository": {
+                      "nameWithOwner": "mike-north/doc-linter"
+                    },
+                    "author": {
+                      "login": "mike-north"
+                    },
+                    "labels": {
+                      "pageInfo": {
+                        "hasNextPage": false
+                      },
+                      "nodes": [
+                        {
+                          "name": "documentation"
+                        },
+                        {
+                          "name": "suggestion-pr"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "name": "suggestion-pr/82/01548a27-f254-4097-a864-590f46513bf4",
+              "associatedPullRequests": {
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "number": 87,
+                    "url": "https://github.com/mike-north/doc-linter/pull/87",
+                    "body": "Suggested in a review of #82 at commit 876a1f901aba43d3234ee8686281931f4afc8e0f.\n\nMerging this pull request into `audit-030-c` applies these 2 changes together:\n\n- Edited [docs/audit-030/c/guide.md line 4 at 876a1f9](https://github.com/mike-north/doc-linter/blob/876a1f901aba43d3234ee8686281931f4afc8e0f/docs/audit-030/c/guide.md#L4)\n- Edited [docs/audit-030/c/guide.md lines 9-10 at 876a1f9](https://github.com/mike-north/doc-linter/blob/876a1f901aba43d3234ee8686281931f4afc8e0f/docs/audit-030/c/guide.md#L9-L10)\n\n**How this suggestion is accepted:** it is a draft pull request into `audit-030-c`, the branch of #82. A draft cannot be merged: someone with write access first marks it ready for review. The author of #82 then decides whether to merge it, and #82 carries the change to its base. Once #82 is merged or closed, this pull request can be closed.\n\n---\n\n**Source:** [docs/audit-030/c/guide.md line 9 at 876a1f9](https://github.com/mike-north/doc-linter/blob/876a1f901aba43d3234ee8686281931f4afc8e0f/docs/audit-030/c/guide.md#L9)\n\n```\nLine eight has a dubble word.\n```\n\nDoubled and tripled words on lines 8-9.\n\n<sub>— Audit agent</sub>\n\n<!-- suggestion-pr {\"version\":1,\"original\":{\"owner\":\"mike-north\",\"repo\":\"doc-linter\",\"pullNumber\":82},\"reviewedCommit\":\"876a1f901aba43d3234ee8686281931f4afc8e0f\",\"id\":\"01548a27-f254-4097-a864-590f46513bf4\",\"batch\":\"cd9f8103-7075-46ec-b0cd-1fed37df98db\"} -->",
+                    "headRefName": "suggestion-pr/82/01548a27-f254-4097-a864-590f46513bf4",
+                    "headRepository": {
+                      "nameWithOwner": "mike-north/doc-linter"
+                    },
+                    "repository": {
+                      "nameWithOwner": "mike-north/doc-linter"
+                    },
+                    "author": {
+                      "login": "mike-north"
+                    },
+                    "labels": {
+                      "pageInfo": {
+                        "hasNextPage": false
+                      },
+                      "nodes": [
+                        {
+                          "name": "documentation"
+                        },
+                        {
+                          "name": "suggestion-pr"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "name": "suggestion-pr/83/497c74d7-f4da-42c8-9f60-2ab7498a5cb5",
+              "associatedPullRequests": {
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "number": 90,
+                    "url": "https://github.com/mike-north/doc-linter/pull/90",
+                    "body": "Suggested in a review of #83 at commit 3a1054f85f9747d30eb35d3bfd05d19d504d423f.\n\nMerging this pull request into `audit-030-d` applies this change:\n\n- New file `docs/audit-030/d/checklist.md`: 39 bytes of UTF-8 text · LF line endings · ends with a newline · mode 100644\n\n**How this suggestion is accepted:** it is a pull request into `audit-030-d`, the branch of #83. The author of #83 decides whether to merge it, and #83 carries the change to its base. Once #83 is merged or closed, this pull request can be closed.\n\n---\n\nStaged creation of \\`docs/audit-030/d/checklist.md\\`. No supplied finding was associated with this change.\n\n<sub>— sarif-to-comment 0.2.1 · rule `staged-change`</sub>\n\n<!-- suggestion-pr {\"version\":1,\"original\":{\"owner\":\"mike-north\",\"repo\":\"doc-linter\",\"pullNumber\":83},\"reviewedCommit\":\"3a1054f85f9747d30eb35d3bfd05d19d504d423f\",\"id\":\"497c74d7-f4da-42c8-9f60-2ab7498a5cb5\",\"batch\":\"98d0e1e9-f38c-45eb-85ca-ed324d635c0c\"} -->",
+                    "headRefName": "suggestion-pr/83/497c74d7-f4da-42c8-9f60-2ab7498a5cb5",
+                    "headRepository": {
+                      "nameWithOwner": "mike-north/doc-linter"
+                    },
+                    "repository": {
+                      "nameWithOwner": "mike-north/doc-linter"
+                    },
+                    "author": {
+                      "login": "mike-north"
+                    },
+                    "labels": {
+                      "pageInfo": {
+                        "hasNextPage": false
+                      },
+                      "nodes": [
+                        {
+                          "name": "suggestion-pr"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "name": "suggestion-pr/84/9d1c21c3-15d1-4a08-85ee-0a0502b89aca",
+              "associatedPullRequests": {
+                "pageInfo": {
+                  "hasNextPage": false
+                },
+                "nodes": [
+                  {
+                    "number": 91,
+                    "url": "https://github.com/mike-north/doc-linter/pull/91",
+                    "body": "Suggested in a review of #84 at commit 58cf4138efcd9ad2a887941f959c11ced43d401b.\n\nThe history of #84 was rewritten after that commit, so this change is re-applied onto commit 019e912b25c4829922a7a45a5f7cf289bc7d3aeb, the head of #84 when it was proposed, where everything it changes is still exactly as reviewed.\n\nMerging this pull request into `audit-030-e` applies these 2 changes together:\n\n- Edited [docs/audit-030/e/guide.md lines 9-10 at 58cf413](https://github.com/mike-north/doc-linter/blob/58cf4138efcd9ad2a887941f959c11ced43d401b/docs/audit-030/e/guide.md#L9-L10)\n- Deleted file [docs/audit-030/e/obsolete.md at 58cf413](https://github.com/mike-north/doc-linter/blob/58cf4138efcd9ad2a887941f959c11ced43d401b/docs/audit-030/e/obsolete.md): the whole file is removed\n\n**How this suggestion is accepted:** it is a draft pull request into `audit-030-e`, the branch of #84. A draft cannot be merged: someone with write access first marks it ready for review. The author of #84 then decides whether to merge it, and #84 carries the change to its base. Once #84 is merged or closed, this pull request can be closed.\n\n---\n\n**Source:** [docs/audit-030/e/guide.md line 9 at 58cf413](https://github.com/mike-north/doc-linter/blob/58cf4138efcd9ad2a887941f959c11ced43d401b/docs/audit-030/e/guide.md#L9)\n\n```\nLine eight has a dubble word.\n```\n\nSpelling: dubble -\\> double.\n\n<sub>— Audit agent</sub>\n\n---\n\n**Source:** [docs/audit-030/e/guide.md line 10 at 58cf413](https://github.com/mike-north/doc-linter/blob/58cf4138efcd9ad2a887941f959c11ced43d401b/docs/audit-030/e/guide.md#L10)\n\n```\nLine nine has a tripple word.\n```\n\nSpelling: tripple -\\> triple.\n\n<sub>— Audit agent</sub>\n\n---\n\n**Source:** [docs/audit-030/e/obsolete.md line 1 at 58cf413](https://github.com/mike-north/doc-linter/blob/58cf4138efcd9ad2a887941f959c11ced43d401b/docs/audit-030/e/obsolete.md#L1)\n\n```\n# Obsolete e\n```\n\nDelete this page.\n\n<sub>— Audit agent</sub>\n\n<!-- suggestion-pr {\"version\":2,\"original\":{\"owner\":\"mike-north\",\"repo\":\"doc-linter\",\"pullNumber\":84},\"reviewedCommit\":\"58cf4138efcd9ad2a887941f959c11ced43d401b\",\"reappliedOnto\":\"019e912b25c4829922a7a45a5f7cf289bc7d3aeb\",\"id\":\"9d1c21c3-15d1-4a08-85ee-0a0502b89aca\",\"batch\":\"ce49ae62-9c07-48df-95ce-811ff50c4e28\"} -->",
+                    "headRefName": "suggestion-pr/84/9d1c21c3-15d1-4a08-85ee-0a0502b89aca",
+                    "headRepository": {
+                      "nameWithOwner": "mike-north/doc-linter"
+                    },
+                    "repository": {
+                      "nameWithOwner": "mike-north/doc-linter"
+                    },
+                    "author": {
+                      "login": "mike-north"
+                    },
+                    "labels": {
+                      "pageInfo": {
+                        "hasNextPage": false
+                      },
+                      "nodes": [
+                        {
+                          "name": "suggestion-pr"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}
