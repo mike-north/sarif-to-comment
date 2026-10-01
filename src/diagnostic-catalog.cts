@@ -683,7 +683,10 @@ export const DIAGNOSTIC_CATALOG = {
   'too-many-suggestion-prs': {
     severity: 'error',
     title: 'The review would create too many suggestion pull requests',
-    remedies: ['Publish fewer proposals in one review, or group related changes.'],
+    remedies: [
+      'Bundle them into one companion pull request (`--companion-bundle single`, `delivery.companionBundle: \'single\'`).',
+      'Publish fewer proposals in one review, or group related changes.',
+    ],
   },
   'suggestion-pr-fallback': {
     severity: 'warning',

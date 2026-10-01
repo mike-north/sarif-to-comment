@@ -99,7 +99,7 @@ export interface IDeliveryPolicyLayer extends IDeliverySettings {
  */
 export const DEFAULT_DELIVERY_POLICY = Object.freeze({
   edits: Object.freeze(['native'] as const),
-  // Flagged for the owner's confirmation at release review (contract §15, item 1).
+  // The owner may replace this default at release review (contract §15, item 1).
   groupedEdits: Object.freeze(['native-batch'] as const),
   fileOperations: Object.freeze(['manual'] as const),
   companionBundle: 'per-unit',
@@ -487,17 +487,26 @@ interface IDeliveryUnitBase {
   readonly location?: ILocationInput | undefined;
 }
 
+/**
+ * Whether each mechanism can deliver one unit, answered on request (§8.7).
+ * The planner asks only for mechanisms its resolved list names, in list
+ * order, at most once each, and never after the first available one, so
+ * preparation never works out obstacles nobody needs.
+ */
+export type AvailabilityOf<M extends string> = (mechanism: M) => MechanismAvailability;
+
 /** An ungrouped change to an existing file (§2), governed by `edits`. */
 export interface IEditUnit extends IDeliveryUnitBase {
   readonly kind: 'edit';
-  readonly availability: Readonly<Record<EditMechanism, MechanismAvailability>>;
+  readonly availability: AvailabilityOf<EditMechanism>;
 }
 
 /** One member of an edit group: whether it alone could be a native suggestion (§8.3). */
 export interface IEditGroupMember {
   /** How an obstacle names the member: Markdown ("The edit of `b.md` line 9"). */
   readonly description: string;
-  readonly native: MechanismAvailability;
+  /** Asked only when the group's `native-batch` is asked for (§8.7). */
+  readonly native: () => MechanismAvailability;
 }
 
 /**
@@ -508,19 +517,25 @@ export interface IEditGroupMember {
 export interface IEditGroupUnit extends IDeliveryUnitBase {
   readonly kind: 'edit-group';
   readonly members: readonly IEditGroupMember[];
-  readonly availability: Readonly<Record<GroupedEditMechanism, MechanismAvailability>>;
+  readonly availability: AvailabilityOf<GroupedEditMechanism>;
 }
 
 /** An ungrouped whole-file creation or deletion (§2, D50), governed by `fileOperations`. */
 export interface IFileOperationUnit extends IDeliveryUnitBase {
   readonly kind: 'file-operation';
-  readonly availability: Readonly<Record<FileOperationMechanism, MechanismAvailability>>;
+  readonly availability: AvailabilityOf<FileOperationMechanism>;
 }
 
-/** A group containing a whole-file operation (§2), governed by `fileOperations` as a whole (D51). */
+/**
+ * A group containing a whole-file operation (§2), governed by
+ * `fileOperations` as a whole (D51). Any group, explicit or a fix with
+ * several changes, that has at least one whole-file creation or deletion
+ * among its members is classified as this kind, whatever its edits'
+ * eligibility for native suggestions; it is never an edit group.
+ */
 export interface IFileOperationGroupUnit extends IDeliveryUnitBase {
   readonly kind: 'file-operation-group';
-  readonly availability: Readonly<Record<FileOperationMechanism, MechanismAvailability>>;
+  readonly availability: AvailabilityOf<FileOperationMechanism>;
 }
 
 /**
@@ -576,7 +591,8 @@ export type DeliveryPlan =
       /**
        * A `delivery-unavailable` error per blocked unit, then a
        * `too-many-suggestion-prs` error when the companion limit is
-       * exceeded, then the delivered units' fallback warnings.
+       * exceeded. Never a `delivery-fallback` warning: a blocked plan
+       * delivers nothing, so no unit "is delivered as" anything (§10.1, D55).
        */
       readonly diagnostics: readonly IDiagnostic[];
     };
@@ -612,7 +628,10 @@ interface IObstructed<M extends string> {
 
 /** The obstacles of one availability, empty when it is available. */
 function obstaclesOf(availability: MechanismAvailability): readonly string[] {
-  return availability.available ? [] : availability.obstacles;
+  if (availability.available) return [];
+  // The type requires an obstacle; a JavaScript caller could still omit it, and §8.7 never reports no reason.
+  if (availability.obstacles.length === 0) throw new TypeError('An unavailable delivery mechanism must name at least one obstacle.');
+  return availability.obstacles;
 }
 
 /**
@@ -638,10 +657,12 @@ function firstAvailable<M extends string>(
  * the whole batch unavailable (§8.3).
  */
 function nativeBatchObstacles(unit: IEditGroupUnit): readonly string[] {
-  const members = unit.members
-    .filter((member) => !member.native.available)
-    .map((member) => `${member.description}: ${obstaclesOf(member.native).join(' ')}`);
-  return [...obstaclesOf(unit.availability['native-batch']), ...members];
+  const group = obstaclesOf(unit.availability('native-batch'));
+  const members = unit.members.flatMap((member) => {
+    const obstacles = obstaclesOf(member.native());
+    return obstacles.length === 0 ? [] : [`${member.description}: ${obstacles.join(' ')}`];
+  });
+  return [...group, ...members];
 }
 
 /** The `- \`mechanism\`: obstacles` lines of a message (§10.1, §10.2). */
@@ -698,15 +719,15 @@ function route<M extends string>(
 function routeUnit(policy: IResolvedDeliveryPolicy, unit: Exclude<DeliveryUnit, IAlternativeUnit>): Routing {
   switch (unit.kind) {
     case 'edit':
-      return route(unit, 'edits', policy.edits, (m) => obstaclesOf(unit.availability[m]),
+      return route(unit, 'edits', policy.edits, (m) => obstaclesOf(unit.availability(m)),
         (mechanism) => ({ unitId: unit.id, kind: unit.kind, dimension: 'edits', mechanism }));
     case 'edit-group':
       return route(unit, 'groupedEdits', policy.groupedEdits,
-        (m) => (m === 'native-batch' ? nativeBatchObstacles(unit) : obstaclesOf(unit.availability[m])),
+        (m) => (m === 'native-batch' ? nativeBatchObstacles(unit) : obstaclesOf(unit.availability(m))),
         (mechanism) => ({ unitId: unit.id, kind: unit.kind, dimension: 'groupedEdits', mechanism }));
     case 'file-operation':
     case 'file-operation-group':
-      return route(unit, 'fileOperations', policy.fileOperations, (m) => obstaclesOf(unit.availability[m]),
+      return route(unit, 'fileOperations', policy.fileOperations, (m) => obstaclesOf(unit.availability(m)),
         (mechanism) => ({ unitId: unit.id, kind: unit.kind, dimension: 'fileOperations', mechanism }));
   }
 }
@@ -717,17 +738,11 @@ function routeUnit(policy: IResolvedDeliveryPolicy, unit: Exclude<DeliveryUnit, 
  */
 export const MAX_COMPANION_PULL_REQUESTS = 10;
 
-/** The limit's error, unchanged in wording, with the single bundle as the first remedy (§9). */
+/** The limit's error, unchanged in wording; its catalogued remedies name the single bundle first (§9). */
 function tooManyCompanions(count: number): IDiagnostic {
   return createDiagnostic(
     'too-many-suggestion-prs',
     `The review needs ${String(count)} suggestion pull requests; the limit is ${String(MAX_COMPANION_PULL_REQUESTS)}. Nothing is split or dropped.`,
-    {
-      remedies: [
-        'Bundle them into one companion pull request (`--companion-bundle single`, `delivery.companionBundle: \'single\'`).',
-        'Publish fewer proposals in one review, or group related changes.',
-      ],
-    },
   );
 }
 
@@ -783,7 +798,8 @@ export function planDelivery(
   const deliveries: UnitDelivery[] = [];
   const alternatives: string[] = [];
   const blocked: string[] = [];
-  const diagnostics: IDiagnostic[] = [];
+  const errors: IDiagnostic[] = [];
+  const warnings: IDiagnostic[] = [];
   for (const unit of units) {
     if (unit.kind === 'alternative') {
       alternatives.push(unit.id);
@@ -792,18 +808,18 @@ export function planDelivery(
     const routing = routeUnit(policy, unit);
     if ('blocked' in routing) {
       blocked.push(unit.id);
-      diagnostics.push(routing.blocked);
+      errors.push(routing.blocked);
     } else {
       deliveries.push(routing.delivery);
-      if (routing.warning !== undefined) diagnostics.push(routing.warning);
+      if (routing.warning !== undefined) warnings.push(routing.warning);
     }
   }
   const companions = bundle(policy.companionBundle.value, deliveries.filter((d) => d.mechanism === 'companion').map((d) => d.unitId));
-  const overLimit = companions.length > MAX_COMPANION_PULL_REQUESTS;
-  if (overLimit) diagnostics.push(tooManyCompanions(companions.length));
-  if (blocked.length > 0 || overLimit) return { status: 'blocked', policy, blocked, diagnostics: orderDiagnostics(diagnostics) };
+  if (companions.length > MAX_COMPANION_PULL_REQUESTS) errors.push(tooManyCompanions(companions.length));
+  // Blocked: only the errors. The fallback warnings describe deliveries that will not happen (§10.1).
+  if (errors.length > 0) return { status: 'blocked', policy, blocked, diagnostics: errors };
   const unused = companions.length === 0 ? unusedCompanionOptions(companionOptions) : undefined;
-  if (unused !== undefined) diagnostics.push(unused);
+  const diagnostics = unused === undefined ? warnings : [...warnings, unused];
   return { status: 'planned', policy, deliveries, companions, alternatives, diagnostics: orderDiagnostics(diagnostics) };
 }
 
