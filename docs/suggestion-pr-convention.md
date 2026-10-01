@@ -16,6 +16,8 @@ The key words MUST, MUST NOT, SHOULD and MAY are used as in [RFC 2119](https://w
 
 ## 2. When a suggestion pull request is used
 
+> **September 30, 2026 note.** This section describes the current implemented behavior. The owner's decisions [D48–D60](design-decisions.md#owner-decisions-of-september-30-2026-delivery-policy-and-the-force-push-boundary) set a different target: [D48](design-decisions.md#d48-make-publication-policy-caller-controlled--accepted-product-direction-implementation-design-open) lets a caller of this tool request companion pull requests for every proposed change, including changes that a native suggestion could represent. The guidance below matches the tool's implemented behavior. What makes a pull request a suggestion pull request under this convention does not change. Implementing that target is pending; until then, the behavior below is what the tool does.
+
 A suggestion pull request is for a change that GitHub's native review suggestions cannot represent safely: a whole-file creation or deletion, or several edits that must be accepted together. A change a native suggestion represents faithfully SHOULD be offered as a native suggestion instead. This section is guidance for producers; consumers do not depend on it.
 
 ## 3. The canonical label
@@ -67,6 +69,8 @@ in the original's repository, where `<id>` is the suggestion's identifier from i
 - Consumers close pull requests only. Deleting a branch is left to people, or to GitHub's automatic deletion of merged branches.
 
 ### 5.1 When the original's branch has moved since the review
+
+> **September 30, 2026 note.** This section describes the current implemented behavior. The owner's decisions [D48–D60](design-decisions.md#owner-decisions-of-september-30-2026-delivery-policy-and-the-force-push-boundary) set a different target: [D58](design-decisions.md#d58-do-not-abort-historical-review-publication-merely-because-the-pr-branch-changes--owner-selected-force-push-direction) keeps feedback about the explicitly reviewed commit when the branch moves, and does not authorize automatic re-application or rebasing of proposals. [D59](design-decisions.md#d59-treat-force-push-review-lifecycle-as-host-behavior-not-a-new-publisher-service--owner-selected-boundary) treats a companion that would unintentionally include discarded changes as a proposal-fidelity issue to investigate as such, rather than a rule keyed to branch movement. Re-application, and version 2 markers naming `reappliedOnto`, are therefore not the target direction for this tool. The convention's rule never to propose a suggestion on a discarded commit records the [force-push experiment](force-push-experiment.md)'s observations, which the [behavior register](github-behavior.md) keeps as GH-14. Implementing that target is pending; until then, the behavior below is what the tool does.
 
 A producer tests **ancestry, not equality**: when the reviewed commit is not the original's current head, it asks whether the reviewed commit is still an ancestor of that head.
 
@@ -156,6 +160,8 @@ Consumers act only on conforming pull requests, whichever tool produced them. A 
 **Scope.** In versions 1 and 2, suggestion pull requests are defined for originals whose head branch is in the repository itself (not a fork) and whose base is the repository's default branch. Other bases and forks are not yet covered; a possible later route for forks is a pull request from the reviewer's fork into the original fork's branch.
 
 ## 10. Open questions
+
+> **September 30, 2026 note.** This section describes the current implemented behavior. The owner's decisions [D48–D60](design-decisions.md#owner-decisions-of-september-30-2026-delivery-policy-and-the-force-push-boundary) set a different target: questions 5 and 6 concern re-application, which [D58](design-decisions.md#d58-do-not-abort-historical-review-publication-merely-because-the-pr-branch-changes--owner-selected-force-push-direction) and [D59](design-decisions.md#d59-treat-force-push-review-lifecycle-as-host-behavior-not-a-new-publisher-service--owner-selected-boundary) no longer target. They stay listed because the implemented behavior still depends on them.
 
 These details are proposals of this document, awaiting the owner's decision:
 
