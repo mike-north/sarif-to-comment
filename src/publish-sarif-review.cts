@@ -237,8 +237,9 @@ export interface IPublishSarifReviewOptions {
   /**
    * Your own Markdown for named review elements: a finding, its attribution
    * and alternatives, a proposed new file or file deletion, an edit made by
-   * hand in the review body, and a suggestion pull request's lifecycle note. Each callback receives the element's data,
-   * its built-in Markdown and the fragments your result must keep; omitted
+   * hand in the review body, and a suggestion pull request's lifecycle
+   * note. Each callback receives the element's data, its built-in
+   * Markdown and the fragments your result must keep; omitted
    * elements keep the built-in presentation. See {@link IReviewPresentation}
    * for what the tool keeps regardless (markers, suggestion blocks, exact
    * proposed content, provenance, size limits) and when a result is refused.
