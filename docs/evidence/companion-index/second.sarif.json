@@ -1,0 +1,16 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": { "driver": { "name": "Companion index probe", "version": "1.0.0" } },
+      "columnKind": "utf16CodeUnits",
+      "versionControlProvenance": [{ "repositoryUri": "https://github.com/mike-north/doc-linter", "revisionId": "a7662e3085c192c87860b78f24863977901f0d43" }],
+      "results": [
+        {
+          "message": { "text": "The suggestion for line 5 still applies; line 9 could also say what it is for." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "docs/experiments/companion-index/sample.md" }, "region": { "startLine": 9 } } }]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,81 @@
+{
+  "format": "sarif-to-comment.companion-publication-state",
+  "version": 1,
+  "publication": "e149273c-139d-45a2-bbd5-3bb6e97c1ce0",
+  "destination": {
+    "owner": "mike-north",
+    "repo": "doc-linter",
+    "pullNumber": 100
+  },
+  "reviewedCommit": "a7662e3085c192c87860b78f24863977901f0d43",
+  "inputFingerprint": "sha256:09cd6ec2709fe45257f8b28f8b530896c2ceba242057a6132f4613bacd776ae7",
+  "authorId": 558005,
+  "submit": true,
+  "headRef": "exp-companion-index-20261001",
+  "labels": [
+    "suggestion-pr"
+  ],
+  "ready": false,
+  "delivery": {
+    "edits": {
+      "value": [
+        "companion"
+      ],
+      "source": "caller"
+    },
+    "groupedEdits": {
+      "value": [
+        "native-batch"
+      ],
+      "source": "default"
+    },
+    "fileOperations": {
+      "value": [
+        "manual"
+      ],
+      "source": "default"
+    },
+    "companionBundle": {
+      "value": "per-unit",
+      "source": "default"
+    }
+  },
+  "suggestions": [
+    {
+      "title": "Suggestion for #100: edit docs/experiments/companion-index/sample.md",
+      "commitMessage": "Suggestion for #100: edit docs/experiments/companion-index/sample.md\n\nSuggested in a review of mike-north/doc-linter pull request 100 at commit a7662e3085c192c87860b78f24863977901f0d43.",
+      "changes": [
+        {
+          "operation": "edit",
+          "path": "docs/experiments/companion-index/sample.md",
+          "text": "Line 1.\nLine 2.\nLine 3.\nLine 4.\nLine 5, suggested.\nLine 6.\nLine 7.\nLine 8.\nLine 9.\nLine 10.\nLine 11.\nLine 12.\n"
+        }
+      ],
+      "sections": [
+        {
+          "changeCount": 1,
+          "changeLines": "- Edited [docs/experiments/companion-index/sample.md line 5 at a7662e3](https://github.com/mike-north/doc-linter/blob/a7662e3085c192c87860b78f24863977901f0d43/docs/experiments/companion-index/sample.md#L5)",
+          "items": "**Source:** [docs/experiments/companion-index/sample.md line 5 at a7662e3](https://github.com/mike-north/doc-linter/blob/a7662e3085c192c87860b78f24863977901f0d43/docs/experiments/companion-index/sample.md#L5)\n\n```\nLine 5.\n```\n\nLine 5 could say what it is for.\n\n<sub>— Companion index probe 1.0.0</sub>"
+        }
+      ],
+      "id": "07ce6f99-7c28-4b22-8583-c5161c7b1568",
+      "branch": "suggestion-pr/100/07ce6f99-7c28-4b22-8583-c5161c7b1568",
+      "body": "Suggested in a review of #100 at commit a7662e3085c192c87860b78f24863977901f0d43.\n\nMerging this pull request into `exp-companion-index-20261001` applies this change:\n\n- Edited [docs/experiments/companion-index/sample.md line 5 at a7662e3](https://github.com/mike-north/doc-linter/blob/a7662e3085c192c87860b78f24863977901f0d43/docs/experiments/companion-index/sample.md#L5)\n\n**How this suggestion is accepted:** it is a draft pull request into `exp-companion-index-20261001`, the branch of #100. A draft cannot be merged: someone with write access first marks it ready for review. The author of #100 then decides whether to merge it, and #100 carries the change to its base. Once #100 is merged or closed, this pull request can be closed.\n\n---\n\n**Source:** [docs/experiments/companion-index/sample.md line 5 at a7662e3](https://github.com/mike-north/doc-linter/blob/a7662e3085c192c87860b78f24863977901f0d43/docs/experiments/companion-index/sample.md#L5)\n\n```\nLine 5.\n```\n\nLine 5 could say what it is for.\n\n<sub>— Companion index probe 1.0.0</sub>\n\n<!-- suggestion-pr {\"version\":1,\"original\":{\"owner\":\"mike-north\",\"repo\":\"doc-linter\",\"pullNumber\":100},\"reviewedCommit\":\"a7662e3085c192c87860b78f24863977901f0d43\",\"id\":\"07ce6f99-7c28-4b22-8583-c5161c7b1568\",\"batch\":\"e149273c-139d-45a2-bbd5-3bb6e97c1ce0\"} -->"
+    }
+  ],
+  "review": {
+    "sections": [
+      {
+        "companionIndex": {
+          "existing": []
+        }
+      },
+      {
+        "companion": 0,
+        "section": 0
+      }
+    ],
+    "comments": []
+  },
+  "planFingerprint": "sha256:6fe05d66dc952fb94e0412e2735d76421d6b3f2c96850a7e3fda1e26f8f48df7"
+}

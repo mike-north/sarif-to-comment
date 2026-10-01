@@ -1,0 +1,29 @@
+{
+  "format": "sarif-to-comment.publication-state",
+  "version": 1,
+  "phase": "completed",
+  "marker": "<!-- sarif-to-comment:review:b2d33c7f-694e-4fc6-b040-8cdef391e521 -->",
+  "destination": {
+    "owner": "mike-north",
+    "repo": "doc-linter",
+    "pullNumber": 100
+  },
+  "reviewedCommit": "a7662e3085c192c87860b78f24863977901f0d43",
+  "inputFingerprint": "sha256:09cd6ec2709fe45257f8b28f8b530896c2ceba242057a6132f4613bacd776ae7",
+  "authorId": 558005,
+  "request": {
+    "owner": "mike-north",
+    "repo": "doc-linter",
+    "pullNumber": 100,
+    "commitId": "a7662e3085c192c87860b78f24863977901f0d43",
+    "body": "**Companion pull requests of this review:**\n\n- [#101](https://github.com/mike-north/doc-linter/pull/101): Suggestion for \\#100: edit docs/experiments/companion-index/sample.md — created with this review\n\n---\n\n**Suggestion pull request:** [#101](https://github.com/mike-north/doc-linter/pull/101)\n\nMerging it into `exp-companion-index-20261001` applies this change:\n\n- Edited [docs/experiments/companion-index/sample.md line 5 at a7662e3](https://github.com/mike-north/doc-linter/blob/a7662e3085c192c87860b78f24863977901f0d43/docs/experiments/companion-index/sample.md#L5)\n\n**Source:** [docs/experiments/companion-index/sample.md line 5 at a7662e3](https://github.com/mike-north/doc-linter/blob/a7662e3085c192c87860b78f24863977901f0d43/docs/experiments/companion-index/sample.md#L5)\n\n```\nLine 5.\n```\n\nLine 5 could say what it is for.\n\n<sub>— Companion index probe 1.0.0</sub>\n\n<!-- sarif-to-comment:review:b2d33c7f-694e-4fc6-b040-8cdef391e521 -->",
+    "comments": [],
+    "event": "COMMENT"
+  },
+  "requestFingerprint": "sha256:8a13e10a437a9d70c16eef8fb0bda4b61e7721026c956b4082dbd99ce4425cef",
+  "receipt": {
+    "reviewId": 5376657276,
+    "htmlUrl": "https://github.com/mike-north/doc-linter/pull/100#pullrequestreview-5376657276",
+    "via": "created"
+  }
+}

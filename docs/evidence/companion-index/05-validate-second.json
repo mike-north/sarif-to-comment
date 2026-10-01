@@ -1,0 +1,14 @@
+{
+  "command": "validate",
+  "status": "ready",
+  "message": "## Ready to publish\n\nThe complete document can be published faithfully to mike-north/doc-linter#100 at commit `a7662e3085c192c87860b78f24863977901f0d43`.\n\n**Review prepared:** 1 inline comment(s) and 0 general section(s) for commit `a7662e3085c192c87860b78f24863977901f0d43`.\n\n**Warnings:**\n\n- `companion-reused`: #101 is listed in the review's companion index as an existing companion; it was a draft when the review was prepared.\n\nNothing was published and no publication state was written.\n\nNo pending review of this account was found on the pull request. This is not an approval: publication repeats every check against the pull request as it is then. GitHub can still refuse the review, for example if this account starts a pending review on the pull request before publication.",
+  "diagnostics": [
+    {
+      "severity": "note",
+      "code": "companion-reused",
+      "title": "An existing companion pull request is listed in the review",
+      "message": "#101 is listed in the review's companion index as an existing companion; it was a draft when the review was prepared.",
+      "subject": "mike-north/doc-linter#101"
+    }
+  ]
+}
