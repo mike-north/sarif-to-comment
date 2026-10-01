@@ -165,11 +165,6 @@ export function diagnosticProblem(value: unknown): string | null {
   return null;
 }
 
-/** Whether `value` is a diagnostic of the model (see {@link diagnosticProblem}). */
-export function isDiagnostic(value: unknown): value is IDiagnostic {
-  return diagnosticProblem(value) === null;
-}
-
 /** Rank of each severity in an outcome's list. */
 const RANK: Readonly<Record<DiagnosticSeverity, number>> = { error: 0, warning: 1, note: 2 };
 
