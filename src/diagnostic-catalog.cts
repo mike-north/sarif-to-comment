@@ -734,6 +734,11 @@ export const DIAGNOSTIC_CATALOG = {
     title: 'The delivery configuration is not valid',
     remedies: ['Fix `.github/sarif-to-comment.json` on the default branch.'],
   },
+  'companion-options-unused': {
+    severity: 'note',
+    title: 'Companion pull request options have no effect',
+    remedies: [],
+  },
   'too-many-comments': {
     severity: 'error',
     title: 'The review needs too many inline comments',

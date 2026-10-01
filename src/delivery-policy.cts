@@ -17,11 +17,14 @@
  *   - the fixed vocabularies, defaults and presets (§3, §5, §6);
  *   - resolving each dimension separately through the five layers, recording
  *     each value's source layer (§7, §13): {@link resolveDeliveryPolicy};
+ *   - deciding whether the configuration must be read at all (§11.1):
+ *     {@link deliveryConfigurationNeeded};
  *   - validating a caller's settings and the configuration file (§11, §12):
  *     {@link validateDeliveryPolicyLayer}, {@link validateDeliveryConfiguration},
  *     {@link readDeliveryConfiguration}, {@link deliveryConfigurationDiagnostics};
- *   - planning one destination per unit, the companion bundles, and the
- *     blocked and fallback diagnostics (§8-§10): {@link planDelivery}.
+ *   - planning one destination per unit, the companion bundles and their
+ *     limit, the blocked and fallback diagnostics, and the note for unused
+ *     companion options (§8-§10, §12): {@link planDelivery}.
  *
  * It does not present anything, persist anything or choose remedies; how a
  * mechanism is rendered belongs to the presentation contracts.
@@ -43,7 +46,7 @@ import type { IDefaultBranchConfiguration } from './suggestion-pr-convention.cjs
  */
 export const DELIVERY_MECHANISMS = Object.freeze({
   /** An ungrouped change to an existing file. */
-  edits: Object.freeze(['native', 'review-body'] as const),
+  edits: Object.freeze(['native', 'review-body', 'companion'] as const),
   /** A group all of whose members are edits (an explicit group, or a fix with several changes). */
   groupedEdits: Object.freeze(['native-batch', 'companion', 'manual-group'] as const),
   /** An ungrouped whole-file creation or deletion, and any group containing one (D50, D51). */
@@ -89,9 +92,13 @@ export interface IDeliveryPolicyLayer extends IDeliverySettings {
   readonly preset?: DeliveryPreset;
 }
 
-/** The defaults (§5). They never name a companion, so a default publication creates none. */
+/**
+ * The defaults (§5). They never name a companion, so a default publication
+ * creates none, and `edits` is strictly native, so an edit that cannot be a
+ * native suggestion is refused as it always was.
+ */
 export const DEFAULT_DELIVERY_POLICY = Object.freeze({
-  edits: Object.freeze(['native', 'review-body'] as const),
+  edits: Object.freeze(['native'] as const),
   // Flagged for the owner's confirmation at release review (contract §15, item 1).
   groupedEdits: Object.freeze(['native-batch'] as const),
   fileOperations: Object.freeze(['manual'] as const),
@@ -109,9 +116,10 @@ export const DELIVERY_PRESET_SETTINGS: Readonly<Record<DeliveryPreset, IDelivery
     groupedEdits: Object.freeze(['native-batch', 'manual-group'] as const),
     fileOperations: Object.freeze(['manual'] as const),
   }),
-  // Every group and whole-file operation in companions, strictly (D48's all-companion mode, D55).
-  // `edits` has no companion mechanism, so it is left to lower layers.
+  // Every proposed change in companions, strictly (D48's all-companion mode, D55).
+  // companionBundle is left to lower layers; the limit's error names `single` (§9).
   companion: Object.freeze({
+    edits: Object.freeze(['companion'] as const),
     groupedEdits: Object.freeze(['companion'] as const),
     fileOperations: Object.freeze(['companion'] as const),
   }),
@@ -202,6 +210,19 @@ export function resolveDeliveryPolicy(inputs: IDeliveryPolicyInputs): IResolvedD
     fileOperations: resolveSetting(inputs, (s) => s.fileOperations, DEFAULT_DELIVERY_POLICY.fileOperations, frozenList),
     companionBundle: resolveSetting<CompanionBundle>(inputs, (s) => s.companionBundle, DEFAULT_DELIVERY_POLICY.companionBundle, same),
   };
+}
+
+/**
+ * Whether the configuration file must be read (§11.1): true unless the
+ * caller's specific settings and preset together decide `edits`,
+ * `groupedEdits`, `fileOperations` and `companionBundle`, in which case no
+ * configuration value could win (§7) and the file is not read at all.
+ */
+export function deliveryConfigurationNeeded(caller: IDeliveryPolicyLayer | undefined): boolean {
+  if (caller === undefined) return true;
+  const preset: IDeliverySettings = caller.preset === undefined ? {} : DELIVERY_PRESET_SETTINGS[caller.preset];
+  const decides = (read: (settings: IDeliverySettings) => unknown): boolean => read(caller) !== undefined || read(preset) !== undefined;
+  return !(decides((s) => s.edits) && decides((s) => s.groupedEdits) && decides((s) => s.fileOperations) && decides((s) => s.companionBundle));
 }
 
 // ---------------------------------------------------------------------------
@@ -544,15 +565,19 @@ export type DeliveryPlan =
       readonly companions: readonly ICompanionPlan[];
       /** The alternatives, listed with their findings and delivered by nothing. */
       readonly alternatives: readonly string[];
-      /** The `delivery-fallback` warnings. */
+      /** The `delivery-fallback` warnings, then any `companion-options-unused` note. */
       readonly diagnostics: readonly IDiagnostic[];
     }
   | {
       readonly status: 'blocked';
       readonly policy: IResolvedDeliveryPolicy;
-      /** The units no listed mechanism can deliver, in input order. */
+      /** The units no listed mechanism can deliver, in input order; empty when only the companion limit blocks. */
       readonly blocked: readonly string[];
-      /** A `delivery-unavailable` error per blocked unit, then the other units' fallback warnings. */
+      /**
+       * A `delivery-unavailable` error per blocked unit, then a
+       * `too-many-suggestion-prs` error when the companion limit is
+       * exceeded, then the delivered units' fallback warnings.
+       */
       readonly diagnostics: readonly IDiagnostic[];
     };
 
@@ -686,6 +711,48 @@ function routeUnit(policy: IResolvedDeliveryPolicy, unit: Exclude<DeliveryUnit, 
   }
 }
 
+/**
+ * The most companion pull requests one review creates, counted after
+ * bundling (§9; the companion contract's limit, `too-many-suggestion-prs`).
+ */
+export const MAX_COMPANION_PULL_REQUESTS = 10;
+
+/** The limit's error, unchanged in wording, with the single bundle as the first remedy (§9). */
+function tooManyCompanions(count: number): IDiagnostic {
+  return createDiagnostic(
+    'too-many-suggestion-prs',
+    `The review needs ${String(count)} suggestion pull requests; the limit is ${String(MAX_COMPANION_PULL_REQUESTS)}. Nothing is split or dropped.`,
+    {
+      remedies: [
+        'Bundle them into one companion pull request (`--companion-bundle single`, `delivery.companionBundle: \'single\'`).',
+        'Publish fewer proposals in one review, or group related changes.',
+      ],
+    },
+  );
+}
+
+/**
+ * The caller's companion pull request options, as given (§12). They apply
+ * only to companions; planning notes them when no companion is planned.
+ */
+export interface ICompanionOptions {
+  readonly pullRequestLabels?: readonly string[] | undefined;
+  readonly markSuggestionPullRequestsReady?: boolean | undefined;
+}
+
+/**
+ * The `companion-options-unused` note for the options that would have had
+ * an effect (at least one label; ready true), or undefined when none would.
+ */
+function unusedCompanionOptions(options: ICompanionOptions): IDiagnostic | undefined {
+  const named = [
+    ...((options.pullRequestLabels?.length ?? 0) > 0 ? ['`--pr-labels` (`pullRequestLabels`)'] : []),
+    ...(options.markSuggestionPullRequestsReady === true ? ['`--mark-suggestion-prs-ready` (`markSuggestionPullRequestsReady`)'] : []),
+  ];
+  if (named.length === 0) return undefined;
+  return createDiagnostic('companion-options-unused', `No companion pull request is planned, so these options have no effect: ${named.join(', ')}.`);
+}
+
 /** The companion pull requests for the companion-delivered units, in order (§9). */
 function bundle(bundling: CompanionBundle, units: readonly string[]): ICompanionPlan[] {
   if (units.length === 0) return [];
@@ -696,11 +763,18 @@ function bundle(bundling: CompanionBundle, units: readonly string[]): ICompanion
  * Plans one destination for every unit under `policy` (§8-§10). A unit is
  * delivered whole by the first available mechanism of its dimension's list;
  * a mechanism the list does not name is never used. If any unit has no
- * available listed mechanism, the plan is blocked and names every such unit.
+ * available listed mechanism, or the companions exceed
+ * {@link MAX_COMPANION_PULL_REQUESTS}, the plan is blocked and reports every
+ * such problem. A planned publication with no companion notes the caller's
+ * `companionOptions` that therefore have no effect (§12).
  *
  * @throws TypeError when two units share an identifier: a plan names each unit once.
  */
-export function planDelivery(policy: IResolvedDeliveryPolicy, units: readonly DeliveryUnit[]): DeliveryPlan {
+export function planDelivery(
+  policy: IResolvedDeliveryPolicy,
+  units: readonly DeliveryUnit[],
+  companionOptions: ICompanionOptions = {},
+): DeliveryPlan {
   const ids = new Set<string>();
   for (const unit of units) {
     if (ids.has(unit.id)) throw new TypeError(`Two delivery units share the identifier ${JSON.stringify(unit.id)}.`);
@@ -724,16 +798,13 @@ export function planDelivery(policy: IResolvedDeliveryPolicy, units: readonly De
       if (routing.warning !== undefined) diagnostics.push(routing.warning);
     }
   }
-  if (blocked.length > 0) return { status: 'blocked', policy, blocked, diagnostics: orderDiagnostics(diagnostics) };
-  const companionUnits = deliveries.filter((d) => d.mechanism === 'companion').map((d) => d.unitId);
-  return {
-    status: 'planned',
-    policy,
-    deliveries,
-    companions: bundle(policy.companionBundle.value, companionUnits),
-    alternatives,
-    diagnostics: orderDiagnostics(diagnostics),
-  };
+  const companions = bundle(policy.companionBundle.value, deliveries.filter((d) => d.mechanism === 'companion').map((d) => d.unitId));
+  const overLimit = companions.length > MAX_COMPANION_PULL_REQUESTS;
+  if (overLimit) diagnostics.push(tooManyCompanions(companions.length));
+  if (blocked.length > 0 || overLimit) return { status: 'blocked', policy, blocked, diagnostics: orderDiagnostics(diagnostics) };
+  const unused = companions.length === 0 ? unusedCompanionOptions(companionOptions) : undefined;
+  if (unused !== undefined) diagnostics.push(unused);
+  return { status: 'planned', policy, deliveries, companions, alternatives, diagnostics: orderDiagnostics(diagnostics) };
 }
 
 // ---------------------------------------------------------------------------
