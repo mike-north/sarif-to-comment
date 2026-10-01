@@ -246,7 +246,7 @@ describe('precedence and recording (§7, §13)', () => {
   test('D-A4: with nothing set, an edit that cannot be a native suggestion is blocked, naming the default list', async () => {
     const world = makeWorld();
     await assertBlockedEverywhere(world, document([RETRY()]), undefined, [
-      `- \`delivery-unavailable\` at \`/runs/0/results/0\`: The edit of \`src/client.ts\` line 2 cannot be delivered. \`edits\` is \`[native]\`, ${DEFAULT}, and no mechanism it lists is available:\n\n- \`native\`: ${RETRY_NOT_INLINE}`,
+      `- \`delivery-unavailable\` at \`/runs/0/results/0\`: The edit of \`src/client.ts\` line 2 cannot be delivered. \`edits\` is \`[native]\`, ${DEFAULT}, and no mechanism it lists is available:\n\n  - \`native\`: ${RETRY_NOT_INLINE}`,
     ]);
   });
 
@@ -258,7 +258,7 @@ describe('precedence and recording (§7, §13)', () => {
 
     const world = makeWorld();
     const blocked = await assertBlockedEverywhere(world, document([RETRY()]), { delivery: { edits: ['native'] } }, [
-      `- \`delivery-unavailable\` at \`/runs/0/results/0\`: The edit of \`src/client.ts\` line 2 cannot be delivered. \`edits\` is \`[native]\`, ${CALLER('--edits', 'edits')}, and no mechanism it lists is available:\n\n- \`native\`: ${RETRY_NOT_INLINE}`,
+      `- \`delivery-unavailable\` at \`/runs/0/results/0\`: The edit of \`src/client.ts\` line 2 cannot be delivered. \`edits\` is \`[native]\`, ${CALLER('--edits', 'edits')}, and no mechanism it lists is available:\n\n  - \`native\`: ${RETRY_NOT_INLINE}`,
     ]);
     const [problem] = diagnostics(blocked);
     assert.ok(problem);
@@ -338,7 +338,7 @@ describe('groups stay whole (D49, D51; §8.3–§8.5, §8.8)', () => {
   test('D-A6: never one native and one companion; with [native-batch, companion] the whole group goes to one companion, announced', async () => {
     const blocked = makeWorld();
     await assertBlockedEverywhere(blocked, mixedPair(), undefined, [
-      `- \`delivery-unavailable\` at \`/runs/0/results/0\`: The group \`pair\` cannot be delivered. \`groupedEdits\` is \`[native-batch]\`, ${DEFAULT}, and no mechanism it lists is available:\n\n- \`native-batch\`: The edit of \`src/client.ts\` line 2: ${RETRY_NOT_INLINE}`,
+      `- \`delivery-unavailable\` at \`/runs/0/results/0\`: The group \`pair\` cannot be delivered. \`groupedEdits\` is \`[native-batch]\`, ${DEFAULT}, and no mechanism it lists is available:\n\n  - \`native-batch\`: The edit of \`src/client.ts\` line 2: ${RETRY_NOT_INLINE}`,
     ]);
 
     const world = makeWorld();
@@ -416,7 +416,7 @@ describe('groups stay whole (D49, D51; §8.3–§8.5, §8.8)', () => {
 
   test('D-A11: the manual group is used only when listed; the original-pr preset lists it, announced as a fallback', async () => {
     await assertBlockedEverywhere(makeWorld(), mixedPair(), undefined, [
-      `- \`delivery-unavailable\` at \`/runs/0/results/0\`: The group \`pair\` cannot be delivered. \`groupedEdits\` is \`[native-batch]\`, ${DEFAULT}, and no mechanism it lists is available:\n\n- \`native-batch\`: The edit of \`src/client.ts\` line 2: ${RETRY_NOT_INLINE}`,
+      `- \`delivery-unavailable\` at \`/runs/0/results/0\`: The group \`pair\` cannot be delivered. \`groupedEdits\` is \`[native-batch]\`, ${DEFAULT}, and no mechanism it lists is available:\n\n  - \`native-batch\`: The edit of \`src/client.ts\` line 2: ${RETRY_NOT_INLINE}`,
     ]);
     const world = makeWorld();
     const options = { delivery: { preset: 'original-pr' } };
@@ -473,7 +473,7 @@ describe('groups stay whole (D49, D51; §8.3–§8.5, §8.8)', () => {
       { artifactLocation: { uri: 'src/client.ts' }, replacements: [{ deletedRegion: { startLine: 2 }, insertedContent: { text: '  const response = await request(id).catch(() => request(id));' } }] },
     ] }] })]);
     await assertBlockedEverywhere(makeWorld(), joint, undefined, [
-      `- \`delivery-unavailable\` at \`/runs/0/results/0\`: The fix with 2 changes at \`/runs/0/results/0\` cannot be delivered. \`groupedEdits\` is \`[native-batch]\`, ${DEFAULT}, and no mechanism it lists is available:\n\n- \`native-batch\`: The edit of \`src/client.ts\` line 2: ${RETRY_NOT_INLINE}`,
+      `- \`delivery-unavailable\` at \`/runs/0/results/0\`: The fix with 2 changes at \`/runs/0/results/0\` cannot be delivered. \`groupedEdits\` is \`[native-batch]\`, ${DEFAULT}, and no mechanism it lists is available:\n\n  - \`native-batch\`: The edit of \`src/client.ts\` line 2: ${RETRY_NOT_INLINE}`,
     ]);
     // Listed, the manual group delivers it whole by hand: both changes, the finding with each.
     const world = makeWorld();
@@ -570,7 +570,7 @@ describe('strict lists and announced fallback (D55; §10)', () => {
   test('D-A9: a strict companion list on a pull request from a fork blocks before any write', async () => {
     const world = makeWorld(repository({ fork: true }));
     await assertBlockedEverywhere(world, document([OBSOLETE_RESULT()], [deleted('obsolete.txt')]), { delivery: { fileOperations: ['companion'] } }, [
-      `- \`delivery-unavailable\` at \`/runs/0/results/0\`: The deletion of \`obsolete.txt\` cannot be delivered. \`fileOperations\` is \`[companion]\`, ${CALLER('--file-operations', 'fileOperations')}, and no mechanism it lists is available:\n\n- \`companion\`: ${FORK_OBSTACLE}`,
+      `- \`delivery-unavailable\` at \`/runs/0/results/0\`: The deletion of \`obsolete.txt\` cannot be delivered. \`fileOperations\` is \`[companion]\`, ${CALLER('--file-operations', 'fileOperations')}, and no mechanism it lists is available:\n\n  - \`companion\`: ${FORK_OBSTACLE}`,
     ]);
     assert.deepEqual(pulls(world), []);
     // A fork has no remedy of its own (§8.9): only the catalogued remedies.
@@ -640,7 +640,7 @@ describe('strict lists and announced fallback (D55; §10)', () => {
     const hidden = result({ text: 'Mark the direction.', location: at('notes.txt', 2), fixes: [lineFix('notes.txt', 2, 'Note 2,\u200E revised.')] });
     const blocked = await assertBlockedEverywhere(makeWorld(), document([hidden]), { delivery: { edits: ['review-body'] } }, [
       `- \`delivery-unavailable\` at \`/runs/0/results/0\`: The edit of \`notes.txt\` line 2 cannot be delivered. \`edits\` is \`[review-body]\`, ${CALLER('--edits', 'edits')}, and no mechanism it lists is available:\n\n`
-        + '- `review-body`: The replacement of `notes.txt` line 2 cannot be shown exactly in the review body: replacement line 1 contains U+200E, which a code block does not show.',
+        + '  - `review-body`: The replacement of `notes.txt` line 2 cannot be shown exactly in the review body: replacement line 1 contains U+200E, which a code block does not show.',
     ]);
     assert.deepEqual(diagnostics(blocked)[0]?.['remedies'], ['Change the replacement.', ...UNAVAILABLE_REMEDIES]);
   });
@@ -846,7 +846,7 @@ describe('the configuration file (§11) and caller settings (§12)', () => {
     }
   });
 
-  test('L15: a failed configuration read is operational: validate is incomplete and publish rejects, never a silent default', async () => {
+  test('§11.1: a failed configuration read is operational: validate is incomplete and publish rejects, never a silent default', async () => {
     const world = makeWorld(repository(), { companion: { defaultBranchRead: 'server-error' } });
     const assessed = await validate(world, document([TYPO()]));
     assert.equal(status(assessed), 'incomplete', markdown(assessed));
@@ -896,7 +896,7 @@ describe('the configuration file (§11) and caller settings (§12)', () => {
   test('a blocked publication carries no companion-options-unused note and no fallback warning', async () => {
     const world = makeWorld();
     const blocked = await assertBlockedEverywhere(world, document([RETRY(), GUIDE_RESULT()], [created('docs/guide.md', GUIDE)]), { pullRequestLabels: ['team-a'] }, [
-      `- \`delivery-unavailable\` at \`/runs/0/results/0\`: The edit of \`src/client.ts\` line 2 cannot be delivered. \`edits\` is \`[native]\`, ${DEFAULT}, and no mechanism it lists is available:\n\n- \`native\`: ${RETRY_NOT_INLINE}`,
+      `- \`delivery-unavailable\` at \`/runs/0/results/0\`: The edit of \`src/client.ts\` line 2 cannot be delivered. \`edits\` is \`[native]\`, ${DEFAULT}, and no mechanism it lists is available:\n\n  - \`native\`: ${RETRY_NOT_INLINE}`,
     ]);
     assert.deepEqual(diagnostics(blocked).map((d) => d['code']), ['delivery-unavailable']);
   });

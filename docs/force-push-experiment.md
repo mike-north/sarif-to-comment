@@ -46,7 +46,7 @@ The native suggestion's body was intact. Discarded commits stayed reachable: in 
 
 On #43, after the force-push (head `3f77a6e`), with the reviewed commit `eb6c2f6`:
 
-- `validate` of plain feedback answered `ready`, with "0 inline comment(s) and 2 general section(s)": at a commit that is not the head, findings become review-body sections linking `blob/eb6c2f6…#L5`.
+- `validate` of plain feedback answered `ready`, with "0 inline comment(s) and 2 general section(s)": at a commit that is not the head, findings become review-body sections linking line 5 of the file at that commit (`blob/eb6c2f6…`, with the line anchor for line 5).
 - `validate` of the same document with a native fix answered `blocked` (`suggestion-historical-unsupported`): "The reviewed commit is not the pull request head, so a native suggestion could not be applied to the reviewed text."
 - `publish` of the plain feedback succeeded: pending review 5356511269 has `commit_id` `eb6c2f6…` while the pull request's only commit is `3f77a6e`. GitHub gave no warning, and the body's links resolve.
 

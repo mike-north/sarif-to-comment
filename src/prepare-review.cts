@@ -374,7 +374,7 @@ import type { IManualEdit, IManualReplacement } from './presentation/manual-edit
 import { renderManualGroup } from './presentation/manual-group.cjs';
 import type { IManualGroupPart } from './presentation/manual-group.cjs';
 import { renderNativeBatchGuidance, renderNativeBatchMemberNote } from './presentation/native-batch.cjs';
-import { SEPARATOR, codePointName, codeSpan, escapePlain, escapePlainInline, lineSpan } from './presentation/markdown.cjs';
+import { SEPARATOR, UNSHOWN_IN_CODE_BLOCK, codePointName, codeSpan, escapePlain, escapePlainInline, lineSpan } from './presentation/markdown.cjs';
 import { composedProblem, fenceProblem, loadMarkdownParser, unbalancedHtml } from './presentation/markdown-tree.cjs';
 import type { IComposedExpectation } from './presentation/markdown-tree.cjs';
 import { renderDiagnosticLine, renderWarningsList } from './presentation/warnings-list.cjs';
@@ -1308,20 +1308,23 @@ const VERIFIABLE_HASHES: ReadonlyMap<string, string> = new Map([
 const BOM = '\uFEFF';
 
 /**
- * Characters a rendered code block cannot show exactly: C0 controls other
- * than tab, LF and CR; DEL and C1 controls; every format character (Unicode
- * category Cf: a byte-order mark, the bidirectional marks, embeddings,
- * overrides and isolates, which reorder text invisibly, zero-width spaces and
- * joiners, the word joiner, the soft hyphen, tag characters, …); U+00A0,
- * which renders as an ordinary space; and the line and paragraph separators.
- * Callers remove a file's own leading byte-order mark first. One rule for
- * every content block: a proposed file, an alternative and an edit made by
- * hand.
+ * Characters a rendered code block cannot show exactly (the shared rule,
+ * src/presentation/markdown.cts UNSHOWN_IN_CODE_BLOCK). Callers remove a
+ * file's own leading byte-order mark first. Every content block shown here
+ * refuses them: a proposed file, an alternative and an edit made by hand.
  */
-const INVISIBLE_IN_CONTENT = /[\p{Cf}\u00A0\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u2028\u2029]/u;
+const INVISIBLE_IN_CONTENT = UNSHOWN_IN_CODE_BLOCK;
 
-/** The same, plus tab, LF and CR: a path is shown on one line, in a code span or link text. */
-const INVISIBLE_IN_PATH = /[\u0000-\u001F\u007F-\u009F\uFEFF\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069\u2028\u2029]/;
+/**
+ * Characters a path may not hold (docs/delivery-policy-contract.md §8.10:
+ * "a control or invisible formatting character"): every character a code
+ * block does not show, UNSHOWN_IN_CODE_BLOCK (every format character, Cf,
+ * U+00A0 and the controls), plus tab, LF and CR, because a path is shown on
+ * one line, in a code span or link text. Unlike a title, a path has no
+ * exemption for a zero-width joiner inside an emoji sequence: it names a
+ * destination, so every character of it must be visible.
+ */
+const INVISIBLE_IN_PATH = new RegExp(`${UNSHOWN_IN_CODE_BLOCK.source}|[\\t\\n\\r]`, 'u');
 
 /** A UTF-16 surrogate without its pair: not a Unicode scalar value, so not UTF-8 text. */
 const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;

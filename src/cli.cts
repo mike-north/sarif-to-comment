@@ -248,7 +248,7 @@ const FORMAT_OPTION = md`  --format human|json|toon       Output format (default
  * lowercase phrase saying what it does (test/cli-commands.test.mts).
  */
 const USAGE: Readonly<Record<'top' | CliCommand, string>> = {
-  top: md`sarif-to-comment — author, inspect and publish SARIF as one GitHub draft review
+  top: md`sarif-to-comment — author, inspect, publish SARIF as a draft or submitted review
 
 Usage:
   sarif-to-comment init --output FILE [options]
@@ -421,9 +421,10 @@ already in use extends that group, so a single finding may be added; groups are
 never joined. A finding's change is its primary (first) fix, or its proposed
 whole-file operation; further fixes are alternatives and are never grouped.
 Publication delivers the group whole, by --grouped-edits (or --file-operations,
-when it creates or deletes a whole file): as one native batch or one companion
-pull request, never split; when no listed mechanism can, it refuses the group. A
-single fix with several changes is already accepted whole and needs no group.
+when it creates or deletes a whole file): as one native batch, one companion
+pull request or one review-body section to make by hand, never split; when no
+listed mechanism can, it refuses the group. A single fix with several changes is
+already accepted whole and needs no group.
 
 Take each SELECTOR from inspect: "Selector:" under each finding, or "selector"
 in JSON. Selectors belong to the file exactly as inspected, so inspect again

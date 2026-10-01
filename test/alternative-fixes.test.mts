@@ -61,6 +61,12 @@ const SNAPSHOT: Readonly<Record<string, string>> = {
   'src/other.js': 'export const parse = parseA;\n',
   // A file whose path Markdown cannot show exactly (it begins with a space).
   ' odd.js': 'odd\n',
+  // Files whose paths hold an invisible formatting character or U+00A0 (delivery policy §8.10).
+  'alt\u200Bname.js': 'odd\n',
+  'alt\u00A0name.js': 'odd\n',
+  'alt\u00ADname.js': 'odd\n',
+  'alt\u200Dname.js': 'odd\n',
+  'alt\u2060name.js': 'odd\n',
   // A file with CRLF line endings, outside the diff.
   'src/crlf.js': 'one\r\ntwo\r\n',
 };
@@ -168,7 +174,8 @@ function assertReady(outcome: PrepareReviewOutcome): asserts outcome is IReadyOu
 function assertBlocked(outcome: PrepareReviewOutcome, expected: readonly (readonly [code: string, pointer: string | undefined])[]): asserts outcome is IBlockedOutcome {
   if (outcome.status !== 'blocked') throw new assert.AssertionError({ message: `expected blocked, got ready: ${JSON.stringify(outcome.review)}` });
   assert.deepEqual(outcome.diagnostics.map((d) => [d.code, d.location?.pointer]), expected.map(([code, pointer]) => [code, pointer]), outcome.markdown);
-  for (const d of outcome.diagnostics) assert.ok(outcome.markdown.includes(d.message), 'every problem is in the explanation');
+  // Review presentation contract §6: a message's later lines are indented two spaces under its list item.
+  for (const d of outcome.diagnostics) assert.ok(outcome.markdown.includes(d.message.replace(/\n(?=[^\n])/g, '\n  ')), 'every problem is in the explanation');
 }
 
 /**
@@ -410,6 +417,12 @@ describe('an alternative that cannot be listed faithfully refuses the whole revi
   blocked('an alternative whose content could open a suggestion block', lineFix('src/app.js', 2, 'const b = md`\n```suggestion\n`;'), 'alternative-suggestion-fence');
   blocked('an alternative whose content hides a bidirectional override', lineFix('src/app.js', 2, 'const b = parseB(input); // ‮'), 'alternative-content-unrepresentable');
   blocked('an alternative on another file whose path Markdown cannot show exactly', lineFix('%20odd.js', 1, 'even'), 'alternative-path-unrepresentable');
+  // Delivery policy §8.10: any control or invisible formatting character in a path, U+00A0 included.
+  blocked('regression: an alternative on another file whose path holds a zero-width space', lineFix('alt%E2%80%8Bname.js', 1, 'even'), 'alternative-path-unrepresentable');
+  blocked('regression: an alternative on another file whose path holds a no-break space', lineFix('alt%C2%A0name.js', 1, 'even'), 'alternative-path-unrepresentable');
+  blocked('regression: an alternative on another file whose path holds a soft hyphen', lineFix('alt%C2%ADname.js', 1, 'even'), 'alternative-path-unrepresentable');
+  blocked('regression: an alternative on another file whose path holds a zero-width joiner', lineFix('alt%E2%80%8Dname.js', 1, 'even'), 'alternative-path-unrepresentable');
+  blocked('regression: an alternative on another file whose path holds a word joiner', lineFix('alt%E2%81%A0name.js', 1, 'even'), 'alternative-path-unrepresentable');
   blocked('an alternative whose content has a carriage return that does not end a line', lineFix('src/app.js', 2, 'const b = 1;\rconst d = 2;'), 'alternative-content-unrepresentable');
   // Format characters (Unicode category Cf) and U+00A0 cannot be shown exactly either (review presentation contract §4).
   blocked('an alternative whose content holds a zero-width space', lineFix('src/app.js', 2, 'const b\u200B = 1;'), 'alternative-content-unrepresentable');

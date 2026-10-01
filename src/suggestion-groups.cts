@@ -6,9 +6,9 @@
  * findings, or an edit with a whole-file creation or deletion. This module
  * lets a caller declare such a group without editing SARIF by hand, as an
  * authoring step separate from extraction (issue #29;
- * docs/companion-suggestion-pr-contract.md §2.3 and §2.12). With suggestion
- * pull requests allowed, publication proposes each group as one suggestion
- * pull request.
+ * docs/companion-suggestion-pr-contract.md §2.3 and §2.12). Publication
+ * delivers each group whole by its delivery list
+ * (docs/delivery-policy-contract.md §8.3–§8.5).
  *
  * Representation: every member result carries the same
  * `properties.sarifToComment.suggestionGroup` value. The property is read by
@@ -54,6 +54,7 @@ import type { IParsedSelector } from './finding-selectors.cjs';
 import { canonicalJson, captureJson, isPlainObject, isSuggestionGroupName, validateSarif } from './sarif-common.cjs';
 import type { JsonValue } from './sarif-common.cjs';
 import { createProblem, diagnosticOf } from './diagnostics.cjs';
+import { listItem } from './presentation/markdown.cjs';
 import type { IDiagnostic, IInvalidSarifOutcome, IProblem, ISarifLog } from './public-types.cjs';
 import type { IStaleSarifSelectorOutcome } from './sarif-authoring.cjs';
 
@@ -343,7 +344,7 @@ function refusedOutcome(operation: Operation, problems: readonly IProblem[]): IR
   return {
     status: 'refused',
     problems,
-    markdown: `${HEADINGS[operation]} nothing was changed.\n\n${problems.map((p) => `- ${p.message}`).join('\n')}`,
+    markdown: `${HEADINGS[operation]} nothing was changed.\n\n${problems.map((p) => listItem(p.message)).join('\n')}`,
     diagnostics: problems.map(diagnosticOf),
   };
 }
@@ -499,10 +500,12 @@ function fewChanges(count: number): string {
  * SARIF already applies the changes of one fix together; it cannot join
  * fixes of different findings, or an edit with a whole-file creation or
  * deletion. This operation declares such a group by giving each named
- * finding the same `properties.sarifToComment.suggestionGroup`. With
- * suggestion pull requests allowed, publication proposes the group as one
- * suggestion pull request; without them, it refuses the document, naming the
- * setting, and never splits the group.
+ * finding the same `properties.sarifToComment.suggestionGroup`. Publication
+ * delivers the group whole, by the first available mechanism of its delivery
+ * list: by default a native batch of suggestions, or, for a group that
+ * creates or deletes a whole file, one section of the review to make by hand;
+ * a suggestion pull request when the list names `companion`. When no listed
+ * mechanism can deliver it, the document is blocked; a group is never split.
  *
  * Take the selectors from {@link inspectSarif}. Only a finding's primary
  * (first) fix, or its proposed whole-file operation, is a member; further

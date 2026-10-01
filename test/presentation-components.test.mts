@@ -23,6 +23,7 @@
  * @see https://github.com/mike-north/sarif-to-comment/issues/30
  * @see https://spec.commonmark.org/0.31.2/#code-spans
  * @see https://github.github.com/gfm/#fenced-code-blocks
+ * @see https://spec.commonmark.org/0.31.2/#list-items
  */
 
 import * as assert from 'node:assert/strict';
@@ -47,6 +48,9 @@ import { renderNativeBatchGuidance, renderNativeBatchMemberNote } from '../dist/
 import { renderDiagnosticLine, renderWarningsList } from '../dist/presentation/warnings-list.cjs';
 import { codeSpan, escapePlain, escapePlainInline, fenced, lineSpan } from '../dist/presentation/markdown.cjs';
 import { fenceProblem, loadMarkdownParser, unbalancedHtml } from '../dist/presentation/markdown-tree.cjs';
+import { fromMarkdown } from 'mdast-util-from-markdown';
+import { gfmFromMarkdown } from 'mdast-util-gfm';
+import { gfm } from 'micromark-extension-gfm';
 
 const C = '2222222222222222222222222222222222222222';
 
@@ -363,6 +367,91 @@ describe('the projection section of a companion\'s description (companion contra
     const text = renderCompanionProjection({ head: 'H', verdict: 'faithful', conflicts: [], files: [{ path: 'f', hunks: [{ oldStart: 0, oldLines: 0, newStart: 1, newLines: 1, lines }] }] }, target);
     assert.ok(text.endsWith('\n\n`````diff\n--- a/f\n+++ b/f\n@@ -0,0 +1 @@\n+````\n`````'), text);
   });
+
+  // §2.11: the diff does not show a carriage return that ends a line, so a hunk whose lines change their line
+  // endings states it in its header, in the words of delivery policy §8.10's details: the old side's style, then the new.
+  const oneHunk = (lines: readonly { text: string; noNewline: boolean }[], oldLines = 1, newLines = 1): ICompanionProjectionView =>
+    ({ head: 'H', verdict: 'faithful', conflicts: [], files: [{ path: 'f', hunks: [{ oldStart: 4, oldLines, newStart: 4, newLines, lines }] }] });
+  const diffOf = (text: string): string => text.slice(text.indexOf('```diff\n') + '```diff\n'.length, text.lastIndexOf('\n```'));
+
+  test('regression: a change of line endings only (CRLF to LF) is stated on its hunk, not shown as two identical lines', () => {
+    const text = renderCompanionProjection(oneHunk([{ text: '-x\r', noNewline: false }, { text: '+x', noNewline: false }]), target);
+    assert.equal(diffOf(text), '--- a/f\n+++ b/f\n@@ -4 +4 @@ CRLF line endings become LF line endings\n-x\n+x');
+  });
+
+  test('LF to CRLF is stated the other way round', () => {
+    const text = renderCompanionProjection(oneHunk([{ text: '-x', noNewline: false }, { text: '+x\r', noNewline: false }]), target);
+    assert.equal(diffOf(text), '--- a/f\n+++ b/f\n@@ -4 +4 @@ LF line endings become CRLF line endings\n-x\n+x');
+  });
+
+  test('context lines count for both sides: LF lines added among CRLF lines make the new side mixed', () => {
+    const lines = [{ text: ' a\r', noNewline: false }, { text: '+b', noNewline: false }, { text: ' c\r', noNewline: false }];
+    const text = renderCompanionProjection(oneHunk(lines, 2, 3), target);
+    assert.equal(diffOf(text), '--- a/f\n+++ b/f\n@@ -4,2 +4,3 @@ CRLF line endings become mixed CRLF and LF line endings\n a\n+b\n c');
+  });
+
+  test('a hunk whose line endings do not change has no note, CRLF or LF', () => {
+    const crlf = renderCompanionProjection(oneHunk([{ text: '-x\r', noNewline: false }, { text: '+y\r', noNewline: false }]), target);
+    assert.equal(diffOf(crlf), '--- a/f\n+++ b/f\n@@ -4 +4 @@\n-x\n+y');
+    const lf = renderCompanionProjection(oneHunk([{ text: '-x', noNewline: false }, { text: '+y', noNewline: false }]), target);
+    assert.equal(diffOf(lf), '--- a/f\n+++ b/f\n@@ -4 +4 @@\n-x\n+y');
+  });
+
+  test('a last line without a newline has no line ending: it does not count, and a carriage return there is content, shown visibly', () => {
+    const text = renderCompanionProjection(oneHunk([{ text: '-x\r', noNewline: true }, { text: '+x', noNewline: true }]), target);
+    assert.equal(diffOf(text), '--- a/f\n+++ b/f\n@@ -4 +4 @@\n-x{U+000D}\n\\ No newline at end of file\n+x\n\\ No newline at end of file');
+  });
+
+  // §2.11 and delivery policy §8.10: a code block does not show these characters as themselves, so the diff writes each as a visible escape.
+  const NOTE = 'In this diff, each `{U+XXXX}` stands for the character with that code point, written visibly; this pull request\'s commit has the exact bytes.';
+
+  test('regression: a character a code block does not show is written as a visible escape, and a note says so; the diff never carries it raw', () => {
+    const lines = [
+      { text: ' a\u00A0b', noNewline: false },          // U+00A0, which renders as a space
+      { text: '-c\u200Bd', noNewline: false },          // a zero-width space (Cf)
+      { text: '+c\u200Dd\u202E', noNewline: false },    // a zero-width joiner and a bidirectional override (Cf)
+      { text: '+\u00ADe\u2028f\uFEFF', noNewline: false }, // a soft hyphen (Cf), a line separator, a byte-order mark (Cf)
+      { text: '+g\u0007h\u007Fi\u0085', noNewline: false }, // a C0 control, DEL and a C1 control
+      { text: '+bare\rcr\r', noNewline: false },        // a carriage return inside the line is shown; the one ending it is not
+    ];
+    const text = renderCompanionProjection({ head: 'H', verdict: 'faithful', conflicts: [], files: [{ path: 'f', hunks: [{ oldStart: 1, oldLines: 2, newStart: 1, newLines: 5, lines }] }] }, target);
+    assert.equal(text, `${LEAD}applies only its own changes, which are these:\n\n${[
+      // The last added line ends with CRLF among LF lines, so the hunk states its line endings.
+      '```diff', '--- a/f', '+++ b/f', '@@ -1,2 +1,5 @@ LF line endings become mixed CRLF and LF line endings',
+      ' a{U+00A0}b',
+      '-c{U+200B}d',
+      '+c{U+200D}d{U+202E}',
+      '+{U+00AD}e{U+2028}f{U+FEFF}',
+      '+g{U+0007}h{U+007F}i{U+0085}',
+      '+bare{U+000D}cr',
+      '```',
+    ].join('\n')}\n\n${NOTE}`);
+    assert.doesNotMatch(text, /[\p{Cf}\u00A0\u0000-\u0008\u000B-\u001F\u007F-\u009F\u2028\u2029]/u, 'no unshown character reaches the description');
+  });
+
+  test('a zero-width joiner inside an emoji sequence is escaped too: the diff shows content, not a title', () => {
+    const lines = [{ text: '+\u{1F469}\u200D\u{1F4BB}', noNewline: false }];
+    const text = renderCompanionProjection({ head: 'H', verdict: 'faithful', conflicts: [], files: [{ path: 'f', hunks: [{ oldStart: 0, oldLines: 0, newStart: 1, newLines: 1, lines }] }] }, target);
+    assert.ok(text.endsWith('\n+\u{1F469}{U+200D}\u{1F4BB}\n```\n\n' + NOTE), text);
+  });
+
+  test('literal text that reads as an escape has its brace escaped, so every `{U+XXXX}` in the diff stands for one character', () => {
+    const lines = [{ text: '+{U+0041} {U+1F600} {u+0041} {U+41} {x}', noNewline: false }];
+    const text = renderCompanionProjection({ head: 'H', verdict: 'faithful', conflicts: [], files: [{ path: 'f', hunks: [{ oldStart: 0, oldLines: 0, newStart: 1, newLines: 1, lines }] }] }, target);
+    assert.ok(text.endsWith('\n+{U+007B}U+0041} {U+007B}U+1F600} {u+0041} {U+41} {x}\n```\n\n' + NOTE), text);
+  });
+
+  test('a path in the diff\'s file headers is escaped by the same rule', () => {
+    const lines = [{ text: '+x', noNewline: false }];
+    const text = renderCompanionProjection({ head: 'H', verdict: 'faithful', conflicts: [], files: [{ path: 'a\u200Bb.md', hunks: [{ oldStart: 0, oldLines: 0, newStart: 1, newLines: 1, lines }] }] }, target);
+    assert.ok(text.endsWith('\n--- a/a{U+200B}b.md\n+++ b/a{U+200B}b.md\n@@ -0,0 +1 @@\n+x\n```\n\n' + NOTE), text);
+  });
+
+  test('a diff with nothing to escape has no note; tabs and trailing spaces are shown as themselves', () => {
+    const lines = [{ text: '+\tindented  ', noNewline: false }];
+    const text = renderCompanionProjection({ head: 'H', verdict: 'faithful', conflicts: [], files: [{ path: 'f', hunks: [{ oldStart: 0, oldLines: 0, newStart: 1, newLines: 1, lines }] }] }, target);
+    assert.ok(text.endsWith('\n+\tindented  \n```'), text);
+  });
 });
 
 describe('a native batch (delivery policy §8.8)', () => {
@@ -513,5 +602,35 @@ describe('the warnings list of an outcome report (docs/diagnostics.md)', () => {
   test('the list is headed **Warnings:** and keeps the order given', () => {
     assert.equal(renderWarningsList([warning('a-code', 'First.', '/x'), warning('b-code', 'Second.')]),
       '**Warnings:**\n\n- `a-code` at `/x`: First.\n- `b-code`: Second.');
+  });
+  // Review presentation contract §6: every line of a message after its first is indented two spaces, the content
+  // column of "- ", so it continues the list item (CommonMark §5.2); blank lines stay empty. The text is unchanged.
+  const OBSTACLES = 'The group `g` cannot be delivered:\n\n- `native-batch`: The edit of `README.md` line 5.\n- `companion`: Not yet supported.';
+
+  test('regression: a message with its own list stays inside its diagnostic\'s item, indented two spaces', () => {
+    assert.equal(renderDiagnosticLine(warning('delivery-unavailable', OBSTACLES, '/runs/0/results/7')), [
+      '- `delivery-unavailable` at `/runs/0/results/7`: The group `g` cannot be delivered:',
+      '',
+      '  - `native-batch`: The edit of `README.md` line 5.',
+      '  - `companion`: Not yet supported.',
+    ].join('\n'));
+  });
+
+  test('every continuation line is indented, a fenced block included, and blank lines carry no spaces', () => {
+    assert.equal(renderDiagnosticLine(warning('c', 'One\ntwo\n\n```\ncode\n```')), '- `c`: One\n  two\n\n  ```\n  code\n  ```');
+  });
+
+  test('regression: as CommonMark reads it, each message\'s list nests under its own item, and the items stay siblings', () => {
+    const tree = fromMarkdown(renderWarningsList([warning('a-code', OBSTACLES, '/x'), warning('b-code', 'Second.')]), {
+      extensions: [gfm()], mdastExtensions: [gfmFromMarkdown()],
+    });
+    const lists = tree.children.filter((node) => node.type === 'list');
+    assert.equal(lists.length, 1, 'one list of diagnostics; no sibling list after it');
+    const [list] = lists;
+    assert.ok(list?.type === 'list');
+    assert.equal(list.children.length, 2, 'two diagnostics, nothing more at their level');
+    const nested = list.children[0]?.children.filter((node) => node.type === 'list') ?? [];
+    assert.equal(nested.length, 1, 'the obstacles are a list inside the first diagnostic\'s item');
+    assert.equal(nested[0]?.type === 'list' ? nested[0].children.length : 0, 2);
   });
 });

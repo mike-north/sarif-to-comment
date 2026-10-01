@@ -76,7 +76,7 @@ Other timeline observations:
 - With `itemTypes` set, `totalCount` still counts the whole timeline (4 for #41, 3 for #44), while `filteredCount` counts the matching items (2 and 0). See `e0-41-timeline-graphql.json` and `e0-44-timeline-graphql.json`.
 - The pending reviews appear in the timeline as `PullRequestReview` items for this account, which created them.
 
-**Bearing on EC9** (inference, not observation): an association check that accepts the head or any `beforeCommit` would associate all three discarded reviewed commits with their PRs. This snapshot has only three force-pushed PRs and at most two events each. It does not show whether `beforeCommit` can be null, for example after the commit is garbage-collected, or how events paginate past 100 items. The fixtures do not cover forks.
+**Bearing on the association check** (specification R17; inference, not observation): an association check that accepts the head or any `beforeCommit` would associate all three discarded reviewed commits with their PRs. This snapshot has only three force-pushed PRs and at most two events each. It does not show whether `beforeCommit` can be null, for example after the commit is garbage-collected, or how events paginate past 100 items. The fixtures do not cover forks.
 
 ## Reachability of discarded commits
 

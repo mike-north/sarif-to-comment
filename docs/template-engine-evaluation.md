@@ -2,9 +2,9 @@
 
 Recorded October 1, 2026, against `main` at `c6c7fcb`.
 
-> **This is an evaluation, not a selection.** No template engine was integrated into the product, and no dependency was added to the package's `package.json` or lockfile. The candidates were installed only in an isolated scratch directory. This record selects no engine. The owner decides at implementation time (U10). Until then, [D60](design-decisions.md#d60-use-reusable-markdown-components-for-a-rich-github-review-experience--owner-selected-presentation-direction)'s "No engine has been selected or verified" still stands. This record supplies the capability and Markdown checks that D60 requires before any selection.
+> **This is an evaluation, not a selection.** No template engine was integrated into the product, and no dependency was added to the package's `package.json` or lockfile. The candidates were installed only in an isolated scratch directory. This record selects no engine. The owner decides when repository templates are implemented. Until then, [D60](design-decisions.md#d60-use-reusable-markdown-components-for-a-rich-github-review-experience--owner-selected-presentation-direction)'s "No engine has been selected or verified" still stands. This record supplies the capability and Markdown checks that D60 requires before any selection.
 
-**Sources.** [D60](design-decisions.md#d60-use-reusable-markdown-components-for-a-rich-github-review-experience--owner-selected-presentation-direction), its "Template execution constraint", "Permitted compilation" and "Markdown compatibility" paragraphs; the [review presentation contract](review-presentation-contract.md) §7 (required fragments, the composed-text checkpoint, pass-through by node, markers); and the realignment plan's engineering choice EC10, risk 8 and lead decision L5. EC10 shortlists mustache.js, an in-house Mustache subset and sandboxed LiquidJS, and ranks Handlebars third. Risk 8 names the cases: prototype access, helper loading, delimiter collisions (`{{`, `${{ }}`), re-parsing of values, dynamic fences, CRLF and trailing newlines.
+**Sources.** [D60](design-decisions.md#d60-use-reusable-markdown-components-for-a-rich-github-review-experience--owner-selected-presentation-direction), its "Template execution constraint", "Permitted compilation" and "Markdown compatibility" paragraphs; the [review presentation contract](review-presentation-contract.md) §7 (required fragments, the composed-text checkpoint, pass-through by node, markers); and the engineering shortlist this evaluation was asked to check: mustache.js, an in-house Mustache subset and sandboxed LiquidJS, with Handlebars ranked third. The cases it was asked to cover are prototype access, helper loading, delimiter collisions (`{{`, `${{ }}`), re-parsing of values, dynamic fences, CRLF and trailing newlines.
 
 ## 1. The constraints checked
 
@@ -292,7 +292,7 @@ This is a recommendation for the owner. It is not a selection.
   - Its bounds are deterministic sizes.
   - It is byte-exact across LF, CRLF and a missing final newline.
   - It reproduced the built-in components exactly.
-  - It is under 150 lines, has no dependency, and can be written spec-first (L6).
+  - It is under 150 lines, has no dependency, and can be written spec-first.
 - **Design change:**
   - Remove the context-stack fallback. Inside a section, a bare name resolves only in the section's own value. Reaching an outer field takes an explicit path from the root.
   - D shows the fallback attributing the tool's version to an extension, and the checks cannot catch that.
@@ -323,12 +323,12 @@ This is a recommendation for the owner. It is not a selection.
 
 **The most important residual risk, whatever the engine:** silent changes that remain well-formed Markdown. The product's checks are an engine-independent backstop for structure, required fragments, suggestion blocks and markers, and they refused every structural attack in D. They cannot know the static text or the optional values the template author intended: an example's `{{ message }}` interpolated, an Actions expression reduced to `$` by a lenient engine, an extension shown with the tool's version. The mitigations are an engine that fails loudly on unknown names and has no scope fallback, literal blocks, and a way to preview the rendered review, for example through `validate`, before publishing.
 
-## 9. What remains for implementation (U10)
+## 9. What remains for implementation
 
 - **Configuration location.**
-  - Templates belong to the repository configuration of EC1, `.github/sarif-to-comment.json`.
+  - Templates belong to the repository's delivery configuration, `.github/sarif-to-comment.json`.
   - They are either inline strings keyed by component, or paths to template files under a fixed directory such as `.github/sarif-to-comment/templates/`, resolved by the configuration and never by the engine.
-  - An unknown component key or an invalid template blocks (EC1), with a diagnostic that names the component and the template line. Under D55, an unusable template is not silently replaced by the built-in presentation.
+  - An unknown component key or an invalid template blocks, as an invalid configuration does, with a diagnostic that names the component and the template line. Under D55, an unusable template is not silently replaced by the built-in presentation.
 - **Trust model**, consistent with D60's "reviewing a repository must not implicitly authorize its configuration to execute arbitrary code".
   - A repository template is data: it is parsed and rendered by an engine that has no file, network, module, helper, partial or clock access.
   - The repository cannot register helpers, filters or partials.
@@ -337,9 +337,9 @@ This is a recommendation for the owner. It is not a selection.
   - The context is a deeply frozen, structured copy.
   - An owner decision remains open: whether honoring repository templates also needs an explicit caller opt-in, given that a template still controls what reviewers read.
 - **Default-branch reads.**
-  - Read the configuration and its template files from the default branch through Git objects (EC1, risk 5), never from the working tree or the pull request head, so a pull request cannot change its own presentation.
+  - Read the configuration and its template files from the default branch through Git objects, as the delivery configuration is read, never from the working tree or the pull request head, so a pull request cannot change its own presentation.
   - Record the default branch's commit and the resolved templates in the publication plan, so a retry with the same state path renders nothing again and is unaffected by later changes to the default branch.
-- **Contract work, spec-first (L6).**
+- **Contract work, spec-first.**
   - A grammar and data contract for each customizable component, naming which fields are raw strings and which are Markdown fragments.
   - The literal-block syntax, and the size, depth and output bounds.
   - Diagnostics codes for template errors.

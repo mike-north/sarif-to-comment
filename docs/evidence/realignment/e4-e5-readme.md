@@ -136,7 +136,7 @@ For each case, `e5-merge-tree-projection.json` records two projections made with
 - **merge:** `git merge-tree --write-tree H X`, what merging X into H would produce from their real merge base;
 - **head + proposal:** `git merge-tree --write-tree --merge-base=R H X`, H plus only the proposal's own edits (the cherry-pick of R..X).
 
-The files whose content differs between the two are what the merge would restore or change beyond the proposal. Under the content-based fidelity definition (the realignment plan's L1, which revises EC7), those files make a companion unfaithful.
+The files whose content differs between the two are what the merge would restore or change beyond the proposal. Under the content-based fidelity definition then proposed (fidelity judged by content, not by ancestry), those files make a companion unfaithful.
 
 | Case | Merge | Head + proposal | Files the merge changes beyond the proposal |
 |---|---|---|---|

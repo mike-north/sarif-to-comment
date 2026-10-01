@@ -55,7 +55,8 @@ TOOL [ " " VERSION ] [ " · " EXTENSION [ " " EXTENSION-VERSION ] ] [ " · rule 
 - Several: `Changes K files together:` or `Makes K changes together:`, then for each change a blank line and ``` `PATH` — replace LINES with[ (CRLF line endings)]: ``` with its `BLOCK`, or ``` `PATH` — delete LINES. ```.
 - `LINES` is `line N` or `lines N-M` of the reviewed file.
 - `BLOCK` is a fenced code block of the replacement lines, with LF line breaks and without the final terminator. Its fence is one backtick longer than the longest backtick run inside, and at least three.
-- Lines a block cannot show exactly block the review at the alternative (`alternative-content-unrepresentable`): a C0 control other than tab, LF and the CR of CRLF; DEL or a C1 control; any format character (Unicode category `Cf`, such as a zero-width space, a soft hyphen, a bidirectional control or a byte-order mark other than the file's own); U+00A0, which renders as a space; U+2028 or U+2029; a carriage return that does not end a line; mixed CRLF and LF; an unpaired surrogate. A manual edit ([delivery policy contract](delivery-policy-contract.md) §8.10) and a new file's content ([file-operation contract](file-operation-publication-contract.md) §2) follow the same rule.
+- Lines a block cannot show exactly block the review at the alternative (`alternative-content-unrepresentable`): a C0 control other than tab, LF and the CR of CRLF; DEL or a C1 control; any format character (Unicode category `Cf`, such as a zero-width space, a soft hyphen, a bidirectional control or a byte-order mark other than the file's own); U+00A0, which renders as a space; U+2028 or U+2029; a carriage return that does not end a line; mixed CRLF and LF; an unpaired surrogate. A manual edit ([delivery policy contract](delivery-policy-contract.md) §8.10) and a new file's content ([file-operation contract](file-operation-publication-contract.md) §2) follow the same rule. A suggestion pull request's own diff ([companion contract §2.11](companion-suggestion-pr-contract.md#211-presentation)), whose exact bytes its commit carries, writes such characters as visible `{U+XXXX}` escapes instead of refusing them.
+- A path an alternative names that cannot be shown exactly blocks the review at the alternative (`alternative-path-unrepresentable`): one holding a control or invisible formatting character, as [delivery policy §8.10](delivery-policy-contract.md#810-proposals-made-by-hand-on-the-original-pull-request) defines it (every character a code block does not show, a zero-width joiner in an emoji sequence included, or a tab, LF or CR), or beginning or ending with whitespace.
 
 ## 5. Finding section
 
@@ -69,11 +70,13 @@ A finding published in the review body rather than inline keeps its source assoc
 
 ## 6. Warnings list
 
-Outcome reports (the library's `markdown`, and the CLI's JSON and TOON `message`) list diagnostics one per line:
+Outcome reports (the library's `markdown`, and the CLI's JSON and TOON `message`) list diagnostics one list item each:
 
 ```
 "- `" CODE "`" [ " at `" POINTER "`" ] ": " MESSAGE
 ```
+
+Every line of `MESSAGE` after its first that is not blank is indented two spaces, the content column of `- `, so the message's own paragraphs, lists and code blocks continue its list item ([CommonMark list items](https://spec.commonmark.org/0.31.2/#list-items)): the obstacles a `delivery-unavailable` or `delivery-fallback` message lists are nested under that diagnostic, never siblings of it. Blank lines stay empty, and the text is otherwise the message's own. Every other report that lists problems (invalid SARIF, a refused grouping, a failed `add-staged-changes`) indents a message's later lines the same way.
 
 A report with warnings ends with them:
 

@@ -209,6 +209,12 @@ describe('command dispatch and help', () => {
     assert.match(result.stdout, /--sarif FILE --repo OWNER\/REPO --pull N --commit FULLSHA/);
   });
 
+  test('regression: the title covers both review modes, since --submit creates a submitted review, and fits 80 columns', () => {
+    const [title = ''] = run(['--help']).stdout.split('\n');
+    assert.equal(title, 'sarif-to-comment — author, inspect, publish SARIF as a draft or submitted review');
+    assert.ok(title.length <= 80, title);
+  });
+
   const commands: readonly (readonly [string, readonly string[]])[] = [
     ['init', ['--output', '--tool-name', '--tool-version', '--repo', '--commit', '--format']],
     [

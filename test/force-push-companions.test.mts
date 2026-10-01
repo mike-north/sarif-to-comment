@@ -516,6 +516,31 @@ describe('merge attributes, a deletion applied again, and a head that already ha
   });
 });
 
+describe('characters a code block does not show, in a projected suggestion\'s own changes (§2.11)', () => {
+  test('regression: the description\'s diff writes them as visible escapes, while the commit keeps the exact bytes', async () => {
+    // A zero-width space, U+00A0 and literal text that reads as an escape, in the replacement of line 10.
+    const replacement = 'Line 10,\u200Bsuggested\u00A0{U+0041}.';
+    const document = documentWith(['reword', 'remark']);
+    const result = asRecord(asArray(asRecord(asArray(document['runs'])[0])['results'])[1]);
+    result['fixes'] = [{ artifactChanges: [{ artifactLocation: { uri: 'docs/sample.md' }, replacements: [{ deletedRegion: { startLine: 10 }, insertedContent: { text: replacement } }] }] }];
+    const world = makeWorld(AMENDED);
+    const outcome = await publishWith(world, document);
+    assert.equal(status(outcome), 'published', markdown(outcome));
+    const [pull, ...rest] = world.host.pulls();
+    assert.ok(pull && rest.length === 0);
+
+    const diff = REWORD_DIFF.map((line) => (line === '+Line 10, suggested.' ? '+Line 10,{U+200B}suggested{U+00A0}{U+007B}U+0041}.' : line));
+    const note = 'In this diff, each `{U+XXXX}` stands for the character with that code point, written visibly; this pull request\'s commit has the exact bytes.';
+    assert.equal(pull.body, pullBody(REWORD, idsOf(pull), [...projection(AMENDED, ['docs/sample.md'], diff), '', note]));
+    assert.doesNotMatch(pull.body, /[\u200B\u00A0]/u, 'no unshown character reaches the description');
+
+    const committed = [...REVIEWED_SAMPLE];
+    committed[5] = 'Line 6, suggested.\n';
+    committed[9] = `${replacement}\n`;
+    assert.deepEqual(world.host.fileOnBranch(pull.head, 'docs/sample.md'), Buffer.from(committed.join('')), 'the committed bytes are exact');
+  });
+});
+
 describe('a single bundle after a rewritten history (delivery policy §9)', () => {
   test('the bundle as planned is projected: one suggestion pull request, its projection section once, and the warning names the bundle', async () => {
     const world = makeWorld(AMENDED);
