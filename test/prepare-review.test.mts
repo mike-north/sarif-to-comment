@@ -810,38 +810,16 @@ describe('source revision binding', () => {
     assert.deepStrictEqual(reader.calls, [[HEAD, 'lib/legacy.js']]);
   });
 
-  const earlierReview = () => reviewContext({ reviewedCommit: EARLIER });
-
-  test('an explicit earlier reviewed commit with the current diff yields exact historical general feedback', async () => {
-    const reader = snapshotReader();
-    const { outcome } = await prepare(sarifLog([result('Still capped?', at('src/app.js', { startLine: 7 }))]),
-      { context: earlierReview(), reader });
-    assertReady(outcome, EARLIER);
-    assert.deepStrictEqual(outcome.review.comments, []);
-    assert.equal(outcome.review.body, `**Source:** [src/app.js line 7 at ea71ea7](${permalink(EARLIER, 'src/app.js', 7)})`
-      + `\n\n\`\`\`\n  return items.slice(0, limit).map((item) => item.id);\n\`\`\`\n\nStill capped?\n\n${author('T')}`);
-    assert.deepStrictEqual(reader.calls, [[EARLIER, 'src/app.js']]);
-  });
-
-  test('under an earlier reviewed commit, current-diff anchors are never mixed into the review', async () => {
-    const { outcome } = await prepare(sarifLog([result('Removed.', at('lib/legacy.js', { startLine: 1 }))], {
-      versionControlProvenance: [{ repositoryUri: 'https://github.com/acme/widgets', revisionId: BASE }],
-    }), { context: earlierReview() });
-    assertReady(outcome, EARLIER);
-    assert.deepStrictEqual(outcome.review.comments, []);
-    assert.equal(outcome.evidence[0]?.treatment, 'general');
-    assert.deepStrictEqual(outcome.evidence[0].source,
-      { commit: BASE, path: 'lib/legacy.js', startLine: 1, endLine: 1, text: "module.exports = 'legacy';" });
-  });
-
-  test('an explicit earlier reviewed commit cannot carry a native suggestion', async () => {
-    const { outcome } = await prepare(sarifLog([result('x', at('src/app.js', { startLine: 3 }), {
-      fixes: [fix({ startLine: 3, startColumn: 23, endColumn: 25 }, '20')],
-    })]), { context: earlierReview(), realReplacement: true });
-    // Delivery policy §8.9: the condition is the obstacle of `native`, the default `edits` list's only mechanism.
-    assertBlocked(outcome, [['delivery-unavailable', '/runs/0/results/0']]);
-    assert.ok(outcome.diagnostics[0]?.message.endsWith(
-      '- `native`: The reviewed commit is not the pull request head, so a native suggestion could not be applied to the reviewed text.'));
+  test('a context whose diff does not end at the reviewed commit is a caller error (specification R13.1: the diff is the reviewed diff)', async () => {
+    // The fixture diff ends at HEAD; a review of EARLIER needs EARLIER's own
+    // reviewed diff. Historical placement on such a diff is tested in
+    // test/historical-placement.test.mts.
+    await assert.rejects(prepare(sarifLog([result('Still capped?', at('src/app.js', { startLine: 7 }))]),
+      { context: reviewContext({ reviewedCommit: EARLIER }) }), (err) => {
+      assert.ok(err instanceof TypeError);
+      assert.match(err.message, /reviewed diff/);
+      return true;
+    });
   });
 
   test('an abbreviated reviewed commit is a caller error', async () => {

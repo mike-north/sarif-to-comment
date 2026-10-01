@@ -75,12 +75,10 @@ function located(message: string, region: Record<string, unknown>, uri = 'src/ap
 }
 
 /**
- * A finding on line 4 with a fix replacing exactly that line. On the pull
- * request as fetched ('ok': the diff ends at the reviewed commit) the fix is
- * a native suggestion; once the pull request has advanced ('historical'), a
- * fix on the reviewed commit is no longer on the diff head and blocks
- * (prepare-review support profile: fixes must be on the reviewed head, which
- * must be the diff head).
+ * A finding on line 4 with a fix replacing exactly that line: a native
+ * suggestion on the reviewed diff, whether the pull request's head is the
+ * reviewed commit ('ok') or has advanced past it ('historical';
+ * docs/specification.md R13.1).
  */
 const FIXED = sarifWith([
   {
@@ -595,16 +593,22 @@ describe('no approval stamp: publication checks everything again', () => {
     );
   });
 
-  test('the pull request advancing after a ready assessment is caught by publication itself', async () => {
+  test('the pull request advancing after a ready assessment is checked again by publication itself', async () => {
     // Worked example 6: the same remote, first as assessed, then after the author pushed.
     const world = makeWorld();
     assert.equal((await validate(world, assessmentInput(FIXED))).status, 'ready');
+    assert.equal(world.remote.calls('adapter:compareCommits').length, 0, 'the head was the reviewed commit');
     setAdapterConfig(world.remote.dir, { context: 'historical' });
     const publication = await publish(world, FIXED);
-    assert.equal(publication.status, 'blocked', publication.markdown);
+    // The push alone changes no verdict (specification R13.1): the fix stays a
+    // native suggestion at the reviewed commit, after publication fetched the
+    // context again and associated the commit with the pull request (R17).
+    assert.equal(publication.status, 'published', publication.markdown);
     assert.equal(world.remote.calls('adapter:fetchContext').length, 2, 'publication fetched the context again');
-    assert.deepEqual(world.remote.writeCalls(), [], 'nothing was written');
-    assert.equal(fs.existsSync(world.statePath), false);
+    assert.equal(world.remote.calls('adapter:compareCommits').length, 1, 'publication associated the reviewed commit itself');
+    assert.equal(world.remote.calls('createReview').length, 1);
+    const [review] = world.remote.reviews();
+    assert.match(review?.comments[0]?.body ?? '', /```suggestion\nconst MAX = 100; \/\/ upper bound\n```/);
   });
 
   test('a network outage after a ready assessment makes publication refuse, not proceed', async () => {
@@ -625,11 +629,13 @@ describe('no approval stamp: publication checks everything again', () => {
     assert.equal(world.remote.calls('createReview').length, 1);
   });
 
-  test('the same remote can be assessed again after the pull request advanced, with the new verdict', async () => {
+  test('the same remote can be assessed again after the pull request advanced, with a fresh verdict', async () => {
     const world = makeWorld();
     assert.equal((await validate(world, assessmentInput(FIXED))).status, 'ready');
     setAdapterConfig(world.remote.dir, { context: 'historical' });
-    assert.equal((await validate(world, assessmentInput(FIXED))).status, 'blocked', 'no cached verdict');
+    assert.equal((await validate(world, assessmentInput(FIXED))).status, 'ready');
+    assert.equal(world.remote.calls('adapter:fetchContext').length, 2, 'no cached context');
+    assert.equal(world.remote.calls('adapter:compareCommits').length, 1, 'no cached association');
     assertNothingWritten(world);
   });
 });

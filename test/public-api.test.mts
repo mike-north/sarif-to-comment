@@ -618,7 +618,7 @@ describe('a new publication prepares once and publishes once', () => {
     assert.deepEqual(sentRequest(world).comments, readyReviewOf(prepared)?.comments);
   });
 
-  test('a historical reviewed commit stays the review commit while the pull request has advanced', async () => {
+  test('a historical reviewed commit stays the review commit, placed inline on its reviewed diff, while the pull request has advanced', async () => {
     const world = makeWorld();
     setAdapterConfig(world.remote.dir, { context: 'historical' });
     const outcome = await run(world);
@@ -628,11 +628,17 @@ describe('a new publication prepares once and publishes once', () => {
     assert.equal(prepared.status, 'ready');
     assert.equal(request.commitId, HEAD, 'the review must stay pinned to the reviewed commit');
     assert.deepEqual(request.comments, prepared.review.comments);
-    // Independent facts: the advanced diff cannot anchor at the reviewed
-    // commit, so the located finding is general feedback linked to it.
-    assert.equal(request.comments.length, 0);
-    assert.ok(request.body.includes(`/blob/${HEAD}/src/app.js`));
-    assert.ok(request.body.includes('MAX is exported but never validated.'));
+    // Specification R13.1: line 4 of src/app.js is in the reviewed diff, so
+    // the finding is an inline comment at the reviewed commit, as it would be
+    // if the pull request had not advanced.
+    assert.deepEqual(request.comments.map((c) => [c.path, c.side, c.line]), [['src/app.js', 'RIGHT', 4]]);
+    assert.ok(at(request.comments, 0).body.includes('MAX is exported but never validated.'));
+    // Specification R17: the advanced head contains the reviewed commit, which
+    // one comparison shows; no force-push history is read.
+    assert.deepEqual(calls(world, 'adapter:compareCommits').map((c) => c.args), [
+      { owner: DESTINATION.owner, repo: DESTINATION.repo, base: HEAD, head: REPOSITORY.commits.advanced },
+    ]);
+    assert.equal(calls(world, 'adapter:listHeadRefForcePushes').length, 0);
   });
 
   test('invalid SARIF is blocked with the core diagnostics, no remote write and no state', async () => {
@@ -921,8 +927,8 @@ describe('submitted publication: readiness and targeting apply unchanged (contra
     assertPublicShape(outcome, 'published');
     const request = sentRequest(world);
     assert.equal(request.commitId, HEAD, 'the submitted review must stay pinned to the reviewed commit');
-    assert.equal(request.comments.length, 0);
-    assert.ok(request.body.includes(`/blob/${HEAD}/src/app.js`));
+    // Specification R13.1: placed on the reviewed diff, exactly as a draft would be.
+    assert.deepEqual(request.comments.map((c) => [c.path, c.side, c.line]), [['src/app.js', 'RIGHT', 4]]);
     assert.equal(at(world.remote.reviews(), 0).state, 'COMMENTED');
   });
 

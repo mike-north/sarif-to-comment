@@ -20,8 +20,12 @@
  *
  * Behavior is configured per remote in adapter-config.json:
  *   context: 'ok'                     the pull head is the reviewed commit
- *            'historical'             the pull request advanced: the current
- *                                     diff ends at a later head
+ *            'historical'             the pull request advanced by an
+ *                                     ordinary push: its head is a later
+ *                                     commit, and the context's diff is still
+ *                                     the reviewed diff, ending at the
+ *                                     reviewed commit (docs/specification.md
+ *                                     R13.1)
  *            'throw'                  context cannot be fetched
  *            'throw-with-token'       an error whose message quotes the token
  *            'throw-with-token-cause' a clean error whose cause and extra
@@ -157,7 +161,7 @@ export interface IFakeFetchedContext {
   readonly readSource: FakeReadSource;
 }
 
-/** The fake client: the publication transport methods plus fetchContext. */
+/** The fake client: the publication transport methods, fetchContext, and the reads that associate the reviewed commit. */
 export interface IFakeGitHubClient {
   readonly getAuthenticatedUser: IFakeTransport['getAuthenticatedUser'];
   readonly createReview: IFakeTransport['createReview'];
@@ -165,6 +169,8 @@ export interface IFakeGitHubClient {
   readonly listReviewComments: IFakeTransport['listReviewComments'];
   readonly fetchContext: (request: IFakeContextRequest) => Promise<IFakeFetchedContext>;
   readonly readDefaultBranchFile: (request: { readonly owner: string; readonly repo: string; readonly path: string; readonly branch?: string }) => Promise<IFakeDefaultBranchFile>;
+  readonly compareCommits: (request: { readonly owner: string; readonly repo: string; readonly base: string; readonly head: string }) => Promise<'identical' | 'ahead' | 'behind' | 'diverged'>;
+  readonly listHeadRefForcePushes: (request: IAdapterDestination) => Promise<{ readonly beforeCommits: readonly (string | null)[]; readonly complete: boolean }>;
 }
 
 /** readDefaultBranchFile's answer (the GitHub client's IDefaultBranchFile). */
@@ -253,19 +259,19 @@ function joinedDiff(diff: IAdapterDiff, oldSourceCommit: string | undefined): IT
 
 /**
  * The context the adapter contract describes for the fixture pull request.
- * `historical`: the pull request has advanced past the reviewed commit; the
- * current diff is retained and ends at the later head.
+ * `historical`: the pull request has advanced past the reviewed commit, so
+ * its head is the later commit, while the diff is the reviewed diff, ending
+ * at the reviewed commit (docs/specification.md R13.1).
  */
 export function trustedContext({ historical = false, oldSourceCommit }: ITrustedContextOptions = {}): ITrustedContext {
-  const diff = historical ? REPOSITORY.advancedDiff : REPOSITORY.diff;
   return {
     owner: REPOSITORY.destination.owner,
     repo: REPOSITORY.destination.repo,
     pullNumber: REPOSITORY.destination.pullNumber,
     reviewedCommit: REPOSITORY.commits.head,
-    pullHead: diff.headCommit,
+    pullHead: historical ? REPOSITORY.commits.advanced : REPOSITORY.commits.head,
     currentBaseTip: REPOSITORY.commits.base,
-    diff: joinedDiff(diff, oldSourceCommit),
+    diff: joinedDiff(REPOSITORY.diff, oldSourceCommit),
     fileDiagnostics: [],
   };
 }
@@ -318,6 +324,19 @@ export function createFakeClientFactory(remoteDir: string): FakeClientFactory {
           ? { kind: 'absent' as const }
           : { kind: 'file' as const, bytes: new Uint8Array(Buffer.from(configured)) };
         return { branch: 'main', commit: REPOSITORY.commits.base, content };
+      },
+      // The fixture's commits form one line, base -> head -> advanced, with
+      // no force-push: whatever is compared, the earlier commit is an ancestor.
+      compareCommits: async (request) => {
+        remote.logCall('adapter:compareCommits', request);
+        const order = [REPOSITORY.commits.base, REPOSITORY.commits.head, REPOSITORY.commits.advanced];
+        const [from, to] = [order.indexOf(request.base), order.indexOf(request.head)];
+        if (from === -1 || to === -1) throw new GitHubError('http-status', 'GitHub answered HTTP 404 (Not Found) comparing commits.', { status: 404 });
+        return from === to ? 'identical' : from < to ? 'ahead' : 'behind';
+      },
+      listHeadRefForcePushes: async (request) => {
+        remote.logCall('adapter:listHeadRefForcePushes', request);
+        return { beforeCommits: [], complete: true };
       },
       fetchContext: async (request) => {
         remote.logCall('adapter:fetchContext', request);

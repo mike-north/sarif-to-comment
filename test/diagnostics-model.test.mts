@@ -43,7 +43,9 @@ describe('the code catalog (docs/diagnostics.md "Code catalog")', () => {
       assert.ok(CATALOG.has(code), code);
     }
     // The delivery policy retired the allow/disallow setting's codes and the native-suggestion
-    // eligibility codes in favour of its own (docs/delivery-policy-contract.md §10.3).
+    // eligibility codes in favour of its own (docs/delivery-policy-contract.md §10.3); the
+    // reviewed diff retired `suggestion-reviewed-commit-not-head` (specification R13.1).
+    // docs/diagnostics.md "Retired codes": never released, and no longer reported.
     for (const code of ['delivery-unavailable', 'delivery-fallback', 'delivery-configuration-invalid', 'companion-options-unused']) assert.ok(CATALOG.has(code), code);
     const retired = [
       'suggestion-pr-fallback', 'suggestion-group-pr-unavailable', 'suggestion-group-requires-suggestion-prs', 'fix-changes-require-suggestion-prs',
@@ -54,6 +56,9 @@ describe('the code catalog (docs/diagnostics.md "Code catalog")', () => {
       assert.equal(CATALOG.has(code), false, `${code} is retired`);
       assert.ok(DIAGNOSTICS_DOC.includes(`| \`${code}\` | `), `the retired ${code} is listed under "Retired codes"`);
     }
+    // Specification R17: the reviewed commit's association with the pull request.
+    assert.equal(CATALOG.get('reviewed-commit-not-in-pull-request')?.severity, 'error');
+    assert.equal(CATALOG.get('reviewed-commit-association-unknown')?.severity, 'note');
     // docs/diagnostics.md "Renamed codes".
     const renames: readonly (readonly [string, string])[] = [
       ['inline-unavailable', 'inline-placement-unavailable'],

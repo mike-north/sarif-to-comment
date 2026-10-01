@@ -129,6 +129,22 @@ export function pullFile(filename: string, before: readonly string[] | undefined
   };
 }
 
+/**
+ * The heads force-pushes replaced to reach each head, oldest first, as the
+ * pull request's timeline records them (each discarded reviewed commit was
+ * the `beforeCommit` of a HeadRefForcePushedEvent in E0,
+ * docs/evidence/realignment/e0-readme.md). An ordinary push records none.
+ */
+export const FORCE_PUSHES: Readonly<Record<string, readonly string[]>> = {
+  [AMENDED]: [REVIEWED],
+  [REWRITTEN]: [REVIEWED],
+  [DROPPED]: [REVIEWED],
+  [MOVED]: [REVIEWED],
+  [AMENDED_LATER]: [REVIEWED],
+  [NOT_TEXT]: [REVIEWED],
+  [OVERSIZE]: [REVIEWED],
+};
+
 /** The pull request, its head at `head`; every snapshot stays readable (discarded commits stay fetchable). */
 export function repositoryAt(head: string): IHttpRepository {
   const special = specialHead(head);
@@ -143,6 +159,7 @@ export function repositoryAt(head: string): IHttpRepository {
     commits: { base: BASE, head },
     ...special,
     parents: PARENTS,
+    forcePushes: FORCE_PUSHES[head] ?? [],
     pullFiles,
     pull: { headRef: HEAD_REF, baseRef: 'main' },
     defaultBranch: 'main',
