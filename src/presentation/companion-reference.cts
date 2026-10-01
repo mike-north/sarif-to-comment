@@ -3,7 +3,8 @@
  * docs/companion-suggestion-pr-contract.md §2.11).
  *
  * The review body's section for one companion suggestion pull request: a
- * link to it by number, the re-application paragraph when it applies, what
+ * link to it by number, the re-application paragraph of a version-2 plan
+ * when it applies (contract §2.11), what
  * merging it applies, and the findings that carry its changes. It is how a
  * review explicitly identifies a proposal associated with it (D56). It is
  * rendered only once the pull request exists, because it names its number.

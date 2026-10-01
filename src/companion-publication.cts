@@ -28,11 +28,16 @@
  * diagnostics that are not errors, in either version; issue #42), bound by a
  * fingerprint over all of it. `delivery` is required in every plan version:
  * no plan without it was ever released, so there is none to continue.
- * Version 2 adds `reappliedOnto`: the commit every proposal is based on
- * instead of the reviewed commit, because the pull request's history was
- * rewritten (docs/companion-suggestion-pr-contract.md §2.5.1); its markers
- * are then version 2 of the convention. It is decided once, when planned,
- * and never again.
+ * Version 3 adds `projection`, written when the reviewed commit was not an
+ * ancestor of the pull request's head: the head and merge base each
+ * suggestion was projected onto, and each one's verdict, faithful or
+ * conflicting with its conflicting paths
+ * (docs/companion-suggestion-pr-contract.md §2.5.1). It is decided once,
+ * when planned, and never again; every proposal is still based on the
+ * reviewed commit. Version 2, written only by unreleased builds that
+ * re-applied suggestions, adds `reappliedOnto`, the commit every proposal of
+ * that plan is based on (its markers are version 2 of the convention); it is
+ * still read and continued exactly as planned, and never written.
  * Each step that a person could see has its own record beside it,
  * `<statePath>.suggestion-<n>-branch|pull|labels` (format
  * 'sarif-to-comment.companion-step', version 1), claimed exclusively
@@ -63,13 +68,21 @@
  *   (src/github.cts's client).
  * continueCompanionPublication(identity, internals?) -> Promise<Outcome>
  *   For an existing plan: identity mismatches are refused locally
- *   (PublicationStateError 'state-mismatch') before any request. When a
- *   suggestion's steps are not all complete, the pull request's head is read
- *   (read-only) and compared with the plan's base (reappliedOnto, else the
- *   reviewed commit): a base that is no longer part of the branch is
- *   reported as `baseCheck` on the outcome, and nothing is re-decided
+ *   (PublicationStateError 'state-mismatch') before any request. When some
+ *   suggestion's steps are not all complete and no step was refused, the
+ *   pull request's head is read (read-only) before each suggestion still to
+ *   be created: for a version-3 plan it is compared with the head the
+ *   suggestions were projected onto, otherwise with the plan's base
+ *   (reappliedOnto, else the reviewed commit). A projection that no longer
+ *   applies, or a base that is no longer part of the branch, is reported as
+ *   `baseCheck` on the outcome (the last such read), and nothing is
+ *   re-decided or projected again
  *   (docs/companion-suggestion-pr-contract.md §2.10). A failed read is
  *   reported the same way, as unknown, never as a failure.
+ *   On every call whose outcome is published, each suggestion projected to
+ *   conflict has GitHub's `mergeable` read back (at most 4 reads, waiting 2,
+ *   3 and 5 seconds while GitHub has not computed it) and reported as
+ *   observed: 'mergeable', 'conflicting', or 'unknown' (never a failure).
  * hasCompanionPlan(statePath, internals?) -> boolean
  *   Whether the file at the state path is a plan (never guessed further:
  *   anything else is for the version-1 reader to accept or refuse).
@@ -77,7 +90,9 @@
  * Outcome (private; presented by src/publish-sarif-review.cts), each with
  * the plan's `warnings` ([] when it records none), on the call that planned
  * the publication and on every later call alike:
- *   { status: 'published', review, via, receiptPersisted, suggestions }
+ *   { status: 'published', review, via, receiptPersisted, suggestions,
+ *     projectedOnto?, reappliedOnto? }   (suggestions[i].mergeable for each
+ *     one projected to conflict)
  *   { status: 'uncertain', step, suggestion?, detail, established, cause? }
  *   { status: 'rejected', step, suggestion?, httpStatus, detail, established,
  *     via: 'response' | 'record' }
@@ -157,6 +172,16 @@ export interface ICompanionTransport {
   readSuggestionTarget?(request: { readonly owner: string; readonly repo: string; readonly pullNumber: number }): Promise<{ readonly headSha: string }>;
   /** Read only on a retry with work left, when the head is not the plan's base. */
   compareCommits?(request: { readonly owner: string; readonly repo: string; readonly base: string; readonly head: string }): Promise<string>;
+  /** Read only once the publication is published, for each suggestion projected to conflict. */
+  readPullMergeability?(request: { readonly owner: string; readonly repo: string; readonly pullNumber: number }): Promise<{ readonly mergeable: boolean | null }>;
+}
+
+/**
+ * The private seams of a companion publication: the file system (as for any
+ * publication) and how to wait between reads of GitHub's `mergeable`.
+ */
+export interface ICompanionInternals extends IPublicationInternals {
+  readonly wait?: (milliseconds: number) => Promise<void>;
 }
 
 /**
@@ -167,7 +192,8 @@ export interface ICompanionTransport {
  */
 export type BaseCheck =
   | { readonly kind: 'changed'; readonly base: string; readonly head: string }
-  | { readonly kind: 'unknown'; readonly base: string; readonly detail: string };
+  | { readonly kind: 'projection-stale'; readonly projectedHead: string; readonly head: string }
+  | { readonly kind: 'unknown'; readonly base: string; readonly projected: boolean; readonly detail: string };
 
 /** The identity every call is checked against. */
 export interface ICompanionIdentity {
@@ -188,8 +214,12 @@ export interface IStartCompanionInput extends ICompanionIdentity {
   readonly labels: readonly string[];
   /** Whether the pull requests are created ready for review instead of as drafts. */
   readonly ready: boolean;
-  /** The commit the suggestions are re-applied onto after a rewritten history; absent when they are based on the reviewed commit. */
-  readonly reappliedOnto?: string;
+  /**
+   * The head and merge base the suggestions were projected onto, when the
+   * reviewed commit was not an ancestor of the head; each suggestion's
+   * verdict is its prepared companion's `projection`.
+   */
+  readonly projection?: { readonly head: string; readonly mergeBase: string };
   /** Preparation's warnings and notes, recorded with the plan and reported by every call for this state path. */
   readonly warnings: readonly IDiagnostic[];
   /** The resolved delivery policy the publication was planned under, recorded with the plan (docs/delivery-policy-contract.md §13). */
@@ -206,8 +236,8 @@ interface IPlanSuggestion extends IPreparedCompanion {
 /** The plan record (see the module documentation). */
 interface IPlanRecord {
   readonly format: typeof PLAN_FORMAT;
-  /** 1, or 2 exactly when `reappliedOnto` is present. */
-  readonly version: typeof RECORD_VERSION | typeof REAPPLIED_PLAN_VERSION;
+  /** 1; 3 exactly when `projection` is present; 2 (read only) exactly when `reappliedOnto` is present. */
+  readonly version: typeof RECORD_VERSION | typeof REAPPLIED_PLAN_VERSION | typeof PROJECTED_PLAN_VERSION;
   readonly publication: string;
   readonly destination: IDestination;
   readonly reviewedCommit: string;
@@ -217,8 +247,10 @@ interface IPlanRecord {
   readonly headRef: string;
   readonly labels: readonly string[];
   readonly ready: boolean;
-  /** The commit every proposal is based on after a rewritten history (version 2 only). */
+  /** The commit every proposal of a version-2 plan is based on (read only, never written). */
   readonly reappliedOnto?: string;
+  /** What each suggestion was projected onto, and its verdict (version 3 only). */
+  readonly projection?: IPlanProjection;
   /** The resolved delivery policy, with each value's source (docs/delivery-policy-contract.md §13). */
   readonly delivery: IResolvedDeliveryPolicy;
   readonly suggestions: readonly IPlanSuggestion[];
@@ -226,6 +258,14 @@ interface IPlanRecord {
   /** Preparation's warnings; present exactly when there are any. */
   readonly warnings?: readonly IDiagnostic[];
   readonly planFingerprint: string;
+}
+
+/** A version-3 plan's projection record (docs/companion-suggestion-pr-contract.md §2.9). */
+interface IPlanProjection {
+  readonly head: string;
+  readonly mergeBase: string;
+  /** One per suggestion, in order: faithful (no conflicts) or conflicting in the paths named. */
+  readonly suggestions: readonly { readonly verdict: 'faithful' | 'conflicts'; readonly conflicts: readonly string[] }[];
 }
 
 /** The three steps a person can see, per suggestion. */
@@ -276,7 +316,12 @@ export interface ICompanionSuggestionRef {
   readonly number: number;
   readonly htmlUrl: string;
   readonly branch: string;
+  /** GitHub's `mergeable`, read back for a suggestion projected to conflict (absent for any other). */
+  readonly mergeable?: ObservedMergeability;
 }
+
+/** What GitHub reported about a suggestion pull request's mergeability, or that it had not computed it (or could not be read). */
+export type ObservedMergeability = 'mergeable' | 'conflicting' | 'unknown';
 
 /** What is already established when a publication stops: per suggestion, its branch and pull request if known. */
 export interface IEstablished {
@@ -297,7 +342,9 @@ export interface ICompanionPublished {
   readonly headRef: string;
   readonly labels: readonly string[];
   readonly ready: boolean;
-  /** The commit the suggestions were re-applied onto, when they were. */
+  /** The head the suggestions were projected onto, when they were (a version-3 plan). */
+  readonly projectedOnto?: string;
+  /** The commit a version-2 plan's suggestions were re-applied onto. */
   readonly reappliedOnto?: string;
   readonly baseCheck?: BaseCheck;
 }
@@ -341,8 +388,13 @@ type UnknownObject = Readonly<Record<string, unknown>>;
 const PLAN_FORMAT = 'sarif-to-comment.companion-publication-state';
 const STEP_FORMAT = 'sarif-to-comment.companion-step';
 const RECORD_VERSION = 1;
-/** The plan version whose suggestions are re-applied onto a rewritten head. */
+/** The plan version whose suggestions an unreleased build re-applied onto a rewritten head: read and continued, never written. */
 const REAPPLIED_PLAN_VERSION = 2;
+/** The plan version whose suggestions were projected onto the head after a rewritten history. */
+const PROJECTED_PLAN_VERSION = 3;
+
+/** How long to wait between reads of GitHub's `mergeable` while it has not computed it (four reads at most). */
+const MERGEABILITY_WAITS: readonly number[] = [2000, 3000, 5000];
 
 const FULL_SHA = /^[0-9a-f]{40}$/;
 const FINGERPRINT = /^sha256:[0-9a-f]{64}$/;
@@ -409,8 +461,9 @@ function isPreparedComment(value: unknown): value is PreparedComment {
 function planProblem(record: unknown): string | null {
   if (!isPlainObject(record) || record['format'] !== PLAN_FORMAT) return 'not a companion publication plan';
   const version = record['version'];
-  if (version !== RECORD_VERSION && version !== REAPPLIED_PLAN_VERSION) return 'unsupported plan version';
-  const keys = [...(version === RECORD_VERSION ? PLAN_KEYS : [...PLAN_KEYS, 'reappliedOnto']), ...(Object.hasOwn(record, 'warnings') ? ['warnings'] : [])];
+  if (version !== RECORD_VERSION && version !== REAPPLIED_PLAN_VERSION && version !== PROJECTED_PLAN_VERSION) return 'unsupported plan version';
+  const own = version === REAPPLIED_PLAN_VERSION ? ['reappliedOnto'] : version === PROJECTED_PLAN_VERSION ? ['projection'] : [];
+  const keys = [...PLAN_KEYS, ...own, ...(Object.hasOwn(record, 'warnings') ? ['warnings'] : [])];
   if (!hasExactKeys(record, keys)) return 'plan fields are not the expected set';
   const destination = record['destination'];
   if (!isPlainObject(destination) || !hasExactKeys(destination, ['owner', 'pullNumber', 'repo'])
@@ -432,6 +485,10 @@ function planProblem(record: unknown): string | null {
   if (typeof record['ready'] !== 'boolean') return 'malformed ready setting';
   const suggestions = record['suggestions'];
   if (!isList(suggestions) || suggestions.length === 0) return 'no suggestions';
+  if (version === PROJECTED_PLAN_VERSION) {
+    const problem = projectionProblem(record['projection'], record['reviewedCommit'], suggestions.length);
+    if (problem !== null) return `malformed projection (${problem})`;
+  }
   for (const [i, s] of suggestions.entries()) {
     if (!isPlainObject(s) || !hasExactKeys(s, SUGGESTION_KEYS)) return `suggestion ${String(i + 1)} fields are not the expected set`;
     const id = s['id'];
@@ -476,6 +533,22 @@ function planProblem(record: unknown): string | null {
   }
   const { planFingerprint, ...rest } = record;
   if (typeof planFingerprint !== 'string' || planFingerprint !== fingerprintOf(rest)) return 'the plan does not match its fingerprint';
+  return null;
+}
+
+/** Why a version-3 plan's `projection` is not consistent with its reviewed commit and suggestions, or null. */
+function projectionProblem(projection: unknown, reviewedCommit: unknown, count: number): string | null {
+  if (!isPlainObject(projection) || !hasExactKeys(projection, ['head', 'mergeBase', 'suggestions'])) return 'fields are not the expected set';
+  const { head, mergeBase, suggestions } = projection;
+  if (typeof head !== 'string' || !FULL_SHA.test(head) || head === reviewedCommit) return 'malformed head';
+  if (typeof mergeBase !== 'string' || !FULL_SHA.test(mergeBase)) return 'malformed merge base';
+  if (!isList(suggestions) || suggestions.length !== count) return 'not one verdict per suggestion';
+  for (const verdict of suggestions) {
+    if (!isPlainObject(verdict) || !hasExactKeys(verdict, ['conflicts', 'verdict'])) return 'a verdict is malformed';
+    const conflicts = verdict['conflicts'];
+    if (!isList(conflicts) || !conflicts.every(isNonEmptyString)) return 'a verdict is malformed';
+    if (verdict['verdict'] === 'faithful' ? conflicts.length !== 0 : verdict['verdict'] !== 'conflicts' || conflicts.length === 0) return 'a verdict is malformed';
+  }
   return null;
 }
 
@@ -577,16 +650,16 @@ export function hasCompanionPlan(statePath: string, internals: IPublicationInter
 }
 
 /** Starts a new publication under `statePath`, or continues the plan another invocation claimed first. */
-export async function startCompanionPublication(input: IStartCompanionInput, internals: IPublicationInternals = {}): Promise<CompanionOutcome> {
+export async function startCompanionPublication(input: IStartCompanionInput, internals: ICompanionInternals = {}): Promise<CompanionOutcome> {
   const fs = internals.fs || nodeFs;
   const authorId = await authenticatedUserId(input.transport);
   const publication = crypto.randomUUID();
   const { owner, repo, pullNumber } = input.destination;
-  const reapplied = input.reappliedOnto === undefined ? {} : { reappliedOnto: input.reappliedOnto };
-  const target: ISuggestionContext = { owner, repo, pullNumber, reviewedCommit: input.reviewedCommit, headRef: input.headRef, ready: input.ready, ...reapplied };
+  const target: ISuggestionContext = { owner, repo, pullNumber, reviewedCommit: input.reviewedCommit, headRef: input.headRef, ready: input.ready };
+  const projection = planProjection(input);
   const suggestions = input.suggestions.companions.map((companion): IPlanSuggestion => {
     const id = crypto.randomUUID();
-    const marker = formatSuggestionMarker({ id, batch: publication, owner, repo, pullNumber, reviewedCommit: input.reviewedCommit, ...reapplied });
+    const marker = formatSuggestionMarker({ id, batch: publication, owner, repo, pullNumber, reviewedCommit: input.reviewedCommit });
     return {
       title: companion.title,
       commitMessage: companion.commitMessage,
@@ -599,7 +672,7 @@ export async function startCompanionPublication(input: IStartCompanionInput, int
   });
   const unsigned = {
     format: PLAN_FORMAT,
-    version: input.reappliedOnto === undefined ? RECORD_VERSION : REAPPLIED_PLAN_VERSION,
+    version: projection === undefined ? RECORD_VERSION : PROJECTED_PLAN_VERSION,
     publication,
     destination: { owner, repo, pullNumber },
     reviewedCommit: input.reviewedCommit,
@@ -609,7 +682,7 @@ export async function startCompanionPublication(input: IStartCompanionInput, int
     headRef: input.headRef,
     labels: [...input.labels],
     ready: input.ready,
-    ...reapplied,
+    ...(projection === undefined ? {} : { projection }),
     delivery: input.delivery,
     suggestions,
     review: { sections: input.suggestions.sections, comments: input.comments },
@@ -620,7 +693,23 @@ export async function startCompanionPublication(input: IStartCompanionInput, int
     // Another invocation claimed this identity first; continue its plan.
     return continueCompanionPublication(input, internals);
   }
-  return withPlanWarnings(plan, await drive(new Publication(fs, input, plan, authorId)));
+  return withPlanWarnings(plan, await drive(new Publication(fs, input, plan, authorId, false), internals));
+}
+
+/**
+ * The projection record of a new plan (version 3), from the head and merge
+ * base the suggestions were projected onto and each prepared companion's
+ * verdict; undefined when nothing was projected. Every companion of a
+ * projected publication carries its projection.
+ */
+function planProjection(input: IStartCompanionInput): IPlanProjection | undefined {
+  if (input.projection === undefined) return undefined;
+  const verdicts = input.suggestions.companions.map((companion) => {
+    const projected = companion.projection;
+    if (projected === undefined) throw new Error('Internal error: a companion of a projected publication has no projection.');
+    return { verdict: projected.verdict, conflicts: [...projected.conflicts] };
+  });
+  return { head: input.projection.head, mergeBase: input.projection.mergeBase, suggestions: verdicts };
 }
 
 /**
@@ -632,32 +721,36 @@ function withPlanWarnings(plan: IPlanRecord, outcome: StepsOutcome): CompanionOu
 }
 
 /** Continues the plan at `statePath` (see the module documentation). */
-export async function continueCompanionPublication(identity: ICompanionIdentity, internals: IPublicationInternals = {}): Promise<CompanionOutcome> {
+export async function continueCompanionPublication(identity: ICompanionIdentity, internals: ICompanionInternals = {}): Promise<CompanionOutcome> {
   const fs = internals.fs || nodeFs;
   const plan = readPlan(fs, identity.statePath);
   assertSameIdentity(plan, identity);
-  const publication = new Publication(fs, identity, plan, null);
-  const baseCheck = publication.hasSuggestionWorkLeft() ? await checkPlannedBase(plan, identity.transport) : undefined;
-  const outcome = await drive(publication);
-  return withPlanWarnings(plan, baseCheck === undefined ? outcome : { ...outcome, baseCheck });
+  const publication = new Publication(fs, identity, plan, null, true);
+  return withPlanWarnings(plan, await drive(publication, internals));
 }
 
 /**
- * Whether the plan's base (reappliedOnto, else the reviewed commit) is still
- * part of the pull request's branch; read-only, and never a reason to stop:
- * a failed read is reported as unknown. Nothing is re-decided either way.
+ * Whether the plan still holds for the pull request's branch, read before a
+ * suggestion still to be created (contract §2.10); read-only, and never a
+ * reason to stop: a failed read is reported as unknown. For a version-3 plan,
+ * whether the head is still the one its suggestions were projected onto;
+ * otherwise whether its base (reappliedOnto, else the reviewed commit) is
+ * still part of the branch. Nothing is re-decided either way.
  */
 async function checkPlannedBase(plan: IPlanRecord, transport: ICompanionTransport): Promise<BaseCheck | undefined> {
-  const base = plan.reappliedOnto ?? plan.reviewedCommit;
   const { owner, repo, pullNumber } = plan.destination;
-  if (transport.readSuggestionTarget === undefined || transport.compareCommits === undefined) return undefined;
+  const projectedHead = plan.projection?.head;
+  const base = projectedHead ?? plan.reappliedOnto ?? plan.reviewedCommit;
+  if (transport.readSuggestionTarget === undefined || (projectedHead === undefined && transport.compareCommits === undefined)) return undefined;
   try {
     const { headSha: head } = await transport.readSuggestionTarget({ owner, repo, pullNumber });
     if (head === base) return undefined;
+    if (projectedHead !== undefined) return { kind: 'projection-stale', projectedHead, head };
+    if (transport.compareCommits === undefined) return undefined;
     const comparison = await transport.compareCommits({ owner, repo, base, head });
     return comparison === 'ahead' || comparison === 'identical' ? undefined : { kind: 'changed', base, head };
   } catch (err) {
-    return { kind: 'unknown', base, detail: String(thrownMessage(err)) };
+    return { kind: 'unknown', base, projected: projectedHead !== undefined, detail: String(thrownMessage(err)) };
   }
 }
 
@@ -691,12 +784,18 @@ class Publication {
   readonly plan: IPlanRecord;
   private author: number | null;
   readonly established: IEstablished[];
+  /** Whether this call continues a plan another call made, and so re-reads the head before each suggestion still to be created. */
+  readonly continuing: boolean;
+  /** The last check of the branch this call made, when it found something to report. */
+  baseCheck: BaseCheck | undefined;
 
-  constructor(fs: IPublicationFs, identity: ICompanionIdentity, plan: IPlanRecord, author: number | null) {
+  constructor(fs: IPublicationFs, identity: ICompanionIdentity, plan: IPlanRecord, author: number | null, continuing: boolean) {
     this.fs = fs;
     this.identity = identity;
     this.plan = plan;
     this.author = author;
+    this.continuing = continuing;
+    this.baseCheck = undefined;
     this.established = plan.suggestions.map((_, i) => ({ suggestion: i + 1, branch: null, pull: null }));
   }
 
@@ -754,7 +853,23 @@ class Publication {
   hasSuggestionWorkLeft(): boolean {
     const steps: readonly StepName[] = ['branch', 'pull', 'labels'];
     const refused = this.plan.suggestions.some((_, index) => steps.some((step) => this.readStep(index, step)?.phase === 'rejected'));
-    return !refused && this.plan.suggestions.some((_, index) => this.readStep<ILabelsStep>(index, 'labels')?.phase !== 'completed');
+    return !refused && this.plan.suggestions.some((_, index) => this.suggestionLeft(index));
+  }
+
+  /** Whether some step of suggestion `index` is not complete (read from the local records only). */
+  suggestionLeft(index: number): boolean {
+    return this.readStep<ILabelsStep>(index, 'labels')?.phase !== 'completed';
+  }
+
+  /**
+   * On a continuing call with work left, re-reads the head before suggestion
+   * `index` is created, when it is still to be (contract §2.10), keeping
+   * what the read found to report. Nothing is re-decided.
+   */
+  async recheckBefore(index: number, workLeft: boolean): Promise<void> {
+    if (!this.continuing || !workLeft || !this.suggestionLeft(index)) return;
+    const check = await checkPlannedBase(this.plan, this.transport);
+    if (check !== undefined) this.baseCheck = check;
   }
 
   base(index: number): IStepBase {
@@ -803,6 +918,7 @@ class Publication {
     if (record === undefined) {
       await this.requireAuthor();
       const { commit } = await this.transport.createProposalCommit({
+        // A version-2 plan is continued as planned, on the head it re-applied onto.
         ...this.where, parent: this.plan.reappliedOnto ?? this.plan.reviewedCommit, message: s.commitMessage, changes: s.changes,
       });
       const intent: IBranchStep = { ...this.base(index), step: 'branch', commit, phase: 'sending' };
@@ -968,10 +1084,22 @@ class Publication {
   }
 }
 
-/** Runs every step in order: per suggestion its branch, pull request and labels; then the review. */
-async function drive(publication: Publication): Promise<StepsOutcome> {
+/**
+ * Runs every step in order: per suggestion its branch, pull request and
+ * labels (on a continuing call, after re-reading the head when it is still
+ * to be created); then the review. The outcome carries the last branch check
+ * that found something to report.
+ */
+async function drive(publication: Publication, internals: ICompanionInternals): Promise<StepsOutcome> {
+  const outcome = await steps(publication, internals);
+  return publication.baseCheck === undefined ? outcome : { ...outcome, baseCheck: publication.baseCheck };
+}
+
+async function steps(publication: Publication, internals: ICompanionInternals): Promise<StepsOutcome> {
   const pulls: { readonly number: number; readonly htmlUrl: string }[] = [];
+  const workLeft = publication.continuing && publication.hasSuggestionWorkLeft();
   for (const index of publication.plan.suggestions.keys()) {
+    await publication.recheckBefore(index, workLeft);
     const branch = await publication.branch(index);
     if (!branch.done) return branch.outcome;
     const pull = await publication.pull(index, branch.value);
@@ -980,11 +1108,34 @@ async function drive(publication: Publication): Promise<StepsOutcome> {
     if (!labelled.done) return labelled.outcome;
     pulls.push(pull.value);
   }
-  return review(publication, pulls);
+  return review(publication, pulls, internals);
+}
+
+/**
+ * GitHub's `mergeable` for a suggestion pull request projected to conflict:
+ * read up to 4 times, waiting between reads while GitHub has not computed it
+ * (null), and 'unknown' if it still has not, or a read fails. An observation,
+ * never a reason to fail.
+ */
+async function observeMergeability(transport: ICompanionTransport, where: { readonly owner: string; readonly repo: string }, number: number, internals: ICompanionInternals): Promise<ObservedMergeability> {
+  if (transport.readPullMergeability === undefined) return 'unknown';
+  const wait = internals.wait ?? ((milliseconds: number) => new Promise<void>((resolve) => { setTimeout(resolve, milliseconds); }));
+  for (let attempt = 0; ; attempt++) {
+    let mergeable: boolean | null;
+    try {
+      ({ mergeable } = await transport.readPullMergeability({ ...where, pullNumber: number }));
+    } catch {
+      return 'unknown';
+    }
+    if (mergeable !== null) return mergeable ? 'mergeable' : 'conflicting';
+    const delay = MERGEABILITY_WAITS[attempt];
+    if (delay === undefined) return 'unknown';
+    await wait(delay);
+  }
 }
 
 /** The review, published by the version-1 core at `<statePath>.review` once every suggestion exists. */
-async function review(publication: Publication, pulls: readonly { readonly number: number; readonly htmlUrl: string }[]): Promise<StepsOutcome> {
+async function review(publication: Publication, pulls: readonly { readonly number: number; readonly htmlUrl: string }[], internals: ICompanionInternals): Promise<StepsOutcome> {
   const { plan } = publication;
   const identity = {
     destination: plan.destination,
@@ -1009,11 +1160,19 @@ async function review(publication: Publication, pulls: readonly { readonly numbe
     return { number: pull.number, htmlUrl: pull.htmlUrl, branch: s.branch };
   });
   switch (result.status) {
-    case 'published':
+    case 'published': {
+      const observed: ICompanionSuggestionRef[] = [];
+      for (const [i, suggestion] of suggestions.entries()) {
+        const conflicting = plan.projection?.suggestions[i]?.verdict === 'conflicts';
+        observed.push(conflicting ? { ...suggestion, mergeable: await observeMergeability(publication.transport, publication.where, suggestion.number, internals) } : suggestion);
+      }
       return {
-        status: 'published', review: result.review, via: result.via, receiptPersisted: result.receiptPersisted, suggestions,
-        headRef: plan.headRef, labels: plan.labels, ready: plan.ready, ...(plan.reappliedOnto === undefined ? {} : { reappliedOnto: plan.reappliedOnto }),
+        status: 'published', review: result.review, via: result.via, receiptPersisted: result.receiptPersisted, suggestions: observed,
+        headRef: plan.headRef, labels: plan.labels, ready: plan.ready,
+        ...(plan.projection === undefined ? {} : { projectedOnto: plan.projection.head }),
+        ...(plan.reappliedOnto === undefined ? {} : { reappliedOnto: plan.reappliedOnto }),
       };
+    }
     case 'uncertain':
       return { status: 'uncertain', step: 'review', detail: result.detail, established: publication.established, ...(result.cause === undefined ? {} : { cause: result.cause }) };
     case 'rejected':

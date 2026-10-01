@@ -699,6 +699,11 @@ export const DIAGNOSTIC_CATALOG = {
     title: 'Companion pull request options have no effect',
     remedies: [],
   },
+  'companion-conflicts-at-head': {
+    severity: 'warning',
+    title: "A suggestion pull request is projected to conflict with the pull request's head",
+    remedies: ['Review the pull request\'s current head again, and publish that review.', 'Or resolve the conflict when merging the suggestion pull request.'],
+  },
   'too-many-comments': {
     severity: 'error',
     title: 'The review needs too many inline comments',

@@ -4,7 +4,8 @@
  *
  * The body of the companion pull request itself: the ordinary reference to
  * the reviewed pull request and commit (which creates GitHub's backlink), the
- * re-application paragraph when it applies, what merging it applies, its
+ * projection section when the reviewed commit is no longer part of the
+ * branch (src/presentation/companion-projection.cts), what merging it applies, its
  * lifecycle note, the findings that carry its changes, and — last, on its own
  * line — the structured marker that relates it to the original pull request
  * (docs/suggestion-pr-convention.md §7). The marker is supplied by the caller
@@ -18,24 +19,37 @@
  *
  * Rendering:
  *
- *   description = "Suggested in a review of #PULL at commit REVIEWED.\n\n" [ re-applied ]
+ *   description = "Suggested in a review of #PULL at commit REVIEWED.\n\n" [ projection "\n\n" ]
  *                 merging (subject "this pull request") "\n\n" change list "\n\n" lifecycle note
  *                 "\n\n---\n\n" findings "\n\n" marker
- *   bundle      = "Suggested in a review of #PULL at commit REVIEWED.\n\n" [ re-applied ]
+ *   bundle      = "Suggested in a review of #PULL at commit REVIEWED.\n\n" [ projection "\n\n" ]
  *                 "This pull request bundles M proposals, each in its own section below. Merging it into "
  *                 code span of head ref " applies all of them; bundling them does not mean they depend on one another.\n\n"
  *                 lifecycle note { "\n\n---\n\n" section } "\n\n" marker
  *   section     = "**Proposal K of M:** " ( "this change" | "these J changes together" ) ":\n\n" change list "\n\n" findings
  */
 
-import { mergeSentence, reappliedParagraph } from './companion-changes.cjs';
+import { mergeSentence } from './companion-changes.cjs';
 import type { ICompanionContent, ICompanionTarget } from './companion-changes.cjs';
+import { renderCompanionProjection } from './companion-projection.cjs';
+import type { ICompanionProjectionView } from './companion-projection.cjs';
 import { SEPARATOR, codeSpan } from './markdown.cjs';
 
+/** The projection section and its paragraph break, or nothing when the suggestion was not projected. */
+function projectionPart(target: ICompanionTarget, projection: ICompanionProjectionView | undefined): string {
+  return projection === undefined ? '' : `${renderCompanionProjection(projection, target)}\n\n`;
+}
+
 /** The companion pull request's body, ending with its marker line. */
-export function renderCompanionDescription(companion: ICompanionContent, target: ICompanionTarget, lifecycleNote: string, marker: string): string {
+export function renderCompanionDescription(
+  companion: ICompanionContent,
+  target: ICompanionTarget,
+  lifecycleNote: string,
+  marker: string,
+  projection?: ICompanionProjectionView,
+): string {
   return `Suggested in a review of #${String(target.pullNumber)} at commit ${target.reviewedCommit}.`
-    + `\n\n${reappliedParagraph(target, 'that commit')}${mergeSentence(companion.changeCount, 'this pull request', target.headRef)}\n\n${companion.changeLines}\n\n${lifecycleNote}`
+    + `\n\n${projectionPart(target, projection)}${mergeSentence(companion.changeCount, 'this pull request', target.headRef)}\n\n${companion.changeLines}\n\n${lifecycleNote}`
     + `${SEPARATOR}${companion.items}\n\n${marker}`;
 }
 
@@ -54,14 +68,15 @@ export function renderCompanionBundleDescription(
   target: ICompanionTarget,
   lifecycleNote: string,
   marker: string,
+  projection?: ICompanionProjectionView,
 ): string {
   const [only] = sections;
-  if (sections.length === 1 && only !== undefined) return renderCompanionDescription(only, target, lifecycleNote, marker);
+  if (sections.length === 1 && only !== undefined) return renderCompanionDescription(only, target, lifecycleNote, marker, projection);
   const count = String(sections.length);
   const parts = sections.map((section, i) =>
     `**Proposal ${String(i + 1)} of ${count}:** ${proposalChanges(section.changeCount)}:\n\n${section.changeLines}\n\n${section.items}`);
   return `Suggested in a review of #${String(target.pullNumber)} at commit ${target.reviewedCommit}.`
-    + `\n\n${reappliedParagraph(target, 'that commit')}This pull request bundles ${count} proposals, each in its own section below. `
+    + `\n\n${projectionPart(target, projection)}This pull request bundles ${count} proposals, each in its own section below. `
     + `Merging it into ${codeSpan(target.headRef)} applies all of them; bundling them does not mean they depend on one another.\n\n${lifecycleNote}`
     + `${SEPARATOR}${parts.join(SEPARATOR)}\n\n${marker}`;
 }

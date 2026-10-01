@@ -132,7 +132,7 @@ import * as crypto from 'node:crypto';
 import * as path from 'node:path';
 
 import { continueCompanionPublication, hasCompanionPlan, startCompanionPublication } from './companion-publication.cjs';
-import type { BaseCheck, CompanionOutcome, ICompanionTransport, IEstablished } from './companion-publication.cjs';
+import type { BaseCheck, CompanionOutcome, ICompanionInternals, ICompanionTransport, IEstablished } from './companion-publication.cjs';
 import { createGitHubClient as defaultCreateGitHubClient } from './github.cjs';
 import type { ICreateGitHubClientOptions } from './github.cjs';
 import type { IReviewPresentation } from './presentation/customization.cjs';
@@ -392,6 +392,16 @@ export interface IPublishedSuggestion {
   readonly url: string;
   /** Its proposal branch, which targets the reviewed pull request's head branch. */
   readonly branch: string;
+  /**
+   * GitHub's own report of whether it can be merged, read back once it
+   * exists, present only for a suggestion pull request that was projected to
+   * conflict with the pull request's head after a rewritten history (the
+   * `companion-conflicts-at-head` warning): `'mergeable'`, `'conflicting'`,
+   * or `'unknown'` when GitHub had not computed it after a bounded wait, or
+   * could not be read. It is an observation made on each call that reports
+   * the publication, reported beside the projection and never in its place.
+   */
+  readonly mergeable?: 'mergeable' | 'conflicting' | 'unknown';
 }
 
 /**
@@ -514,6 +524,8 @@ type CreatePublishingClient = (options: ICreateGitHubClientOptions) => IContextC
  */
 export interface IPublishSarifReviewInternals {
   readonly createGitHubClient?: CreatePublishingClient | undefined;
+  /** How a companion publication waits between reads of GitHub's `mergeable` (src/companion-publication.cts). */
+  readonly wait?: ((milliseconds: number) => Promise<void>) | undefined;
 }
 
 /** Everything the operation uses, captured and validated before the first await. */
@@ -864,11 +876,19 @@ function baseCheckMarkdown(check: BaseCheck | undefined, captured: ICapturedInpu
 /** The lead and the rest of the base-check paragraph (contract §2.10). */
 function baseCheckText(check: BaseCheck, captured: ICapturedInput): readonly [lead: string, rest: string] {
   const pull = `#${String(captured.destination.pullNumber)}`;
-  return check.kind === 'changed'
-    ? [`The branch of ${pull} changed since these suggestions were planned`, `they are based on commit ${code(check.base)}, which is no longer part of it `
-      + `(its head is now ${code(check.head)}). The suggestion pull requests still to be created are created on that commit, as planned; nothing is re-decided.`]
-    : [`Whether the branch of ${pull} changed since these suggestions were planned is not known`, `they are based on commit ${code(check.base)}, `
-      + `and the branch could not be read (${check.detail}). Nothing is re-decided.`];
+  switch (check.kind) {
+    case 'changed':
+      return [`The branch of ${pull} changed since these suggestions were planned`, `they are based on commit ${code(check.base)}, which is no longer part of it `
+        + `(its head is now ${code(check.head)}). The suggestion pull requests still to be created are created on that commit, as planned; nothing is re-decided.`];
+    case 'projection-stale':
+      return [`The head of ${pull} changed since these suggestions were projected`, `they were projected onto commit ${code(check.projectedHead)}, `
+        + `and the head is now ${code(check.head)}, so that projection no longer applies. The suggestion pull requests still to be created are created on `
+        + 'the reviewed commit, as planned; nothing is re-decided or projected again.'];
+    case 'unknown':
+      return [`Whether the branch of ${pull} changed since these suggestions were planned is not known`,
+        `${check.projected ? `they were projected onto commit ${code(check.base)}` : `they are based on commit ${code(check.base)}`}, `
+        + `and the branch could not be read (${check.detail}). Nothing is re-decided.`];
+  }
 }
 
 /** The base-check paragraph as a diagnostic: a note that the branch moved, or a warning that it could not be read. */
@@ -877,23 +897,38 @@ function baseCheckDiagnostics(check: BaseCheck | undefined, captured: ICapturedI
   const [lead, rest] = baseCheckText(check, captured);
   const message = `${lead}: ${rest}`;
   const subject = destinationLabel(captured);
-  return [createDiagnostic(check.kind === 'changed' ? 'suggestion-branch-moved' : 'suggestion-branch-unreadable', message, { subject })];
+  return [createDiagnostic(check.kind === 'unknown' ? 'suggestion-branch-unreadable' : 'suggestion-branch-moved', message, { subject })];
+}
+
+/**
+ * The end of a suggestion's line in the published list when it was projected
+ * to conflict: what GitHub reported, as observed (contract §2.11).
+ */
+function observedMergeability(mergeable: IPublishedSuggestion['mergeable']): string {
+  switch (mergeable) {
+    case undefined: return '';
+    case 'mergeable': return ': projected to conflict; GitHub reports it as mergeable.';
+    case 'conflicting': return ': projected to conflict; GitHub reports it as conflicting.';
+    case 'unknown': return ': projected to conflict; GitHub has not reported whether it can be merged.';
+  }
 }
 
 function presentCompanion(outcome: CompanionOutcome, captured: ICapturedInput): IReported<PublishSarifReviewOutcome> {
   const { statePath } = captured;
   switch (outcome.status) {
     case 'published': {
-      const suggestions = outcome.suggestions.map((s) => ({ number: s.number, url: s.htmlUrl, branch: s.branch }));
-      const listed = suggestions.map((s) => `- [#${String(s.number)}](${s.url}) from ${code(s.branch)}`);
+      const suggestions = outcome.suggestions.map((s) => ({ number: s.number, url: s.htmlUrl, branch: s.branch, ...(s.mergeable === undefined ? {} : { mergeable: s.mergeable }) }));
+      const listed = suggestions.map((s) => `- [#${String(s.number)}](${s.url}) from ${code(s.branch)}${observedMergeability(s.mergeable)}`);
       const form = outcome.ready ? `ready for review, into ${code(outcome.headRef)}` : `drafts into ${code(outcome.headRef)}`;
-      const reapplied = outcome.reappliedOnto === undefined ? '' : `, re-applied onto commit ${code(outcome.reappliedOnto)}`;
+      const basis = outcome.projectedOnto !== undefined
+        ? `, proposed on the reviewed commit and projected onto the head ${code(outcome.projectedOnto)}`
+        : outcome.reappliedOnto === undefined ? '' : `, re-applied onto commit ${code(outcome.reappliedOnto)}`;
       const diagnostics = publishedDiagnostics(outcome, captured, outcome.baseCheck);
       const text = (full: boolean): string => [
         publishedMarkdown(outcome, captured, outcome.warnings, diagnostics, full),
         '',
         ...(full ? baseCheckMarkdown(outcome.baseCheck, captured) : []),
-        `Suggestion pull requests (${form}, labeled ${labelList(outcome.labels)}${reapplied}):`,
+        `Suggestion pull requests (${form}, labeled ${labelList(outcome.labels)}${basis}):`,
         '',
         ...listed,
       ].join('\n');
@@ -969,7 +1004,7 @@ function presentCompanion(outcome: CompanionOutcome, captured: ICapturedInput): 
 // Entry point
 // ---------------------------------------------------------------------------
 
-async function run(captured: ICapturedInput, createGitHubClient: CreatePublishingClient): Promise<IReported<PublishSarifReviewOutcome>> {
+async function run(captured: ICapturedInput, createGitHubClient: CreatePublishingClient, companionInternals: ICompanionInternals): Promise<IReported<PublishSarifReviewOutcome>> {
   const client = createGitHubClient({ token: captured.token, fetch: globalThis.fetch });
   const identity = {
     destination: captured.destination,
@@ -983,7 +1018,7 @@ async function run(captured: ICapturedInput, createGitHubClient: CreatePublishin
   // A companion plan is continued before anything else: its own identity
   // checks, then only the steps it still lacks.
   if (hasCompanionPlan(captured.statePath)) {
-    return presentCompanion(await continueCompanionPublication({ ...identity, transport: companionTransport(client) }), captured);
+    return presentCompanion(await continueCompanionPublication({ ...identity, transport: companionTransport(client) }, companionInternals), captured);
   }
   const existing = await recoverPublication(identity);
   if (existing.status !== 'missing') return present(existing, captured);
@@ -1008,10 +1043,10 @@ async function run(captured: ICapturedInput, createGitHubClient: CreatePublishin
       headRef: prepared.suggestionPullRequests.headRef,
       labels: prepared.suggestionPullRequests.labels,
       ready: prepared.suggestionPullRequests.ready,
-      ...(prepared.suggestionPullRequests.reappliedOnto === undefined ? {} : { reappliedOnto: prepared.suggestionPullRequests.reappliedOnto }),
+      ...(prepared.suggestionPullRequests.projection === undefined ? {} : { projection: prepared.suggestionPullRequests.projection }),
       warnings,
       delivery: prepared.delivery,
-    });
+    }, companionInternals);
     return presentCompanion(outcome, captured);
   }
 
@@ -1097,7 +1132,7 @@ export async function publishSarifReviewReported(
   const createGitHubClient = internals.createGitHubClient || defaultCreateGitHubClient;
   let reported: IReported<PublishSarifReviewOutcome>;
   try {
-    reported = await run(captured, createGitHubClient);
+    reported = await run(captured, createGitHubClient, internals.wait === undefined ? {} : { wait: internals.wait });
   } catch (err) {
     throw withoutCredential(err, captured.token);
   }

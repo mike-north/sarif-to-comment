@@ -97,7 +97,7 @@ import {
   warningsHeadline,
   withoutCredential,
 } from './review-preflight.cjs';
-import type { ICapturedReview, IContextClient, IDestinationReady, IReadySuggestionPullRequests, IReported, IReviewInputSpec } from './review-preflight.cjs';
+import type { ICapturedReview, IContextClient, IDestinationReady, IReported, IReviewInputSpec } from './review-preflight.cjs';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -252,7 +252,7 @@ function readyMarkdown(prepared: IDestinationReady, captured: ICapturedReview, s
     ? `${String(count)} suggestion pull request${plural}, ready for review, into`
     : `${String(count)} draft suggestion pull request${plural} into`;
   const suggestions = count === 0 || target === undefined ? [] : [
-    `Publication would also create ${created} ${code(target.headRef)}, labeled ${labelList(target.labels)}.${reappliedSentence(target, captured, count)}`,
+    `Publication would also create ${created} ${code(target.headRef)}, labeled ${labelList(target.labels)}.${projectionSentence(prepared, captured)}`,
     '',
   ];
   const headline = warningsHeadline(prepared.warnings, 'ready');
@@ -273,13 +273,27 @@ function readyMarkdown(prepared: IDestinationReady, captured: ICapturedReview, s
 
 /**
  * After a rewritten history, the sentence that says the suggestion pull
- * requests are re-applied onto the head (contract §2.8, §2.5.1); empty
- * otherwise.
+ * requests are proposed on the reviewed commit and were projected onto the
+ * head, with how many apply only their own changes and how many would
+ * conflict (contract §2.8, §2.5.1); empty when nothing was projected.
  */
-function reappliedSentence(target: IReadySuggestionPullRequests, captured: ICapturedReview, count: number): string {
-  if (target.reappliedOnto === undefined) return '';
-  const [they, change] = count === 1 ? ['it is', 'it changes'] : ['they are', 'they change'];
-  return ` The history of #${String(captured.destination.pullNumber)} was rewritten after the reviewed commit, so ${they} re-applied onto commit ${code(target.reappliedOnto)}, where everything ${change} is still exactly as reviewed.`;
+function projectionSentence(prepared: IDestinationReady, captured: ICapturedReview): string {
+  const head = prepared.suggestionPullRequests?.projection?.head;
+  const companions = prepared.suggestions?.companions ?? [];
+  if (head === undefined || companions.length === 0) return '';
+  const pull = `#${String(captured.destination.pullNumber)}`;
+  const conflicting = companions.filter((c) => c.projection?.verdict === 'conflicts').length;
+  const faithful = companions.length - conflicting;
+  if (companions.length === 1) {
+    return ` The history of ${pull} was rewritten after the reviewed commit, so it is proposed on that commit and was projected onto the head ${code(head)}: `
+      + (conflicting === 1 ? 'merging it would conflict.' : 'merging it applies only its own changes.');
+  }
+  const parts = [
+    ...(faithful > 0 ? [`merging ${String(faithful)} applies only ${faithful === 1 ? 'its' : 'their'} own changes`] : []),
+    ...(conflicting > 0 ? [`merging ${String(conflicting)} would conflict`] : []),
+  ];
+  return ` The history of ${pull} was rewritten after the reviewed commit, so the ${String(companions.length)} suggestion pull requests are proposed on that commit `
+    + `and were projected onto the head ${code(head)}: ${parts.join(', and ')}.`;
 }
 
 /** The incomplete report; the CLI's report leaves out the cause, which is its diagnostic. */
@@ -361,7 +375,6 @@ class OperationalFailures {
           context: fetched.context,
           readSource: this.observeReader(fetched.readSource),
           ...(fetched.fileExists === undefined ? {} : { fileExists: this.observeReader(fetched.fileExists) }),
-          ...(fetched.readEntry === undefined ? {} : { readEntry: this.observeReader(fetched.readEntry) }),
         };
       },
       getAuthenticatedUser: async () => {
@@ -374,6 +387,9 @@ class OperationalFailures {
       listReviews: this.observeCall(client.listReviews),
       ...(client.readSuggestionTarget === undefined ? {} : { readSuggestionTarget: this.observeCall(client.readSuggestionTarget) }),
       ...(client.compareCommits === undefined ? {} : { compareCommits: this.observeCall(client.compareCommits) }),
+      ...(client.readComparison === undefined ? {} : { readComparison: this.observeCall(client.readComparison) }),
+      ...(client.readTreeRecursive === undefined ? {} : { readTreeRecursive: this.observeCall(client.readTreeRecursive) }),
+      ...(client.readBlobBytes === undefined ? {} : { readBlobBytes: this.observeCall(client.readBlobBytes) }),
       ...(client.listHeadRefForcePushes === undefined ? {} : { listHeadRefForcePushes: this.observeCall(client.listHeadRefForcePushes) }),
       ...(client.findLabel === undefined ? {} : { findLabel: this.observeCall(client.findLabel) }),
       ...(client.readDefaultBranchFile === undefined ? {} : { readDefaultBranchFile: this.observeCall(client.readDefaultBranchFile) }),

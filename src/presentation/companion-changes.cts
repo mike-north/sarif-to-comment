@@ -8,8 +8,11 @@
  * an explicit group — as one proposal into the reviewed pull request's head
  * branch. These shared pieces say what merging it applies: the change list
  * (one line per change, in order of first appearance), the sentence that
- * introduces it, and, when the proposal was re-applied onto a rewritten
- * head, the paragraph that says so. They never decide what a companion holds.
+ * introduces it, and, for the review section of a suggestion that a plan
+ * written before re-application was removed re-applied onto a rewritten
+ * head, the paragraph that says so (docs/companion-suggestion-pr-contract.md
+ * §2.11: such a plan is continued as it was planned). They never decide what
+ * a companion holds.
  *
  * Rendering:
  *
@@ -34,7 +37,10 @@ export interface ICompanionTarget {
   readonly headRef: string;
   /** Whether the companion is created ready for review instead of as a draft. */
   readonly ready: boolean;
-  /** The commit the companion is re-applied onto after a rewritten history, when it is (contract §2.5.1). */
+  /**
+   * The commit a version-2 plan's companion was re-applied onto, when it was
+   * (contract §2.9, §2.11); new plans never re-apply.
+   */
   readonly reappliedOnto?: string;
 }
 
@@ -72,10 +78,10 @@ export function mergeSentence(changeCount: number, subject: string, headRef: str
 }
 
 /**
- * The paragraph that says a companion was re-applied onto a rewritten head
- * (contract §2.11), naming what it was rewritten after: "that commit" in the
- * companion's own description, whose first line names it, "the reviewed
- * commit" in the review. Empty when it was not re-applied.
+ * The paragraph that says a version-2 plan's companion was re-applied onto a
+ * rewritten head (contract §2.11), naming what it was rewritten after ("the
+ * reviewed commit" in the review). Empty when it was not re-applied, which
+ * is always the case for plans written since re-application was removed.
  */
 export function reappliedParagraph(target: Pick<ICompanionTarget, 'pullNumber' | 'reappliedOnto'>, after: string): string {
   if (target.reappliedOnto === undefined) return '';

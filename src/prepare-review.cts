@@ -39,15 +39,6 @@
  *                    // repository-validated provenance revision, and only with
  *                    // paths that resolved inside the repository. A thrown
  *                    // error is operational and propagates unchanged.
- *   readEntry?: async (commit, path) => { kind: 'file', blob, mode } |
- *                    { kind: 'absent' } | { kind: 'not-a-file', entry, path }
- *                    // trusted tree read at the same boundary: what stands
- *                    // at a path, never downloading a blob. Required with,
- *                    // and called only for, a head resolveRewrittenHead names.
- *                    // There, a readSource error whose `code` is
- *                    // 'undecodable-source' or 'source-too-large' (an edited
- *                    // file that is not source at the head) is a reason
- *                    // that suggestion cannot be re-applied, not a failure.
  *   fileExists?: async (commit, path) => boolean
  *                    // trusted existence check at the same boundary: whether
  *                    // a regular file exists there, without reading its
@@ -68,16 +59,17 @@
  *                                     // most once, the first time a unit's
  *                                     // `companion` availability is asked;
  *                                     // answers { headRef, ready,
- *                                     // unavailable?, resolveRewrittenHead? }:
+ *                                     // unavailable?, resolveProjection? }:
  *                                     // the head branch companions target,
  *                                     // whether they are created ready, the
  *                                     // obstacles that prevent every one
- *                                     // (a fork, another base), and the
- *                                     // pull request's head when the reviewed
- *                                     // commit is not its ancestor, onto
- *                                     // which each companion is re-applied
- *                                     // only when everything it changes is
- *                                     // identical there (contract §2.5.1)
+ *                                     // (a fork, another base), and, when
+ *                                     // the reviewed commit is not an
+ *                                     // ancestor of the head, the basis on
+ *                                     // which each companion's fidelity is
+ *                                     // projected before it is planned
+ *                                     // (src/companion-fidelity.cts,
+ *                                     // contract §2.5.1)
  *     maxComments?: number,           // default 100 inline comments
  *     maxCommentBodyChars?: number,   // default 60000 UTF-16 units per comment
  *                                     // body and for the review body
@@ -108,8 +100,8 @@
  *     evidence: Evidence[],   // one per SARIF result, in SARIF order
  *     warnings: Diagnostic[], markdown: string,
  *     suggestions?: { companions, sections, lifecycleNote } }  // only when the plan
- *       // has companion pull requests: each companion's exact changes
- *       // (re-applied onto the rewritten head when there is one), title,
+ *       // has companion pull requests: each companion's exact changes on the
+ *       // reviewed commit, its projection after a rewritten history, title,
  *       // commit message and the rendered sections of the proposals it holds
  *       // (several for a `single` bundle), and the body's sections (text, or
  *       // a reference to one proposal of one companion, rendered once its
@@ -255,9 +247,11 @@
  *   group's note and the body's guidance) is offered for an explicit group
  *   of one-change members; `review-body`, `manual-group` and the mixed
  *   manual group are always unavailable (§8.8). A companion cannot be made
- *   for an unsupported pull request, a unit that cannot be re-applied onto a
- *   rewritten head, a created file over 1,000,000 bytes, or a description
- *   over the comment limit (under `single`, the bundle's). At most 10
+ *   for an unsupported pull request, after a rewritten history one whose
+ *   projection is unfaithful (under `single`, the bundle's as planned so
+ *   far), a created file over 1,000,000 bytes, or a description over the
+ *   comment limit (under `single`, the bundle's). A companion projected to
+ *   conflict is planned with a `companion-conflicts-at-head` warning. At most 10
  *   companion pull requests, after bundling. Each obstacle carries the
  *   remedy its retired refusal code gave (§8.9). A limit that blocks the
  *   review after planning names the fallbacks that put proposals where it
@@ -314,7 +308,10 @@ import * as crypto from 'node:crypto';
 import type { SchemaObject, ValidateFunction } from 'ajv';
 import type AjvDraft04Module = require('ajv-draft-04');
 import type AjvFormatsModule = require('ajv-formats');
-import type { IReviewContext, PathEntry, ProposalChange } from './github.cjs';
+import type { IReviewContext, ProposalChange } from './github.cjs';
+import { projectCompanion } from './companion-fidelity.cjs';
+import type { CompanionProjection, IProjectedEntry, IProjectionBasis, IProjectionTree, ProjectionLimit, UnfaithfulReason } from './companion-fidelity.cjs';
+import { diffHunks } from './three-way-merge.cjs';
 import { blobUrl, pullRequestUrl } from './github-urls.cjs';
 import { classifyPlacement } from './placement.cjs';
 import type { IPlacementSourceRange, PlacementAnchorSide } from './placement.cjs';
@@ -327,6 +324,7 @@ import { renderAttribution } from './presentation/attribution.cjs';
 import type { IProducerAttribution, IProducerComponent } from './presentation/attribution.cjs';
 import { renderCompanionChange } from './presentation/companion-changes.cjs';
 import { renderCompanionBundleDescription } from './presentation/companion-description.cjs';
+import type { ICompanionProjectionView } from './presentation/companion-projection.cjs';
 import { renderBundledCompanionReference } from './presentation/companion-reference.cjs';
 import type { ICompanionContent } from './presentation/companion-changes.cjs';
 import { present, presentationOptionProblem } from './presentation/customization.cjs';
@@ -575,13 +573,6 @@ type SnapshotReader = (commit: string, path: string) => unknown;
 type ExistenceCheck = (commit: string, path: string) => unknown;
 
 /**
- * The trusted tree read: what stands at a path in a full commit, from its
- * trees alone (checked where it is used). The review context's ReadEntry
- * (src/github.cts) is one.
- */
-type EntryReader = (commit: string, path: string) => unknown;
-
-/**
  * What companion suggestion pull requests need to know about the pull request
  * (docs/companion-suggestion-pr-contract.md): `headRef` is its head branch,
  * which they target and their texts name, and `ready` whether they are
@@ -591,14 +582,17 @@ interface ICompanionTargetFacts {
   readonly headRef: string;
   readonly ready: boolean;
   /**
-   * Answers the pull request's head when the reviewed commit is not its
-   * ancestor (the history was rewritten), otherwise undefined: companions
-   * are then re-applied onto it, or `companion` is unavailable for the unit
+   * Answers, when the reviewed commit is not an ancestor of the pull
+   * request's head (the history was rewritten), the basis each companion's
+   * fidelity is projected on: { head, mergeBase, sources: { tree, blob },
+   * maxBlobBytes } (src/companion-fidelity.cts); otherwise undefined.
+   * Companions stay on the reviewed commit either way; a projection that is
+   * unfaithful makes `companion` unavailable for the unit
    * (docs/companion-suggestion-pr-contract.md §2.5.1). Called at most once,
    * and only when the target is supported (no `unavailable` obstacle). A
    * rejection is operational.
    */
-  readonly resolveRewrittenHead?: () => Promise<unknown>;
+  readonly resolveProjection?: () => Promise<unknown>;
   /**
    * Why no companion pull request can be made for this pull request at all
    * (for example a fork, or a base that is not the default branch), each an
@@ -644,7 +638,6 @@ export interface IPrepareReviewInput {
   readonly context: IPreparationContext;
   readonly readSource: SnapshotReader;
   readonly fileExists?: ExistenceCheck | undefined;
-  readonly readEntry?: EntryReader | undefined;
   readonly options?: IPrepareReviewOptions | undefined;
 }
 
@@ -930,6 +923,20 @@ export interface IPreparedCompanion {
    * Each is its change count, rendered change list and rendered findings.
    */
   readonly sections: readonly ICompanionContent[];
+  /**
+   * Its projection onto the pull request's head, present exactly when the
+   * reviewed commit is not an ancestor of the head
+   * (docs/companion-suggestion-pr-contract.md §2.5.1): faithful or
+   * conflicting (an unfaithful one is never planned), with the merge base it
+   * was made from and the companion's own changes, which its description
+   * shows.
+   */
+  readonly projection?: IPreparedProjection;
+}
+
+/** A companion's projection as preparation plans it: what its description states, and the merge base it was made from. */
+export interface IPreparedProjection extends ICompanionProjectionView {
+  readonly mergeBase: string;
 }
 
 /** A review body section that references one proposal of one companion, rendered once its number is known. */
@@ -1010,8 +1017,6 @@ interface IPreparationState {
   readonly applyFix: ApplyReplacement;
   readonly readSource: (commit: string, path: string) => Promise<unknown>;
   readonly fileExists: (commit: string, path: string) => Promise<boolean>;
-  /** Present exactly when suggestions may have to be re-applied onto a rewritten head. */
-  readonly readEntry: ((commit: string, path: string) => Promise<PathEntry>) | null;
   readonly sourceRoot: ParsedReference | null;
   /** Renders prepared findings and proposals, with the caller's presentation callbacks. */
   readonly renderer: ReviewRenderer;
@@ -1083,7 +1088,11 @@ export interface ISuggestionContext {
   readonly headRef: string;
   /** Whether the suggestion is created ready for review instead of as a draft (its lifecycle note says which). */
   readonly ready: boolean;
-  /** The commit the suggestion is re-applied onto after a rewritten history, when it is (§2.5.1). */
+  /**
+   * The commit a version-2 plan's suggestions were re-applied onto, when they
+   * were (contract §2.9): read only to continue such a plan as it was
+   * planned. Preparation never sets it.
+   */
   readonly reappliedOnto?: string;
 }
 
@@ -1106,11 +1115,6 @@ interface IUnitAssembly {
   /** The units the plan delivered by a fallback, which a later block names (docs/delivery-policy-contract.md §10.1). */
   readonly fallbacks: readonly IFallbackDelivery[];
 }
-
-/** Whether one unit can be re-applied onto a rewritten head (with that head's edited files) or not, with every reason. */
-type UnitDecision =
-  | { readonly kind: 'created'; readonly headTexts: ReadonlyMap<string, string> }
-  | { readonly kind: 'not-created'; readonly reasons: readonly string[] };
 
 /**
  * Whether one edit can be a native suggestion: the suggestion, or every
@@ -1347,7 +1351,6 @@ async function prepareReview(input: unknown, internals: IPrepareReviewInternals 
     applyFix: (internals && internals.applyReplacement) || productionApplyReplacement,
     readSource: cachedSource,
     fileExists: existenceCheck(input.fileExists === undefined ? undefined : cachedReader(input.fileExists), cachedSource),
-    readEntry: input.readEntry === undefined ? null : entryReader(cachedReader(input.readEntry)),
     sourceRoot: context.sourceRootUri === undefined ? null : parseBaseUri(context.sourceRootUri),
     renderer: new ReviewRenderer(context, options.presentation ?? {}),
   };
@@ -1479,35 +1482,8 @@ function existenceCheck(
   };
 }
 
-/**
- * The caller's tree read, with its answer checked: an entry of a known kind
- * with well-formed fields. Anything else is caller misuse.
- */
-function entryReader(read: (commit: string, path: string) => Promise<unknown>): (commit: string, path: string) => Promise<PathEntry> {
-  return async (commit, path) => {
-    const entry = await read(commit, path);
-    if (isPathEntry(entry)) return entry;
-    throw new TypeError(`readEntry(${commit}, ${path}) returned an answer that is not a path entry.`);
-  };
-}
-
-/** Whether an answer of the caller's tree read is a PathEntry (see src/github.cts). */
-function isPathEntry(value: unknown): value is PathEntry {
-  if (!isPlainObject(value)) return false;
-  switch (value['kind']) {
-    case 'absent':
-      return true;
-    case 'file':
-      return isFullCommit(value['blob']) && (value['mode'] === '100644' || value['mode'] === '100755');
-    case 'not-a-file':
-      return ['a directory', 'a symbolic link', 'a submodule'].includes(String(value['entry'])) && typeof value['path'] === 'string';
-    default:
-      return false;
-  }
-}
-
 /** Reads each (commit, path) snapshot at most once. */
-function cachedReader(readSource: SnapshotReader | ExistenceCheck | EntryReader): (commit: string, path: string) => Promise<unknown> {
+function cachedReader(readSource: SnapshotReader | ExistenceCheck): (commit: string, path: string) => Promise<unknown> {
   const cache = new Map<string, Promise<unknown>>();
   return (commit, path) => {
     const key = `${commit}\0${path}`;
@@ -3457,29 +3433,90 @@ const COMPANION_REMEDIES = Object.freeze({
   description: 'Shorten the findings\' messages.',
 });
 
-/** A unit whose companion is available: its rendered content and the head's text of each file it edits, when re-applied. */
+/** A unit whose companion is available: its rendered content, and its companion's projection when one was made. */
 interface ICompanionDraft {
   readonly unit: ISuggestionUnit;
   readonly content: ICompanionContent;
-  readonly headTexts: ReadonlyMap<string, string>;
+  /**
+   * The projection of the companion as planned when this unit was accepted:
+   * its own, or under `single` the bundle's so far, this unit included.
+   */
+  readonly projection?: IPreparedProjection;
+}
+
+/** Why a path is unfaithful, as an obstacle names it (contract §2.5.1). */
+function unfaithfulReason(path: string, reason: UnfaithfulReason): string {
+  switch (reason) {
+    case 'restores': return `${codeSpan(path)} would bring back content the head no longer has`;
+    case 'restores-beside-conflict': return `${codeSpan(path)} would bring back content the head no longer has, beside a conflict`;
+    case 'loses': return `${codeSpan(path)} would lose its change`;
+    case 'not-expressible': return `its change to ${codeSpan(path)} cannot be expressed at the head`;
+    case 'file-and-directory': return `${codeSpan(path)} would be both a file and a directory`;
+  }
+}
+
+/** A case the projection cannot decide, as an obstacle names it (contract §2.5.1). */
+function projectionLimit(limit: ProjectionLimit, maxBlobBytes: number): string {
+  switch (limit.kind) {
+    case 'truncated': return `GitHub listed the tree of commit ${codeSpan(limit.commit)} as truncated`;
+    case 'no-merge-base': return 'GitHub named no merge base of the reviewed commit and the head';
+    case 'binary': return `${codeSpan(limit.path)} is binary and changed on both sides`;
+    case 'symlink': return `${codeSpan(limit.path)} is a symbolic link changed on both sides`;
+    case 'submodule': return `${codeSpan(limit.path)} is a submodule changed on both sides`;
+    case 'kind-change': return `${codeSpan(limit.path)} changes kind on one side and changes on the other`;
+    case 'too-large': return `${codeSpan(limit.path)} is larger than the ${maxBlobBytes.toLocaleString('en-US')}-byte read limit`;
+    case 'directory-rename':
+      return `a new file under ${codeSpan(`${limit.directory}/`)} lands in a directory the other side removed, which Git's directory-rename detection could move`;
+  }
+}
+
+/** The obstacles of an unfaithful projection, one sentence for its reasons and one for its limits (contract §2.5.1). */
+function projectionObstacles(projection: Extract<CompanionProjection, { readonly verdict: 'unfaithful' }>, pullNumber: number, basis: IProjectionBasis): string[] {
+  const pull = `#${String(pullNumber)}`;
+  const head = codeSpan(basis.head);
+  const obstacles: string[] = [];
+  if (projection.reasons.length > 0) {
+    obstacles.push(`The history of ${pull} was rewritten after the reviewed commit, and projected onto its head ${head}, merging its suggestion pull request `
+      + `would not apply exactly its own changes: ${projection.reasons.map((r) => unfaithfulReason(r.path, r.reason)).join('; ')}.`);
+  }
+  if (projection.limits.length > 0) {
+    obstacles.push(`The history of ${pull} was rewritten after the reviewed commit, and whether merging its suggestion pull request into the head ${head} `
+      + `would apply exactly its own changes cannot be projected: ${projection.limits.map((l) => projectionLimit(l, basis.maxBlobBytes)).join('; ')}.`);
+  }
+  return obstacles;
+}
+
+/** Code spans joined like `a`; `a` and `b`; `a`, `b` and `c`. */
+function codeSpanList(values: readonly string[]): string {
+  const spans = values.map(codeSpan);
+  const last = spans.at(-1) ?? '';
+  return spans.length <= 1 ? last : `${spans.slice(0, -1).join(', ')} and ${last}`;
+}
+
+/** `text` with its first letter in lower case, as a unit's description reads mid-sentence. */
+function lowerFirst(text: string): string {
+  return `${text.charAt(0).toLowerCase()}${text.slice(1)}`;
 }
 
 /**
  * Whether a companion pull request can deliver each unit
  * (docs/companion-suggestion-pr-contract.md §2.5, §2.5.1, §2.8), worked out
  * only when asked: the pull request's target is read the first time, the
- * rewritten head (if any) once, and each unit is checked against the
- * obstacles a companion can meet — an unsupported pull request, a rewritten
- * history it cannot be re-applied onto, a created file over the per-file
- * limit, and a description over the body limit (under a `single` bundle,
- * the bundle's description as planned so far, docs/delivery-policy-contract.md
- * §9). It then builds the companions the plan bundles.
+ * projection basis (if the history was rewritten) once, and each unit is
+ * checked against the obstacles a companion can meet — an unsupported pull
+ * request, an unfaithful projection, a created file over the per-file limit,
+ * and a description over the body limit (under a `single` bundle, the
+ * bundle's projection and description as planned so far,
+ * docs/delivery-policy-contract.md §9). It then builds the companions the
+ * plan bundles, and warns of each one projected to conflict.
  */
 class CompanionPlanner {
   readonly #state: IPreparationState;
   readonly #units: readonly ISuggestionUnit[];
   #facts: ICompanionTargetFacts | undefined;
   #target: ISuggestionContext | undefined;
+  /** The projection basis, once the target is resolved; undefined when no projection is needed. */
+  #basis: IProjectionBasis | undefined;
   #lifecycleNote: string | undefined;
   readonly #drafts = new Map<number, ICompanionDraft>();
   /** The units delivered by `companion` so far, in order. */
@@ -3502,7 +3539,7 @@ class CompanionPlanner {
     return this.#lifecycleNote;
   }
 
-  /** Records that `companion` delivers the unit (so a `single` bundle's size counts it). */
+  /** Records that `companion` delivers the unit (so a `single` bundle's projection and size count it). */
   accept(index: number): void {
     this.#accepted.push(index);
   }
@@ -3513,17 +3550,19 @@ class CompanionPlanner {
     const facts = await this.#readFacts();
     const target = this.#target ?? await this.#resolveTarget(facts);
     const unit = itemAt(this.#units, index);
+    const single = state.options.delivery.policy.companionBundle.value === 'single';
+    const bundledUnits = single ? [...this.#accepted.map((i) => this.#draft(i).unit), unit] : [unit];
     const obstacles: string[] = [...(facts.unavailable ?? [])];
     const remedies: string[] = [];
-    let headTexts: ReadonlyMap<string, string> = new Map();
-    if (obstacles.length === 0 && target.reappliedOnto !== undefined) {
-      const decision = await reapplication(unit, target.reappliedOnto, state);
-      if (decision.kind === 'created') headTexts = decision.headTexts;
-      else {
-        const subject = unit.changes.size === 1 ? 'it' : `its ${String(unit.changes.size)} changes`;
-        obstacles.push(`The history of #${String(target.pullNumber)} was rewritten after the reviewed commit, and ${subject} cannot be re-applied onto commit `
-          + `${codeSpan(target.reappliedOnto)} because ${decision.reasons.join('; ')}.`);
+    let projection: IPreparedProjection | undefined;
+    if (obstacles.length === 0 && this.#basis !== undefined) {
+      const changes = commitChangesOf(bundledUnits);
+      const projected = await projectCompanion(this.#basis, changes);
+      if (projected.verdict === 'unfaithful') {
+        obstacles.push(...projectionObstacles(projected, target.pullNumber, this.#basis));
         remedies.push(COMPANION_REMEDIES.rewritten);
+      } else {
+        projection = preparedProjection(projected, this.#basis, bundledUnits, changes);
       }
     }
     for (const change of unit.changes.values()) {
@@ -3537,17 +3576,15 @@ class CompanionPlanner {
     if (obstacles.length === 0) {
       const content = companionContent(unit, state.renderer);
       this.#lifecycleNote ??= state.renderer.lifecycleNote(target);
-      const bundled = state.options.delivery.policy.companionBundle.value === 'single'
-        ? [...this.#accepted.map((i) => this.#draft(i).content), content]
-        : [content];
+      const bundled = single ? [...this.#accepted.map((i) => this.#draft(i).content), content] : [content];
       const sizingMarker = formatSuggestionMarker({ ...target, id: SIZING_UUID, batch: SIZING_UUID });
-      const characters = renderCompanionBundleDescription(bundled, target, this.#lifecycleNote, sizingMarker).length;
+      const characters = renderCompanionBundleDescription(bundled, target, this.#lifecycleNote, sizingMarker, projection).length;
       const limit = state.options.maxCommentBodyChars;
       if (limit !== undefined && characters > limit) {
         obstacles.push(`Its suggestion pull request's description would be ${String(characters)} characters, and the limit is ${String(limit)}.`);
         remedies.push(COMPANION_REMEDIES.description);
       } else {
-        this.#drafts.set(index, { unit, content, headTexts });
+        this.#drafts.set(index, { unit, content, ...(projection === undefined ? {} : { projection }) });
       }
     }
     return obstacles.length === 0 ? AVAILABLE : unavailableFor(obstacles, [...new Set(remedies)]);
@@ -3556,6 +3593,27 @@ class CompanionPlanner {
   /** The companions of the plan, each holding its units in order (§9). */
   build(plan: Extract<DeliveryPlan, { readonly status: 'planned' }>): IPreparedCompanion[] {
     return plan.companions.map((companion) => bundleCompanion(companion.sections.map((id) => this.#draft(Number(id))), this.target()));
+  }
+
+  /**
+   * One `companion-conflicts-at-head` warning per planned companion projected
+   * to conflict (docs/delivery-policy-contract.md §10.3), in plan order.
+   */
+  conflictWarnings(plan: Extract<DeliveryPlan, { readonly status: 'planned' }>, prepared: readonly IPreparedCompanion[]): IDiagnostic[] {
+    return plan.companions.flatMap((planned, c) => {
+      const projection = itemAt(prepared, c).projection;
+      if (projection === undefined || projection.verdict !== 'conflicts') return [];
+      const units = planned.sections.map((id) => itemAt(this.#units, Number(id)));
+      const [first] = units;
+      if (first === undefined) return [];
+      const subject = units.length === 1
+        ? `the suggestion pull request for ${lowerFirst(unitDescription(first))}`
+        : `the suggestion pull request bundling ${String(units.length)} proposals`;
+      return [createDiagnostic('companion-conflicts-at-head',
+        `Projected onto the head ${codeSpan(projection.head)} of #${String(this.target().pullNumber)}, merging ${subject} would conflict in `
+        + `${codeSpanList(projection.conflicts)}. It is created on the reviewed commit, as planned; GitHub shows the conflict to whoever merges it.`,
+        { location: { pointer: itemAt(first.items, 0).pointer } })];
+    });
   }
 
   #draft(index: number): ICompanionDraft {
@@ -3574,29 +3632,28 @@ class CompanionPlanner {
     const headRef = facts['headRef'];
     const ready = facts['ready'];
     const unavailable = facts['unavailable'];
-    const resolve = facts['resolveRewrittenHead'];
+    const resolve = facts['resolveProjection'];
     if (typeof headRef !== 'string' || headRef === '' || typeof ready !== 'boolean') {
-      throw new TypeError('`options.delivery.companionTarget` must answer { headRef, ready, resolveRewrittenHead?, unavailable? }.');
+      throw new TypeError('`options.delivery.companionTarget` must answer { headRef, ready, resolveProjection?, unavailable? }.');
     }
     if (unavailable !== undefined && !isObstacleList(unavailable)) throw new TypeError('`options.delivery.companionTarget` must answer `unavailable` as non-empty obstacle sentences.');
-    if (resolve !== undefined && typeof resolve !== 'function') throw new TypeError('`resolveRewrittenHead` must be a function () => Promise<commit | undefined>.');
+    if (resolve !== undefined && typeof resolve !== 'function') throw new TypeError('`resolveProjection` must be a function () => Promise<basis | undefined>.');
     this.#facts = {
       headRef,
       ready,
       ...(unavailable === undefined ? {} : { unavailable }),
-      ...(resolve === undefined ? {} : { resolveRewrittenHead: (): Promise<unknown> => Promise.resolve(Reflect.apply(resolve, facts, [])) }),
+      ...(resolve === undefined ? {} : { resolveProjection: (): Promise<unknown> => Promise.resolve(Reflect.apply(resolve, facts, [])) }),
     };
     return this.#facts;
   }
 
-  /** The companion texts' context, with the rewritten head when the pull request is supported and its history was rewritten. */
+  /** The companion texts' context, and the projection basis when the pull request is supported and its history was rewritten. */
   async #resolveTarget(facts: ICompanionTargetFacts): Promise<ISuggestionContext> {
     const { context } = this.#state;
     const supported = (facts.unavailable ?? []).length === 0;
-    const head = supported ? await rewrittenHeadOf(facts, context, this.#state) : undefined;
+    this.#basis = supported ? await projectionBasisOf(facts, context) : undefined;
     this.#target = {
-      owner: context.owner, repo: context.repo, pullNumber: context.pullNumber, reviewedCommit: context.reviewedCommit, headRef: facts.headRef,
-      ready: facts.ready, ...(head === undefined ? {} : { reappliedOnto: head }),
+      owner: context.owner, repo: context.repo, pullNumber: context.pullNumber, reviewedCommit: context.reviewedCommit, headRef: facts.headRef, ready: facts.ready,
     };
     return this.#target;
   }
@@ -3608,19 +3665,92 @@ function isObstacleList(value: unknown): value is readonly string[] {
 }
 
 /**
- * The rewritten head companions are re-applied onto (contract §2.5.1), from
- * the caller's resolver, checked: a full commit other than the reviewed one,
- * with a tree read to compare against. Undefined when there is none.
+ * The projection basis from the caller's resolver (contract §2.5.1),
+ * checked: a head other than the reviewed commit, a merge base or null, the
+ * tree and blob readers, and the blob read limit. Undefined when the
+ * reviewed commit is an ancestor of the head, so nothing needs projecting.
  */
-async function rewrittenHeadOf(facts: ICompanionTargetFacts, context: IPreparationContext, state: IPreparationState): Promise<string | undefined> {
-  if (facts.resolveRewrittenHead === undefined) return undefined;
-  const head: unknown = await facts.resolveRewrittenHead();
-  if (head === undefined) return undefined;
-  if (!isFullCommit(head) || head === context.reviewedCommit) {
-    throw new TypeError('`resolveRewrittenHead` must answer a full commit other than the reviewed commit, or undefined.');
+async function projectionBasisOf(facts: ICompanionTargetFacts, context: IPreparationContext): Promise<IProjectionBasis | undefined> {
+  if (facts.resolveProjection === undefined) return undefined;
+  const basis: unknown = await facts.resolveProjection();
+  if (basis === undefined) return undefined;
+  const misuse = (): never => {
+    throw new TypeError('`resolveProjection` must answer undefined or { head, mergeBase, sources: { tree, blob }, maxBlobBytes }, with a head other than the reviewed commit.');
+  };
+  if (!isPlainObject(basis)) return misuse();
+  const { head, mergeBase, sources, maxBlobBytes } = basis;
+  if (!isFullCommit(head) || head === context.reviewedCommit || (mergeBase !== null && !isFullCommit(mergeBase))) return misuse();
+  if (!isPlainObject(sources) || typeof sources['tree'] !== 'function' || typeof sources['blob'] !== 'function') return misuse();
+  if (typeof maxBlobBytes !== 'number' || !Number.isSafeInteger(maxBlobBytes) || maxBlobBytes <= 0) return misuse();
+  const readTree = sources['tree'];
+  const readBlob = sources['blob'];
+  return {
+    reviewed: context.reviewedCommit,
+    head,
+    mergeBase,
+    maxBlobBytes,
+    sources: {
+      tree: async (commit) => checkedTree(await Promise.resolve(Reflect.apply(readTree, sources, [commit])), commit),
+      blob: async (oid) => {
+        const bytes: unknown = await Promise.resolve(Reflect.apply(readBlob, sources, [oid]));
+        if (!(bytes instanceof Uint8Array)) throw new TypeError(`The projection's blob reader answered no bytes for ${oid}.`);
+        return bytes;
+      },
+    },
+  };
+}
+
+/** Whether a value is a Map, whose keys and values are still unchecked. */
+function isMap(value: unknown): value is ReadonlyMap<unknown, unknown> {
+  return value instanceof Map;
+}
+
+/** A projection tree answer, checked: `truncated` and a map of well-formed entries. */
+function checkedTree(tree: unknown, commit: string): IProjectionTree {
+  const misuse = (): never => {
+    throw new TypeError(`The projection's tree reader answered no valid tree for ${commit}.`);
+  };
+  if (!isPlainObject(tree) || typeof tree['truncated'] !== 'boolean') return misuse();
+  const listed = tree['entries'];
+  if (!isMap(listed)) return misuse();
+  const entries = new Map<string, IProjectedEntry>();
+  for (const [path, entry] of listed) {
+    if (typeof path !== 'string' || !isPlainObject(entry)) return misuse();
+    const { mode, oid, size } = entry;
+    if (!['100644', '100755', '120000', '160000'].includes(String(mode)) || !isFullCommit(oid) || (size !== undefined && typeof size !== 'number')) return misuse();
+    entries.set(path, { mode: String(mode), oid, ...(typeof size === 'number' ? { size } : {}) });
   }
-  if (state.readEntry === null) throw new TypeError('`readEntry` is required to re-apply suggestions onto a rewritten head.');
-  return head;
+  return { truncated: tree['truncated'], entries };
+}
+
+/**
+ * A faithful or conflicting projection as preparation plans it: the head and
+ * merge base, the verdict, and the companion's own changes (each edited
+ * file's hunks from the reviewed file, in the order its units list them),
+ * which its description shows.
+ */
+function preparedProjection(
+  projection: Exclude<CompanionProjection, { readonly verdict: 'unfaithful' }>,
+  basis: IProjectionBasis,
+  units: readonly ISuggestionUnit[],
+  changes: readonly ProposalChange[],
+): IPreparedProjection {
+  const reviewed = new Map<string, string>();
+  for (const unit of units) {
+    for (const change of unit.changes.values()) if (change.kind === 'edit' && !reviewed.has(change.edit.path)) reviewed.set(change.edit.path, change.edit.sourceText);
+  }
+  const files = changes.flatMap((change) => {
+    const before = reviewed.get(change.path);
+    return change.operation === 'edit' && before !== undefined ? [{ path: change.path, hunks: diffHunks(before, change.text) }] : [];
+  });
+  if (basis.mergeBase === null) throw new Error('Internal error: a projection without a merge base was planned.');
+  return {
+    head: basis.head,
+    mergeBase: basis.mergeBase,
+    verdict: projection.verdict,
+    conflicts: projection.verdict === 'conflicts' ? projection.conflicts : [],
+    files,
+  };
 }
 
 /** Where each item of a delivered unit goes, once the plan is known. */
@@ -3814,7 +3944,9 @@ function renderDelivery(
       text: renderSuggestionPullBody(itemAt(prepared, c), sizingMarker, target, lifecycleNote),
       expected: { marker: sizingMarker },
       items: delivered.flatMap((unit) => unit.items),
-      compose: (r) => renderCompanionBundleDescription(delivered.map((unit) => companionContent(unit, r)), target, r.lifecycleNote(target), sizingMarker),
+      compose: (r) => renderCompanionBundleDescription(
+        delivered.map((unit) => companionContent(unit, r)), target, r.lifecycleNote(target), sizingMarker, itemAt(prepared, c).projection,
+      ),
     };
   });
   const suggestions: IPreparedSuggestions = { companions: prepared, sections: parts, lifecycleNote };
@@ -3826,65 +3958,9 @@ function renderDelivery(
     proposals,
     suggestions,
     composed: composedFor(body, descriptions),
-    deliveryDiagnostics: plan.diagnostics,
+    deliveryDiagnostics: [...plan.diagnostics, ...companions.conflictWarnings(plan, prepared)],
     fallbacks: plan.fallbacks,
   };
-}
-
-/**
- * Whether one suggestion pull request can be re-applied onto a rewritten head
- * (contract §2.5.1): every change must still meet exactly what was reviewed
- * there — an edited file with each replaced range byte-identical at the same
- * lines, a created path absent, a deleted file with the same blob and mode.
- * Created with the head's text of each edited file, or not re-appliable with
- * every reason, in the order of the changes.
- */
-async function reapplication(unit: ISuggestionUnit, head: string, state: IPreparationState): Promise<UnitDecision> {
-  const { readEntry } = state;
-  if (readEntry === null) throw new TypeError('`readEntry` is required to re-apply suggestions onto a rewritten head.');
-  const reasons: string[] = [];
-  const headTexts = new Map<string, string>();
-  for (const [filePath, onPath] of changesByPath(unit)) {
-    const first = itemAt(onPath, 0);
-    const entry = await readEntry(head, filePath);
-    if (entry.kind === 'not-a-file') {
-      reasons.push(`${codeSpan(entry.path)} is ${entry.entry}`);
-    } else if (first.kind === 'edit') {
-      if (entry.kind === 'absent') {
-        reasons.push(`${codeSpan(filePath)} no longer exists`);
-        continue;
-      }
-      const read = await headSource(state, head, filePath);
-      if (read.kind === 'unreadable') {
-        reasons.push(`${codeSpan(filePath)} ${read.reason}`);
-        continue;
-      }
-      const { text } = read;
-      const reviewedLines = sourceLines(first.edit.sourceText);
-      const headLines = sourceLines(text);
-      const differing = onPath.flatMap((change) => {
-        if (change.kind !== 'edit') return [];
-        const { startLine, endLine } = change.edit;
-        const region = (lines: readonly string[]): string => lines.slice(startLine - 1, endLine).join('');
-        if (region(headLines) === region(reviewedLines)) return [];
-        return [startLine === endLine
-          ? `${codeSpan(filePath)} line ${String(startLine)} differs from the reviewed text`
-          : `${codeSpan(filePath)} lines ${String(startLine)}-${String(endLine)} differ from the reviewed text`];
-      });
-      reasons.push(...differing);
-      if (differing.length === 0) headTexts.set(filePath, text);
-    } else if (first.operation.operation === 'create') {
-      if (entry.kind === 'file') reasons.push(`${codeSpan(filePath)} already exists`);
-    } else if (entry.kind === 'absent') {
-      reasons.push(`${codeSpan(filePath)} no longer exists`);
-    } else {
-      const reviewed = await readEntry(first.operation.commit, filePath);
-      if (reviewed.kind !== 'file' || reviewed.blob !== entry.blob || reviewed.mode !== entry.mode) {
-        reasons.push(`${codeSpan(filePath)} differs from the reviewed file`);
-      }
-    }
-  }
-  return reasons.length === 0 ? { kind: 'created', headTexts } : { kind: 'not-created', reasons };
 }
 
 /** The whole-file proposal a standalone proposal unit carries (its only change). */
@@ -3892,36 +3968,6 @@ function standaloneOperation(unit: ISuggestionUnit): PreparedFileOperation {
   const [change, ...others] = unit.changes.values();
   if (change?.kind !== 'operation' || others.length > 0) throw new Error('Internal error: a standalone proposal unit carries exactly one whole-file proposal.');
   return change.operation;
-}
-
-/**
- * Why a head file's text is not source a replaced range can be compared in,
- * by the reader's error code (src/github.cts): not UTF-8, or beyond the
- * source-read limit. Such a file is a reason its suggestion cannot be
- * re-applied; any other failure stays operational.
- */
-const UNREADABLE_SOURCE: Readonly<Record<string, string>> = {
-  'undecodable-source': 'is not UTF-8 text at the head',
-  'source-too-large': 'exceeds the source-read limit',
-};
-
-/** An edited file's text at a rewritten head, or why it cannot be compared (contract §2.5.1). */
-async function headSource(
-  state: IPreparationState,
-  head: string,
-  filePath: string,
-): Promise<{ readonly kind: 'text'; readonly text: string } | { readonly kind: 'unreadable'; readonly reason: string }> {
-  let text: unknown;
-  try {
-    text = await state.readSource(head, filePath);
-  } catch (err) {
-    const code: unknown = err instanceof Error ? Reflect.get(err, 'code') : undefined;
-    const reason = typeof code === 'string' && Object.hasOwn(UNREADABLE_SOURCE, code) ? UNREADABLE_SOURCE[code] : undefined;
-    if (reason === undefined) throw err;
-    return { kind: 'unreadable', reason };
-  }
-  if (typeof text !== 'string') throw new TypeError(`readSource(${head}, ${filePath}) returned no text for a file that exists.`);
-  return { kind: 'text', text };
 }
 
 /** A unit's changes grouped by path, in the order paths first appear. */
@@ -3947,21 +3993,17 @@ function companionContent(unit: ISuggestionUnit, renderer: ReviewRenderer): ICom
 }
 
 /**
- * One companion pull request holding `drafts`' units, in order: its exact
- * commit changes (each path once, every unit's changes of it combined, an
- * edited file being the head's text when re-applied, contract §2.5.1),
- * title, commit message and sections (docs/delivery-policy-contract.md §9).
- * A companion of one unit is titled as always; a bundle of several, by its
- * proposals and changes.
+ * The exact commit changes of a companion holding `units`, in order: each
+ * path once, in the order paths first appear, every unit's changes of it
+ * combined on the reviewed file (docs/companion-suggestion-pr-contract.md
+ * §2.6, §2.11).
  */
-function bundleCompanion(drafts: readonly ICompanionDraft[], target: ISuggestionContext): IPreparedCompanion {
+function commitChangesOf(units: readonly ISuggestionUnit[]): ProposalChange[] {
   const byPath = new Map<string, UnitChange[]>();
-  const headTexts = new Map<string, string>();
-  for (const draft of drafts) {
-    for (const [filePath, onPath] of changesByPath(draft.unit)) byPath.set(filePath, [...(byPath.get(filePath) ?? []), ...onPath]);
-    for (const [filePath, text] of draft.headTexts) headTexts.set(filePath, text);
+  for (const unit of units) {
+    for (const [filePath, onPath] of changesByPath(unit)) byPath.set(filePath, [...(byPath.get(filePath) ?? []), ...onPath]);
   }
-  const commitChanges = [...byPath].map(([filePath, onPath]): ProposalChange => {
+  return [...byPath].map(([filePath, onPath]): ProposalChange => {
     const first = itemAt(onPath, 0);
     if (first.kind === 'operation') {
       const operation = first.operation;
@@ -3970,8 +4012,20 @@ function bundleCompanion(drafts: readonly ICompanionDraft[], target: ISuggestion
         : { operation: 'delete', path: filePath };
     }
     const fileEdits = onPath.flatMap((c) => (c.kind === 'edit' ? [c.edit] : []));
-    return { operation: 'edit', path: filePath, text: combineEdits(headTexts.get(filePath) ?? first.edit.sourceText, fileEdits) };
+    return { operation: 'edit', path: filePath, text: combineEdits(first.edit.sourceText, fileEdits) };
   });
+}
+
+/**
+ * One companion pull request holding `drafts`' units, in order: its exact
+ * commit changes on the reviewed commit, title, commit message, sections
+ * (docs/delivery-policy-contract.md §9) and, after a rewritten history, the
+ * projection made when its last unit was accepted, which covers every unit
+ * it holds. A companion of one unit is titled as always; a bundle of
+ * several, by its proposals and changes.
+ */
+function bundleCompanion(drafts: readonly ICompanionDraft[], target: ISuggestionContext): IPreparedCompanion {
+  const commitChanges = commitChangesOf(drafts.map((draft) => draft.unit));
   const count = drafts.reduce((n, draft) => n + draft.content.changeCount, 0);
   const pull = `#${String(target.pullNumber)}`;
   const [only] = drafts;
@@ -3981,12 +4035,13 @@ function bundleCompanion(drafts: readonly ICompanionDraft[], target: ISuggestion
       : single === undefined ? `${String(count)} changes` : `${single.operation} ${single.path}`;
   const full = `Suggestion for ${pull}: ${summary}`;
   const title = full.length <= MAX_TITLE ? full : `Suggestion for ${pull}: ${String(count)} change${count === 1 ? '' : 's'}`;
+  const projection = drafts.at(-1)?.projection;
   return {
     title,
-    commitMessage: `${title}\n\nSuggested in a review of ${target.owner}/${target.repo} pull request ${String(target.pullNumber)} at commit ${target.reviewedCommit}`
-      + `${target.reappliedOnto === undefined ? '' : `, and re-applied onto commit ${target.reappliedOnto} after the pull request's history was rewritten`}.`,
+    commitMessage: `${title}\n\nSuggested in a review of ${target.owner}/${target.repo} pull request ${String(target.pullNumber)} at commit ${target.reviewedCommit}.`,
     changes: commitChanges,
     sections: drafts.map((draft) => draft.content),
+    ...(projection === undefined ? {} : { projection }),
   };
 }
 
@@ -4025,11 +4080,12 @@ function renderReviewBody(suggestions: Pick<IPreparedSuggestions, 'companions' |
  * A suggestion pull request's body, ending with its structured marker line
  * (src/presentation/companion-description.cts), carrying the lifecycle note
  * every suggestion pull request carries, as presented during preparation
- * (IPreparedSuggestions.lifecycleNote): one proposal's description, or a
+ * (IPreparedSuggestions.lifecycleNote), and its projection section when it
+ * was projected after a rewritten history: one proposal's description, or a
  * bundle's.
  */
 function renderSuggestionPullBody(companion: IPreparedCompanion, marker: string, target: ISuggestionContext, lifecycleNote: string): string {
-  return renderCompanionBundleDescription(companion.sections, target, lifecycleNote, marker);
+  return renderCompanionBundleDescription(companion.sections, target, lifecycleNote, marker, companion.projection);
 }
 
 /** The identity of a proposal: equal proposals share one section (R8). */
