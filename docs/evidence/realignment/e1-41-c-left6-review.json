@@ -1,0 +1,48 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "repos/mike-north/doc-linter/pulls/41/reviews/5373957807"
+  },
+  "status": 200,
+  "statusLine": "HTTP/2.0 200 OK",
+  "response": {
+    "id": 5373957807,
+    "node_id": "PRR_kwDOUuyy7s8AAAABQFAWrw",
+    "user": {
+      "login": "mike-north",
+      "id": 558005,
+      "node_id": "MDQ6VXNlcjU1ODAwNQ==",
+      "avatar_url": "https://avatars.githubusercontent.com/u/558005?u=a27f905c8f24e1ad227d32905fa5512fd615153d&v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/mike-north",
+      "html_url": "https://github.com/mike-north",
+      "followers_url": "https://api.github.com/users/mike-north/followers",
+      "following_url": "https://api.github.com/users/mike-north/following{/other_user}",
+      "gists_url": "https://api.github.com/users/mike-north/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/mike-north/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/mike-north/subscriptions",
+      "organizations_url": "https://api.github.com/users/mike-north/orgs",
+      "repos_url": "https://api.github.com/users/mike-north/repos",
+      "events_url": "https://api.github.com/users/mike-north/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/mike-north/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "body": "E1 historical-review experiment, case `c-left6` on #41: LEFT line 6, a deleted base line in both base...reviewed and base...head. Reviewed commit `e69981e`. Fixture only; do not act on this review.\n\n<!-- e1:41:c-left6 -->",
+    "state": "COMMENTED",
+    "html_url": "https://github.com/mike-north/doc-linter/pull/41#pullrequestreview-5373957807",
+    "pull_request_url": "https://api.github.com/repos/mike-north/doc-linter/pulls/41",
+    "author_association": "OWNER",
+    "_links": {
+      "html": {
+        "href": "https://github.com/mike-north/doc-linter/pull/41#pullrequestreview-5373957807"
+      },
+      "pull_request": {
+        "href": "https://api.github.com/repos/mike-north/doc-linter/pulls/41"
+      }
+    },
+    "submitted_at": "2026-10-01T01:39:20Z",
+    "commit_id": "e69981ed42926b07d0ff3f25d98558229afd348e"
+  }
+}

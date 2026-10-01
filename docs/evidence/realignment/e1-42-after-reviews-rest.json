@@ -1,0 +1,290 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "repos/mike-north/doc-linter/pulls/42/reviews?per_page=100"
+  },
+  "status": 200,
+  "statusLine": "HTTP/2.0 200 OK",
+  "response": [
+    {
+      "id": 5356481554,
+      "node_id": "PRR_kwDOUuyy7s8AAAABP0VsEg",
+      "user": {
+        "login": "mike-north",
+        "id": 558005,
+        "node_id": "MDQ6VXNlcjU1ODAwNQ==",
+        "avatar_url": "https://avatars.githubusercontent.com/u/558005?u=a27f905c8f24e1ad227d32905fa5512fd615153d&v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/mike-north",
+        "html_url": "https://github.com/mike-north",
+        "followers_url": "https://api.github.com/users/mike-north/followers",
+        "following_url": "https://api.github.com/users/mike-north/following{/other_user}",
+        "gists_url": "https://api.github.com/users/mike-north/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/mike-north/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/mike-north/subscriptions",
+        "organizations_url": "https://api.github.com/users/mike-north/orgs",
+        "repos_url": "https://api.github.com/users/mike-north/repos",
+        "events_url": "https://api.github.com/users/mike-north/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/mike-north/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "body": "\n\n<!-- sarif-to-comment:review:ad11405f-c515-4b27-b887-0332204bc016 -->",
+      "state": "COMMENTED",
+      "html_url": "https://github.com/mike-north/doc-linter/pull/42#pullrequestreview-5356481554",
+      "pull_request_url": "https://api.github.com/repos/mike-north/doc-linter/pulls/42",
+      "author_association": "OWNER",
+      "_links": {
+        "html": {
+          "href": "https://github.com/mike-north/doc-linter/pull/42#pullrequestreview-5356481554"
+        },
+        "pull_request": {
+          "href": "https://api.github.com/repos/mike-north/doc-linter/pulls/42"
+        }
+      },
+      "submitted_at": "2026-09-29T18:02:58Z",
+      "commit_id": "7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc"
+    },
+    {
+      "id": 5373958189,
+      "node_id": "PRR_kwDOUuyy7s8AAAABQFAYLQ",
+      "user": {
+        "login": "mike-north",
+        "id": 558005,
+        "node_id": "MDQ6VXNlcjU1ODAwNQ==",
+        "avatar_url": "https://avatars.githubusercontent.com/u/558005?u=a27f905c8f24e1ad227d32905fa5512fd615153d&v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/mike-north",
+        "html_url": "https://github.com/mike-north",
+        "followers_url": "https://api.github.com/users/mike-north/followers",
+        "following_url": "https://api.github.com/users/mike-north/following{/other_user}",
+        "gists_url": "https://api.github.com/users/mike-north/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/mike-north/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/mike-north/subscriptions",
+        "organizations_url": "https://api.github.com/users/mike-north/orgs",
+        "repos_url": "https://api.github.com/users/mike-north/repos",
+        "events_url": "https://api.github.com/users/mike-north/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/mike-north/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "body": "E1 historical-review experiment, case `a-right6` on #42: RIGHT line 6, unchanged between the reviewed commit and the head. Reviewed commit `7eb3dc6`. Fixture only; do not act on this review.\n\n<!-- e1:42:a-right6 -->",
+      "state": "COMMENTED",
+      "html_url": "https://github.com/mike-north/doc-linter/pull/42#pullrequestreview-5373958189",
+      "pull_request_url": "https://api.github.com/repos/mike-north/doc-linter/pulls/42",
+      "author_association": "OWNER",
+      "_links": {
+        "html": {
+          "href": "https://github.com/mike-north/doc-linter/pull/42#pullrequestreview-5373958189"
+        },
+        "pull_request": {
+          "href": "https://api.github.com/repos/mike-north/doc-linter/pulls/42"
+        }
+      },
+      "submitted_at": "2026-10-01T01:39:24Z",
+      "commit_id": "7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc"
+    },
+    {
+      "id": 5373958297,
+      "node_id": "PRR_kwDOUuyy7s8AAAABQFAYmQ",
+      "user": {
+        "login": "mike-north",
+        "id": 558005,
+        "node_id": "MDQ6VXNlcjU1ODAwNQ==",
+        "avatar_url": "https://avatars.githubusercontent.com/u/558005?u=a27f905c8f24e1ad227d32905fa5512fd615153d&v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/mike-north",
+        "html_url": "https://github.com/mike-north",
+        "followers_url": "https://api.github.com/users/mike-north/followers",
+        "following_url": "https://api.github.com/users/mike-north/following{/other_user}",
+        "gists_url": "https://api.github.com/users/mike-north/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/mike-north/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/mike-north/subscriptions",
+        "organizations_url": "https://api.github.com/users/mike-north/orgs",
+        "repos_url": "https://api.github.com/users/mike-north/repos",
+        "events_url": "https://api.github.com/users/mike-north/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/mike-north/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "body": "E1 historical-review experiment, case `b-right5` on #42: RIGHT line 5, changed at the reviewed commit, change dropped at the head. Reviewed commit `7eb3dc6`. Fixture only; do not act on this review.\n\n<!-- e1:42:b-right5 -->",
+      "state": "COMMENTED",
+      "html_url": "https://github.com/mike-north/doc-linter/pull/42#pullrequestreview-5373958297",
+      "pull_request_url": "https://api.github.com/repos/mike-north/doc-linter/pulls/42",
+      "author_association": "OWNER",
+      "_links": {
+        "html": {
+          "href": "https://github.com/mike-north/doc-linter/pull/42#pullrequestreview-5373958297"
+        },
+        "pull_request": {
+          "href": "https://api.github.com/repos/mike-north/doc-linter/pulls/42"
+        }
+      },
+      "submitted_at": "2026-10-01T01:39:25Z",
+      "commit_id": "7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc"
+    },
+    {
+      "id": 5373958412,
+      "node_id": "PRR_kwDOUuyy7s8AAAABQFAZDA",
+      "user": {
+        "login": "mike-north",
+        "id": 558005,
+        "node_id": "MDQ6VXNlcjU1ODAwNQ==",
+        "avatar_url": "https://avatars.githubusercontent.com/u/558005?u=a27f905c8f24e1ad227d32905fa5512fd615153d&v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/mike-north",
+        "html_url": "https://github.com/mike-north",
+        "followers_url": "https://api.github.com/users/mike-north/followers",
+        "following_url": "https://api.github.com/users/mike-north/following{/other_user}",
+        "gists_url": "https://api.github.com/users/mike-north/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/mike-north/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/mike-north/subscriptions",
+        "organizations_url": "https://api.github.com/users/mike-north/orgs",
+        "repos_url": "https://api.github.com/users/mike-north/repos",
+        "events_url": "https://api.github.com/users/mike-north/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/mike-north/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "body": "E1 historical-review experiment, case `c-left6` on #42: LEFT line 6, a deleted base line in both diffs. Reviewed commit `7eb3dc6`. Fixture only; do not act on this review.\n\n<!-- e1:42:c-left6 -->",
+      "state": "COMMENTED",
+      "html_url": "https://github.com/mike-north/doc-linter/pull/42#pullrequestreview-5373958412",
+      "pull_request_url": "https://api.github.com/repos/mike-north/doc-linter/pulls/42",
+      "author_association": "OWNER",
+      "_links": {
+        "html": {
+          "href": "https://github.com/mike-north/doc-linter/pull/42#pullrequestreview-5373958412"
+        },
+        "pull_request": {
+          "href": "https://api.github.com/repos/mike-north/doc-linter/pulls/42"
+        }
+      },
+      "submitted_at": "2026-10-01T01:39:27Z",
+      "commit_id": "7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc"
+    },
+    {
+      "id": 5373958488,
+      "node_id": "PRR_kwDOUuyy7s8AAAABQFAZWA",
+      "user": {
+        "login": "mike-north",
+        "id": 558005,
+        "node_id": "MDQ6VXNlcjU1ODAwNQ==",
+        "avatar_url": "https://avatars.githubusercontent.com/u/558005?u=a27f905c8f24e1ad227d32905fa5512fd615153d&v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/mike-north",
+        "html_url": "https://github.com/mike-north",
+        "followers_url": "https://api.github.com/users/mike-north/followers",
+        "following_url": "https://api.github.com/users/mike-north/following{/other_user}",
+        "gists_url": "https://api.github.com/users/mike-north/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/mike-north/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/mike-north/subscriptions",
+        "organizations_url": "https://api.github.com/users/mike-north/orgs",
+        "repos_url": "https://api.github.com/users/mike-north/repos",
+        "events_url": "https://api.github.com/users/mike-north/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/mike-north/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "body": "E1 historical-review experiment, case `c-left5` on #42: LEFT line 5, deleted in the reviewed diff, context in the head diff. Reviewed commit `7eb3dc6`. Fixture only; do not act on this review.\n\n<!-- e1:42:c-left5 -->",
+      "state": "COMMENTED",
+      "html_url": "https://github.com/mike-north/doc-linter/pull/42#pullrequestreview-5373958488",
+      "pull_request_url": "https://api.github.com/repos/mike-north/doc-linter/pulls/42",
+      "author_association": "OWNER",
+      "_links": {
+        "html": {
+          "href": "https://github.com/mike-north/doc-linter/pull/42#pullrequestreview-5373958488"
+        },
+        "pull_request": {
+          "href": "https://api.github.com/repos/mike-north/doc-linter/pulls/42"
+        }
+      },
+      "submitted_at": "2026-10-01T01:39:28Z",
+      "commit_id": "7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc"
+    },
+    {
+      "id": 5373958588,
+      "node_id": "PRR_kwDOUuyy7s8AAAABQFAZvA",
+      "user": {
+        "login": "mike-north",
+        "id": 558005,
+        "node_id": "MDQ6VXNlcjU1ODAwNQ==",
+        "avatar_url": "https://avatars.githubusercontent.com/u/558005?u=a27f905c8f24e1ad227d32905fa5512fd615153d&v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/mike-north",
+        "html_url": "https://github.com/mike-north",
+        "followers_url": "https://api.github.com/users/mike-north/followers",
+        "following_url": "https://api.github.com/users/mike-north/following{/other_user}",
+        "gists_url": "https://api.github.com/users/mike-north/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/mike-north/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/mike-north/subscriptions",
+        "organizations_url": "https://api.github.com/users/mike-north/orgs",
+        "repos_url": "https://api.github.com/users/mike-north/repos",
+        "events_url": "https://api.github.com/users/mike-north/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/mike-north/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "body": "E1 historical-review experiment, case `d-reviewed-only-right2` on #42: RIGHT line 2, inside the merge-base...reviewed hunk but outside the base...head hunk. Reviewed commit `7eb3dc6`. Fixture only; do not act on this review.\n\n<!-- e1:42:d-reviewed-only-right2 -->",
+      "state": "COMMENTED",
+      "html_url": "https://github.com/mike-north/doc-linter/pull/42#pullrequestreview-5373958588",
+      "pull_request_url": "https://api.github.com/repos/mike-north/doc-linter/pulls/42",
+      "author_association": "OWNER",
+      "_links": {
+        "html": {
+          "href": "https://github.com/mike-north/doc-linter/pull/42#pullrequestreview-5373958588"
+        },
+        "pull_request": {
+          "href": "https://api.github.com/repos/mike-north/doc-linter/pulls/42"
+        }
+      },
+      "submitted_at": "2026-10-01T01:39:29Z",
+      "commit_id": "7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc"
+    },
+    {
+      "id": 5373958814,
+      "node_id": "PRR_kwDOUuyy7s8AAAABQFAang",
+      "user": {
+        "login": "mike-north",
+        "id": 558005,
+        "node_id": "MDQ6VXNlcjU1ODAwNQ==",
+        "avatar_url": "https://avatars.githubusercontent.com/u/558005?u=a27f905c8f24e1ad227d32905fa5512fd615153d&v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/mike-north",
+        "html_url": "https://github.com/mike-north",
+        "followers_url": "https://api.github.com/users/mike-north/followers",
+        "following_url": "https://api.github.com/users/mike-north/following{/other_user}",
+        "gists_url": "https://api.github.com/users/mike-north/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/mike-north/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/mike-north/subscriptions",
+        "organizations_url": "https://api.github.com/users/mike-north/orgs",
+        "repos_url": "https://api.github.com/users/mike-north/repos",
+        "events_url": "https://api.github.com/users/mike-north/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/mike-north/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "body": "E1 historical-review experiment, case `f-twodot-only-right18` on #42: RIGHT line 18, inside the two-dot current-base..reviewed hunk only, outside the merge-base...reviewed and base...head hunks. Reviewed commit `7eb3dc6`. Fixture only; do not act on this review.\n\n<!-- e1:42:f-twodot-only-right18 -->",
+      "state": "COMMENTED",
+      "html_url": "https://github.com/mike-north/doc-linter/pull/42#pullrequestreview-5373958814",
+      "pull_request_url": "https://api.github.com/repos/mike-north/doc-linter/pulls/42",
+      "author_association": "OWNER",
+      "_links": {
+        "html": {
+          "href": "https://github.com/mike-north/doc-linter/pull/42#pullrequestreview-5373958814"
+        },
+        "pull_request": {
+          "href": "https://api.github.com/repos/mike-north/doc-linter/pulls/42"
+        }
+      },
+      "submitted_at": "2026-10-01T01:39:31Z",
+      "commit_id": "7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc"
+    }
+  ]
+}
