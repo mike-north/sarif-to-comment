@@ -17,8 +17,9 @@ export const layer: IDeliveryPolicyLayer = {
   companionBundle: 'single',
 };
 
-// @ts-expect-error -- `edits` has no companion mechanism (§3)
 export const editsCompanion: IDeliveryPolicyLayer = { edits: ['companion'] };
+// @ts-expect-error -- `manual` belongs to fileOperations, not edits (§3)
+export const editsManual: IDeliveryPolicyLayer = { edits: ['manual'] };
 // @ts-expect-error -- `manual-group` belongs to groupedEdits, not fileOperations (§3)
 export const fileManualGroup: IDeliveryPolicyLayer = { fileOperations: ['manual-group'] };
 // @ts-expect-error -- companionBundle is a single value, not a list (§4)
@@ -36,5 +37,7 @@ export const fileOperation: DeliveryUnit = {
   description: 'The creation of `a.md`',
   availability: { manual: { available: true }, companion: unavailable },
 };
+// @ts-expect-error -- an edit states every edits mechanism's availability, companion included (§3)
+export const editWithoutCompanion: DeliveryUnit = { kind: 'edit', id: 'e', description: 'e', availability: { native: unavailable, 'review-body': unavailable } };
 // @ts-expect-error -- an edit group states every groupedEdits mechanism's availability
 export const partialGroup: DeliveryUnit = { kind: 'edit-group', id: 'g', description: 'g', members: [], availability: { companion: unavailable } };

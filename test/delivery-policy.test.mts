@@ -33,6 +33,7 @@ import {
   DELIVERY_PRESETS,
   DELIVERY_PRESET_SETTINGS,
   deliveryConfigurationDiagnostics,
+  deliveryConfigurationNeeded,
   planDelivery,
   readDeliveryConfiguration,
   resolveDeliveryPolicy,
@@ -65,8 +66,14 @@ function no(...obstacles: [string, ...string[]]): MechanismAvailability {
   return { available: false, obstacles };
 }
 
-function edit(id: string, description: string, native: MechanismAvailability = OK, reviewBody: MechanismAvailability = OK): DeliveryUnit {
-  return { kind: 'edit', id, description, availability: { native, 'review-body': reviewBody } };
+function edit(
+  id: string,
+  description: string,
+  native: MechanismAvailability = OK,
+  reviewBody: MechanismAvailability = OK,
+  companion: MechanismAvailability = OK,
+): DeliveryUnit {
+  return { kind: 'edit', id, description, availability: { native, 'review-body': reviewBody, companion } };
 }
 
 function member(description: string, native: MechanismAvailability = OK): IEditGroupMember {
@@ -136,6 +143,32 @@ const CONFIGURATION_INVALID = {
   remedies: ['Fix `.github/sarif-to-comment.json` on the default branch.'],
 } as const;
 
+/** The existing limit's code, from docs/diagnostics.md, with the remedies of contract §9. */
+const TOO_MANY = {
+  severity: 'error',
+  code: 'too-many-suggestion-prs',
+  title: 'The review would create too many suggestion pull requests',
+  remedies: [
+    'Bundle them into one companion pull request (`--companion-bundle single`, `delivery.companionBundle: \'single\'`).',
+    'Publish fewer proposals in one review, or group related changes.',
+  ],
+} as const;
+const OPTIONS_UNUSED = { severity: 'note', code: 'companion-options-unused', title: 'Companion pull request options have no effect' } as const;
+
+function tooManyDiagnostic(count: number): IDiagnostic {
+  return {
+    severity: TOO_MANY.severity,
+    code: TOO_MANY.code,
+    title: TOO_MANY.title,
+    message: `The review needs ${String(count)} suggestion pull requests; the limit is 10. Nothing is split or dropped.`,
+    remedies: [...TOO_MANY.remedies],
+  };
+}
+
+function optionsUnusedDiagnostic(message: string): IDiagnostic {
+  return { severity: OPTIONS_UNUSED.severity, code: OPTIONS_UNUSED.code, title: OPTIONS_UNUSED.title, message };
+}
+
 function unavailableDiagnostic(message: string): IDiagnostic {
   return { severity: UNAVAILABLE.severity, code: UNAVAILABLE.code, title: UNAVAILABLE.title, message, remedies: [...UNAVAILABLE.remedies] };
 }
@@ -179,7 +212,7 @@ function file(text: string): { readonly branch: string; readonly content: { read
 describe('vocabularies, defaults and presets (contract §3, §5, §6, §11.1)', () => {
   test('each dimension has exactly its fixed vocabulary, in the contract\'s order (§3)', () => {
     assert.deepEqual(DELIVERY_MECHANISMS, {
-      edits: ['native', 'review-body'],
+      edits: ['native', 'review-body', 'companion'],
       groupedEdits: ['native-batch', 'companion', 'manual-group'],
       fileOperations: ['manual', 'companion'],
     });
@@ -187,9 +220,9 @@ describe('vocabularies, defaults and presets (contract §3, §5, §6, §11.1)', 
     assert.deepEqual(DELIVERY_PRESETS, ['original-pr', 'companion']);
   });
 
-  test('the defaults are explicit and never name a companion (§5)', () => {
+  test('the defaults are explicit, edits is strictly native, and none names a companion (§5)', () => {
     assert.deepEqual(DEFAULT_DELIVERY_POLICY, {
-      edits: ['native', 'review-body'],
+      edits: ['native'],
       groupedEdits: ['native-batch'],
       fileOperations: ['manual'],
       companionBundle: 'per-unit',
@@ -199,7 +232,7 @@ describe('vocabularies, defaults and presets (contract §3, §5, §6, §11.1)', 
   test('each preset sets exactly the dimensions of its row (§6)', () => {
     assert.deepEqual(DELIVERY_PRESET_SETTINGS, {
       'original-pr': { edits: ['native', 'review-body'], groupedEdits: ['native-batch', 'manual-group'], fileOperations: ['manual'] },
-      companion: { groupedEdits: ['companion'], fileOperations: ['companion'] },
+      companion: { edits: ['companion'], groupedEdits: ['companion'], fileOperations: ['companion'] },
     });
   });
 
@@ -285,7 +318,7 @@ describe('precedence, per dimension (contract §7)', () => {
         'caller-preset': { value: ['native', 'review-body'], source: 'caller-preset', preset: 'original-pr' },
         configuration: { value: ['review-body', 'native'], source: 'configuration' },
         'configuration-preset': { value: ['native', 'review-body'], source: 'configuration-preset', preset: 'original-pr' },
-        default: { value: ['native', 'review-body'], source: 'default' },
+        default: { value: ['native'], source: 'default' },
       }[winner];
       assert.deepEqual(policy({ caller, configuration }).edits, expected);
     });
@@ -325,10 +358,10 @@ describe('precedence, per dimension (contract §7)', () => {
     });
   }
 
-  test('a preset that does not set a dimension does not stop the search (§7)', () => {
-    // The companion preset does not set edits (§6).
-    const resolved = policy({ caller: { preset: 'companion' }, configuration: { edits: ['review-body'] } });
-    assert.deepEqual(resolved.edits, { value: ['review-body'], source: 'configuration' });
+  test('a preset that does not set a setting does not stop the search (§7)', () => {
+    // No preset sets companionBundle (§6).
+    const resolved = policy({ caller: { preset: 'companion' }, configuration: { companionBundle: 'single' } });
+    assert.deepEqual(resolved.companionBundle, { value: 'single', source: 'configuration' });
   });
 
   test('a list is taken whole: the winning layer replaces lower lists, never merges with them (§7)', () => {
@@ -357,11 +390,44 @@ describe('precedence, per dimension (contract §7)', () => {
     const resolved = policy({ caller: { preset: 'companion' } });
     assert.deepEqual(Object.keys(resolved), ['edits', 'groupedEdits', 'fileOperations', 'companionBundle']);
     assert.deepEqual(parseJson(JSON.stringify(resolved)), {
-      edits: { value: ['native', 'review-body'], source: 'default' },
+      edits: { value: ['companion'], source: 'caller-preset', preset: 'companion' },
       groupedEdits: { value: ['companion'], source: 'caller-preset', preset: 'companion' },
       fileOperations: { value: ['companion'], source: 'caller-preset', preset: 'companion' },
       companionBundle: { value: 'per-unit', source: 'default' },
     });
+  });
+});
+
+describe('whether the configuration is read (contract §11.1)', () => {
+  // Written by hand: the file is not read exactly when the caller's specific
+  // settings and preset together decide edits, groupedEdits, fileOperations
+  // and companionBundle.
+  const CASES: readonly (readonly [what: string, caller: IDeliveryPolicyLayer | undefined, needed: boolean])[] = [
+    ['no caller layer', undefined, true],
+    ['an empty caller layer', {}, true],
+    ['every setting given specifically', { edits: ['native'], groupedEdits: ['companion'], fileOperations: ['manual'], companionBundle: 'per-unit' }, false],
+    ['every list but no companionBundle', { edits: ['native'], groupedEdits: ['companion'], fileOperations: ['manual'] }, true],
+    ['the companion preset alone (it leaves companionBundle)', { preset: 'companion' }, true],
+    ['the companion preset and companionBundle', { preset: 'companion', companionBundle: 'per-unit' }, false],
+    ['the original-pr preset and companionBundle', { preset: 'original-pr', companionBundle: 'single' }, false],
+    ['the original-pr preset alone', { preset: 'original-pr' }, true],
+    ['edits alone', { edits: ['native'] }, true],
+    ['a preset plus specific overrides, still deciding everything', { preset: 'companion', edits: ['native'], companionBundle: 'single' }, false],
+  ];
+  for (const [what, caller, needed] of CASES) {
+    test(`${what}: ${needed ? 'read' : 'not read'}`, () => {
+      assert.equal(deliveryConfigurationNeeded(caller), needed);
+    });
+  }
+
+  test('when it is not read, the resolution comes from the caller layers alone', () => {
+    const caller: IDeliveryPolicyLayer = { preset: 'companion', companionBundle: 'single' };
+    assert.equal(deliveryConfigurationNeeded(caller), false);
+    const resolved = policy({ caller });
+    assert.deepEqual(
+      [resolved.edits.source, resolved.groupedEdits.source, resolved.fileOperations.source, resolved.companionBundle.source],
+      ['caller-preset', 'caller-preset', 'caller-preset', 'caller'],
+    );
   });
 });
 
@@ -392,8 +458,8 @@ describe('validating a caller layer (contract §12, by the rules of §11.4)', ()
     ['a list given as a string', { edits: 'native' }, [{ pointer: '/edits', detail: 'must be a list of mechanisms' }]],
     ['a list given as null', { fileOperations: null }, [{ pointer: '/fileOperations', detail: 'must be a list of mechanisms' }]],
     ['an empty list', { edits: [] }, [{ pointer: '/edits', detail: 'must list at least one mechanism' }]],
-    ['a mechanism of another dimension', { edits: ['native', 'companion'] }, [{ pointer: '/edits/1', detail: 'is not one of `native`, `review-body`' }]],
-    ['a non-string entry', { edits: [1] }, [{ pointer: '/edits/0', detail: 'is not one of `native`, `review-body`' }]],
+    ['a mechanism of another dimension', { edits: ['native', 'manual'] }, [{ pointer: '/edits/1', detail: 'is not one of `native`, `review-body`, `companion`' }]],
+    ['a non-string entry', { edits: [1] }, [{ pointer: '/edits/0', detail: 'is not one of `native`, `review-body`, `companion`' }]],
     ['a differently cased mechanism', { groupedEdits: ['companion', 'Companion'] }, [{ pointer: '/groupedEdits/1', detail: 'is not one of `native-batch`, `companion`, `manual-group`' }]],
     ['a repeated mechanism', { edits: ['native', 'review-body', 'native'] }, [{ pointer: '/edits/2', detail: 'repeats `native`' }]],
     ['a mechanism repeated twice', { fileOperations: ['manual', 'manual', 'manual'] }, [
@@ -680,13 +746,14 @@ describe('companion bundles (contract §9)', () => {
     editGroup('g2', 'The group `two`', [member('c'), member('d')]),
   ];
 
+  // The edit stays native, so only the groups and the creation are companion-delivered.
   test('per-unit: one companion per companion-delivered unit, in order', () => {
-    const plan = planned(planDelivery(policy({ caller: { preset: 'companion' } }), units()));
+    const plan = planned(planDelivery(policy({ caller: { preset: 'companion', edits: ['native'] } }), units()));
     assert.deepEqual(plan.companions, [{ sections: ['g1'] }, { sections: ['f'] }, { sections: ['g2'] }]);
   });
 
   test('single: one companion with each unit as its own section, in order', () => {
-    const plan = planned(planDelivery(policy({ caller: { preset: 'companion', companionBundle: 'single' } }), units()));
+    const plan = planned(planDelivery(policy({ caller: { preset: 'companion', edits: ['native'], companionBundle: 'single' } }), units()));
     assert.deepEqual(plan.companions, [{ sections: ['g1', 'f', 'g2'] }]);
   });
 
@@ -722,7 +789,7 @@ describe('blocking and announced fallback (contract §10)', () => {
   });
 
   test('a blocked plan still reports the fallbacks of other units, after the errors', () => {
-    const plan = blocked(planDelivery(policy(), [
+    const plan = blocked(planDelivery(policy({ caller: { edits: ['native', 'review-body'] } }), [
       edit('e1', 'The edit of `a.ts` line 1', no('Not inline.')),
       fileOperation('f', 'The creation of `b.md`', { manual: no('Too long.') }),
     ]));
@@ -766,19 +833,37 @@ describe('blocking and announced fallback (contract §10)', () => {
     ]);
   });
 
-  test('the default edits list falls back to the review body, announced (§5, §10.2)', () => {
-    const plan = planned(planDelivery(policy(), [edit('e', 'The edit of `a.ts` line 7', no('The lines are not on the new side of the pull request\'s diff.'))]));
-    assert.deepEqual(plan.deliveries, [{ unitId: 'e', kind: 'edit', dimension: 'edits', mechanism: 'review-body' }]);
+  test('the default edits list is strict: an edit that cannot be native is blocked, not moved (§5)', () => {
+    const plan = blocked(planDelivery(policy(), [edit('e', 'The edit of `a.ts` line 7', no('The lines are not on the new side of the pull request\'s diff.'))]));
     assert.deepEqual(plan.diagnostics, [
-      fallbackDiagnostic(
-        'The edit of `a.ts` line 7 is delivered as `review-body`. `edits` is `[native, review-body]`, the default, and the mechanisms listed before it are unavailable:\n\n'
+      unavailableDiagnostic(
+        'The edit of `a.ts` line 7 cannot be delivered. `edits` is `[native]`, the default, and no mechanism it lists is available:\n\n'
         + '- `native`: The lines are not on the new side of the pull request\'s diff.',
       ),
     ]);
   });
 
+  test('a caller\'s review-body fallback for edits is announced (§10.2)', () => {
+    const plan = planned(planDelivery(policy({ caller: { edits: ['native', 'review-body'] } }), [
+      edit('e', 'The edit of `a.ts` line 7', no('The lines are not on the new side of the pull request\'s diff.')),
+    ]));
+    assert.deepEqual(plan.deliveries, [{ unitId: 'e', kind: 'edit', dimension: 'edits', mechanism: 'review-body' }]);
+    assert.deepEqual(plan.diagnostics, [
+      fallbackDiagnostic(
+        'The edit of `a.ts` line 7 is delivered as `review-body`. `edits` is `[native, review-body]`, set by the caller (`--edits`, `delivery.edits`), and the mechanisms listed before it are unavailable:\n\n'
+        + '- `native`: The lines are not on the new side of the pull request\'s diff.',
+      ),
+    ]);
+  });
+
+  test('an edit delivered by companion is in a companion pull request (§8.2)', () => {
+    const plan = planned(planDelivery(policy({ caller: { edits: ['companion'] } }), [edit('e', 'The edit')]));
+    assert.deepEqual(plan.deliveries, [{ unitId: 'e', kind: 'edit', dimension: 'edits', mechanism: 'companion' }]);
+    assert.deepEqual(plan.companions, [{ sections: ['e'] }]);
+  });
+
   test('the unit\'s location becomes the diagnostic\'s location', () => {
-    const unit: DeliveryUnit = { kind: 'edit', id: 'e', description: 'The edit', location: { pointer: '/runs/0/results/3' }, availability: { native: no('X.'), 'review-body': no('Y.') } };
+    const unit: DeliveryUnit = { kind: 'edit', id: 'e', description: 'The edit', location: { pointer: '/runs/0/results/3' }, availability: { native: no('X.'), 'review-body': no('Y.'), companion: no('Z.') } };
     const [diagnostic] = blocked(planDelivery(policy(), [unit])).diagnostics;
     assert.deepEqual(diagnostic?.location, { pointer: '/runs/0/results/3' });
   });
@@ -799,12 +884,12 @@ describe('acceptance examples (contract §14)', () => {
     assert.deepEqual(plan.diagnostics, []);
   });
 
-  test('D-A2 (D48): presets follow the same precedence, and the companion preset leaves edits to lower layers', () => {
-    assert.deepEqual(policy({ caller: { preset: 'companion' }, configuration: { preset: 'original-pr' } }), {
-      edits: { value: ['native', 'review-body'], source: 'configuration-preset', preset: 'original-pr' },
+  test('D-A2 (D48): presets follow the same precedence, and no preset sets companionBundle', () => {
+    assert.deepEqual(policy({ caller: { preset: 'companion' }, configuration: { preset: 'original-pr', companionBundle: 'single' } }), {
+      edits: { value: ['companion'], source: 'caller-preset', preset: 'companion' },
       groupedEdits: { value: ['companion'], source: 'caller-preset', preset: 'companion' },
       fileOperations: { value: ['companion'], source: 'caller-preset', preset: 'companion' },
-      companionBundle: { value: 'per-unit', source: 'default' },
+      companionBundle: { value: 'single', source: 'configuration' },
     });
   });
 
@@ -823,7 +908,7 @@ describe('acceptance examples (contract §14)', () => {
 
   test('D-A4 (D48): nothing set resolves to the documented defaults, and no document gets a companion', () => {
     assert.deepEqual(policy(), {
-      edits: { value: ['native', 'review-body'], source: 'default' },
+      edits: { value: ['native'], source: 'default' },
       groupedEdits: { value: ['native-batch'], source: 'default' },
       fileOperations: { value: ['manual'], source: 'default' },
       companionBundle: { value: 'per-unit', source: 'default' },
@@ -832,6 +917,8 @@ describe('acceptance examples (contract §14)', () => {
       edit('e', 'e'), editGroup('g', 'g', [member('a'), member('b')]), fileOperation('f', 'f'), fileOperationGroup('h', 'h'),
     ]));
     assert.deepEqual(plan.companions, []);
+    // An edit that cannot be a native suggestion is blocked, as it is refused today.
+    assert.deepEqual(blocked(planDelivery(policy(), [edit('x', 'The edit of `x.ts` line 1', no('Not inline.'))])).blocked, ['x']);
   });
 
   test('D-A5 (D49): a group of two eligible edits is one native batch on the original pull request', () => {
@@ -973,6 +1060,99 @@ describe('acceptance examples (contract §14)', () => {
       problems: [{ pointer: '/fileOperations', detail: 'must list at least one mechanism' }],
     });
   });
+
+  test('D-A18 (D48): every proposed change, ungrouped edits included, goes to companions', () => {
+    const plan = planned(planDelivery(policy({ caller: { preset: 'companion', companionBundle: 'single' } }), [
+      edit('e', 'The edit of `a.ts` line 1'),
+      editGroup('g', 'The group `g`', [member('m1'), member('m2')]),
+      fileOperation('d', 'The deletion of `old.txt`'),
+    ]));
+    assert.deepEqual(plan.deliveries, [
+      { unitId: 'e', kind: 'edit', dimension: 'edits', mechanism: 'companion' },
+      { unitId: 'g', kind: 'edit-group', dimension: 'groupedEdits', mechanism: 'companion' },
+      { unitId: 'd', kind: 'file-operation', dimension: 'fileOperations', mechanism: 'companion' },
+    ]);
+    assert.deepEqual(plan.companions, [{ sections: ['e', 'g', 'd'] }]);
+    assert.deepEqual(plan.diagnostics, []);
+  });
+
+  test('D-A19: the limit blocks per-unit companions, naming the single bundle; single delivers them', () => {
+    const units = Array.from({ length: 11 }, (_, i) => edit(`e${String(i)}`, `Edit ${String(i)}`));
+    const over = blocked(planDelivery(policy({ caller: { preset: 'companion' } }), units));
+    assert.deepEqual(over.blocked, []);
+    assert.deepEqual(over.diagnostics, [tooManyDiagnostic(11)]);
+    const bundled = planned(planDelivery(policy({ caller: { preset: 'companion', companionBundle: 'single' } }), units));
+    assert.deepEqual(bundled.companions, [{ sections: units.map((u) => u.id) }]);
+  });
+
+  test('D-A20: companion options without a planned companion are a note naming them', () => {
+    const plan = planned(planDelivery(policy(), [edit('e', 'The edit')], { pullRequestLabels: ['team-a'], markSuggestionPullRequestsReady: true }));
+    assert.deepEqual(plan.deliveries, [{ unitId: 'e', kind: 'edit', dimension: 'edits', mechanism: 'native' }]);
+    assert.deepEqual(plan.diagnostics, [
+      optionsUnusedDiagnostic('No companion pull request is planned, so these options have no effect: `--pr-labels` (`pullRequestLabels`), `--mark-suggestion-prs-ready` (`markSuggestionPullRequestsReady`).'),
+    ]);
+    const companions = planned(planDelivery(policy({ caller: { preset: 'companion' } }), [edit('e', 'The edit')], { pullRequestLabels: ['team-a'], markSuggestionPullRequestsReady: true }));
+    assert.deepEqual(companions.diagnostics, []);
+  });
+
+  test('D-A21: the configuration is read only when the caller leaves a setting undecided', () => {
+    assert.equal(deliveryConfigurationNeeded({ preset: 'companion', companionBundle: 'per-unit' }), false);
+    assert.equal(deliveryConfigurationNeeded({ preset: 'companion' }), true);
+    assert.equal(deliveryConfigurationNeeded({ preset: 'original-pr' }), true);
+    assert.equal(deliveryConfigurationNeeded({ edits: ['native'] }), true);
+  });
+});
+
+describe('the companion limit (contract §9)', () => {
+  const edits = (n: number): DeliveryUnit[] => Array.from({ length: n }, (_, i) => edit(`e${String(i)}`, `Edit ${String(i)}`));
+
+  test('exactly 10 companions are planned', () => {
+    assert.equal(planned(planDelivery(policy({ caller: { edits: ['companion'] } }), edits(10))).companions.length, 10);
+  });
+
+  test('the limit is reported after every unavailable unit, and counts only delivered units', () => {
+    const units = [...edits(11), fileOperation('f', 'The creation of `a.md`', { manual: no('Too long.') })];
+    const plan = blocked(planDelivery(policy({ caller: { edits: ['companion'] } }), units));
+    assert.deepEqual(plan.blocked, ['f']);
+    assert.deepEqual(plan.diagnostics.map((d) => d.code), ['delivery-unavailable', 'too-many-suggestion-prs']);
+    assert.deepEqual(plan.diagnostics[1], tooManyDiagnostic(11));
+  });
+
+  test('alternatives and non-companion deliveries do not count', () => {
+    const plan = planned(planDelivery(policy({ caller: { edits: ['companion', 'native'] } }), [
+      ...edits(10),
+      edit('n', 'Native', OK, OK, no('No companion for this one.')),
+      alternative('a', 'Alternative'),
+    ]));
+    assert.equal(plan.companions.length, 10);
+  });
+});
+
+describe('the companion-options-unused note (contract §12)', () => {
+  const native = (): DeliveryUnit[] => [edit('e', 'The edit')];
+  const LABELS = 'No companion pull request is planned, so these options have no effect: `--pr-labels` (`pullRequestLabels`).';
+
+  test('one option alone is named alone', () => {
+    assert.deepEqual(planned(planDelivery(policy(), native(), { pullRequestLabels: ['a', 'b'] })).diagnostics, [optionsUnusedDiagnostic(LABELS)]);
+    assert.deepEqual(planned(planDelivery(policy(), native(), { markSuggestionPullRequestsReady: true })).diagnostics, [
+      optionsUnusedDiagnostic('No companion pull request is planned, so these options have no effect: `--mark-suggestion-prs-ready` (`markSuggestionPullRequestsReady`).'),
+    ]);
+  });
+
+  test('options without an effect are not named: no labels, or ready false', () => {
+    assert.deepEqual(planned(planDelivery(policy(), native(), { pullRequestLabels: [], markSuggestionPullRequestsReady: false })).diagnostics, []);
+    assert.deepEqual(planned(planDelivery(policy(), native(), {})).diagnostics, []);
+  });
+
+  test('the note comes after the warnings', () => {
+    const plan = planned(planDelivery(policy({ caller: { edits: ['native', 'review-body'] } }), [edit('e', 'The edit', no('X.'))], { pullRequestLabels: ['a'] }));
+    assert.deepEqual(plan.diagnostics.map((d) => d.code), ['delivery-fallback', 'companion-options-unused']);
+  });
+
+  test('a blocked plan carries no note', () => {
+    const plan = blocked(planDelivery(policy(), [edit('e', 'The edit', no('X.'))], { pullRequestLabels: ['a'] }));
+    assert.deepEqual(plan.diagnostics.map((d) => d.code), ['delivery-unavailable']);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1025,7 +1205,7 @@ function generatedUnits(random: () => number): DeliveryUnit[] {
     const kind = pick(random, ['edit', 'edit-group', 'file-operation', 'file-operation-group', 'alternative'] as const);
     switch (kind) {
       case 'edit':
-        units.push(edit(id, `Unit ${id}`, availability(random, 1), availability(random, 2)));
+        units.push(edit(id, `Unit ${id}`, availability(random, 1), availability(random, 2), availability(random, 9)));
         break;
       case 'edit-group': {
         const members = Array.from({ length: 2 + Math.floor(random() * 3) }, (_, m) => member(`Member ${String(m)}`, availability(random, 10 + m)));
@@ -1061,7 +1241,8 @@ function dimensionOf(unit: DeliveryUnit): 'edits' | 'groupedEdits' | 'fileOperat
 function canDeliver(unit: DeliveryUnit, mechanism: string): boolean {
   switch (unit.kind) {
     case 'edit':
-      return mechanism === 'native' ? unit.availability.native.available : unit.availability['review-body'].available;
+      if (mechanism === 'native') return unit.availability.native.available;
+      return mechanism === 'review-body' ? unit.availability['review-body'].available : unit.availability.companion.available;
     case 'edit-group':
       if (mechanism === 'native-batch') return unit.availability['native-batch'].available && unit.members.every((m) => m.native.available);
       return mechanism === 'companion' ? unit.availability.companion.available : unit.availability['manual-group'].available;
