@@ -163,6 +163,18 @@ function createdSection(unit: IUnit, number: number, reappliedOnto?: string): st
   ];
 }
 
+/**
+ * §2.13.3: the companion index a review that creates these suggestion pull
+ * requests begins with; a title is shown as plain text, so its `#` is escaped.
+ */
+function companionIndex(...created: readonly (readonly [unit: IUnit, number: number])[]): string[] {
+  return [
+    '**Companion pull requests of this review:**',
+    '',
+    ...created.map(([unit, n]) => `- [#${String(n)}](${pullUrl(n)}): ${unit.title.replace('#', '\\#')} — created with this review`),
+  ];
+}
+
 /** §2.11: the review body's sections, joined as every review body's sections are. */
 const reviewBody = (...sections: readonly (readonly string[])[]): string => sections.map((s) => s.join('\n')).join('\n\n---\n\n');
 
@@ -228,6 +240,7 @@ function assertProposedOnReviewed(world: IWorld, outcome: Json): void {
   assert.ok(review);
   assert.equal(review.request.commit_id, REVIEWED);
   assert.equal(review.request.body.replace(REVIEW_MARKER, ''), reviewBody(
+    companionIndex([REWORD, pulls[0].number], [CREATE, pulls[1].number], [DELETE, pulls[2].number]),
     createdSection(REWORD, pulls[0].number), createdSection(CREATE, pulls[1].number), createdSection(DELETE, pulls[2].number), REMARK_SECTION,
   ));
   assert.ok(markdown(outcome).includes('Suggestion pull requests (drafts into `feature/retry`, labeled `suggestion-pr`):'), markdown(outcome));
@@ -314,6 +327,7 @@ describe('a rewritten history: every suggestion stays on the reviewed commit and
     assert.ok(review);
     assert.equal(review.request.commit_id, REVIEWED, 'the review stays pinned to the reviewed commit');
     assert.equal(review.request.body.replace(REVIEW_MARKER, ''), reviewBody(
+      companionIndex([REWORD, pulls[0].number], [CREATE, pulls[1].number], [DELETE, pulls[2].number]),
       createdSection(REWORD, pulls[0].number), createdSection(CREATE, pulls[1].number), createdSection(DELETE, pulls[2].number), REMARK_SECTION,
     ), 'the projection is in each suggestion pull request\'s own description, not in the review');
 
@@ -728,7 +742,11 @@ describe('a plan of version 2, written by unreleased builds that re-applied sugg
     }
     const [review] = world.host.reviews();
     assert.ok(review);
-    assert.equal(review.request.body.replace(REVIEW_MARKER, ''), reviewBody(createdSection(CREATE, creation.number, AMENDED), createdSection(DELETE, deletion.number, AMENDED)));
+    assert.equal(review.request.body.replace(REVIEW_MARKER, ''), reviewBody(
+      // The plan was written with the companion index, which the version-2 rewrite keeps.
+      companionIndex([CREATE, creation.number], [DELETE, deletion.number]),
+      createdSection(CREATE, creation.number, AMENDED), createdSection(DELETE, deletion.number, AMENDED),
+    ));
     assert.ok(markdown(outcome).includes(`labeled \`suggestion-pr\`, re-applied onto commit \`${AMENDED}\`):`), markdown(outcome));
   });
 

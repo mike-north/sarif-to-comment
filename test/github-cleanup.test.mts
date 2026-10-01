@@ -265,8 +265,10 @@ describe('listOpenPullRequestsByLabel', () => {
 const pull = (number: number, extra: Record<string, unknown> = {}): Record<string, unknown> => ({
   number,
   html_url: `https://github.com/octo/widgets/pull/${String(number)}`,
+  title: `Pull request ${String(number)}`,
   state: 'open',
   merged: false,
+  draft: false,
   body: 'text',
   head: { ref: `sarif-to-comment/suggestions/37/x`, repo: { full_name: 'octo/widgets' } },
   base: { ref: 'feature', repo: { full_name: 'octo/widgets' } },
@@ -275,16 +277,18 @@ const pull = (number: number, extra: Record<string, unknown> = {}): Record<strin
 });
 
 describe('getPullRequest', () => {
-  test('answers the state, merge, body, branches, repositories and labels', async () => {
+  test('answers the title, state, merge, draft, body, branches, repositories and labels', async () => {
     const script = new Script()
-      .on('GET', `${REPO}/pulls/37`, json(pull(37, { state: 'closed', merged: true, body: null, head: { ref: 'feature', repo: null }, labels: [] })))
+      .on('GET', `${REPO}/pulls/37`, json(pull(37, { state: 'closed', merged: true, draft: true, body: null, head: { ref: 'feature', repo: null }, labels: [] })))
       .on('GET', `${REPO}/pulls/40`, json(pull(40)));
     const client = script.client();
     assert.deepEqual(await client.getPullRequest({ owner: 'octo', repo: 'widgets', pullNumber: 37 }), {
       number: 37,
       htmlUrl: 'https://github.com/octo/widgets/pull/37',
+      title: 'Pull request 37',
       state: 'closed',
       merged: true,
+      draft: true,
       body: '',
       headRef: 'feature',
       headRepository: null,
@@ -294,8 +298,10 @@ describe('getPullRequest', () => {
     assert.deepEqual(await client.getPullRequest({ owner: 'octo', repo: 'widgets', pullNumber: 40 }), {
       number: 40,
       htmlUrl: 'https://github.com/octo/widgets/pull/40',
+      title: 'Pull request 40',
       state: 'open',
       merged: false,
+      draft: false,
       body: 'text',
       headRef: 'sarif-to-comment/suggestions/37/x',
       headRepository: 'octo/widgets',
@@ -309,6 +315,10 @@ describe('getPullRequest', () => {
     ['an unknown state', pull(40, { state: 'reopened' })],
     ['no merged flag', pull(40, { merged: undefined })],
     ['merged while open', pull(40, { merged: true })],
+    ['no title', pull(40, { title: undefined })],
+    ['an empty title', pull(40, { title: '' })],
+    ['no draft flag', pull(40, { draft: undefined })],
+    ['a draft flag that is not a boolean', pull(40, { draft: 'yes' })],
     ['no head branch', pull(40, { head: { repo: { full_name: 'octo/widgets' } } })],
     ['no base repository', pull(40, { base: { ref: 'feature', repo: null } })],
     ['a label without a name', pull(40, { labels: [{ color: 'ededed' }] })],

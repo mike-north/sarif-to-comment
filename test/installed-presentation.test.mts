@@ -108,6 +108,12 @@ describe('the installed package accepts presentation callbacks', () => {
     assert.match(body, REVIEW_MARKER);
     const number = String(pull.number);
     assert.equal(body.replace(REVIEW_MARKER, ''), [
+      '**Companion pull requests of this review:**',
+      '',
+      `- [#${number}](https://github.com/octo/widgets/pull/${number}): Suggestion for \\#7: create docs/guide.md — created with this review`,
+      '',
+      '---',
+      '',
       `**Suggestion pull request:** [#${number}](https://github.com/octo/widgets/pull/${number})`,
       '',
       'Merging it into `feature/retry` applies this change:',
