@@ -1,0 +1,71 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "repos/mike-north/doc-linter/pulls/93/reviews",
+    "body": {
+      "commit_id": "04d5d812ccedf3accb3011fe65494481760c72fa",
+      "body": "E4 linked-group experiment on #93: one pending review with three native suggestions. Fixture only; do not act on this review.",
+      "comments": [
+        {
+          "path": "docs/experiments/forcepush/sample-control.md",
+          "line": 5,
+          "side": "RIGHT",
+          "body": "E4 suggestion on line 5.\n\n```suggestion\nLine 05: linked-group suggested text.\n```"
+        },
+        {
+          "path": "docs/experiments/forcepush/sample-control.md",
+          "line": 15,
+          "side": "RIGHT",
+          "body": "E4 suggestion on line 15.\n\n```suggestion\nLine 15: linked-group suggested text.\n```"
+        },
+        {
+          "path": "docs/experiments/forcepush/sample-control.md",
+          "line": 18,
+          "side": "RIGHT",
+          "body": "E4 suggestion on line 18.\n\n```suggestion\nLine 18: linked-group suggested text.\n```"
+        }
+      ]
+    }
+  },
+  "status": 200,
+  "statusLine": "HTTP/2.0 200 OK",
+  "response": {
+    "id": 5374159934,
+    "node_id": "PRR_kwDOUuyy7s8AAAABQFMsPg",
+    "user": {
+      "login": "mike-north",
+      "id": 558005,
+      "node_id": "MDQ6VXNlcjU1ODAwNQ==",
+      "avatar_url": "https://avatars.githubusercontent.com/u/558005?u=a27f905c8f24e1ad227d32905fa5512fd615153d&v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/mike-north",
+      "html_url": "https://github.com/mike-north",
+      "followers_url": "https://api.github.com/users/mike-north/followers",
+      "following_url": "https://api.github.com/users/mike-north/following{/other_user}",
+      "gists_url": "https://api.github.com/users/mike-north/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/mike-north/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/mike-north/subscriptions",
+      "organizations_url": "https://api.github.com/users/mike-north/orgs",
+      "repos_url": "https://api.github.com/users/mike-north/repos",
+      "events_url": "https://api.github.com/users/mike-north/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/mike-north/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "body": "E4 linked-group experiment on #93: one pending review with three native suggestions. Fixture only; do not act on this review.",
+    "state": "PENDING",
+    "html_url": "https://github.com/mike-north/doc-linter/pull/93#pullrequestreview-5374159934",
+    "pull_request_url": "https://api.github.com/repos/mike-north/doc-linter/pulls/93",
+    "author_association": "OWNER",
+    "_links": {
+      "html": {
+        "href": "https://github.com/mike-north/doc-linter/pull/93#pullrequestreview-5374159934"
+      },
+      "pull_request": {
+        "href": "https://api.github.com/repos/mike-north/doc-linter/pulls/93"
+      }
+    },
+    "commit_id": "04d5d812ccedf3accb3011fe65494481760c72fa"
+  }
+}

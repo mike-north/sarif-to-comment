@@ -1,0 +1,60 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "repos/mike-north/doc-linter/git/commits",
+    "body": {
+      "message": "Experiment (E5): proposal P edits line 10 on top of the discarded eb6c2f6\n\nDangling commit for the companion-fidelity experiment. No ref points at it.",
+      "tree": "ee628cd16e5af356df0c8db7f24a5997eb8ad56e",
+      "parents": [
+        "eb6c2f6bbceb78a957684917cdb1a50cf9850cd4"
+      ],
+      "author": {
+        "name": "Mike North",
+        "email": "<redacted-email>",
+        "date": "2026-10-01T03:00:00Z"
+      },
+      "committer": {
+        "name": "Mike North",
+        "email": "<redacted-email>",
+        "date": "2026-10-01T03:00:00Z"
+      }
+    }
+  },
+  "status": 201,
+  "statusLine": "HTTP/2.0 201 Created",
+  "response": {
+    "sha": "9b513c482973851d58ffcaec0740c10b429c3197",
+    "node_id": "C_kwDOUuyy7toAKDliNTEzYzQ4Mjk3Mzg1MWQ1OGZmY2FlYzA3NDBjMTBiNDI5YzMxOTc",
+    "url": "https://api.github.com/repos/mike-north/doc-linter/git/commits/9b513c482973851d58ffcaec0740c10b429c3197",
+    "html_url": "https://github.com/mike-north/doc-linter/commit/9b513c482973851d58ffcaec0740c10b429c3197",
+    "author": {
+      "name": "Mike North",
+      "email": "<redacted-email>",
+      "date": "2026-10-01T03:00:00Z"
+    },
+    "committer": {
+      "name": "Mike North",
+      "email": "<redacted-email>",
+      "date": "2026-10-01T03:00:00Z"
+    },
+    "tree": {
+      "sha": "ee628cd16e5af356df0c8db7f24a5997eb8ad56e",
+      "url": "https://api.github.com/repos/mike-north/doc-linter/git/trees/ee628cd16e5af356df0c8db7f24a5997eb8ad56e"
+    },
+    "message": "Experiment (E5): proposal P edits line 10 on top of the discarded eb6c2f6\n\nDangling commit for the companion-fidelity experiment. No ref points at it.",
+    "parents": [
+      {
+        "sha": "eb6c2f6bbceb78a957684917cdb1a50cf9850cd4",
+        "url": "https://api.github.com/repos/mike-north/doc-linter/git/commits/eb6c2f6bbceb78a957684917cdb1a50cf9850cd4",
+        "html_url": "https://github.com/mike-north/doc-linter/commit/eb6c2f6bbceb78a957684917cdb1a50cf9850cd4"
+      }
+    ],
+    "verification": {
+      "verified": false,
+      "reason": "unsigned",
+      "signature": null,
+      "payload": null,
+      "verified_at": null
+    }
+  }
+}

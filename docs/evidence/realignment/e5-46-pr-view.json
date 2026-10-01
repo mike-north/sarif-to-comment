@@ -1,0 +1,46 @@
+{
+  "additions": 3,
+  "baseRefName": "exp-forcepush-20260929-amend",
+  "baseRefOid": "b3e3ed734b03fc8e4dae2b7cb85f6d8bb1b98801",
+  "changedFiles": 1,
+  "commits": [
+    {
+      "authoredDate": "2026-09-29T17:13:47Z",
+      "authors": [
+        {
+          "email": "<redacted-email>",
+          "id": "MDQ6VXNlcjU1ODAwNQ==",
+          "login": "mike-north",
+          "name": "Mike North"
+        }
+      ],
+      "committedDate": "2026-09-29T17:13:47Z",
+      "messageBody": "",
+      "messageHeadline": "Experiment (amend): C1 reviewed change",
+      "oid": "e69981ed42926b07d0ff3f25d98558229afd348e"
+    },
+    {
+      "authoredDate": "2026-09-29T18:06:30Z",
+      "authors": [
+        {
+          "email": "<redacted-email>",
+          "id": "MDQ6VXNlcjU1ODAwNQ==",
+          "login": "mike-north",
+          "name": "Mike North"
+        }
+      ],
+      "committedDate": "2026-09-29T18:06:30Z",
+      "messageBody": "",
+      "messageHeadline": "Experiment (amend): suggestion ctx on top of e69981e",
+      "oid": "6089e282c86189816b111792ff81c27d2f7b389d"
+    }
+  ],
+  "deletions": 3,
+  "headRefName": "exp-forcepush-20260929-amend-sugg-ctx",
+  "headRefOid": "6089e282c86189816b111792ff81c27d2f7b389d",
+  "isDraft": true,
+  "mergeStateStatus": "DIRTY",
+  "mergeable": "CONFLICTING",
+  "number": 46,
+  "state": "OPEN"
+}

@@ -1,0 +1,16 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "repos/mike-north/doc-linter/git/blobs",
+    "body": {
+      "encoding": "utf-8",
+      "content": "# Force-push experiment sample (orphan)\n\nLine 03: stable filler text for the experiment.\nLine 04: stable filler text for the experiment.\nLine 05: original text.\nLine 06: original text.\nLine 07: stable filler text for the experiment.\nLine 08: stable filler text for the experiment.\nLine 09: stable filler text for the experiment.\nLine 10: E5 proposal edits a context line.\nLine 11: stable filler text for the experiment.\nLine 12: stable filler text for the experiment.\nLine 13: stable filler text for the experiment.\nLine 14: stable filler text for the experiment.\nLine 15: amended unrelated change (C1').\nLine 16: stable filler text for the experiment.\nLine 17: stable filler text for the experiment.\nLine 18: original text.\nLine 19: stable filler text for the experiment.\nLine 20: stable filler text for the experiment.\n"
+    }
+  },
+  "status": 201,
+  "statusLine": "HTTP/2.0 201 Created",
+  "response": {
+    "sha": "f21d9e6027f25ddfb34131295dc47addb50e6e87",
+    "url": "https://api.github.com/repos/mike-north/doc-linter/git/blobs/f21d9e6027f25ddfb34131295dc47addb50e6e87"
+  }
+}

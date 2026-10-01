@@ -1,0 +1,30 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "graphql",
+    "body": {
+      "query": "mutation($id: ID!, $body: String!) { updatePullRequestReviewComment(input: {pullRequestReviewCommentId: $id, body: $body}) { pullRequestReviewComment { id databaseId url state body lastEditedAt updatedAt } } }",
+      "variables": {
+        "id": "PRRC_kwDOUuyy7s73bbZI",
+        "body": "E4 suggestion on line 15. Part 2 of 3 of one linked suggestion group.\n\nOther parts: [part 1 of 3, line 5](https://github.com/mike-north/doc-linter/pull/93#discussion_r4151162432) and [part 3 of 3, line 18](https://github.com/mike-north/doc-linter/pull/93#discussion_r4151162443).\n\nApply the three parts together: on the Files changed tab, choose \"Add suggestion to batch\" on each part, then \"Commit suggestions\".\n\n```suggestion\nLine 15: linked-group suggested text.\n```"
+      }
+    }
+  },
+  "status": 200,
+  "statusLine": "HTTP/2.0 200 OK",
+  "response": {
+    "data": {
+      "updatePullRequestReviewComment": {
+        "pullRequestReviewComment": {
+          "id": "PRRC_kwDOUuyy7s73bbZI",
+          "databaseId": 4151162440,
+          "url": "https://github.com/mike-north/doc-linter/pull/93#discussion_r4151162440",
+          "state": "PENDING",
+          "body": "E4 suggestion on line 15. Part 2 of 3 of one linked suggestion group.\n\nOther parts: [part 1 of 3, line 5](https://github.com/mike-north/doc-linter/pull/93#discussion_r4151162432) and [part 3 of 3, line 18](https://github.com/mike-north/doc-linter/pull/93#discussion_r4151162443).\n\nApply the three parts together: on the Files changed tab, choose \"Add suggestion to batch\" on each part, then \"Commit suggestions\".\n\n```suggestion\nLine 15: linked-group suggested text.\n```",
+          "lastEditedAt": null,
+          "updatedAt": "2026-10-01T02:19:50Z"
+        }
+      }
+    }
+  }
+}

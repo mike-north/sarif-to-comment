@@ -1,0 +1,235 @@
+{
+  "gitVersion": "git version 2.54.0 (Apple Git-157)",
+  "cases": [
+    {
+      "case": "#46",
+      "head": "b3e3ed734b03fc8e4dae2b7cb85f6d8bb1b98801",
+      "proposal": "6089e282c86189816b111792ff81c27d2f7b389d",
+      "reviewed": "e69981ed42926b07d0ff3f25d98558229afd348e",
+      "mergeBase": "c29a1b22f7d7b91f12f41893ad25f555b3f9101f",
+      "reviewedIsAncestorOfHead": false,
+      "filesReviewedDiffersFromHead": [
+        "docs/experiments/forcepush/sample-amend.md"
+      ],
+      "filesTouchedByProposal": [
+        "docs/experiments/forcepush/sample-amend.md"
+      ],
+      "merge": {
+        "command": "git merge-tree --write-tree --name-only b3e3ed734b03fc8e4dae2b7cb85f6d8bb1b98801 6089e282c86189816b111792ff81c27d2f7b389d",
+        "exitCode": 1,
+        "clean": false,
+        "tree": "580c5959325a2d5ced6ceade50569cfdd3dcf26b",
+        "output": "580c5959325a2d5ced6ceade50569cfdd3dcf26b\ndocs/experiments/forcepush/sample-amend.md\n\nAuto-merging docs/experiments/forcepush/sample-amend.md\nCONFLICT (content): Merge conflict in docs/experiments/forcepush/sample-amend.md\n"
+      },
+      "expectedHeadPlusProposal": {
+        "command": "git merge-tree --write-tree --name-only --merge-base=e69981ed42926b07d0ff3f25d98558229afd348e b3e3ed734b03fc8e4dae2b7cb85f6d8bb1b98801 6089e282c86189816b111792ff81c27d2f7b389d",
+        "exitCode": 0,
+        "clean": true,
+        "tree": "76cae64e4debed41843ea5ca60560e03a3fd706d",
+        "output": "76cae64e4debed41843ea5ca60560e03a3fd706d\n"
+      },
+      "filesMergeChangesBeyondProposal": [
+        "docs/experiments/forcepush/sample-amend.md"
+      ],
+      "diffExpectedToMerge": "diff --git a/docs/experiments/forcepush/sample-amend.md b/docs/experiments/forcepush/sample-amend.md\nindex 4be5536..d7a6dd6 100644\n--- a/docs/experiments/forcepush/sample-amend.md\n+++ b/docs/experiments/forcepush/sample-amend.md\n@@ -2,7 +2,11 @@\n \n Line 03: stable filler text for the experiment.\n Line 04: stable filler text for the experiment.\n+<<<<<<< b3e3ed734b03fc8e4dae2b7cb85f6d8bb1b98801\n Line 05: original text.\n+=======\n+Line 05: reviewed change one (added by C1).\n+>>>>>>> 6089e282c86189816b111792ff81c27d2f7b389d\n Line 06: reviewed change two (added by C1).\n Line 07: stable filler text for the experiment.\n Line 08: stable filler text for the experiment.\n",
+      "diffHeadToMerge": "diff --git a/docs/experiments/forcepush/sample-amend.md b/docs/experiments/forcepush/sample-amend.md\nindex 708f3e8..d7a6dd6 100644\n--- a/docs/experiments/forcepush/sample-amend.md\n+++ b/docs/experiments/forcepush/sample-amend.md\n@@ -2,12 +2,16 @@\n \n Line 03: stable filler text for the experiment.\n Line 04: stable filler text for the experiment.\n+<<<<<<< b3e3ed734b03fc8e4dae2b7cb85f6d8bb1b98801\n Line 05: original text.\n+=======\n+Line 05: reviewed change one (added by C1).\n+>>>>>>> 6089e282c86189816b111792ff81c27d2f7b389d\n Line 06: reviewed change two (added by C1).\n Line 07: stable filler text for the experiment.\n Line 08: stable filler text for the experiment.\n Line 09: stable filler text for the experiment.\n-Line 10: context line.\n+Line 10: suggestion edits a context line (S1c).\n Line 11: stable filler text for the experiment.\n Line 12: stable filler text for the experiment.\n Line 13: stable filler text for the experiment.\n",
+      "diffHeadToExpected": "diff --git a/docs/experiments/forcepush/sample-amend.md b/docs/experiments/forcepush/sample-amend.md\nindex 708f3e8..4be5536 100644\n--- a/docs/experiments/forcepush/sample-amend.md\n+++ b/docs/experiments/forcepush/sample-amend.md\n@@ -7,7 +7,7 @@ Line 06: reviewed change two (added by C1).\n Line 07: stable filler text for the experiment.\n Line 08: stable filler text for the experiment.\n Line 09: stable filler text for the experiment.\n-Line 10: context line.\n+Line 10: suggestion edits a context line (S1c).\n Line 11: stable filler text for the experiment.\n Line 12: stable filler text for the experiment.\n Line 13: stable filler text for the experiment.\n"
+    },
+    {
+      "case": "#48",
+      "head": "f4ba85967197ae0ec1a2ebd18bebe2a2fb98c5c6",
+      "proposal": "e90f59f65a23339ecce44250568a5d5abdd7101e",
+      "reviewed": "7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc",
+      "mergeBase": "7b5863eac107dddf2a4014dcb9ccc945bbb5de58",
+      "reviewedIsAncestorOfHead": false,
+      "filesReviewedDiffersFromHead": [
+        "docs/experiments/forcepush/sample-rebase.md"
+      ],
+      "filesTouchedByProposal": [
+        "docs/experiments/forcepush/sample-rebase.md"
+      ],
+      "merge": {
+        "command": "git merge-tree --write-tree --name-only f4ba85967197ae0ec1a2ebd18bebe2a2fb98c5c6 e90f59f65a23339ecce44250568a5d5abdd7101e",
+        "exitCode": 1,
+        "clean": false,
+        "tree": "6323c2c8e9152ff42340a06997d611fd536c6765",
+        "output": "6323c2c8e9152ff42340a06997d611fd536c6765\ndocs/experiments/forcepush/sample-rebase.md\n\nAuto-merging docs/experiments/forcepush/sample-rebase.md\nCONFLICT (content): Merge conflict in docs/experiments/forcepush/sample-rebase.md\n"
+      },
+      "expectedHeadPlusProposal": {
+        "command": "git merge-tree --write-tree --name-only --merge-base=7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc f4ba85967197ae0ec1a2ebd18bebe2a2fb98c5c6 e90f59f65a23339ecce44250568a5d5abdd7101e",
+        "exitCode": 0,
+        "clean": true,
+        "tree": "d205e282b138ebebfe88e13a15d575588109bb8a",
+        "output": "d205e282b138ebebfe88e13a15d575588109bb8a\n"
+      },
+      "filesMergeChangesBeyondProposal": [
+        "docs/experiments/forcepush/sample-rebase.md"
+      ],
+      "diffExpectedToMerge": "diff --git a/docs/experiments/forcepush/sample-rebase.md b/docs/experiments/forcepush/sample-rebase.md\nindex 7ce4b91..554f80a 100644\n--- a/docs/experiments/forcepush/sample-rebase.md\n+++ b/docs/experiments/forcepush/sample-rebase.md\n@@ -2,7 +2,11 @@\n \n Line 03: stable filler text for the experiment.\n Line 04: stable filler text for the experiment.\n+<<<<<<< f4ba85967197ae0ec1a2ebd18bebe2a2fb98c5c6\n Line 05: original text.\n+=======\n+Line 05: reviewed change one (added by C1).\n+>>>>>>> e90f59f65a23339ecce44250568a5d5abdd7101e\n Line 06: reviewed change two (added by C1).\n Line 07: stable filler text for the experiment.\n Line 08: stable filler text for the experiment.\n",
+      "diffHeadToMerge": "diff --git a/docs/experiments/forcepush/sample-rebase.md b/docs/experiments/forcepush/sample-rebase.md\nindex a971914..554f80a 100644\n--- a/docs/experiments/forcepush/sample-rebase.md\n+++ b/docs/experiments/forcepush/sample-rebase.md\n@@ -2,12 +2,16 @@\n \n Line 03: stable filler text for the experiment.\n Line 04: stable filler text for the experiment.\n+<<<<<<< f4ba85967197ae0ec1a2ebd18bebe2a2fb98c5c6\n Line 05: original text.\n+=======\n+Line 05: reviewed change one (added by C1).\n+>>>>>>> e90f59f65a23339ecce44250568a5d5abdd7101e\n Line 06: reviewed change two (added by C1).\n Line 07: stable filler text for the experiment.\n Line 08: stable filler text for the experiment.\n Line 09: stable filler text for the experiment.\n-Line 10: context line.\n+Line 10: suggestion edits a context line (S1c).\n Line 11: stable filler text for the experiment.\n Line 12: stable filler text for the experiment.\n Line 13: stable filler text for the experiment.\n",
+      "diffHeadToExpected": "diff --git a/docs/experiments/forcepush/sample-rebase.md b/docs/experiments/forcepush/sample-rebase.md\nindex a971914..7ce4b91 100644\n--- a/docs/experiments/forcepush/sample-rebase.md\n+++ b/docs/experiments/forcepush/sample-rebase.md\n@@ -7,7 +7,7 @@ Line 06: reviewed change two (added by C1).\n Line 07: stable filler text for the experiment.\n Line 08: stable filler text for the experiment.\n Line 09: stable filler text for the experiment.\n-Line 10: context line.\n+Line 10: suggestion edits a context line (S1c).\n Line 11: stable filler text for the experiment.\n Line 12: stable filler text for the experiment.\n Line 13: stable filler text for the experiment.\n"
+    },
+    {
+      "case": "#52",
+      "head": "d28aa24815178ce56025303fe98da1d1a0915a9f",
+      "proposal": "d92f82cf2802494276dac4cfb90e951a1487671d",
+      "reviewed": "eb6c2f6bbceb78a957684917cdb1a50cf9850cd4",
+      "mergeBase": "4f1974668dd1800b7926fa0aaf475330b68252a1",
+      "reviewedIsAncestorOfHead": false,
+      "filesReviewedDiffersFromHead": [
+        "docs/experiments/forcepush/sample-orphan.md"
+      ],
+      "filesTouchedByProposal": [
+        "docs/experiments/forcepush/sample-orphan.md"
+      ],
+      "merge": {
+        "command": "git merge-tree --write-tree --name-only d28aa24815178ce56025303fe98da1d1a0915a9f d92f82cf2802494276dac4cfb90e951a1487671d",
+        "exitCode": 0,
+        "clean": true,
+        "tree": "c803f4b9eeb2efed53aaaa2663c371f34ca43f27",
+        "output": "c803f4b9eeb2efed53aaaa2663c371f34ca43f27\n"
+      },
+      "expectedHeadPlusProposal": {
+        "command": "git merge-tree --write-tree --name-only --merge-base=eb6c2f6bbceb78a957684917cdb1a50cf9850cd4 d28aa24815178ce56025303fe98da1d1a0915a9f d92f82cf2802494276dac4cfb90e951a1487671d",
+        "exitCode": 0,
+        "clean": true,
+        "tree": "236f42dcc8104bdbfb0fb1bd92da5736b3f83f84",
+        "output": "236f42dcc8104bdbfb0fb1bd92da5736b3f83f84\n"
+      },
+      "filesMergeChangesBeyondProposal": [
+        "docs/experiments/forcepush/sample-orphan.md"
+      ],
+      "diffExpectedToMerge": "diff --git a/docs/experiments/forcepush/sample-orphan.md b/docs/experiments/forcepush/sample-orphan.md\nindex b1f4471..1454358 100644\n--- a/docs/experiments/forcepush/sample-orphan.md\n+++ b/docs/experiments/forcepush/sample-orphan.md\n@@ -2,8 +2,8 @@\n \n Line 03: stable filler text for the experiment.\n Line 04: stable filler text for the experiment.\n-Line 05: original text.\n-Line 06: original text.\n+Line 05: reviewed change one (added by C1).\n+Line 06: reviewed change two (added by C1).\n Line 07: stable filler text for the experiment.\n Line 08: stable filler text for the experiment.\n Line 09: stable filler text for the experiment.\n",
+      "diffHeadToMerge": "diff --git a/docs/experiments/forcepush/sample-orphan.md b/docs/experiments/forcepush/sample-orphan.md\nindex b995fd1..1454358 100644\n--- a/docs/experiments/forcepush/sample-orphan.md\n+++ b/docs/experiments/forcepush/sample-orphan.md\n@@ -2,12 +2,12 @@\n \n Line 03: stable filler text for the experiment.\n Line 04: stable filler text for the experiment.\n-Line 05: original text.\n-Line 06: original text.\n+Line 05: reviewed change one (added by C1).\n+Line 06: reviewed change two (added by C1).\n Line 07: stable filler text for the experiment.\n Line 08: stable filler text for the experiment.\n Line 09: stable filler text for the experiment.\n-Line 10: context line.\n+Line 10: suggestion edits a context line (S1c).\n Line 11: stable filler text for the experiment.\n Line 12: stable filler text for the experiment.\n Line 13: stable filler text for the experiment.\n",
+      "diffHeadToExpected": "diff --git a/docs/experiments/forcepush/sample-orphan.md b/docs/experiments/forcepush/sample-orphan.md\nindex b995fd1..b1f4471 100644\n--- a/docs/experiments/forcepush/sample-orphan.md\n+++ b/docs/experiments/forcepush/sample-orphan.md\n@@ -7,7 +7,7 @@ Line 06: original text.\n Line 07: stable filler text for the experiment.\n Line 08: stable filler text for the experiment.\n Line 09: stable filler text for the experiment.\n-Line 10: context line.\n+Line 10: suggestion edits a context line (S1c).\n Line 11: stable filler text for the experiment.\n Line 12: stable filler text for the experiment.\n Line 13: stable filler text for the experiment.\n"
+    },
+    {
+      "case": "P",
+      "head": "d28aa24815178ce56025303fe98da1d1a0915a9f",
+      "proposal": "9b513c482973851d58ffcaec0740c10b429c3197",
+      "reviewed": "eb6c2f6bbceb78a957684917cdb1a50cf9850cd4",
+      "mergeBase": "4f1974668dd1800b7926fa0aaf475330b68252a1",
+      "reviewedIsAncestorOfHead": false,
+      "filesReviewedDiffersFromHead": [
+        "docs/experiments/forcepush/sample-orphan.md"
+      ],
+      "filesTouchedByProposal": [
+        "docs/experiments/forcepush/sample-orphan.md"
+      ],
+      "merge": {
+        "command": "git merge-tree --write-tree --name-only d28aa24815178ce56025303fe98da1d1a0915a9f 9b513c482973851d58ffcaec0740c10b429c3197",
+        "exitCode": 0,
+        "clean": true,
+        "tree": "700f02e51071d7e856e405fec48cca97445f77a3",
+        "output": "700f02e51071d7e856e405fec48cca97445f77a3\n"
+      },
+      "expectedHeadPlusProposal": {
+        "command": "git merge-tree --write-tree --name-only --merge-base=eb6c2f6bbceb78a957684917cdb1a50cf9850cd4 d28aa24815178ce56025303fe98da1d1a0915a9f 9b513c482973851d58ffcaec0740c10b429c3197",
+        "exitCode": 0,
+        "clean": true,
+        "tree": "c0d28f08f42833fc0d298fc7c87b5f6b5527cd02",
+        "output": "c0d28f08f42833fc0d298fc7c87b5f6b5527cd02\n"
+      },
+      "filesMergeChangesBeyondProposal": [
+        "docs/experiments/forcepush/sample-orphan.md"
+      ],
+      "diffExpectedToMerge": "diff --git a/docs/experiments/forcepush/sample-orphan.md b/docs/experiments/forcepush/sample-orphan.md\nindex f21d9e6..4d1afab 100644\n--- a/docs/experiments/forcepush/sample-orphan.md\n+++ b/docs/experiments/forcepush/sample-orphan.md\n@@ -2,8 +2,8 @@\n \n Line 03: stable filler text for the experiment.\n Line 04: stable filler text for the experiment.\n-Line 05: original text.\n-Line 06: original text.\n+Line 05: reviewed change one (added by C1).\n+Line 06: reviewed change two (added by C1).\n Line 07: stable filler text for the experiment.\n Line 08: stable filler text for the experiment.\n Line 09: stable filler text for the experiment.\n",
+      "diffHeadToMerge": "diff --git a/docs/experiments/forcepush/sample-orphan.md b/docs/experiments/forcepush/sample-orphan.md\nindex b995fd1..4d1afab 100644\n--- a/docs/experiments/forcepush/sample-orphan.md\n+++ b/docs/experiments/forcepush/sample-orphan.md\n@@ -2,12 +2,12 @@\n \n Line 03: stable filler text for the experiment.\n Line 04: stable filler text for the experiment.\n-Line 05: original text.\n-Line 06: original text.\n+Line 05: reviewed change one (added by C1).\n+Line 06: reviewed change two (added by C1).\n Line 07: stable filler text for the experiment.\n Line 08: stable filler text for the experiment.\n Line 09: stable filler text for the experiment.\n-Line 10: context line.\n+Line 10: E5 proposal edits a context line.\n Line 11: stable filler text for the experiment.\n Line 12: stable filler text for the experiment.\n Line 13: stable filler text for the experiment.\n",
+      "diffHeadToExpected": "diff --git a/docs/experiments/forcepush/sample-orphan.md b/docs/experiments/forcepush/sample-orphan.md\nindex b995fd1..f21d9e6 100644\n--- a/docs/experiments/forcepush/sample-orphan.md\n+++ b/docs/experiments/forcepush/sample-orphan.md\n@@ -7,7 +7,7 @@ Line 06: original text.\n Line 07: stable filler text for the experiment.\n Line 08: stable filler text for the experiment.\n Line 09: stable filler text for the experiment.\n-Line 10: context line.\n+Line 10: E5 proposal edits a context line.\n Line 11: stable filler text for the experiment.\n Line 12: stable filler text for the experiment.\n Line 13: stable filler text for the experiment.\n"
+    },
+    {
+      "case": "P2",
+      "head": "d28aa24815178ce56025303fe98da1d1a0915a9f",
+      "proposal": "c4b74a24b7dab618954aac63520359ffde8bb1a7",
+      "reviewed": "d28aa24815178ce56025303fe98da1d1a0915a9f",
+      "mergeBase": "d28aa24815178ce56025303fe98da1d1a0915a9f",
+      "reviewedIsAncestorOfHead": true,
+      "filesReviewedDiffersFromHead": [],
+      "filesTouchedByProposal": [
+        "docs/experiments/forcepush/sample-orphan.md"
+      ],
+      "merge": {
+        "command": "git merge-tree --write-tree --name-only d28aa24815178ce56025303fe98da1d1a0915a9f c4b74a24b7dab618954aac63520359ffde8bb1a7",
+        "exitCode": 0,
+        "clean": true,
+        "tree": "c0d28f08f42833fc0d298fc7c87b5f6b5527cd02",
+        "output": "c0d28f08f42833fc0d298fc7c87b5f6b5527cd02\n"
+      },
+      "expectedHeadPlusProposal": {
+        "command": "git merge-tree --write-tree --name-only --merge-base=d28aa24815178ce56025303fe98da1d1a0915a9f d28aa24815178ce56025303fe98da1d1a0915a9f c4b74a24b7dab618954aac63520359ffde8bb1a7",
+        "exitCode": 0,
+        "clean": true,
+        "tree": "c0d28f08f42833fc0d298fc7c87b5f6b5527cd02",
+        "output": "c0d28f08f42833fc0d298fc7c87b5f6b5527cd02\n"
+      },
+      "filesMergeChangesBeyondProposal": [],
+      "diffExpectedToMerge": "",
+      "diffHeadToMerge": "diff --git a/docs/experiments/forcepush/sample-orphan.md b/docs/experiments/forcepush/sample-orphan.md\nindex b995fd1..f21d9e6 100644\n--- a/docs/experiments/forcepush/sample-orphan.md\n+++ b/docs/experiments/forcepush/sample-orphan.md\n@@ -7,7 +7,7 @@ Line 06: original text.\n Line 07: stable filler text for the experiment.\n Line 08: stable filler text for the experiment.\n Line 09: stable filler text for the experiment.\n-Line 10: context line.\n+Line 10: E5 proposal edits a context line.\n Line 11: stable filler text for the experiment.\n Line 12: stable filler text for the experiment.\n Line 13: stable filler text for the experiment.\n",
+      "diffHeadToExpected": "diff --git a/docs/experiments/forcepush/sample-orphan.md b/docs/experiments/forcepush/sample-orphan.md\nindex b995fd1..f21d9e6 100644\n--- a/docs/experiments/forcepush/sample-orphan.md\n+++ b/docs/experiments/forcepush/sample-orphan.md\n@@ -7,7 +7,7 @@ Line 06: original text.\n Line 07: stable filler text for the experiment.\n Line 08: stable filler text for the experiment.\n Line 09: stable filler text for the experiment.\n-Line 10: context line.\n+Line 10: E5 proposal edits a context line.\n Line 11: stable filler text for the experiment.\n Line 12: stable filler text for the experiment.\n Line 13: stable filler text for the experiment.\n"
+    },
+    {
+      "case": "#46@3007343",
+      "head": "30073435e95ecbe4849f2423371d3d5010251cfe",
+      "proposal": "6089e282c86189816b111792ff81c27d2f7b389d",
+      "reviewed": "e69981ed42926b07d0ff3f25d98558229afd348e",
+      "mergeBase": "c29a1b22f7d7b91f12f41893ad25f555b3f9101f",
+      "reviewedIsAncestorOfHead": false,
+      "filesReviewedDiffersFromHead": [
+        "docs/experiments/forcepush/sample-amend.md"
+      ],
+      "filesTouchedByProposal": [
+        "docs/experiments/forcepush/sample-amend.md"
+      ],
+      "merge": {
+        "command": "git merge-tree --write-tree --name-only 30073435e95ecbe4849f2423371d3d5010251cfe 6089e282c86189816b111792ff81c27d2f7b389d",
+        "exitCode": 0,
+        "clean": true,
+        "tree": "ae166827dcabc38f05284ff05a680ba050420474",
+        "output": "ae166827dcabc38f05284ff05a680ba050420474\n"
+      },
+      "expectedHeadPlusProposal": {
+        "command": "git merge-tree --write-tree --name-only --merge-base=e69981ed42926b07d0ff3f25d98558229afd348e 30073435e95ecbe4849f2423371d3d5010251cfe 6089e282c86189816b111792ff81c27d2f7b389d",
+        "exitCode": 0,
+        "clean": true,
+        "tree": "ae166827dcabc38f05284ff05a680ba050420474",
+        "output": "ae166827dcabc38f05284ff05a680ba050420474\n"
+      },
+      "filesMergeChangesBeyondProposal": [],
+      "diffExpectedToMerge": "",
+      "diffHeadToMerge": "diff --git a/docs/experiments/forcepush/sample-amend.md b/docs/experiments/forcepush/sample-amend.md\nindex 85e0243..5cb9a17 100644\n--- a/docs/experiments/forcepush/sample-amend.md\n+++ b/docs/experiments/forcepush/sample-amend.md\n@@ -7,7 +7,7 @@ Line 06: reviewed change two (added by C1).\n Line 07: stable filler text for the experiment.\n Line 08: stable filler text for the experiment.\n Line 09: stable filler text for the experiment.\n-Line 10: context line.\n+Line 10: suggestion edits a context line (S1c).\n Line 11: stable filler text for the experiment.\n Line 12: stable filler text for the experiment.\n Line 13: stable filler text for the experiment.\n",
+      "diffHeadToExpected": "diff --git a/docs/experiments/forcepush/sample-amend.md b/docs/experiments/forcepush/sample-amend.md\nindex 85e0243..5cb9a17 100644\n--- a/docs/experiments/forcepush/sample-amend.md\n+++ b/docs/experiments/forcepush/sample-amend.md\n@@ -7,7 +7,7 @@ Line 06: reviewed change two (added by C1).\n Line 07: stable filler text for the experiment.\n Line 08: stable filler text for the experiment.\n Line 09: stable filler text for the experiment.\n-Line 10: context line.\n+Line 10: suggestion edits a context line (S1c).\n Line 11: stable filler text for the experiment.\n Line 12: stable filler text for the experiment.\n Line 13: stable filler text for the experiment.\n"
+    },
+    {
+      "case": "#48@62ed990",
+      "head": "62ed990cc54a2f8185410d3d6a6e84a82da1f0c3",
+      "proposal": "e90f59f65a23339ecce44250568a5d5abdd7101e",
+      "reviewed": "7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc",
+      "mergeBase": "7b5863eac107dddf2a4014dcb9ccc945bbb5de58",
+      "reviewedIsAncestorOfHead": false,
+      "filesReviewedDiffersFromHead": [
+        "docs/experiments/forcepush/sample-rebase.md"
+      ],
+      "filesTouchedByProposal": [
+        "docs/experiments/forcepush/sample-rebase.md"
+      ],
+      "merge": {
+        "command": "git merge-tree --write-tree --name-only 62ed990cc54a2f8185410d3d6a6e84a82da1f0c3 e90f59f65a23339ecce44250568a5d5abdd7101e",
+        "exitCode": 0,
+        "clean": true,
+        "tree": "666c27fd24a1506fd3cd714b9b0e000634c10840",
+        "output": "666c27fd24a1506fd3cd714b9b0e000634c10840\n"
+      },
+      "expectedHeadPlusProposal": {
+        "command": "git merge-tree --write-tree --name-only --merge-base=7eb3dc6ff95b82993a95f6433c7d43f0fcd461cc 62ed990cc54a2f8185410d3d6a6e84a82da1f0c3 e90f59f65a23339ecce44250568a5d5abdd7101e",
+        "exitCode": 0,
+        "clean": true,
+        "tree": "666c27fd24a1506fd3cd714b9b0e000634c10840",
+        "output": "666c27fd24a1506fd3cd714b9b0e000634c10840\n"
+      },
+      "filesMergeChangesBeyondProposal": [],
+      "diffExpectedToMerge": "",
+      "diffHeadToMerge": "diff --git a/docs/experiments/forcepush/sample-rebase.md b/docs/experiments/forcepush/sample-rebase.md\nindex 2b8e2f3..ca19686 100644\n--- a/docs/experiments/forcepush/sample-rebase.md\n+++ b/docs/experiments/forcepush/sample-rebase.md\n@@ -7,7 +7,7 @@ Line 06: reviewed change two (added by C1).\n Line 07: stable filler text for the experiment.\n Line 08: stable filler text for the experiment.\n Line 09: stable filler text for the experiment.\n-Line 10: context line.\n+Line 10: suggestion edits a context line (S1c).\n Line 11: stable filler text for the experiment.\n Line 12: stable filler text for the experiment.\n Line 13: stable filler text for the experiment.\n",
+      "diffHeadToExpected": "diff --git a/docs/experiments/forcepush/sample-rebase.md b/docs/experiments/forcepush/sample-rebase.md\nindex 2b8e2f3..ca19686 100644\n--- a/docs/experiments/forcepush/sample-rebase.md\n+++ b/docs/experiments/forcepush/sample-rebase.md\n@@ -7,7 +7,7 @@ Line 06: reviewed change two (added by C1).\n Line 07: stable filler text for the experiment.\n Line 08: stable filler text for the experiment.\n Line 09: stable filler text for the experiment.\n-Line 10: context line.\n+Line 10: suggestion edits a context line (S1c).\n Line 11: stable filler text for the experiment.\n Line 12: stable filler text for the experiment.\n Line 13: stable filler text for the experiment.\n"
+    }
+  ]
+}
