@@ -36,12 +36,12 @@ The names use the vocabulary users already have: `allowSuggestionPullRequests` /
 | `label?` | `--label NAME` | A **migration override** (#27): sweep the open pull requests with this label (a *label sweep*) and verify with it, instead of the repository's canonical label, for suggestions left under a previously configured label. Omitted: the default sweep by suggestion branch, confirmed by the canonical label (§2.2.1, §2.4). |
 | `originalPullNumber?` | `--original N` | Targeted mode: only the pull requests referencing this original (§2.4). |
 | `owner?` | `--owner me\|all` | Whose suggestion pull requests may be closed, by who opened the **suggestion** pull request (not the original): `me` (the default), the authenticated account; `all`, anyone (§2.6). |
-| `maxCandidates?` | `--max-candidates N` | A sweep's candidate limit, a positive integer; default 500 (§2.4.1). |
-| `force?` | `--force` | A label sweep continues past the early exit (§2.4.2). Nothing else stops early, so elsewhere it changes nothing. |
+| `maxCandidates?` | `--max-candidates N` | A sweep's candidate limit, a positive integer; default 500 (§2.4.1). Targeted discovery has no limit, so it cannot be combined with `originalPullNumber` (`--original`). |
+| `force?` | `--force` | A label sweep continues past the early exit (§2.4.2); its limit still applies (§2.4.1). Nothing else stops early, so `force: true` requires `label` and cannot be combined with `originalPullNumber` (`--force` requires `--label` and cannot be combined with `--original`). |
 | `dryRun?` | `--dry-run` | Discover and verify everything, close nothing (§2.3). |
 | | `--format human\|json` | As for every command. |
 
-Unknown fields are refused. Invalid input is a `TypeError` (CLI: a usage error, exit 1) before any request.
+Unknown fields are refused. Invalid input is a `TypeError` (CLI: a usage error, exit 1, whose remedy names `sarif-to-comment close-suggestion-prs --help`) before any request. An option that could change nothing is invalid input too, never silently ignored: `force: true` without `label` or with `originalPullNumber`, and `maxCandidates` with `originalPullNumber`. `force: false` asks for nothing and is accepted.
 
 **Labels.** `label` must be a label name under the [convention](suggestion-pr-convention.md#3-the-canonical-label): 1–50 characters, no control or invisible formatting characters, no surrounding whitespace, and **no comma**. GitHub's label filter takes a comma-separated list, so a label with a comma cannot be selected on its own; the convention refuses commas in every suggestion label for the same reason.
 
@@ -82,11 +82,15 @@ Any failure to list (HTTP, network, malformed answer, GraphQL errors, pagination
 
 #### 2.4.1 Count first, with a limit
 
-A sweep's first page carries GitHub's total count of its candidates: the branches under `suggestion-pr/`, or the open pull requests with the label. If it exceeds `maxCandidates` (`--max-candidates`, default **500**), the sweep stops there: nothing is evaluated, no further page, configuration, account or pull request is read, and nothing is closed. The outcome resolves with status `too-many-candidates`, empty `originals` and `suggestions`, `counts.candidates` set to the count, and one error diagnostic, `suggestion-pr-candidates-over-limit`, about the repository, stating the count and the limit and how to narrow (`--original`) or raise the limit (CLI: exit 1). Exactly the limit is allowed. Targeted discovery has no limit: it is already narrowed to one original.
+A sweep's first page carries GitHub's total count of its candidates: the branches under `suggestion-pr/`, or the open pull requests with the label. A label sweep's early exit (§2.4.2) is decided first, from the same page; `force` lifts only the early exit, so a forced label sweep is still limited here. If the count exceeds `maxCandidates` (`--max-candidates`, default **500**), the sweep stops there: nothing is evaluated, no further page, configuration, account or pull request is read, and nothing is closed. The outcome resolves with status `too-many-candidates`, empty `originals` and `suggestions`, `counts.candidates` set to the count, and one error diagnostic, `suggestion-pr-candidates-over-limit`, about the repository, stating the count and the limit and how to narrow (`--original`) or raise the limit (CLI: exit 1). Exactly the limit is allowed. Targeted discovery has no limit: it is already narrowed to one original, so `maxCandidates` with `originalPullNumber` is refused (§2.2).
+
+**Known limitation: the branches of closed suggestions count.** The default sweep's count is GitHub's total of branches under `suggestion-pr/`, read in the first request, and cleanup never deletes a branch (§1, §2.9). The branches of suggestions already closed, by cleanup or by hand, therefore still count, and an active repository can reach the limit over time even with few open suggestions. The remedy is `--max-candidates N` (`maxCandidates`), which the diagnostic's remedy names, saying why the count grows; deleting the branches of closed suggestions also lowers it. The count is not narrowed to branches with an open pull request, because that would take reading every page, the cost the limit exists to bound.
 
 #### 2.4.2 Early exit of a label sweep
 
-A label sweep's first page is its first 20 pull requests. If there is at least one and none of them shows a suggestion pull request, judged from the listing alone (a body line that begins `<!-- suggestion-pr `, even a malformed one, or a head branch under `suggestion-pr/`), the label looks wrong and the sweep stops: nothing is evaluated and no per-pull-request read is made. The outcome resolves with status `label-not-suggestion-prs`, empty `originals` and `suggestions`, and one warning diagnostic, `label-not-suggestion-prs`, about the repository, naming the label and how many pull requests were inspected (CLI: exit 2). `force: true` (`--force`) evaluates anyway, for a deliberate second run. A label no open pull request carries is not stopped: there is nothing to check. The default sweep never stops early: every pull request on a suggestion branch is a candidate by construction.
+A label sweep's first page is its first 20 pull requests. If there is at least one and none of them shows a suggestion pull request, judged from the listing alone (a body line that begins `<!-- suggestion-pr `, even a malformed one, or a head branch under `suggestion-pr/`), the label looks wrong and the sweep stops: nothing is evaluated and no per-pull-request read is made. The outcome resolves with status `label-not-suggestion-prs`, empty `originals` and `suggestions`, and one warning diagnostic, `label-not-suggestion-prs`, about the repository, naming the label and how many pull requests were inspected (CLI: exit 2). `force: true` (`--force`) continues anyway, for a deliberate second run; the limit (§2.4.1) still applies after it. A label no open pull request carries is not stopped: there is nothing to check. The default sweep never stops early: every pull request on a suggestion branch is a candidate by construction.
+
+**Order.** The early exit is decided before the limit, on the same first page. A wrong broad label is therefore refused as `label-not-suggestion-prs` (exit 2) whether 30 or 600 pull requests carry it, never as `too-many-candidates`; only with `force` can a label sweep stop over its limit.
 
 A mistyped or overly broad label therefore costs one request before it is refused (the owner's bound is two).
 
@@ -233,7 +237,7 @@ Closing never deletes a branch: each proposal branch is left in place.
 
 Without `--dry-run`, #40 is `closed`: one `PATCH`, and its branch `suggestion-pr/37/<id>` still exists. The title is `## Suggestion pull request cleanup complete`, #40's line reads `- #40 (for #37): closed`, and there is no dry-run note. A rerun still counts #40's branch but no longer lists #40 (it is not open): #38 and #39 `left-open`, exit 0. `--original 37` then finds #40 through #37's backlinks and reports it `already-closed`.
 
-Had a colleague opened #40, it would be `other-owner` and left open, and #37 would not be read; `--owner all` would close it. `--label bug` on a repository whose first 20 open `bug` pull requests are ordinary work stops after one request with `label-not-suggestion-prs` (exit 2), and a repository with 501 branches under `suggestion-pr/` stops after one request with `too-many-candidates` (exit 1) unless `--max-candidates` allows it.
+Had a colleague opened #40, it would be `other-owner` and left open, and #37 would not be read; `--owner all` would close it. `--label bug` on a repository whose first 20 open `bug` pull requests are ordinary work stops after one request with `label-not-suggestion-prs` (exit 2), however many there are; with `--force`, 600 of them stop after one request with `too-many-candidates` (exit 1). A repository with 501 branches under `suggestion-pr/` stops after one request with `too-many-candidates` (exit 1) unless `--max-candidates` allows it.
 
 ## 4. Decisions
 
@@ -255,6 +259,12 @@ Decided by the owner on September 30, 2026 ([#44](https://github.com/mike-north/
 - **`not-ours` is renamed `not-conforming`** (§2.10), and the counts are reported.
 - **Bounded discovery** (§2.4): the default sweep discovers by the convention's branch prefix, with the canonical label as a confirming check; a sweep counts first and stops over `maxCandidates` (default 500, `--max-candidates`); a label sweep whose first 20 pull requests show no suggestion pull request stops with `label-not-suggestion-prs` unless `force` (`--force`).
 
+Settled in engineering after the implementation review of #44, within D47:
+
+- **Options that would change nothing are refused** (§2.2): `force` outside a label sweep and `maxCandidates` with `originalPullNumber` are usage errors (library: `TypeError`), never silently ignored.
+- **The early exit comes before the limit** (§2.4.1, §2.4.2): a wrong broad label is `label-not-suggestion-prs`, not `too-many-candidates`; `force` lifts only the early exit; either refusal still costs one request.
+- **The count is unchanged** (§2.4.1): it is GitHub's total of `suggestion-pr/` branches in the first request, including those of closed suggestions, documented as a known limitation with `--max-candidates` as the remedy; the early exit's evidence is unchanged as well.
+
 Open questions for the owner, raised by implementing #44:
 
 1. **The early exit's evidence** (§2.4.2): a malformed marker line or a `suggestion-pr/` branch on the first page counts as looking like a suggestion, so a label on a single abandoned, hand-opened suggestion branch lets a broad sweep continue up to its limit. The alternative is to require a recognized marker.
@@ -266,7 +276,7 @@ Open questions for the owner, raised by implementing #44:
 | --- | --- | --- |
 | Open, merged, closed-unmerged and inaccessible originals (A36) | `test/cleanup-composition.test.mts` | open and closed-unmerged with suggestions; merged, closed and missing originals probed read-only |
 | Pagination, duplicate references, title changes (A31) | `test/cleanup-composition.test.mts`, `test/github-cleanup.test.mts` | single page only |
-| Owner scope, branch-prefix discovery, the candidate limit, the early exit, `--force`, `--dry-run` with each, counts, and a broad label refused within two requests (#44) | `test/cleanup-scope.test.mts`, `test/github-cleanup.test.mts`, `test/installed-cleanup.test.mts` | |
+| Owner scope, branch-prefix discovery, the candidate limit, the early exit before the limit, `--force` bypassing only the early exit, options that would change nothing refused, `--dry-run` with each, counts, and a broad label refused after one request (#44) | `test/cleanup-scope.test.mts`, `test/github-cleanup.test.mts`, `test/installed-cleanup.test.mts` | |
 | Permission-limited apart from failed; no completion inferred from a failed lookup; a missing original is definitive (`not-found`), never retried | `test/cleanup-composition.test.mts`, `test/github-cleanup.test.mts` | missing original probed read-only (reported `unverified`, exit 3, before a 404 was made definitive) |
 | Already-closed suggestions tolerated | `test/cleanup-composition.test.mts` | sweep and targeted reruns |
 | Targeted discovery, dry run | `test/cleanup-composition.test.mts` | targeted and dry runs |
