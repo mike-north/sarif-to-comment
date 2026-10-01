@@ -1,6 +1,6 @@
 /**
  * Compile-time checks of the public declaration of closeSuggestionPullRequests
- * (docs/suggestion-cleanup-contract.md §2.2, §2.10). This file is
+ * (docs/suggestion-cleanup-contract.md §2.2, §2.10, §2.12). This file is
  * type-checked by `pnpm run check:types` and never executed.
  *
  * The input requires the repository and the token and nothing else; the
@@ -25,7 +25,7 @@ type IsMutuallyAssignable<A, B> = [A] extends [B] ? ([B] extends [A] ? true : fa
 export const vocabularies: readonly true[] = [
   true satisfies IsMutuallyAssignable<
     CloseSuggestionPullRequestsStatus,
-    'complete' | 'permission-limited' | 'incomplete' | 'too-many-candidates' | 'label-not-suggestion-prs'
+    'complete' | 'permission-limited' | 'incomplete' | 'too-many-candidates' | 'label-not-suggestion-prs' | 'original-not-abandoned'
   >,
   true satisfies IsMutuallyAssignable<SuggestionOwnerScope, 'me' | 'all'>,
   true satisfies IsMutuallyAssignable<OriginalPullRequestState, 'open' | 'merged' | 'closed' | 'not-found' | 'unverified'>,
@@ -61,6 +61,7 @@ export const full: ICloseSuggestionPullRequestsInput = {
   owner: 'all',
   maxCandidates: 1000,
   force: true,
+  requireAbandonedOriginal: true,
 };
 
 // @ts-expect-error -- the token is required
@@ -75,5 +76,7 @@ export const statePath: ICloseSuggestionPullRequestsInput = { repository: { owne
 export const namedOwner: ICloseSuggestionPullRequestsInput = { repository: { owner: 'octo', repo: 'widgets' }, token: 't', owner: 'octo' };
 // @ts-expect-error -- the candidate limit is a number
 export const stringLimit: ICloseSuggestionPullRequestsInput = { repository: { owner: 'octo', repo: 'widgets' }, token: 't', maxCandidates: '500' };
+// @ts-expect-error -- requiring an abandoned original is a boolean (contract §2.12)
+export const stringGuard: ICloseSuggestionPullRequestsInput = { repository: { owner: 'octo', repo: 'widgets' }, token: 't', originalPullNumber: 37, requireAbandonedOriginal: 'yes' };
 // @ts-expect-error -- force is a boolean
 export const stringForce: ICloseSuggestionPullRequestsInput = { repository: { owner: 'octo', repo: 'widgets' }, token: 't', force: 'yes' };

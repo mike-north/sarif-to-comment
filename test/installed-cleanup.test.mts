@@ -10,8 +10,10 @@
  * docs/suggestion-cleanup-contract.md §3: an open original with two
  * suggestions and a closed original with one. Expected results are written by
  * hand from that contract, including the owner scope, the early exit of a label
- * sweep before the candidate limit, and options that would change nothing
- * refused as usage errors (§2.2, §2.4.1, §2.4.2).
+ * sweep before the candidate limit, options that would change nothing
+ * refused as usage errors (§2.2, §2.4.1, §2.4.2), and the guard that requires
+ * an abandoned original (§2.12): an open or merged original skipped (exit 0),
+ * a closed, unmerged one cleaned up.
  *
  * @see https://docs.github.com/en/graphql/reference/objects#ref
  * @see https://docs.github.com/en/rest/pulls/pulls#update-a-pull-request
@@ -170,6 +172,67 @@ describe('the installed package closes suggestion pull requests whose original e
     assert.equal(ignored['message'], '--force requires --label (only a --label sweep stops early)');
     assert.equal(w.host.log().length, misuse, 'a usage error makes no request');
     assert.deepEqual(states(w), { ...OPEN_ALL, '41': 'open', ...Object.fromEntries(ordinaries.map((p) => [String(p.number), 'open'])) }, 'nothing was closed');
+  });
+
+  test('CLI and library: --if-abandoned skips an open or merged original and cleans up a closed, unmerged one (§2.12)', { skip, timeout: 300_000 }, () => {
+    const { consumer, bin } = installIntoConsumer();
+    const merged: IStoredPull = { ...original(50, 'closed'), merged: true };
+    const w = world('installed-cleanup-abandoned', [merged, suggestion(51, 50)]);
+    const run = (args: readonly string[], format: 'json' | 'human' = 'json'): SpawnSyncReturns<string> => {
+      const result = spawnSync(bin, ['close-suggestion-prs', '--repo', `${OWNER}/${REPO}`, ...args, '--format', format], {
+        cwd: consumer, env: w.env, encoding: 'utf8', timeout: 120_000,
+      });
+      for (const text of [result.stdout, result.stderr]) assert.ok(!text.includes(TOKEN), 'the token never appears');
+      return result;
+    };
+    const url = (n: number): string => `https://github.com/${OWNER}/${REPO}/pull/${String(n)}`;
+    const SKIPPED = '## Suggestion pull request cleanup skipped: the original is not closed without merging';
+
+    const open = run(['--original', '36', '--if-abandoned']);
+    assert.equal(open.status, 0, open.stdout + open.stderr);
+    const openDoc = asRecord(parseJson(open.stdout));
+    assert.equal(openDoc['status'], 'original-not-abandoned');
+    assert.deepEqual(openDoc['originals'], [{ number: 36, state: 'open' }]);
+    assert.deepEqual(openDoc['suggestions'], []);
+    assert.deepEqual(asArray(openDoc['diagnostics']).map((d) => [asRecord(d)['severity'], asRecord(d)['code'], asRecord(d)['message']]), [
+      ['note', 'original-pull-request-not-abandoned', '#36 is open, not closed without merging, so nothing was checked or closed.'],
+    ]);
+
+    const mergedRun = run(['--original', '50', '--if-abandoned'], 'human');
+    assert.equal(mergedRun.status, 0, mergedRun.stdout + mergedRun.stderr);
+    assert.equal(mergedRun.stdout, `${SKIPPED}\n\nNothing was checked or closed.\n`);
+    assert.match(mergedRun.stderr, /\[original-pull-request-not-abandoned\]/);
+    assert.ok(mergedRun.stderr.includes('#50 was merged, not closed without merging, so nothing was checked or closed.'), mergedRun.stderr);
+
+    const usage = run(['--if-abandoned']);
+    assert.equal(usage.status, 1);
+    assert.equal(asRecord(parseJson(usage.stdout))['message'], '--if-abandoned requires --original (it checks that original pull request)');
+
+    const dry = run(['--original', '37', '--if-abandoned', '--dry-run']);
+    assert.equal(dry.status, 0, dry.stdout + dry.stderr);
+    assert.deepEqual(asRecord(parseJson(dry.stdout))['suggestions'], [{ number: 40, url: url(40), original: 37, result: 'would-close' }]);
+    assert.deepEqual(states(w), { ...OPEN_ALL, '50': 'closed', '51': 'open' }, 'nothing closed so far');
+
+    const js = String.raw;
+    const script = js`
+      import assert from 'node:assert/strict';
+      import { closeSuggestionPullRequests } from 'sarif-to-comment';
+      const input = { repository: { owner: 'octo', repo: 'cleanup-uat' }, token: process.env.GH_TOKEN, requireAbandonedOriginal: true };
+      const skipped = await closeSuggestionPullRequests({ ...input, originalPullNumber: 50 });
+      assert.equal(skipped.status, 'original-not-abandoned', skipped.markdown);
+      assert.deepEqual(skipped.originals, [{ number: 50, state: 'merged' }]);
+      const outcome = await closeSuggestionPullRequests({ ...input, originalPullNumber: 37 });
+      assert.equal(outcome.status, 'complete', outcome.markdown);
+      assert.deepEqual(outcome.suggestions.map((s) => [s.number, s.result]), [[40, 'closed']]);
+      await assert.rejects(closeSuggestionPullRequests({ ...input }), /requireAbandonedOriginal applies only to targeted cleanup, so it requires originalPullNumber/);
+      process.stdout.write(JSON.stringify({ status: outcome.status }));
+    `;
+    const file = path.join(consumer, 'cleanup-abandoned.mjs');
+    fs.writeFileSync(file, script);
+    const library = spawnSync(process.execPath, [file], { cwd: consumer, env: w.env, encoding: 'utf8', timeout: 120_000 });
+    assert.equal(library.status, 0, library.stdout + library.stderr);
+    assert.ok(!library.stdout.includes(TOKEN) && !library.stderr.includes(TOKEN));
+    assert.deepEqual(states(w), { ...OPEN_ALL, '40': 'closed', '50': 'closed', '51': 'open' }, 'only the abandoned original\'s suggestion was closed');
   });
 
   test('library: the same cleanup in memory through the installed function', { skip, timeout: 300_000 }, () => {
