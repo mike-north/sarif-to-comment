@@ -32,12 +32,19 @@
 import * as assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { fenceProblem, loadMarkdownParser, unbalancedHtml } from '../dist/presentation/markdown-tree.cjs';
+import { composedProblem, fenceProblem, loadMarkdownParser, unbalancedHtml } from '../dist/presentation/markdown-tree.cjs';
 import { at, lineFix, log, prepareOutcome, run } from './support/presentation-fixtures.mts';
 
 const ESLINT = { driver: { name: 'eslint', version: '9.0.0' } };
 
 await loadMarkdownParser();
+
+/** A finding whose message is producer Markdown, followed by a native suggestion block. */
+const producer = (markdown: string): Record<string, unknown> => log(run(ESLINT, [{
+  message: { text: 'Plain.', markdown },
+  locations: [at('src/app.js', { startLine: 2 })],
+  fixes: [lineFix('src/app.js', 2, 'C', 'Uppercase it.')],
+}]));
 
 describe('code spans and fences as CommonMark reads them', () => {
   test('a code span cannot span a blank line, so the <details> it seemed to hide is open', () => {
@@ -136,21 +143,17 @@ describe('HTML blocks, attributes and containers (regressions of the hand-writte
     assert.equal(unbalancedHtml('x <details'), null);
   });
 
-  test('comments: a comment cmark-gfm may not read as one is refused under either reading', () => {
-    // CommonMark 0.31 reads `<!-->` and `<!-- a -- b -->` as comments; 0.29 (cmark-gfm) did not.
-    assert.equal(unbalancedHtml('x <!-- a -- <details> -->'), 'an HTML <!-- construct');
-    assert.equal(unbalancedHtml('x <!--> <details> -->'), 'an HTML <!-- construct');
+  test('comments: a comment cmark-gfm may not read as one is read both ways, so the tags inside it count', () => {
+    // CommonMark 0.31 reads `<!-->` and `<!-- a -- b -->` as comments; 0.29 (cmark-gfm) does not,
+    // and then the tags they seem to enclose are raw HTML.
+    assert.equal(unbalancedHtml('x <!-- a -- <details> -->'), 'a <details> element');
+    assert.equal(unbalancedHtml('x <!--> <details> -->'), 'a <details> element');
+    assert.equal(unbalancedHtml('x <!-- TODO -- fix --> y'), null, 'no tag inside, so harmless under either reading');
     assert.equal(unbalancedHtml('x <!-- fine --> y'), null);
   });
 });
 
 describe('producer Markdown: the same reading guards the attribution and the suggestion block', () => {
-  const producer = (markdown: string): Record<string, unknown> => log(run(ESLINT, [{
-    message: { text: 'Plain.', markdown },
-    locations: [at('src/app.js', { startLine: 2 })],
-    fixes: [lineFix('src/app.js', 2, 'C', 'Uppercase it.')],
-  }]));
-
   for (const [label, markdown, code] of [
     ['a code span across a blank line that seems to close <details>', '`<details>\n\n` hidden', 'producer-html-unbalanced'],
     ['an escaped backtick before <details>', '\\`<details>` hidden', 'producer-html-unbalanced'],
@@ -178,3 +181,84 @@ describe('producer Markdown: the same reading guards the attribution and the sug
     });
   }
 });
+
+describe('producer Markdown placed mid-line, and the composed-text checkpoint', () => {
+  const fixed = (fix: Record<string, unknown>): Record<string, unknown>[] => [fix];
+  const description = (markdown: string): Record<string, unknown> => ({
+    description: { text: 'x', markdown },
+    artifactChanges: [{ artifactLocation: { uri: 'src/app.js' }, replacements: [{ deletedRegion: { startLine: 2 }, insertedContent: { text: 'C' } }] }],
+  });
+  const finding = (extra: Record<string, unknown>): Record<string, unknown> => log(run(ESLINT, [{
+    message: { text: 'Plain.' }, locations: [at('src/app.js', { startLine: 2 })], fixes: fixed(lineFix('src/app.js', 2, 'C', 'Uppercase it.')), ...extra,
+  }]));
+
+  // Each string is harmless at the start of a line (indented code, or a fence),
+  // but the finding places it after a label on the same line, where its
+  // <details> is raw HTML left open over the attribution, the suggestion
+  // block and the marker.
+  for (const [label, sarif, pointer] of [
+    ['a fix description "    <details>" after **Fix:**', finding({ fixes: [description('    <details>')] }), '/runs/0/results/0'],
+    ['a fix description of a fence holding <details>', finding({ fixes: [description('```\n<details>\n```')] }), '/runs/0/results/0'],
+    ['a fix description "\t<details>"', finding({ fixes: [description('\t<details>')] }), '/runs/0/results/0'],
+    ['a location message "    <details>" after **At this location:**', finding({
+      locations: [{ physicalLocation: { artifactLocation: { uri: 'src/app.js' }, region: { startLine: 2 } }, message: { text: 'x', markdown: '    <details>' } }],
+    }), '/runs/0/results/0'],
+    ['an alternative\'s description "    <details>" after (1)', finding({
+      fixes: [lineFix('src/app.js', 2, 'C', 'Uppercase it.'), { ...description('    <details>'), artifactChanges: [{ artifactLocation: { uri: 'src/app.js' }, replacements: [{ deletedRegion: { startLine: 2 }, insertedContent: { text: 'D' } }] }] }],
+    }), '/runs/0/results/0/fixes/1'],
+  ] as const) {
+    test(`${label} is refused at the finding or fix that carries it (producer-html-unbalanced)`, async () => {
+      const outcome = await prepareOutcome(sarif);
+      assert.equal(outcome.status, 'blocked');
+      assert.deepEqual(outcome.diagnostics.map((d) => [d.code, d.location?.pointer]), [['producer-html-unbalanced', pointer]]);
+    });
+  }
+});
+
+describe('only void elements close themselves', () => {
+  for (const markdown of ['x <details/> y', 'x <details title=/> y', '<details hidden/>']) {
+    test(`${JSON.stringify(markdown)} leaves <details> open: a trailing "/>" does not close a non-void element`, () => {
+      assert.equal(unbalancedHtml(markdown), 'a <details> element');
+    });
+  }
+
+  test('void elements close themselves with or without "/>"', () => {
+    assert.equal(unbalancedHtml('a<br/>b<img src=x>c<hr>'), null);
+  });
+
+  for (const markdown of ['see <details/> here', 'see <details title=/> here', '<details hidden/>']) {
+    test(`producer ${JSON.stringify(markdown)} before a suggestion is refused (producer-html-unbalanced)`, async () => {
+      const outcome = await prepareOutcome(producer(markdown));
+      assert.equal(outcome.status, 'blocked');
+      assert.deepEqual(outcome.diagnostics.map((d) => d.code), ['producer-html-unbalanced']);
+    });
+  }
+});
+
+describe('composedProblem: the checkpoint over a fully composed comment or body', () => {
+  const block = '```suggestion\nC\n```';
+  const marker = '<!-- sarif-to-comment:review:00000000-0000-4000-8000-000000000000 -->';
+
+  test('a comment as the core composes it passes, as does a body ending with its marker', () => {
+    assert.equal(composedProblem(`Plain.\n\n<sub>— T</sub>\n\n${block}`, { suggestionBlock: block }), null);
+    assert.equal(composedProblem(`Body.\n\n${marker}`, { marker }), null);
+    assert.equal(composedProblem('Content:\n\n````\n```suggestion\n````', {}), null, 'a suggestion line shown inside code is not a suggestion block');
+  });
+
+  test('raw HTML left open by the composition is found, wherever the seam is', () => {
+    assert.equal(composedProblem(`Plain.\n\n**Fix:**     <details>\n\n<sub>— T</sub>\n\n${block}`, { suggestionBlock: block }), 'leaves a <details> element open');
+  });
+
+  test('a suggestion block that is swallowed, duplicated, missing or not last is found', () => {
+    assert.equal(composedProblem(`~~~\n\n${block}`, { suggestionBlock: block }), 'leaves a code fence open');
+    assert.equal(composedProblem(`${block}\n\nmore\n\n${block}`, { suggestionBlock: block }), 'has 2 suggestion blocks, not the one the core built');
+    assert.equal(composedProblem('Plain.', { suggestionBlock: block }), 'has 0 suggestion blocks, not the one the core built');
+    assert.equal(composedProblem(`${block}\n\nafter`, { suggestionBlock: block }), 'has its suggestion block no longer intact as its final block');
+  });
+
+  test('a marker that is not its own final node is found', () => {
+    assert.equal(composedProblem(`Body. ${marker}`, { marker }), 'has its marker no longer as its own final node', 'inside a paragraph');
+    assert.equal(composedProblem(`Body.\n\n${marker} trailing`, { marker }), 'has its marker no longer as its own final node');
+  });
+});
+

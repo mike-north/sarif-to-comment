@@ -323,7 +323,8 @@ import { renderFinding, renderFindingSection } from './presentation/finding.cjs'
 import type { QuotedSource } from './presentation/finding.cjs';
 import { renderLifecycleNote } from './presentation/lifecycle-note.cjs';
 import { SEPARATOR, codeSpan, escapePlain, escapePlainInline, lineSpan } from './presentation/markdown.cjs';
-import { fenceProblem, loadMarkdownParser, unbalancedHtml } from './presentation/markdown-tree.cjs';
+import { composedProblem, fenceProblem, loadMarkdownParser, unbalancedHtml } from './presentation/markdown-tree.cjs';
+import type { IComposedExpectation } from './presentation/markdown-tree.cjs';
 import { renderDiagnosticLine, renderWarningsList } from './presentation/warnings-list.cjs';
 import { createDiagnostic } from './diagnostics.cjs';
 import type { DiagnosticCode, IDiagnostic } from './diagnostics.cjs';
@@ -1116,6 +1117,15 @@ type SuggestionKey = readonly [path: string, startLine: number, endLine: number,
 /** Conservative product limits on one prepared review; not claims about host maxima. */
 const PRODUCT_LIMITS: Readonly<IProductLimits> = Object.freeze({ maxComments: 100, maxCommentBodyChars: 60000, maxPayloadBytes: 1000000 });
 
+/**
+ * The labels the finding component puts before producer Markdown on the same
+ * line (docs/review-presentation-contract.md §2, §4); the producer checks
+ * read such Markdown after its label, as composed.
+ */
+const LOCATION_LABEL = '**At this location:** ';
+const FIX_LABEL = '**Fix:** ';
+const ALTERNATIVE_LABEL = '(1) ';
+
 /** A full, canonical Git object name; abbreviations are never prefix-matched. */
 const FULL_COMMIT = /^[0-9a-f]{40}$/;
 
@@ -1759,7 +1769,7 @@ async function prepareResult(
   const message = resolveMessage(result.message, rule, component || runInfo.driver, pointer, state);
   const [onlyLocation] = locations;
   const locationMessage = locations.length === 1 && onlyLocation !== undefined && onlyLocation.message !== undefined
-    ? resolveMessage(onlyLocation.message, rule, component || runInfo.driver, pointer, state).markdown : undefined;
+    ? resolveMessage(onlyLocation.message, rule, component || runInfo.driver, pointer, state, LOCATION_LABEL).markdown : undefined;
   const classification = classifyResult(result, rule);
   const reference: ISarifReportingDescriptorReference = result.rule || {};
   const ruleId = result.ruleId !== undefined ? result.ruleId : reference.id !== undefined ? reference.id : rule && rule.id;
@@ -1950,6 +1960,10 @@ function componentIdentity(component: ISarifComponent): IComponentIdentity {
  * Resolves a SARIF message to Markdown: markdown verbatim, text escaped to
  * render literally, or message.id through the rule's messageStrings and then
  * the defining component's globalMessageStrings with {n} arguments (SARIF 3.11).
+ * The producer Markdown checks read it alone and, for a message the review
+ * places after a label on the same line, also after `placedAfter` (for
+ * example `**Fix:** `), as it is composed: an indented or fenced line reads
+ * differently in the middle of a line than at its start.
  */
 function resolveMessage(
   message: ISarifMessage,
@@ -1957,6 +1971,7 @@ function resolveMessage(
   component: ISarifComponent,
   pointer: string,
   state: IPreparationState,
+  placedAfter = '',
 ): IRenderedMessage {
   let template: ISarifMessage | ISarifMessageString = message;
   let name = 'The message';
@@ -1992,7 +2007,8 @@ function resolveMessage(
     return { markdown: '' };
   }
   const markdown = useMarkdown ? substituted.text : escapePlain(substituted.text);
-  const markupProblem = producerFenceProblem(markdown) || producerHtmlProblem(markdown);
+  const markupProblem = producerFenceProblem(markdown) || producerHtmlProblem(markdown)
+    || (placedAfter === '' ? null : producerFenceProblem(`${placedAfter}${markdown}`) || producerHtmlProblem(`${placedAfter}${markdown}`));
   if (markupProblem) {
     state.report.error(markupProblem[0], pointer, markupProblem[1]);
     return { markdown: '' };
@@ -2471,7 +2487,7 @@ async function applyResultFix(
   const source = await readLocatedSource(change.artifactLocation, pointer, runInfo, state);
   if (!source) return null;
 
-  const description = fix.description ? resolveMessage(fix.description, undefined, runInfo.driver, pointer, state).markdown : undefined;
+  const description = fix.description ? resolveMessage(fix.description, undefined, runInfo.driver, pointer, state, FIX_LABEL).markdown : undefined;
   const edit = applyExactly(source.text, replacement, runInfo, state);
   if (edit.problem) return fail(edit.problem[0], edit.problem[1]);
   return { source, edit: edit.edit, description };
@@ -2625,7 +2641,7 @@ async function prepareFixEdits(
     entry.replacements.push(...change.replacements);
     byFile.set(source.path, entry);
   }
-  const description = fix.description ? resolveMessage(fix.description, undefined, runInfo.driver, pointer, state).markdown : undefined;
+  const description = fix.description ? resolveMessage(fix.description, undefined, runInfo.driver, pointer, state, FIX_LABEL).markdown : undefined;
 
   const edits: IPreparedEdit[] = [];
   for (const { source, replacements: onFile } of byFile.values()) {
@@ -2822,7 +2838,7 @@ async function prepareAlternative(
       crlf: text.includes('\r\n'),
     });
   }
-  const description = fix.description ? resolveMessage(fix.description, undefined, runInfo.driver, at, state).markdown : undefined;
+  const description = fix.description ? resolveMessage(fix.description, undefined, runInfo.driver, at, state, ALTERNATIVE_LABEL).markdown : undefined;
   return { fix: index, parts, description };
 }
 
@@ -3047,17 +3063,22 @@ function assemble(
     ? [{ path: section.operation.path, characters: itemAt(rendered, i).length }] : []));
 
   // Each comment's body follows its coordinates, once every item it presents is known.
-  const comments: PreparedComment[] = commentItems.map((entry) => {
-    const body = entry.items.map((item) => renderer.finding(item)).join(SEPARATOR);
-    return {
-      ...entry.coordinates,
-      body: entry.suggestion
-        ? `${body}\n\n\`\`\`suggestion\n${entry.suggestion.payload}\`\`\``
-        : body,
-    };
-  });
+  const comments: PreparedComment[] = commentItems.map((entry) => ({ ...entry.coordinates, body: composeComment(entry, renderer) }));
+  const body = rendered.join(SEPARATOR);
+  checkComposed([
+    ...commentItems.map((entry, i) => commentUnit(entry, itemAt(comments, i).body, i)),
+    ...sections.map((section, i): IComposedUnit => ({
+      what: `body section ${String(i + 1)}`,
+      text: itemAt(rendered, i),
+      expected: {},
+      items: section.kind === 'item' ? [section.item] : section.items,
+      compose: (r) => (section.kind === 'item' ? r.section(section.item) : r.proposal(section.operation, section.items)),
+    })),
+    ...bodyUnits(body, sections.flatMap((section) => (section.kind === 'item' ? [section.item] : section.items)),
+      (r) => sections.map((section) => (section.kind === 'item' ? r.section(section.item) : r.proposal(section.operation, section.items))).join(SEPARATOR)),
+  ], state);
   return {
-    review: { commitId: context.reviewedCommit, body: rendered.join(SEPARATOR), comments },
+    review: { commitId: context.reviewedCommit, body, comments },
     evidence,
     commentItems,
     sectionCount: sections.length,
@@ -3321,10 +3342,7 @@ async function assembleWithSuggestions(items: readonly IPreparedItem[], state: I
         + 'Remove the group, and the change is published on its own.');
     }
   }
-  const comments: PreparedComment[] = commentItems.map((entry) => {
-    const body = entry.items.map((item) => renderer.finding(item)).join(SEPARATOR);
-    return { ...entry.coordinates, body: entry.suggestion ? `${body}\n\n\`\`\`suggestion\n${entry.suggestion.payload}\`\`\`` : body };
-  });
+  const comments: PreparedComment[] = commentItems.map((entry) => ({ ...entry.coordinates, body: composeComment(entry, renderer) }));
   const blockedAssembly: IUnitAssembly = { review: { commitId: context.reviewedCommit, body: '', comments }, evidence, sectionCount: sections.length, proposals: [] };
   if (enabled === undefined) return blockedAssembly;
 
@@ -3348,6 +3366,9 @@ async function assembleWithSuggestions(items: readonly IPreparedItem[], state: I
   const sizingMarker = formatSuggestionMarker({ ...target, id: SIZING_UUID, batch: SIZING_UUID });
   /** The lifecycle note every suggestion pull request carries, presented once, when the first is prepared. */
   let lifecycleNote: string | undefined;
+  /** How each unit's companion is prepared with a given renderer, for the composed-text checkpoint. */
+  const companionWith = new Map<number, (r: ReviewRenderer) => IPreparedCompanion>();
+  const companionUnits: IComposedUnit[] = [];
   const { maxCommentBodyChars } = options;
   for (const [i, unit] of units.entries()) {
     const found: Obstacle[] = unavailable.map((reason): Obstacle => ({ kind: 'target', reason }));
@@ -3365,9 +3386,22 @@ async function assembleWithSuggestions(items: readonly IPreparedItem[], state: I
     if (found.length === 0) {
       const companion = prepareCompanion(unit, target, renderer, headTexts);
       lifecycleNote ??= renderer.lifecycleNote(target);
-      const characters = renderSuggestionPullBody(companion, sizingMarker, target, lifecycleNote).length;
-      if (maxCommentBodyChars !== undefined && characters > maxCommentBodyChars) found.push({ kind: 'description-size', characters, limit: maxCommentBodyChars });
-      else companionsByUnit.set(i, companion);
+      const description = renderSuggestionPullBody(companion, sizingMarker, target, lifecycleNote);
+      const characters = description.length;
+      if (maxCommentBodyChars !== undefined && characters > maxCommentBodyChars) {
+        found.push({ kind: 'description-size', characters, limit: maxCommentBodyChars });
+      } else {
+        companionsByUnit.set(i, companion);
+        const prepare = (r: ReviewRenderer): IPreparedCompanion => prepareCompanion(unit, target, r, headTexts);
+        companionWith.set(i, prepare);
+        companionUnits.push({
+          what: `the description of the suggestion pull request for unit ${String(i + 1)}`,
+          text: description,
+          expected: { marker: sizingMarker },
+          items: unit.items,
+          compose: (r) => renderSuggestionPullBody(prepare(r), sizingMarker, target, r.lifecycleNote(target)),
+        });
+      }
     }
     obstacles.push(found);
   }
@@ -3429,15 +3463,46 @@ async function assembleWithSuggestions(items: readonly IPreparedItem[], state: I
     const index = companionOf.get(suggestionPullRequest);
     return index === undefined ? rest : { ...rest, suggestionPullRequest: index };
   });
+  // The composed-text checkpoint (see checkComposed): every comment, every
+  // section, every suggestion pull request's description and the body.
+  const largest = { number: LARGEST_PULL_NUMBER, url: pullRequestUrl(target, LARGEST_PULL_NUMBER) };
+  const sectionWith = (section: UnitSection, r: ReviewRenderer, own: boolean): string => {
+    if (section.kind === 'item') return r.section(section.item);
+    const unit = itemAt(units, section.unit);
+    const prepare = companionWith.get(section.unit);
+    if (prepare !== undefined) return renderCompanionReference(own ? itemAt(companions, companionOf.get(section.unit) ?? -1) : prepare(r), largest, target);
+    const operation = fallbacks.get(section.unit);
+    if (operation === undefined) throw new Error(`Internal error: suggestion unit ${String(section.unit)} is neither created nor presented as a proposal.`);
+    return r.proposal(operation, unit.items);
+  };
+  const sectionItems = (section: UnitSection): readonly IPreparedItem[] => (section.kind === 'item' ? [section.item] : itemAt(units, section.unit).items);
+  const composedBody = (r: ReviewRenderer): string => sections.map((section) => sectionWith(section, r, false)).join(SEPARATOR);
+  const checkpoint = (body: string): void => {
+    checkComposed([
+      ...commentItems.map((entry, i) => commentUnit(entry, itemAt(comments, i).body, i)),
+      ...companionUnits,
+      ...sections.map((section, i): IComposedUnit => ({
+        what: `body section ${String(i + 1)}`,
+        text: sectionWith(section, renderer, true),
+        expected: {},
+        items: sectionItems(section),
+        compose: (r) => sectionWith(section, r, false),
+      })),
+      ...bodyUnits(body, sections.flatMap(sectionItems), composedBody),
+    ], state);
+  };
   if (companions.length === 0) {
     const body = parts.map(String).join(SEPARATOR);
+    checkpoint(body);
     return { review: { commitId: context.reviewedCommit, body, comments }, evidence: renumbered, sectionCount: sections.length, proposals };
   }
   // A created companion always had its lifecycle note presented when it was prepared.
   if (lifecycleNote === undefined) throw new Error('Internal error: a suggestion pull request was prepared without its lifecycle note.');
   const suggestions: IPreparedSuggestions = { companions, sections: parts, lifecycleNote };
+  const body = renderReviewBody(suggestions, companions.map(() => LARGEST_PULL_NUMBER), target);
+  checkpoint(body);
   return {
-    review: { commitId: context.reviewedCommit, body: renderReviewBody(suggestions, companions.map(() => LARGEST_PULL_NUMBER), target), comments },
+    review: { commitId: context.reviewedCommit, body, comments },
     evidence: renumbered,
     sectionCount: sections.length,
     proposals,
@@ -3779,6 +3844,99 @@ function enforceLimits(review: IPreparedReview, proposals: readonly IRenderedPro
 }
 
 // ---------------------------------------------------------------------------
+// The composed-text checkpoint
+
+/**
+ * A marker of the form publication appends to the review body
+ * (src/publication.cts, MARKER_PATTERN), with a fixed id: the checkpoint
+ * reads the body as it will be sent.
+ */
+const SAMPLE_REVIEW_MARKER = `<!-- sarif-to-comment:review:${SIZING_UUID} -->`;
+
+/**
+ * One fully composed text the checkpoint reads: what it is (for messages),
+ * its text, what the core built it to end with, the findings it presents,
+ * and how to compose it again with a given renderer (to tell whether a
+ * problem comes from presentation callbacks or from producer content).
+ */
+interface IComposedUnit {
+  readonly what: string;
+  readonly text: string;
+  readonly expected: IComposedExpectation;
+  readonly items: readonly IPreparedItem[];
+  readonly compose: (renderer: ReviewRenderer) => string;
+}
+
+/** The native suggestion block the core appends to a suggestion comment. */
+function suggestionBlock(payload: string): string {
+  return `\`\`\`suggestion\n${payload}\`\`\``;
+}
+
+/** An inline comment: its findings, then, for a suggestion, its native suggestion block. */
+function composeComment(entry: ICommentEntry, renderer: ReviewRenderer): string {
+  const body = entry.items.map((item) => renderer.finding(item)).join(SEPARATOR);
+  return entry.suggestion ? `${body}\n\n${suggestionBlock(entry.suggestion.payload)}` : body;
+}
+
+function commentUnit(entry: ICommentEntry, text: string, index: number): IComposedUnit {
+  return {
+    what: `inline comment ${String(index + 1)}`,
+    text,
+    expected: entry.suggestion ? { suggestionBlock: suggestionBlock(entry.suggestion.payload) } : {},
+    items: entry.items,
+    compose: (r) => composeComment(entry, r),
+  };
+}
+
+/** The review body as it will be sent, with the publication marker after it; none when the body is empty. */
+function bodyUnits(body: string, items: readonly IPreparedItem[], compose: (r: ReviewRenderer) => string): IComposedUnit[] {
+  if (body === '') return [];
+  return [{
+    what: 'the review body',
+    text: `${body}\n\n${SAMPLE_REVIEW_MARKER}`,
+    expected: { marker: SAMPLE_REVIEW_MARKER },
+    items,
+    compose: (r) => `${compose(r)}\n\n${SAMPLE_REVIEW_MARKER}`,
+  }];
+}
+
+/**
+ * The backstop for every seam between pieces of Markdown: each inline
+ * comment, body section, suggestion pull request description and the review
+ * body is read again, fully composed, and must leave no raw HTML open,
+ * swallow nothing, keep exactly its native suggestion block intact as built,
+ * and end with its marker as its own final node
+ * (src/presentation/markdown-tree.cts, composedProblem). It runs with or
+ * without presentation callbacks. A problem that the same text composed with
+ * the built-in presentation does not have comes from a callback, and rejects
+ * with the presentation TypeError; any other is producer content's, and is
+ * reported as `producer-html-unbalanced` or `producer-fence-unclosed` at the
+ * finding whose own Markdown shows it, or else the first the text presents.
+ */
+function checkComposed(units: readonly IComposedUnit[], state: IPreparationState): void {
+  let builtIn: ReviewRenderer | undefined;
+  const builtInRenderer = (): ReviewRenderer => (builtIn ??= state.renderer.customized ? new ReviewRenderer(state.context, {}) : state.renderer);
+  const reported = new Set<string>();
+  for (const unit of units) {
+    const problem = composedProblem(unit.text, unit.expected);
+    if (problem === null) continue;
+    if (state.renderer.customized && composedProblem(unit.compose(builtInRenderer()), unit.expected) === null) {
+      throw new TypeError(`Invalid presentation: options.presentation returned Markdown that, composed into ${unit.what}, ${problem}, `
+        + 'which would hide or swallow what the core places after it (findings, a suggestion block or a marker). '
+        + 'A presentation callback may change how an element reads, never what is published or how it is identified.');
+    }
+    const culprit = unit.items.find((item) => composedProblem(builtInRenderer().finding(item), {}) !== null) ?? unit.items[0];
+    const code: DiagnosticCode = problem.startsWith('leaves a code fence') || problem.includes('suggestion') || problem.includes('marker')
+      ? 'producer-fence-unclosed' : 'producer-html-unbalanced';
+    const key = `${code} ${culprit?.pointer ?? ''}`;
+    if (reported.has(key)) continue;
+    reported.add(key);
+    state.report.error(code, culprit?.pointer,
+      `Composed into ${unit.what}, the producer Markdown ${problem}, which would hide or swallow the attribution, later findings, a suggestion block or a marker that follows.`);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Rendering: prepared findings and proposals through the presentation
 // components (src/presentation). Preparation decides what is published and
 // where; the components decide only how each element reads.
@@ -3799,6 +3957,11 @@ class ReviewRenderer {
   constructor(context: IPreparationContext, presentation: CapturedPresentation) {
     this.#context = context;
     this.#presentation = presentation;
+  }
+
+  /** Whether any presentation callback is in use (otherwise everything is built in). */
+  get customized(): boolean {
+    return Object.values(this.#presentation).some((callback) => callback !== undefined);
   }
 
   /** A prepared finding, with its alternatives and attribution. */

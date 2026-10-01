@@ -163,5 +163,27 @@ describe('callbacks cannot hide a required fragment that is still "contained"', 
     const context: IAttributionPresentationContext = { tool: 'eslint', markdown: 'eslint', required: ['eslint'] };
     assert.equal(present('attribution', (c) => `reported by **${c.tool}**`, context), 'reported by **eslint**');
   });
+
+  test('a permalink inside a carried <a href> that goes elsewhere is not its source association', () => {
+    const url = 'https://github.com/acme/widgets/blob/2222222222222222222222222222222222222222/obsolete.txt';
+    const builtIn = `[x](${url})\n\nsee <a href="https://example.com/elsewhere">docs</a> F`;
+    assert.throws(() => present('fileDeletion', () => `<a href="https://example.com/elsewhere">${url}</a>\n\nF`, { markdown: builtIn, required: [url, 'F'] }),
+      refusedBy('fileDeletion', /hides a required fragment, which must be shown as itself: "https:/));
+  });
+
+  // GitHub renders $…$ and $$…$$ as TeX, where \phantom{} hides text. (Math rendering is not live-checked.)
+  for (const [label, attribution] of [
+    ['inline math', 'reported by $\\phantom{eslint}$'],
+    ['block math', '$$\n\\phantom{eslint}\n$$'],
+    ['math that a later $ closes', 'eslint said $5 then $'],
+  ] as const) {
+    test(`the producer's name in ${label} is not shown`, () => {
+      assert.throws(() => present('finding', () => attribution, { markdown: 'eslint', required: ['eslint'] }), refusedBy('finding', /hides a required fragment/));
+    });
+  }
+
+  test('a $ in code, or escaped, cannot make math', () => {
+    assert.equal(present('finding', () => 'eslint costs `$5` and \\$6', { markdown: 'eslint', required: ['eslint'] }), 'eslint costs `$5` and \\$6');
+  });
 });
 

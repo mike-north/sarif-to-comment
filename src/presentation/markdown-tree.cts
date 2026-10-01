@@ -171,9 +171,10 @@ interface IHtmlConstruct {
   readonly terminated: boolean;
   readonly name?: string;
   readonly closing?: boolean;
-  readonly selfClosing?: boolean;
   /** Whether the element a start tag opens hides its content: undisplayed, or with a `hidden` or `style` attribute. */
   readonly hides?: boolean;
+  /** An `<a>` start tag's `href`, when it has one. */
+  readonly href?: string;
 }
 
 /** The constructs of one html node's text, in order, up to the first unterminated one. */
@@ -188,13 +189,18 @@ function constructsOf(value: string, offset: number): IHtmlConstruct[] {
         : text === '<?' ? ['instruction', '?>', 2] : text === '<![CDATA[' ? ['cdata', ']]>', text.length] : ['declaration', '>', text.length];
       const at = value.indexOf(terminator, match.index + from);
       const end = at === -1 ? value.length : at + terminator.length;
-      // A comment GitHub's cmark-gfm (CommonMark 0.29) may not read as one —
-      // `<!-->`, `<!--->`, or text with `--` or ending in `-` — would leave
-      // whatever it seems to enclose as raw HTML there: treat it as open.
+      // GitHub's cmark-gfm follows CommonMark 0.29, under which `<!-->`,
+      // `<!--->` and a comment containing `--` or ending in `-` are not
+      // comments: the `<!--` is text, and the tags it seems to enclose are
+      // raw HTML. Read such a comment both ways: its tags count.
       const inner = kind === 'comment' && at !== -1 ? value.slice(match.index + 4, Math.max(at, match.index + 4)) : '';
       const ambiguous = kind === 'comment' && at !== -1 && (at < match.index + 4 || inner.startsWith('>') || inner.startsWith('->') || inner.includes('--') || inner.endsWith('-'));
-      constructs.push({ kind, start: offset + match.index, end: offset + end, terminated: at !== -1 && !ambiguous });
-      if (at === -1 || ambiguous) break;
+      if (ambiguous) {
+        opener.lastIndex = match.index + text.length;
+        continue;
+      }
+      constructs.push({ kind, start: offset + match.index, end: offset + end, terminated: at !== -1 });
+      if (at === -1) break;
       opener.lastIndex = end;
       continue;
     }
@@ -215,9 +221,11 @@ function constructsOf(value: string, offset: number): IHtmlConstruct[] {
     const end = close === -1 ? value.length : close + 1;
     const body = value.slice(match.index, end);
     const element = name.toLowerCase();
+    const href = element === 'a' ? /[\s/]href\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/i.exec(body) : null;
+    const hrefValue = href === null ? undefined : href[1] ?? href[2] ?? href[3];
     constructs.push({
       kind: 'tag', start: offset + match.index, end: offset + end, terminated: close !== -1, name: element, closing: slash === '/',
-      selfClosing: body.endsWith('/>'), hides: UNDISPLAYED_ELEMENTS.has(element) || /[\s/](?:hidden|style)\b/i.test(body),
+      hides: UNDISPLAYED_ELEMENTS.has(element) || /[\s/](?:hidden|style)\b/i.test(body), ...(hrefValue === undefined ? {} : { href: hrefValue }),
     });
     if (close === -1) break;
     opener.lastIndex = end;
@@ -230,30 +238,50 @@ function htmlNodes(root: Root): (IPlacedNode & { readonly node: Html })[] {
   return placedNodes(root).filter((placed): placed is IPlacedNode & { readonly node: Html } => placed.node.type === 'html');
 }
 
-/** The element balance of a tree's raw HTML, and the spans of elements that hide their content. */
-function elementWalk(root: Root): { readonly problem: string | null; readonly hidden: readonly { readonly start: number; readonly end: number }[] } {
-  const stack: { readonly name: string; readonly start: number; readonly hides: boolean }[] = [];
-  const hidden: { start: number; end: number }[] = [];
+/** A span of Markdown that one element covers, from its start tag through its end tag. */
+interface IElementSpan {
+  readonly start: number;
+  readonly end: number;
+}
+
+/** What raw HTML does: its first imbalance, the elements that hide their content, and the `<a>` elements with their `href`. */
+interface IElementWalk {
+  readonly problem: string | null;
+  readonly hidden: readonly IElementSpan[];
+  readonly anchors: readonly (IElementSpan & { readonly href: string | undefined })[];
+}
+
+/**
+ * The element balance of a tree's raw HTML, in document order. Only void
+ * elements close themselves: as in HTML, a trailing `/>` on any other start
+ * tag (`<details/>`) is ignored, and the element stays open.
+ */
+function elementWalk(root: Root): IElementWalk {
+  const stack: { readonly name: string; readonly start: number; readonly hides: boolean; readonly href: string | undefined }[] = [];
+  const hidden: IElementSpan[] = [];
+  const anchors: (IElementSpan & { readonly href: string | undefined })[] = [];
   for (const { node, start } of htmlNodes(root)) {
     for (const construct of constructsOf(node.value, start)) {
       if (!construct.terminated) {
         return {
           problem: construct.kind === 'tag' ? `a <${construct.closing === true ? '/' : ''}${construct.name ?? ''}> tag` : `an HTML ${OPENERS[construct.kind]} construct`,
           hidden,
+          anchors,
         };
       }
       if (construct.kind !== 'tag' || construct.name === undefined) continue;
       if (construct.closing === true) {
         const open = stack.pop();
-        if (open?.name !== construct.name) return { problem: `an unmatched </${construct.name}> tag`, hidden };
+        if (open?.name !== construct.name) return { problem: `an unmatched </${construct.name}> tag`, hidden, anchors };
         if (open.hides) hidden.push({ start: open.start, end: construct.end });
-      } else if (!VOID_ELEMENTS.has(construct.name) && construct.selfClosing !== true) {
-        stack.push({ name: construct.name, start: construct.start, hides: construct.hides === true });
+        if (open.name === 'a') anchors.push({ start: open.start, end: construct.end, href: open.href });
+      } else if (!VOID_ELEMENTS.has(construct.name)) {
+        stack.push({ name: construct.name, start: construct.start, hides: construct.hides === true, href: construct.href });
       }
     }
   }
   const open = stack[stack.length - 1];
-  return { problem: open === undefined ? null : `a <${open.name}> element`, hidden };
+  return { problem: open === undefined ? null : `a <${open.name}> element`, hidden, anchors };
 }
 
 /** The opener a refusal names for each non-tag construct. */
@@ -336,13 +364,18 @@ function linkTextSpan(placed: IPlacedNode, all: readonly IPlacedNode[]): { reado
  *   - a node that crosses the occurrence's boundary is a shown container or
  *     text;
  *   - no element that hides its content (undisplayed, or with a `hidden` or
- *     `style` attribute) reaches into the occurrence from outside.
+ *     `style` attribute) reaches into the occurrence from outside;
+ *   - a fragment that is a URL is in no raw-HTML `<a>` whose `href` is
+ *     something else (a link that goes elsewhere);
+ *   - no `$` outside the occurrence, in a paragraph, heading or table cell
+ *     that holds part of it, could make it GitHub math, which renders TeX and
+ *     can hide text (`\phantom{}`); `$` in code does not count.
  */
 export function showsAsItself(markdown: string, fragment: string): boolean {
   if (fragment === '') return true;
   const whole = parse(markdown);
   const wholeNodes = placedNodes(whole);
-  const hiddenSpans = elementWalk(whole).hidden;
+  const { hidden: hiddenSpans, anchors } = elementWalk(whole);
   const ownNodes = placedNodes(parse(fragment));
   const plainText = ownNodes.length === 2 && ownNodes.every((own) => (own.node.type === 'paragraph' || own.node.type === 'text') && own.start === 0 && own.end === fragment.length);
   const url = /^https?:\/\/\S+$/.test(fragment);
@@ -368,7 +401,83 @@ export function showsAsItself(markdown: string, fragment: string): boolean {
       return false;
     });
     const unhidden = hiddenSpans.every((span) => span.end <= at || span.start >= end || (at <= span.start && span.end <= end));
-    if (shown && unhidden) return true;
+    const notElsewhere = !url || anchors.every((anchor) => anchor.end <= at || anchor.start >= end || anchor.href === fragment);
+    if (shown && unhidden && notElsewhere && !mayBeMath(markdown, wholeNodes, at, end)) return true;
   }
   return false;
+}
+
+/** Blocks whose inline content GitHub may read as `$…$` math. */
+const MATH_BLOCKS: ReadonlySet<Nodes['type']> = new Set(['paragraph', 'heading', 'tableCell']);
+
+/**
+ * Whether GitHub could read part of the occurrence [at, end) as math: some
+ * paragraph, heading or table cell that holds part of it has an unescaped
+ * `$` outside the occurrence and outside code. GitHub renders `$…$` and
+ * `$$…$$` as TeX, which can hide text; the parser does not model it, so any
+ * such `$` counts.
+ */
+function mayBeMath(markdown: string, nodes: readonly IPlacedNode[], at: number, end: number): boolean {
+  return nodes.some((block) => {
+    if (!MATH_BLOCKS.has(block.node.type) || block.end <= at || block.start >= end) return false;
+    const code = nodes.filter((n) => n.node.type === 'inlineCode' && n.start >= block.start && n.end <= block.end);
+    for (let i = block.start; i < block.end; i += 1) {
+      if (markdown[i] !== '$' || (i >= at && i < end)) continue;
+      if (code.some((span) => span.start <= i && i < span.end)) continue;
+      let backslashes = 0;
+      for (let j = i - 1; j >= block.start && markdown[j] === '\\'; j -= 1) backslashes += 1;
+      if (backslashes % 2 === 0) return true;
+    }
+    return false;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Composed text: the checkpoint after every comment and body is composed
+
+/** What a composed comment or body must end with, as the core built it. */
+export interface IComposedExpectation {
+  /** The exact native suggestion block the core appended, when there is one. */
+  readonly suggestionBlock?: string;
+  /** The exact marker the core appends last, when there is one. */
+  readonly marker?: string;
+}
+
+/**
+ * Why a fully composed comment or body is not what the core built, worded to
+ * follow "leaves" or "has", or null. Whatever producer content and callbacks
+ * contributed, the composed text must:
+ *   - leave no raw HTML open (unbalancedHtml) and swallow nothing after it;
+ *   - contain exactly the suggestion blocks the core built — at most its
+ *     own one, as a `suggestion` code node, intact, as the text's last node
+ *     (or the last before its marker). Code the core shows literally (a
+ *     proposed file's content) may contain such lines: they are code, not
+ *     suggestion blocks;
+ *   - end with its marker as its own final html node.
+ */
+export function composedProblem(text: string, expected: IComposedExpectation): string | null {
+  const html = unbalancedHtml(text);
+  if (html !== null) return `leaves ${html} open`;
+  if (swallower(text) !== null) return 'leaves a code fence open';
+  const { suggestionBlock, marker } = expected;
+  const root = parse(text);
+  const suggestions = placedNodes(root).filter((placed) => placed.node.type === 'code' && /^suggestion/i.test(placed.node.lang ?? '')).length;
+  if (suggestions !== (suggestionBlock === undefined ? 0 : 1)) {
+    return `has ${String(suggestions)} suggestion block${suggestions === 1 ? '' : 's'}, not the ${suggestionBlock === undefined ? 'none' : 'one'} the core built`;
+  }
+  const blocks = root.children;
+  const last = blocks[blocks.length - 1];
+  const sourceOf = (node: Nodes | undefined): string | undefined =>
+    node?.position?.start.offset === undefined || node.position.end.offset === undefined ? undefined : text.slice(node.position.start.offset, node.position.end.offset);
+  let beforeMarker = last;
+  if (marker !== undefined) {
+    if (last?.type !== 'html' || sourceOf(last) !== marker || !text.endsWith(marker)) return 'has its marker no longer as its own final node';
+    beforeMarker = blocks[blocks.length - 2];
+  }
+  if (suggestionBlock !== undefined) {
+    if (beforeMarker?.type !== 'code' || beforeMarker.lang !== 'suggestion' || sourceOf(beforeMarker) !== suggestionBlock) {
+      return 'has its suggestion block no longer intact as its final block';
+    }
+  }
+  return null;
 }
