@@ -612,6 +612,25 @@ describe('whole-review refusals (contract §2 Refusals)', () => {
     assertBlocked((await prepare(oneCreation('docs%2Fx.md', 'x\n'))).outcome, 'uri-encoded-separator');
   });
 
+  // Regression: delivery policy §8.10 refuses a path with any control or invisible formatting character, the
+  // characters a code block does not show (Unicode Cf and U+00A0 included), plus tab, LF and CR; the path rule
+  // used to miss the zero-width and no-break characters, so such a path was shown raw in the review.
+  for (const [label, uri, codePoint] of [
+    ['a zero-width space', 'x%E2%80%8By.md', 'U+200B'],
+    ['a no-break space', 'x%C2%A0y.md', 'U+00A0'],
+    ['a soft hyphen', 'x%C2%ADy.md', 'U+00AD'],
+    ['a zero-width joiner', 'x%E2%80%8Dy.md', 'U+200D'],
+    ['a word joiner', 'x%E2%81%A0y.md', 'U+2060'],
+    ['a zero-width joiner inside an emoji sequence (a path is a destination, not prose)', 'x%F0%9F%91%A9%E2%80%8D%F0%9F%92%BBy.md', 'U+200D'],
+    ['a tab', 'x%09y.md', 'U+0009'],
+  ] as const) {
+    test(`regression: a path with ${label} cannot be shown exactly and blocks, naming the character`, async () => {
+      const { outcome } = await prepare(oneCreation(uri, 'x\n'));
+      assertBlocked(outcome, 'file-operation-path-unrepresentable');
+      assert.ok(outcome.diagnostics.some((d) => d.message.includes(`contains ${codePoint}, which cannot be shown exactly`)), JSON.stringify(outcome.diagnostics));
+    });
+  }
+
   for (const [label, uri] of [['an encoded newline', 'bad%0Aname.md'], ['leading whitespace', '%20lead.md'], ['a bidirectional override', 'x%E2%80%AE.md']] as const) {
     test(`a path with ${label} cannot be shown exactly and blocks`, async () => {
       assertBlocked((await prepare(oneCreation(uri, 'x\n'))).outcome, 'file-operation-path-unrepresentable');

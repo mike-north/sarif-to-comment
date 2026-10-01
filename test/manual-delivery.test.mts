@@ -56,6 +56,12 @@ const UNCHANGED: Readonly<Record<string, string>> = {
   'obsolete.txt': 'old\n',
   ' lead.txt': 'x\n',
   'odd\u200Ename.txt': 'x\n',
+  // Paths with an invisible formatting character or U+00A0 (§8.10).
+  'hand\u200Bname.txt': 'x\n',
+  'hand\u00A0name.txt': 'x\n',
+  'hand\u00ADname.txt': 'x\n',
+  'hand\u200Dname.txt': 'x\n',
+  'hand\u2060name.txt': 'x\n',
 };
 const SNAPSHOTS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   [R]: { 'README.md': '# Widgets\nTeh widget client.\nRecieve updates.\nLicence: MIT.\n', ...UNCHANGED },
@@ -284,6 +290,11 @@ describe('a replacement that cannot be shown exactly is an obstacle, not a refus
     ['a line that could open a suggestion block', 'src/app.ts', 'src/app.ts', '```suggestion\nx\n```', 'a line of it could open a suggestion block, which a proposal made by hand never shows'],
     ['a path with leading whitespace', '%20lead.txt', ' lead.txt', 'y', 'the file path begins or ends with whitespace, which Markdown does not show'],
     ['a path with an invisible character', 'odd%E2%80%8Ename.txt', 'odd\u200Ename.txt', 'y', 'the file path contains U+200E, which cannot be shown exactly'],
+    ['regression: a path with a zero-width space', 'hand%E2%80%8Bname.txt', 'hand\u200Bname.txt', 'y', 'the file path contains U+200B, which cannot be shown exactly'],
+    ['regression: a path with a no-break space', 'hand%C2%A0name.txt', 'hand\u00A0name.txt', 'y', 'the file path contains U+00A0, which cannot be shown exactly'],
+    ['regression: a path with a soft hyphen', 'hand%C2%ADname.txt', 'hand\u00ADname.txt', 'y', 'the file path contains U+00AD, which cannot be shown exactly'],
+    ['regression: a path with a zero-width joiner', 'hand%E2%80%8Dname.txt', 'hand\u200Dname.txt', 'y', 'the file path contains U+200D, which cannot be shown exactly'],
+    ['regression: a path with a word joiner', 'hand%E2%81%A0name.txt', 'hand\u2060name.txt', 'y', 'the file path contains U+2060, which cannot be shown exactly'],
   ];
   for (const [label, uri, path, text, reason] of cases) {
     test(`${label}: blocked under a strict list, with its reason and the remedy to change the replacement`, async () => {
