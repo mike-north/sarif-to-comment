@@ -14,7 +14,7 @@ Entries were reconstructed from the conversation and its working notes. “Settl
 
 ## Settled force-push boundary — September 30, 2026
 
-The owner's September 30 decisions were drafted as D34–D46 against an earlier copy of this log; they are recorded here as D48–D60 because D34–D47 were already assigned. References between them, and from this section, use the new numbers; references to earlier entries keep theirs.
+The owner's September 30 decisions were drafted as D34–D46 against an earlier copy of this log; they are recorded here as D48–D60 because D34–D46 were already assigned and D47 is reserved for the suggestion-cleanup scope decision, which is recorded with that change. References between them, and from this section, use the new numbers; references to earlier entries keep theirs.
 
 | Drafted as | Recorded as |
 |---|---|
