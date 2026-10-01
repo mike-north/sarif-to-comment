@@ -68,6 +68,7 @@ import type {
 import { MODE, blobSizes, diffHunks, openRepository, readBlobs, readIndexSnapshot, readTree } from './staged-git.cjs';
 import type { IDiffHunk, IGitRepository, IIndexEntry, IIndexSnapshot, ITreeEntry } from './staged-git.cjs';
 import { createProblem, diagnosticOf } from './diagnostics.cjs';
+import { listItem } from './presentation/markdown.cjs';
 import type { IDiagnostic, IGitHubRepository, IInvalidSarifOutcome, IProblem, ISarifLog } from './public-types.cjs';
 
 // ---------------------------------------------------------------------------
@@ -921,7 +922,7 @@ function isArray(value: unknown): value is readonly unknown[] {
 // ---------------------------------------------------------------------------
 
 function problemsMarkdown(title: string, problems: readonly IProblem[]): string {
-  const lines = problems.map((p) => `- ${p.path ? `\`${p.path}\`: ` : ''}${p.message}${p.pointer ? ` (at \`${p.pointer}\`)` : ''}`);
+  const lines = problems.map((p) => listItem(`${p.path ? `\`${p.path}\`: ` : ''}${p.message}${p.pointer ? ` (at \`${p.pointer}\`)` : ''}`));
   return `**${title}**\n\n${lines.join('\n')}\n`;
 }
 

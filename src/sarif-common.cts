@@ -28,6 +28,7 @@ import type { ErrorObject, SchemaObject, ValidateFunction } from 'ajv';
 import { createProblem, diagnosticOf } from './diagnostics.cjs';
 import type { IDiagnostic, IProblem } from './diagnostics.cjs';
 import { GITHUB_HOST } from './github-urls.cjs';
+import { listItem } from './presentation/markdown.cjs';
 
 /**
  * The vendored SARIF 2.1.0 schema. JSON data, so it is `unknown` until
@@ -487,7 +488,7 @@ export function validateSarif(captured: unknown): ISarifSchemaRefusal | null {
     problems.push({ ...createProblem('sarif-schema-invalid', { message, pointer }), pointer });
   }
   const markdown = `**Invalid SARIF:** the document does not conform to the SARIF 2.1.0 schema, so it was not interpreted.\n\n${
-    problems.map((p) => `- ${p.message}`).join('\n')}`;
+    problems.map((p) => listItem(p.message)).join('\n')}`;
   return { status: 'invalid', problems, markdown, diagnostics: problems.map(diagnosticOf) };
 }
 

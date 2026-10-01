@@ -54,6 +54,7 @@ import type { IParsedSelector } from './finding-selectors.cjs';
 import { canonicalJson, captureJson, isPlainObject, isSuggestionGroupName, validateSarif } from './sarif-common.cjs';
 import type { JsonValue } from './sarif-common.cjs';
 import { createProblem, diagnosticOf } from './diagnostics.cjs';
+import { listItem } from './presentation/markdown.cjs';
 import type { IDiagnostic, IInvalidSarifOutcome, IProblem, ISarifLog } from './public-types.cjs';
 import type { IStaleSarifSelectorOutcome } from './sarif-authoring.cjs';
 
@@ -343,7 +344,7 @@ function refusedOutcome(operation: Operation, problems: readonly IProblem[]): IR
   return {
     status: 'refused',
     problems,
-    markdown: `${HEADINGS[operation]} nothing was changed.\n\n${problems.map((p) => `- ${p.message}`).join('\n')}`,
+    markdown: `${HEADINGS[operation]} nothing was changed.\n\n${problems.map((p) => listItem(p.message)).join('\n')}`,
     diagnostics: problems.map(diagnosticOf),
   };
 }

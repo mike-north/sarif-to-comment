@@ -4,8 +4,9 @@
  *
  * Preparation, assessment and publication explain themselves to the caller
  * in Markdown: the library's `markdown` and the CLI's JSON and TOON
- * `message`. Those reports list diagnostics one per line — code, pointer into
- * the SARIF document when there is one, and message — and a report with
+ * `message`. Those reports list diagnostics one item each — code, pointer
+ * into the SARIF document when there is one, and message, whose own lines
+ * (such as a list of obstacles) stay nested inside the item — and a report with
  * warnings ends with them under `**Warnings:**`. A publication reports the
  * same list on its first call and on every later call for its state path
  * (issue #42). This is report presentation for the caller, never part of the
@@ -14,16 +15,17 @@
  * Rendering (docs/review-presentation-contract.md §6):
  *
  *   line     = "- " code span of code [ " at " code span of pointer ] ": " message
+ *              (every later non-blank line of the message indented two spaces)
  *   warnings = "**Warnings:**\n\n" lines joined by "\n"
  */
 
 import type { IDiagnostic } from '../diagnostics.cjs';
-import { codeSpan } from './markdown.cjs';
+import { codeSpan, listItem } from './markdown.cjs';
 
 /** One diagnostic as a report lists it. */
 export function renderDiagnosticLine(diagnostic: IDiagnostic): string {
   const pointer = diagnostic.location?.pointer;
-  return `- ${codeSpan(diagnostic.code)}${pointer === undefined ? '' : ` at ${codeSpan(pointer)}`}: ${diagnostic.message}`;
+  return listItem(`${codeSpan(diagnostic.code)}${pointer === undefined ? '' : ` at ${codeSpan(pointer)}`}: ${diagnostic.message}`);
 }
 
 /** Warnings as the list a report ends with, under `**Warnings:**`. */

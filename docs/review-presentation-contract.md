@@ -69,11 +69,13 @@ A finding published in the review body rather than inline keeps its source assoc
 
 ## 6. Warnings list
 
-Outcome reports (the library's `markdown`, and the CLI's JSON and TOON `message`) list diagnostics one per line:
+Outcome reports (the library's `markdown`, and the CLI's JSON and TOON `message`) list diagnostics one list item each:
 
 ```
 "- `" CODE "`" [ " at `" POINTER "`" ] ": " MESSAGE
 ```
+
+Every line of `MESSAGE` after its first that is not blank is indented two spaces, the content column of `- `, so the message's own paragraphs, lists and code blocks continue its list item ([CommonMark list items](https://spec.commonmark.org/0.31.2/#list-items)): the obstacles a `delivery-unavailable` or `delivery-fallback` message lists are nested under that diagnostic, never siblings of it. Blank lines stay empty, and the text is otherwise the message's own. Every other report that lists problems (invalid SARIF, a refused grouping, a failed `add-staged-changes`) indents a message's later lines the same way.
 
 A report with warnings ends with them:
 

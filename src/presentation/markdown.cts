@@ -67,6 +67,19 @@ function escapeInline(text: string): string {
 }
 
 /**
+ * A bullet list item holding `text`: "- ", then `text` with every later
+ * non-blank line indented two spaces, the item's content column, so all of
+ * it, its own paragraphs, lists and code blocks included, continues the item
+ * instead of ending the list or starting a sibling (CommonMark §5.2). Blank
+ * lines stay empty, and the text is otherwise unchanged.
+ *
+ * @see https://spec.commonmark.org/0.31.2/#list-items
+ */
+export function listItem(text: string): string {
+  return `- ${text.replace(/\n(?=[^\n])/g, '\n  ')}`;
+}
+
+/**
  * A fenced code block showing `text` literally: its backtick fence is one
  * longer than the longest backtick run inside, and never shorter than three,
  * so no line of the text can close it (GFM §4.5). `info`, when given, is the
