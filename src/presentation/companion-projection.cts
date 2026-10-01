@@ -30,7 +30,11 @@
  *            | "changes nothing, because the head already has its own changes, which are " ( "these:" | "listed below." )
  *            | "conflicts in " paths "; its own changes are " ( "these:" | "listed below." )
  *   diff     = fence "diff\n" { "--- a/" PATH "\n+++ b/" PATH "\n" { hunk } } fence
- *   hunk     = "@@ -" A [ "," B ] " +" C [ "," D ] " @@\n" { ( " " | "-" | "+" ) line "\n" [ "\ No newline at end of file\n" ] }
+ *   hunk     = "@@ -" A [ "," B ] " +" C [ "," D ] " @@" [ " " OLD " line endings become " NEW " line endings" ] "\n"
+ *              { ( " " | "-" | "+" ) line "\n" [ "\ No newline at end of file\n" ] }
+ *   OLD, NEW = "CRLF" | "LF" | "mixed CRLF and LF": the line endings of the hunk's old lines (context and removed)
+ *              and of its new lines (context and added), stated only when they differ, because the diff does
+ *              not show a carriage return that ends a line; a last line without a newline has no line ending
  *   escapes  = "In this diff, each `{U+XXXX}` stands for the character with that code point, written visibly; "
  *              "this pull request's commit has the exact bytes."      (only when the diff holds an escape)
  *
@@ -77,6 +81,26 @@ function range(sign: string, start: number, count: number): string {
 const ESCAPES_NOTE = 'In this diff, each `{U+XXXX}` stands for the character with that code point, written visibly; '
   + 'this pull request\'s commit has the exact bytes.';
 
+type LineEndings = 'CRLF' | 'LF' | 'mixed CRLF and LF';
+
+/** The line endings of `lines` (those with a newline), or undefined when none has one. */
+function lineEndings(lines: readonly IOwnHunk['lines'][number][]): LineEndings | undefined {
+  const ended = lines.filter((line) => !line.noNewline);
+  if (ended.length === 0) return undefined;
+  const crlf = ended.filter((line) => line.text.endsWith('\r')).length;
+  return crlf === 0 ? 'LF' : crlf === ended.length ? 'CRLF' : 'mixed CRLF and LF';
+}
+
+/**
+ * What a hunk's header states after its ranges: the change of line endings
+ * between its old and new lines, which the diff's lines cannot show.
+ */
+function lineEndingNote(hunk: IOwnHunk): string {
+  const before = lineEndings(hunk.lines.filter((line) => !line.text.startsWith('+')));
+  const after = lineEndings(hunk.lines.filter((line) => !line.text.startsWith('-')));
+  return before === undefined || after === undefined || before === after ? '' : ` ${before} line endings become ${after} line endings`;
+}
+
 /**
  * The suggestion's own changes as one unified diff (without its fence), and
  * whether any character in it is written as a visible escape.
@@ -93,10 +117,11 @@ function ownDiff(files: ICompanionProjectionView['files']): { readonly text: str
     const path = visible(file.path);
     lines.push(`--- a/${path}`, `+++ b/${path}`);
     for (const hunk of file.hunks) {
-      lines.push(`@@ ${range('-', hunk.oldStart, hunk.oldLines)} ${range('+', hunk.newStart, hunk.newLines)} @@`);
+      lines.push(`@@ ${range('-', hunk.oldStart, hunk.oldLines)} ${range('+', hunk.newStart, hunk.newLines)} @@${lineEndingNote(hunk)}`);
       for (const line of hunk.lines) {
-        // A carriage return before the newline belongs to the line ending, which the diff does not show.
-        lines.push(visible(line.text.endsWith('\r') ? line.text.slice(0, -1) : line.text));
+        // A carriage return before the newline belongs to the line ending, which the diff does not show (the header
+        // states a change of it); on a last line without a newline it is content, shown like any other.
+        lines.push(visible(!line.noNewline && line.text.endsWith('\r') ? line.text.slice(0, -1) : line.text));
         if (line.noNewline) lines.push('\\ No newline at end of file');
       }
     }
