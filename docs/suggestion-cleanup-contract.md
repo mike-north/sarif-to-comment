@@ -344,6 +344,8 @@ Settled in engineering when implementing D54 (the realignment plan's EC8):
 - **An unreadable original makes a guarded run fail operationally** (exit 1), rather than end `incomplete` (exit 3) as unguarded targeted cleanup does. The guard exists to decide whether to act, and an unknown answer cannot decide it.
 - **The guard's read is targeted discovery's own read** of the original. It is not a second read, so it adds no request.
 - **The delay lives in the workflow**, which is shipped as an example under `docs/examples/`, never installed. Running it live on GitHub (the realignment plan's E7) needs the owner's authority to install a workflow in a fixture repository's branch ([evidence](evidence/abandonment-cleanup/README.md#the-remaining-obstacle-a-live-workflow-run)).
+- **The example's credential is the supported one**: a personal access token from a repository secret, `SARIF_TO_COMMENT_TOKEN`. The workflow's own token (`github.token`) is documented as an alternative whose support is not yet established; Phase 2 of the live experiment would establish it. The `permissions:` block stays, because it scopes `github.token` when a caller switches to it.
+- **The example passes `--owner all`.** With the personal token, `me` would close only the suggestion pull requests opened by the token's own account. With `github.token`, `me` would match nothing, and it needs `GET /user`, which that token cannot read.
 
 Open questions for the owner, raised by implementing #44:
 

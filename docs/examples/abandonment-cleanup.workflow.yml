@@ -21,7 +21,11 @@ on:
   pull_request:
     types: [closed]
 
-# Narrow by design. pull-requests: write closes suggestion pull requests.
+# Narrow by design. These scope the workflow's own token (github.token).
+# With the personal access token below, the token's own scopes govern
+# cleanup's requests instead. Keep them anyway: they still matter if you
+# switch the step to github.token, and they cap anything else in the job.
+# pull-requests: write closes suggestion pull requests.
 # contents: read reads the repository and its .github/suggestion-prs.json.
 # issues: read lets the original's timeline show issues that reference it.
 permissions:
@@ -51,15 +55,23 @@ jobs:
 
       # No checkout: nothing from the pull request's branch is run. Only the
       # repository name and the pull request number are interpolated, and
-      # neither can carry shell syntax. --owner all: the workflow's token did
-      # not open the suggestion pull requests, and cannot read GET /user.
-      # The workflow's token is an installation token, which sarif-to-comment
-      # does not yet claim to support; with --owner all, cleanup avoids the
-      # one request known to refuse it. Not yet run on GitHub: see the page.
-      # For a supported credential, use a personal access token secret.
+      # neither can carry shell syntax.
+      #
+      # Credential: SARIF_TO_COMMENT_TOKEN is a repository secret holding a
+      # personal access token, the credential sarif-to-comment supports. It
+      # needs to read the repository and close its pull requests.
+      # Alternative, not yet established: GH_TOKEN: ${{ github.token }}, the
+      # workflow's own installation token, which sarif-to-comment does not yet
+      # claim to support (see the page).
+      #
+      # --owner all: the suggestion pull requests may have been opened by
+      # anyone who published reviews. With this personal token, the default
+      # --owner me would close only those opened by the token's own account.
+      # With github.token, me would match nothing, and it would need
+      # GET /user, which that token cannot read.
       - name: Close its suggestion pull requests if it is still closed without merging
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.SARIF_TO_COMMENT_TOKEN }}
         run: >-
           npx --yes sarif-to-comment@0.3.0 close-suggestion-prs
           --repo ${{ github.repository }}

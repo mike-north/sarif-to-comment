@@ -5,7 +5,7 @@ Recorded October 1, 2026 (UTC), for the owner's optional abandonment cleanup ([D
 ## Conditions and limits
 
 - **Fixture.** `mike-north/doc-linter`, a same-repository fixture with one account (`mike-north`). The token was the account's own, supplied per command and never recorded.
-- **Build.** The built CLI of this repository at commit `05d941e` (`node dist/sarif-to-comment.cjs`), not an installed release.
+- **Build.** The built CLI of this repository at commit `f9ea9c3` (`node dist/sarif-to-comment.cjs`), not an installed release. The runs used that commit's tree, built before the branch was rebased onto `main`; the rebased commit's tree is identical.
 - **Writes.** Every cleanup run was a dry run (`--dry-run`), and nothing was written to GitHub. No pull request was closed, reopened or created to make a case. The states of the ten fixture pull requests involved were read before and after the runs, and are identical: [`a00`](live/a00-fixture-states.json), [`a12`](live/a12-fixture-states-after.json).
 - **No workflow.** No GitHub Actions workflow was installed or run, here or in the fixture. The example workflow is checked by `test/abandonment-workflow-example.test.mts` (parsed, and accepted by `actionlint` 1.7.12 locally), not run. See [the remaining obstacle](#the-remaining-obstacle-a-live-workflow-run).
 - **Not run live.** Two cases were not run against GitHub:
@@ -45,17 +45,18 @@ So a skipped run cost six requests here: the label resolution and the one read o
 It does not establish:
 
 - the workflow's trigger, condition, wait or concurrency;
-- that the workflow's own token can run the guarded cleanup;
+- that the example's credential, a personal access token from a repository secret, reaches the command in a workflow run;
+- that the workflow's own token (`github.token`, the documented alternative) can run the guarded cleanup;
 - a close made by a guarded run;
 - a read failure against GitHub.
 
 ## The remaining obstacle: a live workflow run
 
-Running the example workflow on GitHub (the realignment plan's E7) needs **the owner's authority to install a GitHub Actions workflow in a fixture repository's branch, and to let it run**. That authority has not been given. The workflow has therefore never been installed or run, here or in `mike-north/doc-linter`. Everything else this work needed was within the existing authority.
+Running the example workflow on GitHub (the realignment plan's E7) needs **the owner's authority to install a GitHub Actions workflow in a fixture repository's branch, and to let it run**. Running the example as shipped also needs a repository secret, `SARIF_TO_COMMENT_TOKEN`, holding the account's personal access token in the fixture repository. That authority has not been given. The workflow has therefore never been installed or run, here or in `mike-north/doc-linter`. Everything else this work needed was within the existing authority.
 
 **The proposed bounded experiment.** It runs in `mike-north/doc-linter`, never on `main`, never merging anything, with one account. Each step below is named by what it needs.
 
-1. **Build (needs the authority above).** Push two fixture branches from `main`: `sarif-e7-a-<date>` and `sarif-e7-b-<date>`. Each adds a one-line documentation change and `.github/workflows/abandonment-cleanup.yml`, the example with one difference: `--dry-run` appended to the command. Open each as a draft pull request into `main`: O-A and O-B.
+1. **Build (needs the authority above).** Add the `SARIF_TO_COMMENT_TOKEN` secret to the fixture repository. Push two fixture branches from `main`: `sarif-e7-a-<date>` and `sarif-e7-b-<date>`. Each adds a one-line documentation change and `.github/workflows/abandonment-cleanup.yml`, the example with one difference: `--dry-run` appended to the command. Open each as a draft pull request into `main`: O-A and O-B.
    - With `pull_request`, GitHub reads the workflow from each pull request's own merge commit, so `main` is never changed.
    - Until 0.3.0 is published, the pinned `npx sarif-to-comment@0.3.0` cannot resolve. Run the experiment after publication, unchanged. Or run it before, with the command pointed at the candidate's packed tarball, and record that difference.
 2. **Companions (existing authority).** Publish one review with one companion on each (`publish --delivery companion`), giving C-A and C-B.
@@ -74,9 +75,9 @@ Running the example workflow on GitHub (the realignment plan's E7) needs **the o
    - the time of the guard's read, against the time of the close and the reopen.
 7. **Afterwards.** Leave the fixture pull requests closed. Delete nothing; branch removal is the owner's call.
 
-**Phase 2 (separate, optional authority).** Remove `--dry-run` for one case-A rerun, so that the workflow's own token closes C-A. That would establish:
+**Phase 2 (separate, optional authority).** Switch the step to the documented alternative, `GH_TOKEN: ${{ github.token }}`, and remove `--dry-run` for one case-A rerun, so that the workflow's own token closes C-A. That would establish:
 
-- the one thing dry runs cannot: that the automatic Actions token can run guarded cleanup end to end;
+- the one thing dry runs and the personal token cannot: that the automatic Actions token can run guarded cleanup end to end, which would let the example offer it as more than an alternative;
 - whether `issues: read` is needed;
 - whether `--owner all` is enough.
 

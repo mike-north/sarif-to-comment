@@ -12,8 +12,11 @@
  * - its job runs only when the event says the pull request was not merged;
  * - it waits two minutes (`sleep 120`) before cleanup, and the tool's own
  *   fresh read decides afterwards (`--if-abandoned`);
- * - its permissions are the narrow ones cleanup needs, and its token is the
- *   workflow's own (`GH_TOKEN: ${{ github.token }}`);
+ * - its permissions are the narrow ones cleanup needs (they scope the
+ *   workflow's own token, should a caller switch to it), and its credential
+ *   is the supported one: a personal access token from a repository secret
+ *   (`GH_TOKEN: ${{ secrets.SARIF_TO_COMMENT_TOKEN }}`), never the
+ *   workflow's own token, whose support is not yet established;
  * - it checks out no code, interpolates only the repository and the pull
  *   request number into its script, and pins an exact package version;
  * - the command it runs exists, with every option it uses, in the built
@@ -113,12 +116,18 @@ describe('the example workflow file', () => {
     assert.equal(Object.hasOwn(asRecord(JOB), 'permissions'), false, 'the job does not widen them');
   });
 
-  test('waits two minutes, then runs cleanup with the workflow\'s own token', () => {
+  test('waits two minutes, then runs cleanup with a personal access token from a repository secret', () => {
     const sleeps = STEPS.findIndex((s) => typeof s['run'] === 'string' && /^sleep 120$/m.test(s['run']));
     const step = cleanupStep();
     assert.ok(sleeps !== -1, 'a step sleeps 120 seconds');
     assert.ok(sleeps < STEPS.indexOf(step), 'the wait comes before cleanup');
-    assert.deepEqual(step['env'], { GH_TOKEN: '${{ github.token }}' });
+    assert.deepEqual(step['env'], { GH_TOKEN: '${{ secrets.SARIF_TO_COMMENT_TOKEN }}' });
+  });
+
+  test('offers the workflow\'s own token only as a commented alternative, never as the credential in use', () => {
+    const credentials = STEPS.flatMap((s) => Object.values(asRecord(s['env'] ?? {})));
+    assert.equal(credentials.some((value) => String(value).includes('github.token')), false);
+    assert.match(TEXT, /^ *# Alternative, not yet established: GH_TOKEN: \$\{\{ github\.token \}\}/m);
   });
 
   test('checks out no code: nothing from the pull request\'s branch is run', () => {
@@ -193,6 +202,10 @@ describe('the page that explains the example', () => {
     ['the accepted trade-off of reopening companions by hand', /reopen[^.]*by hand/i],
     ['that it is never installed or run here', /never installed/i],
     ['why it uses --owner all', /`--owner all`/],
+    ['the supported credential, a personal access token in a secret', /`SARIF_TO_COMMENT_TOKEN`/],
+    ['that the workflow\'s own token is an alternative not yet established', /`github\.token`[^\n]*not yet established/],
+    ['that the permissions still matter with the workflow\'s own token', /permissions[^\n]*still matter/i],
+    ['that the pinned release resolves only once 0.3.0 is published', /resolves only once 0\.3\.0 is published/],
   ];
   for (const [what, pattern] of topics) {
     test(`explains ${what}`, () => {

@@ -689,7 +689,8 @@ The two-minute grace period belongs to the workflow. The tool never waits, delet
 - the choice of `pull_request` over `pull_request_target`;
 - forks;
 - repeat runs;
-- `--owner all` with the workflow's own token, which the support profile does not yet claim;
+- its credential, a personal access token from a repository secret, with the workflow's own token (`github.token`) as an alternative whose support is not yet established;
+- `--owner all`, for either credential;
 - reopening companions by hand.
 
 Live dry runs in doc-linter skipped open, merged and missing originals, and proceeded for a closed, unmerged one ([evidence](evidence/abandonment-cleanup/README.md)). The workflow experiment (E7: trigger, delay, a quick close and reopen) remains pending. It needs the owner's authority to install a workflow in a fixture repository's branch. No workflow has been installed or run. The text above is kept as decided.
