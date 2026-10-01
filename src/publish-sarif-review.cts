@@ -116,8 +116,8 @@ import { continueCompanionPublication, hasCompanionPlan, startCompanionPublicati
 import type { BaseCheck, CompanionOutcome, ICompanionTransport, IEstablished } from './companion-publication.cjs';
 import { createGitHubClient as defaultCreateGitHubClient } from './github.cjs';
 import type { ICreateGitHubClientOptions } from './github.cjs';
-import { listWarnings } from './prepare-review.cjs';
 import type { IReviewPresentation } from './presentation/customization.cjs';
+import { renderWarningsList } from './presentation/warnings-list.cjs';
 import { publishPreparedReview, recoverPublication } from './publication.cjs';
 import {
   blockedReviewMarkdown,
@@ -559,7 +559,7 @@ type DeliveredReview = Pick<PublishedResult, 'via' | 'receiptPersisted'> & { rea
  * lines; none without warnings. The same on every call for a publication.
  */
 function warningsMarkdown(warnings: readonly IDiagnostic[]): string[] {
-  return warnings.length === 0 ? [] : ['', listWarnings(warnings)];
+  return warnings.length === 0 ? [] : ['', renderWarningsList(warnings)];
 }
 
 function publishedMarkdown(

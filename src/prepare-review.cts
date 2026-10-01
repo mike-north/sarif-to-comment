@@ -256,7 +256,9 @@
  * (finding and finding section, attribution, alternatives, file addition,
  * file deletion, companion reference, companion description, lifecycle
  * note), with links from src/github-urls.cts; this module decides what is
- * published and where, and composes them as follows:
+ * published and where, and composes them as follows. (The reports about a
+ * review — its outcome Markdown — list diagnostics through
+ * src/presentation/warnings-list.cts.)
  *   item      = message [ "\n\n**Fix:** " fix description ]
  *               [ "\n\n**Alternatives to consider:**" { "\n\n" alternative } ]
  *               "\n\n<sub>— " attribution "</sub>"
@@ -315,7 +317,8 @@ import { renderFileDeletion } from './presentation/file-deletion.cjs';
 import { renderFinding, renderFindingSection } from './presentation/finding.cjs';
 import type { QuotedSource } from './presentation/finding.cjs';
 import { renderLifecycleNote } from './presentation/lifecycle-note.cjs';
-import { SEPARATOR, codeSpan, escapePlain, escapePlainInline, fenceProblem, unbalancedHtml } from './presentation/markdown.cjs';
+import { SEPARATOR, codeSpan, escapePlain, escapePlainInline, fenceProblem, lineSpan, unbalancedHtml } from './presentation/markdown.cjs';
+import { renderDiagnosticLine, renderWarningsList } from './presentation/warnings-list.cjs';
 import { createDiagnostic } from './diagnostics.cjs';
 import type { DiagnosticCode, IDiagnostic } from './diagnostics.cjs';
 import type {
@@ -1501,23 +1504,12 @@ function blockedBy(diagnostics: readonly IDiagnostic[], warnings: readonly IDiag
   return blocked(report);
 }
 
-function diagnosticLine(d: IDiagnostic): string {
-  const pointer = d.location?.pointer;
-  return `- ${codeSpan(d.code)}${pointer === undefined ? '' : ` at ${codeSpan(pointer)}`}: ${d.message}`;
-}
-
-/** The warnings section a prepared review's Markdown ends with; empty without warnings. */
-function warningsSection(warnings: readonly IDiagnostic[]): string {
-  return warnings.length === 0 ? '' : `\n\n${listWarnings(warnings)}`;
-}
-
 /**
- * Preparation's warnings as the Markdown list a report states them in, each
- * with its code, pointer and message, under `**Warnings:**`. Publication's
- * outcomes end with it, on every call for a publication (issue #42).
+ * The warnings section a prepared review's Markdown ends with
+ * (src/presentation/warnings-list.cts); empty without warnings.
  */
-export function listWarnings(warnings: readonly IDiagnostic[]): string {
-  return `**Warnings:**\n\n${warnings.map(diagnosticLine).join('\n')}`;
+function warningsSection(warnings: readonly IDiagnostic[]): string {
+  return warnings.length === 0 ? '' : `\n\n${renderWarningsList(warnings)}`;
 }
 
 function warningsMarkdown(report: Report): string {
@@ -1538,7 +1530,7 @@ export function withoutWarnings(prepared: { readonly markdown: string; readonly 
 function blockedMarkdown(report: Report): string {
   const count = report.errors.length;
   return `**Review blocked:** ${String(count)} problem${count === 1 ? '' : 's'} must be resolved before publication; `
-    + `nothing was published.\n\n${report.errors.map(diagnosticLine).join('\n')}${warningsMarkdown(report)}`;
+    + `nothing was published.\n\n${report.errors.map(renderDiagnosticLine).join('\n')}${warningsMarkdown(report)}`;
 }
 
 function readyMarkdown(review: IPreparedReview, sections: number, report: Report): string {
@@ -3123,8 +3115,7 @@ function changeDescription(change: UnitChange): string {
     return `The ${change.operation.operation === 'create' ? 'creation' : 'deletion'} of ${codeSpan(change.operation.path)}`;
   }
   const { path: filePath, startLine, endLine } = change.edit;
-  const lines = startLine === endLine ? `line ${String(startLine)}` : `lines ${String(startLine)}-${String(endLine)}`;
-  return `The replacement of ${codeSpan(filePath)} ${lines}`;
+  return `The replacement of ${codeSpan(filePath)} ${lineSpan(startLine, endLine)}`;
 }
 
 /**

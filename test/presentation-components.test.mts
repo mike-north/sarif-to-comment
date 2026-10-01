@@ -8,7 +8,8 @@
  * docs/file-operation-publication-contract.md §2 (additions, deletions and
  * file details), docs/companion-suggestion-pr-contract.md §2.11 (companion
  * change lists, references, descriptions and lifecycle notes) and the
- * alternatives grammar of issue #30.
+ * alternatives grammar of issue #30; docs/diagnostics.md for the warnings
+ * list of an outcome report.
  *
  * @see ../docs/file-operation-publication-contract.md
  * @see ../docs/companion-suggestion-pr-contract.md
@@ -30,6 +31,7 @@ import { fileDetails, proposedContentBlock, renderFileAddition, renderProposedFi
 import { renderFileDeletion } from '../dist/presentation/file-deletion.cjs';
 import { renderFinding, renderFindingSection } from '../dist/presentation/finding.cjs';
 import { renderLifecycleNote } from '../dist/presentation/lifecycle-note.cjs';
+import { renderDiagnosticLine, renderWarningsList } from '../dist/presentation/warnings-list.cjs';
 import { codeSpan, escapePlain, escapePlainInline, fenceProblem, fenced, lineSpan, unbalancedHtml } from '../dist/presentation/markdown.cjs';
 
 const C = '2222222222222222222222222222222222222222';
@@ -249,5 +251,21 @@ describe('companion pieces', () => {
       '**How this suggestion is accepted:** it is a draft pull request into `feature/x`, the branch of #7. A draft cannot be merged: someone with write access first marks it ready for review. The author of #7 then decides whether to merge it, and #7 carries the change to its base. Once #7 is merged or closed, this pull request can be closed.');
     assert.equal(renderLifecycleNote({ ...target, ready: true }),
       '**How this suggestion is accepted:** it is a pull request into `feature/x`, the branch of #7. The author of #7 decides whether to merge it, and #7 carries the change to its base. Once #7 is merged or closed, this pull request can be closed.');
+  });
+});
+
+describe('the warnings list of an outcome report (docs/diagnostics.md)', () => {
+  const warning = (code: string, message: string, pointer?: string) => ({
+    code, severity: 'warning' as const, title: 'T', message, remedies: [], ...(pointer === undefined ? {} : { location: { pointer } }),
+  });
+
+  test('a diagnostic line names its code, its pointer when it has one, and its message', () => {
+    assert.equal(renderDiagnosticLine(warning('taxa-uninterpreted', 'M.', '/runs/0/results/1')), '- `taxa-uninterpreted` at `/runs/0/results/1`: M.');
+    assert.equal(renderDiagnosticLine(warning('delivery-unconfirmed', 'M.')), '- `delivery-unconfirmed`: M.');
+  });
+
+  test('the list is headed **Warnings:** and keeps the order given', () => {
+    assert.equal(renderWarningsList([warning('a-code', 'First.', '/x'), warning('b-code', 'Second.')]),
+      '**Warnings:**\n\n- `a-code` at `/x`: First.\n- `b-code`: Second.');
   });
 });
