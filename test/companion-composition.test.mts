@@ -1062,9 +1062,9 @@ describe('durable identity and recovery (§2.9–§2.10)', () => {
     const world = makeWorld({ companion: { loseResponse: ['pull'] } });
     world.host.hide({ pulls: 1 });
     await publish(world, groupedCodeAndTest());
-    // Plan versions 1 and 2 (re-applied suggestions, §2.5.1) are known; 3 is not.
+    // Plan versions 1, 2 (written by unreleased builds that re-applied suggestions) and 3 (projected, §2.9) are known; 4 is not.
     const plan = asRecord(parseJson(fs.readFileSync(world.statePath, 'utf8')));
-    const unsupported = JSON.stringify({ ...plan, version: 3 });
+    const unsupported = JSON.stringify({ ...plan, version: 4 });
     fs.writeFileSync(world.statePath, unsupported);
     const before = world.host.log().length;
     await assert.rejects(publish(world, groupedCodeAndTest()), /not a valid record \(unsupported plan version\)/);

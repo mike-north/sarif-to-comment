@@ -1,7 +1,8 @@
 /**
  * The rewritten-history world shared by the tests of suggestion pull requests
- * on a branch that moved after the review (issue #28) and of the fallback when
- * one cannot be re-applied (issue #37): a fake GitHub host over HTTP
+ * on a branch that moved after the review (issue #28; their fidelity
+ * projection, docs/companion-suggestion-pr-contract.md §2.5.1) and of the
+ * fallback when one cannot be made (issue #37): a fake GitHub host over HTTP
  * (test/fixtures/composition) whose pull request's head is one of several
  * commits related by their parents, the SARIF document those tests review,
  * and helpers that call the real public library through the real GitHub
@@ -10,7 +11,10 @@
  * The scenario mirrors the live experiment (docs/force-push-experiment.md):
  * C0 adds a 20-line file, the reviewed commit C1 changes its lines 5 and 6,
  * and the pull request's branch then moves forward (C2), is amended (C1′),
- * or is rewritten so that what the suggestions touch has changed.
+ * or is rewritten so that what the suggestions touch has changed. Every
+ * rewritten head has C0 as its merge base with the reviewed commit, so the
+ * suggestion pull requests, which stay on C1, also carry C1's own change of
+ * lines 5 and 6, which the projection weighs against each head.
  *
  * The host models documented GitHub behavior; it is not evidence of live
  * GitHub behavior.
@@ -212,6 +216,8 @@ export interface IWorld {
   readonly root: string;
   readonly statePath: string;
   readonly host: FakeHttpGitHub;
+  /** Every wait between reads of GitHub's `mergeable` the library asked for, in milliseconds. */
+  readonly waits: number[];
 }
 
 /**
@@ -223,11 +229,25 @@ export function makeWorld(head: string, config: Partial<IHttpHostConfig> = {}, r
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'force-push-composition-')));
   FakeHttpGitHub.create(path.join(root, 'host'), config, { ...repositoryAt(head), ...repository });
   fs.mkdirSync(path.join(root, 'state'));
-  return { root, statePath: path.join(root, 'state', 'review.json'), host: new FakeHttpGitHub(path.join(root, 'host'), TOKEN) };
+  return { root, statePath: path.join(root, 'state', 'review.json'), host: new FakeHttpGitHub(path.join(root, 'host'), TOKEN), waits: [] };
 }
 
-export function internalsFor(world: IWorld): { readonly createGitHubClient: (options: ICreateGitHubClientOptions) => IGitHubClient } {
-  return { createGitHubClient: (options) => createGitHubClient({ ...options, fetch: world.host.fetch }) };
+/**
+ * The library's private seams for `world`: the real GitHub client over the
+ * fake host's `fetch`, and a wait between reads of GitHub's `mergeable` that
+ * returns at once (recording each delay asked for), so a test never sleeps.
+ */
+export function internalsFor(world: IWorld): {
+  readonly createGitHubClient: (options: ICreateGitHubClientOptions) => IGitHubClient;
+  readonly wait: (milliseconds: number) => Promise<void>;
+} {
+  return {
+    createGitHubClient: (options) => createGitHubClient({ ...options, fetch: world.host.fetch }),
+    wait: (milliseconds) => {
+      world.waits.push(milliseconds);
+      return Promise.resolve();
+    },
+  };
 }
 
 /**
@@ -241,22 +261,25 @@ export const COMPANIONS: Json = { groupedEdits: ['companion'], fileOperations: [
 /**
  * Calls the public `publishSarifReview` or `validateSarifReview` for `world`,
  * delivering by companions as {@link COMPANIONS} lists them unless
- * `companions` is false, which keeps the default delivery policy.
+ * `companions` is false, which keeps the default delivery policy, or gives
+ * the delivery settings to use instead.
  */
 export async function call(
   name: 'publishSarifReview' | 'validateSarifReview',
   world: IWorld,
   sarif: Json = reviewDocument(),
-  companions = true,
+  companions: boolean | Json = true,
 ): Promise<Json> {
   const operation: unknown = Reflect.get(library, name);
   if (typeof operation !== 'function') throw new assert.AssertionError({ message: `the package exports ${name}` });
+  // `companions` may also be the delivery settings themselves.
+  const delivery = companions === true ? COMPANIONS : companions === false ? undefined : companions;
   const input: Json = {
     sarif,
     destination: { owner: OWNER, repo: REPO, pullNumber: PULL },
     reviewedCommit: REVIEWED,
     token: TOKEN,
-    ...(companions ? { options: { delivery: COMPANIONS } } : {}),
+    ...(delivery === undefined ? {} : { options: { delivery } }),
     ...(name === 'publishSarifReview' ? { statePath: world.statePath } : {}),
   };
   const outcome: unknown = await Reflect.apply(operation, undefined, [input, internalsFor(world)]);
@@ -274,6 +297,15 @@ export const writes = (world: IWorld): readonly string[] =>
   world.host.log().filter((r) => r.method === 'POST' && r.path !== '/graphql').map((r) => r.path.replace(`/repos/${OWNER}/${REPO}`, ''));
 export const compareReads = (world: IWorld): readonly string[] =>
   world.host.log().filter((r) => r.method === 'GET' && r.path.includes('/compare/')).map((r) => r.path.replace(`/repos/${OWNER}/${REPO}/compare/`, ''));
+/** The trees read recursively, by id: the projection's reads (contract §2.5.1). */
+export const recursiveTreeReads = (world: IWorld): readonly string[] =>
+  world.host.log().filter((r) => r.method === 'GET' && r.path.includes('/git/trees/') && r.query === 'recursive=1').map((r) => r.path.replace(`/repos/${OWNER}/${REPO}/git/trees/`, ''));
+/** The blobs read, by id. */
+export const blobReads = (world: IWorld): readonly string[] =>
+  world.host.log().filter((r) => r.method === 'GET' && r.path.includes('/git/blobs/')).map((r) => r.path.replace(`/repos/${OWNER}/${REPO}/git/blobs/`, ''));
+/** Reads of one pull request (GET pulls/{n}), in order. */
+export const pullReads = (world: IWorld, number: number): number =>
+  world.host.log().filter((r) => r.method === 'GET' && r.path === `/repos/${OWNER}/${REPO}/pulls/${String(number)}`).length;
 
 export const SUGGESTION_MARKER = /\n\n(<!-- suggestion-pr (\{[^\n]*\}) -->)$/;
 export const REVIEW_MARKER = /\n\n<!-- sarif-to-comment:review:[0-9a-f-]{36} -->$/;

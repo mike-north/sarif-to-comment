@@ -8,13 +8,18 @@
  * only `fetch`.
  *
  * After a rewritten history, a whole-file deletion whose companion pull
- * request cannot be re-applied is delivered by the next mechanism its list
- * names, `--file-operations companion,manual`: the review body proposes it,
- * with a `delivery-fallback` warning and a headline, and a retry with the
- * same state path reports the same warning (issue #42). A group whose only
- * listed mechanism is unavailable (`--grouped-edits companion`) blocks the
- * review with `delivery-unavailable` and exit status 2, writing nothing.
- * Help documents the delivery flags.
+ * request is projected unfaithful (it would bring back lines the rewrite
+ * dropped) is delivered by the next mechanism its list names,
+ * `--file-operations companion,manual`: the review body proposes it, with a
+ * `delivery-fallback` warning and a headline, and a retry with the same
+ * state path reports the same warning (issue #42). A group whose only listed
+ * mechanism is unavailable (`--grouped-edits companion`) blocks the review
+ * with `delivery-unavailable` and exit status 2, writing nothing. A group
+ * projected to conflict, and nothing worse, is created on the reviewed
+ * commit with a `companion-conflicts-at-head` warning, its description shows
+ * its own changes, and GitHub's `mergeable` is reported as observed
+ * (docs/companion-suggestion-pr-contract.md §2.5.1, §2.11). Help documents
+ * the delivery flags.
  *
  * @see docs/delivery-policy-contract.md §10
  * @see docs/companion-suggestion-pr-contract.md §2.5.1
@@ -29,7 +34,7 @@ import * as path from 'node:path';
 import { describe, test } from 'node:test';
 
 import { ROOT, installIntoConsumer, packProject } from './fixtures/package/installed-package.mts';
-import { DROPPED, OWNER, PULL, REPO, REVIEWED, REWRITTEN, TOKEN, documentWith, makeWorld, writes } from './fixtures/rewritten-history/world.mts';
+import { AMENDED, DROPPED, OWNER, PULL, REPO, REVIEWED, TOKEN, documentWith, makeWorld, proposalCommit, writes } from './fixtures/rewritten-history/world.mts';
 import type { IWorld } from './fixtures/rewritten-history/world.mts';
 import { asArray, asRecord, asString, parseJson } from './support/runtime-types.mts';
 
@@ -40,12 +45,17 @@ function envFor(world: IWorld): NodeJS.ProcessEnv {
   return { PATH: process.env['PATH'], GH_TOKEN: TOKEN, FAKE_HTTP_GITHUB_DIR: world.host.dir, NODE_OPTIONS: `--require=${PRELOAD}` };
 }
 
-const REWRITTEN_DELETION = `The history of #7 was rewritten after the reviewed commit, and it cannot be re-applied onto commit \`${DROPPED}\` because \`obsolete.txt\` no longer exists.`;
+const REWRITTEN_DELETION = `The history of #7 was rewritten after the reviewed commit, and projected onto its head \`${DROPPED}\`, merging its suggestion pull request would not apply `
+  + 'exactly its own changes: `docs/sample.md` would bring back content the head no longer has.';
 const FALLBACK_MESSAGE = 'The deletion of `obsolete.txt` is delivered as `manual`. `fileOperations` is `[companion, manual]`, set by the caller (`--file-operations`, `delivery.fileOperations`), '
   + `and the mechanisms listed before it are unavailable:\n\n- \`companion\`: ${REWRITTEN_DELETION}`;
 const LIBRARY_FALLBACK_MESSAGE = FALLBACK_MESSAGE;
 const GROUP_UNAVAILABLE = 'The group `reword` cannot be delivered. `groupedEdits` is `[companion]`, set by the caller (`--grouped-edits`, `delivery.groupedEdits`), and no mechanism it lists is available:\n\n'
-  + `- \`companion\`: The history of #7 was rewritten after the reviewed commit, and its 2 changes cannot be re-applied onto commit \`${REWRITTEN}\` because \`docs/sample.md\` line 6 differs from the reviewed text.`;
+  + `- \`companion\`: The history of #7 was rewritten after the reviewed commit, and projected onto its head \`${DROPPED}\`, merging its suggestion pull request would not apply `
+  + 'exactly its own changes: `docs/sample.md` would bring back content the head no longer has, beside a conflict.';
+const CONFLICT_MESSAGE = `Projected onto the head \`${AMENDED}\` of #7, merging the suggestion pull request for the group \`reword\` would conflict in \`docs/sample.md\`. `
+  + 'It is created on the reviewed commit, as planned; GitHub shows the conflict to whoever merges it.';
+const CONFLICT_BLOCK = '▲ warning  A suggestion pull request is projected to conflict with the pull request\'s head  [companion-conflicts-at-head]\n';
 const PUBLISHED_HEADLINE = '**Published with 1 warning:** A proposal is delivered by a later mechanism of its delivery list.';
 const WARNING_BLOCK = '▲ warning  A proposal is delivered by a later mechanism of its delivery list  [delivery-fallback]\n';
 
@@ -108,7 +118,7 @@ describe('the installed package follows the delivery policy', () => {
     assert.ok(retriedHuman.stderr.startsWith(WARNING_BLOCK), retriedHuman.stderr);
     assert.equal(fallbackWorld.host.reviews().length, 1, 'the retries sent nothing');
 
-    const refusedWorld = makeWorld(REWRITTEN);
+    const refusedWorld = makeWorld(DROPPED);
     const refused = run(refusedWorld, ['publish', ...flags(refusedWorld, ['reword', 'remark'], ['--grouped-edits', 'companion']), '--state', refusedWorld.statePath, '--format', 'json']);
     assert.equal(refused.status, 2, refused.stdout + refused.stderr);
     const refusal = asRecord(parseJson(refused.stdout));
@@ -121,7 +131,7 @@ describe('the installed package follows the delivery policy', () => {
   test('library: publishSarifReview and validateSarifReview report the same fallback warning; a group is blocked; bad settings are a TypeError', { skip, timeout: 300_000 }, () => {
     const { consumer } = installIntoConsumer();
     const fallbackWorld = makeWorld(DROPPED);
-    const refusedWorld = makeWorld(REWRITTEN);
+    const refusedWorld = makeWorld(DROPPED);
     const input = (world: IWorld, parts: Parameters<typeof documentWith>[0], delivery: unknown, withState: boolean): string => JSON.stringify({
       sarif: documentWith(parts),
       destination: { owner: OWNER, repo: REPO, pullNumber: PULL },
@@ -162,5 +172,40 @@ describe('the installed package follows the delivery policy', () => {
 
     const invalid = script(refusedWorld, 'validateSarifReview', input(refusedWorld, ['remark'], { fileOperations: [] }, false));
     assert.deepEqual(invalid, { thrown: 'TypeError', message: 'Invalid validateSarifReview input: options.delivery.fileOperations must list at least one mechanism' });
+  });
+
+  test('CLI: after a rewritten history, a group projected to conflict is created on the reviewed commit, warned of, shows its own changes, and GitHub\'s mergeable is reported', { skip, timeout: 300_000 }, () => {
+    const { consumer, bin } = installIntoConsumer();
+    // GitHub has already computed it as conflicting when first read.
+    const world = makeWorld(AMENDED, { companion: { mergeable: { '101': { value: false, pendingReads: 0 } } } });
+    const file = path.join(world.root, 'review.sarif');
+    fs.writeFileSync(file, JSON.stringify(documentWith(['reword', 'remark'])));
+    const flags = ['--sarif', file, '--repo', `${OWNER}/${REPO}`, '--pull', String(PULL), '--commit', REVIEWED, '--grouped-edits', 'companion'];
+    const run = (args: readonly string[]): SpawnSyncReturns<string> => {
+      const result = spawnSync(bin, args, { cwd: consumer, env: envFor(world), encoding: 'utf8', timeout: 120_000 });
+      for (const text of [result.stdout, result.stderr]) assert.ok(!text.includes(TOKEN), 'the token never appears');
+      return result;
+    };
+    const checked = run(['validate', ...flags]);
+    assert.equal(checked.status, 0, checked.stdout + checked.stderr);
+    assert.ok(checked.stdout.includes(`so it is proposed on that commit and was projected onto the head \`${AMENDED}\`: merging it would conflict.`), checked.stdout);
+    assert.ok(checked.stderr.startsWith(CONFLICT_BLOCK), checked.stderr);
+
+    const published = run(['publish', ...flags, '--state', world.statePath, '--format', 'json']);
+    assert.equal(published.status, 0, published.stdout + published.stderr);
+    const doc = asRecord(parseJson(published.stdout));
+    assert.equal(doc['status'], 'published');
+    const [warning, ...more] = asArray(doc['diagnostics']).map((d) => asRecord(d));
+    assert.ok(warning && more.length === 0, 'exactly one diagnostic');
+    assert.equal(warning['code'], 'companion-conflicts-at-head');
+    assert.equal(warning['message'], CONFLICT_MESSAGE);
+    const [suggestion] = asArray(doc['suggestions']).map((s) => asRecord(s));
+    assert.equal(suggestion?.['mergeable'], 'conflicting');
+    assert.ok(asString(doc['message']).includes(': projected to conflict; GitHub reports it as conflicting.'), asString(doc['message']));
+    const [pull] = world.host.pulls();
+    assert.ok(pull);
+    assert.deepEqual(proposalCommit(world, pull.head).parents, [REVIEWED]);
+    assert.ok(pull.body.includes('**The reviewed commit is not part of the branch of #7:**'), pull.body);
+    assert.ok(pull.body.includes('```diff\n--- a/docs/sample.md\n+++ b/docs/sample.md\n@@ -3,11 +3,11 @@\n'), pull.body);
   });
 });

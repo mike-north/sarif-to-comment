@@ -421,6 +421,133 @@ describe('compareCommits (issue #28)', () => {
   });
 });
 
+/**
+ * The reads of the companion fidelity projection
+ * (docs/companion-suggestion-pr-contract.md §2.5.1): the comparison with its
+ * merge base, shared with compareCommits; a commit's whole tree, read
+ * recursively; a blob's verified bytes; and a pull request's `mergeable`.
+ *
+ * @see https://docs.github.com/en/rest/commits/commits#compare-two-commits
+ * @see https://docs.github.com/en/rest/git/trees#get-a-tree
+ * @see https://docs.github.com/en/rest/git/blobs#get-a-blob
+ * @see https://docs.github.com/en/rest/pulls/pulls#get-a-pull-request
+ */
+describe('the projection\'s reads: readComparison, readTreeRecursive, readBlobBytes, readPullMergeability', () => {
+  const REVIEWED = 'c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1';
+  const HEAD = 'feedfeedfeedfeedfeedfeedfeedfeedfeedfeed';
+  const BASE = '0000000000000000000000000000000000000c0c';
+  const compareUrl = `${REPO}/compare/${REVIEWED}...${HEAD}`;
+  const request = { owner: 'octo', repo: 'widgets', base: REVIEWED, head: HEAD };
+
+  test('readComparison answers the status and the merge base GitHub names, sharing one read with compareCommits', async () => {
+    const script = new Script().on('GET', compareUrl, json({ status: 'diverged', merge_base_commit: { sha: BASE } }));
+    const c = script.client();
+    assert.deepEqual(await c.readComparison(request), { status: 'diverged', mergeBase: BASE });
+    assert.equal(await c.compareCommits(request), 'diverged');
+    assert.deepEqual(await c.readComparison(request), { status: 'diverged', mergeBase: BASE });
+    assert.deepEqual(script.sent.map((r) => `${r.method} ${r.url}`), [`GET ${compareUrl}`], 'one read of the comparison per client');
+  });
+
+  test('readComparison: no merge base is null; a malformed one, or one contradicting the status, is malformed; a failed read is asked again', async () => {
+    assert.deepEqual(await new Script().on('GET', compareUrl, json({ status: 'diverged' })).client().readComparison(request), { status: 'diverged', mergeBase: null });
+    await rejectsWith(new Script().on('GET', compareUrl, json({ status: 'diverged', merge_base_commit: { sha: 'abc' } })).client().readComparison(request), 'malformed-response');
+    await rejectsWith(new Script().on('GET', compareUrl, json({ status: 'ahead', merge_base_commit: { sha: BASE } })).client().readComparison(request), 'malformed-response');
+    const retried = new Script().on('GET', compareUrl, json({ message: 'Server Error' }, 502), json({ status: 'ahead', merge_base_commit: { sha: REVIEWED } }));
+    const c = retried.client();
+    await rejectsWith(c.readComparison(request), 'http-status');
+    assert.deepEqual(await c.readComparison(request), { status: 'ahead', mergeBase: REVIEWED });
+  });
+
+  const RECURSIVE = `${REPO}/git/trees/${ROOT}?recursive=1`;
+  const listing = [
+    { path: 'src', mode: '040000', type: 'tree', sha: SRC },
+    { path: 'src/client.ts', mode: '100755', type: 'blob', sha: OLD_BLOB, size: 3 },
+    { path: 'link', mode: '120000', type: 'blob', sha: OLD_BLOB, size: 3 },
+    { path: 'vendor/lib', mode: '160000', type: 'commit', sha: COMMIT },
+  ];
+
+  test('readTreeRecursive reads the commit\'s root tree once, recursively, with every entry by full path', async () => {
+    const script = new Script()
+      .on('GET', `${REPO}/git/commits/${PARENT}`, json({ sha: PARENT, tree: { sha: ROOT } }))
+      .on('GET', RECURSIVE, json({ sha: ROOT, truncated: false, tree: listing }));
+    const c = script.client();
+    const tree = await c.readTreeRecursive({ owner: 'octo', repo: 'widgets', commit: PARENT });
+    assert.deepEqual(tree, { truncated: false, entries: listing });
+    assert.deepEqual(await c.readTreeRecursive({ owner: 'octo', repo: 'widgets', commit: PARENT }), tree);
+    assert.equal(script.sent.length, 2, 'the commit and the tree, each read once');
+  });
+
+  test('readTreeRecursive passes GitHub\'s truncated flag on, never treating a truncated listing as complete', async () => {
+    const script = new Script()
+      .on('GET', `${REPO}/git/commits/${PARENT}`, json({ sha: PARENT, tree: { sha: ROOT } }))
+      .on('GET', RECURSIVE, json({ sha: ROOT, truncated: true, tree: listing.slice(0, 1) }));
+    assert.equal((await script.client().readTreeRecursive({ owner: 'octo', repo: 'widgets', commit: PARENT })).truncated, true);
+  });
+
+  for (const [what, tree] of [
+    ['an unknown mode', [{ path: 'a', mode: '100600', type: 'blob', sha: OLD_BLOB }]],
+    ['a mode of another type', [{ path: 'a', mode: '160000', type: 'blob', sha: OLD_BLOB }]],
+    ['a path listed twice', [{ path: 'a', mode: '100644', type: 'blob', sha: OLD_BLOB }, { path: 'a', mode: '100644', type: 'blob', sha: OLD_BLOB }]],
+    ['a dot-dot segment', [{ path: 'a/../b', mode: '100644', type: 'blob', sha: OLD_BLOB }]],
+    ['a leading slash', [{ path: '/a', mode: '100644', type: 'blob', sha: OLD_BLOB }]],
+    ['a malformed id', [{ path: 'a', mode: '100644', type: 'blob', sha: 'xyz' }]],
+  ] as const) {
+    test(`readTreeRecursive refuses a listing with ${what} as malformed`, async () => {
+      const script = new Script()
+        .on('GET', `${REPO}/git/commits/${PARENT}`, json({ sha: PARENT, tree: { sha: ROOT } }))
+        .on('GET', RECURSIVE, json({ sha: ROOT, truncated: false, tree }));
+      await rejectsWith(script.client().readTreeRecursive({ owner: 'octo', repo: 'widgets', commit: PARENT }), 'malformed-response');
+    });
+  }
+
+  test('readTreeRecursive refuses an answer for another tree', async () => {
+    const script = new Script()
+      .on('GET', `${REPO}/git/commits/${PARENT}`, json({ sha: PARENT, tree: { sha: ROOT } }))
+      .on('GET', RECURSIVE, json({ sha: SRC, truncated: false, tree: listing }));
+    await rejectsWith(script.client().readTreeRecursive({ owner: 'octo', repo: 'widgets', commit: PARENT }), 'blob-integrity');
+  });
+
+  const TEXT = 'line one\nline two\n';
+  const BLOB = blobId(TEXT);
+  const blobAnswer = (text: string, sha = BLOB): Answer => json({ sha, encoding: 'base64', content: Buffer.from(text).toString('base64'), size: Buffer.byteLength(text) });
+
+  test('readBlobBytes answers the exact bytes, verified against the blob id, and reads each blob once', async () => {
+    const script = new Script().on('GET', `${REPO}/git/blobs/${BLOB}`, blobAnswer(TEXT));
+    const c = script.client();
+    assert.equal(Buffer.from(await c.readBlobBytes({ owner: 'octo', repo: 'widgets', blob: BLOB })).toString('utf8'), TEXT);
+    assert.equal(Buffer.from(await c.readBlobBytes({ owner: 'octo', repo: 'widgets', blob: BLOB })).toString('utf8'), TEXT);
+    assert.equal(script.sent.length, 1);
+  });
+
+  test('readBlobBytes refuses bytes that do not hash to the requested id, and a blob over the read limit', async () => {
+    await rejectsWith(new Script().on('GET', `${REPO}/git/blobs/${BLOB}`, blobAnswer('other\n')).client().readBlobBytes({ owner: 'octo', repo: 'widgets', blob: BLOB }), 'blob-integrity');
+    const big = 'x'.repeat(2000);
+    const limited = new Script().on('GET', `${REPO}/git/blobs/${blobId(big)}`, blobAnswer(big, blobId(big)));
+    const c = createGitHubClient({ token: TOKEN, fetch: limited.fetch, limits: { maxSourceBytes: 1000 } });
+    await rejectsWith(c.readBlobBytes({ owner: 'octo', repo: 'widgets', blob: blobId(big) }), 'source-too-large');
+  });
+
+  test('readPullMergeability answers GitHub\'s mergeable: true, false, or null while it computes it', async () => {
+    const url = `${REPO}/pulls/101`;
+    for (const mergeable of [true, false, null]) {
+      const script = new Script().on('GET', url, json({ number: 101, mergeable }));
+      assert.deepEqual(await script.client().readPullMergeability({ owner: 'octo', repo: 'widgets', pullNumber: 101 }), { mergeable });
+    }
+    await rejectsWith(new Script().on('GET', url, json({ number: 101, mergeable: 'yes' })).client().readPullMergeability({ owner: 'octo', repo: 'widgets', pullNumber: 101 }), 'malformed-response');
+    await rejectsWith(new Script().on('GET', url, json({ number: 102, mergeable: true })).client().readPullMergeability({ owner: 'octo', repo: 'widgets', pullNumber: 101 }), 'malformed-response');
+  });
+
+  test('refuses malformed input before any request', async () => {
+    const script = new Script();
+    const c = script.client();
+    await assert.rejects(c.readComparison({ ...request, base: REVIEWED.slice(0, 7) }), TypeError);
+    await assert.rejects(c.readTreeRecursive({ owner: 'octo', repo: 'widgets', commit: 'HEAD' }), TypeError);
+    await assert.rejects(c.readBlobBytes({ owner: 'octo/x', repo: 'widgets', blob: BLOB }), TypeError);
+    await assert.rejects(c.readPullMergeability({ owner: 'octo', repo: 'widgets', pullNumber: 0 }), TypeError);
+    assert.deepEqual(script.sent, []);
+  });
+});
+
 describe('readDefaultBranchFile (docs/suggestion-pr-convention.md §4)', () => {
   const DEFAULT_HEAD = '7777777777777777777777777777777777777777';
   const DEFAULT_ROOT = '8888888888888888888888888888888888888888';

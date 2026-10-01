@@ -121,13 +121,20 @@ export interface ICompanionConfig {
   readonly timelinePageSize?: number | undefined;
   /** The GraphQL timeline query answers with an `errors` array. */
   readonly failTimeline?: boolean | undefined;
+  /**
+   * Pull request number -> its `mergeable`, as GET pulls/{n} answers it
+   * (fake-http-cleanup.mts): GitHub answers null while it computes it in the
+   * background, so the first `pendingReads` reads (default 1) answer null and
+   * later ones `value`. A pull request with no entry always answers null.
+   */
+  readonly mergeable?: Readonly<Record<string, { readonly value: boolean | null; readonly pendingReads?: number | undefined }>> | undefined;
 }
 
 /** One entry of a Git tree, as the trees API lists it. */
 export interface ICompanionTreeEntry {
   readonly path: string;
   readonly mode: string;
-  readonly type: 'tree' | 'blob';
+  readonly type: 'tree' | 'blob' | 'commit';
   readonly sha: string;
   readonly size?: number | undefined;
 }
@@ -177,6 +184,8 @@ export interface ICompanionState {
   readonly hidden: { readonly refs: number; readonly pulls: number; readonly labels: number };
   /** Branch reads answered so far. */
   readonly refReads: number;
+  /** Pull request number -> reads of its `mergeable` answered so far. */
+  readonly mergeableReads?: Readonly<Record<string, number>> | undefined;
 }
 
 /** The repository facts the companion routes answer with. */
@@ -222,12 +231,13 @@ export const isCompanionConfig: Guard<ICompanionConfig> = isShape({
   repeatSweepNode: isOptional(isBoolean),
   timelinePageSize: isOptional(isNumber),
   failTimeline: isOptional(isBoolean),
+  mergeable: isOptional(isRecordOf(isShape({ value: isEither(isBoolean, isNull), pendingReads: isOptional(isNumber) }))),
 });
 
 const isTreeEntry: Guard<ICompanionTreeEntry> = isShape({
   path: isString,
   mode: isString,
-  type: isOneOf('tree', 'blob'),
+  type: isOneOf('tree', 'blob', 'commit'),
   sha: isString,
   size: isOptional(isNumber),
 });
@@ -257,6 +267,7 @@ export const isCompanionState: Guard<ICompanionState> = isShape({
   ),
   hidden: isShape({ refs: isNumber, pulls: isNumber, labels: isNumber }),
   refReads: isNumber,
+  mergeableReads: isOptional(isRecordOf(isNumber)),
 });
 
 export const EMPTY_COMPANION_STATE: ICompanionState = Object.freeze({

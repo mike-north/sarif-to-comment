@@ -5,8 +5,9 @@
  * routes (fake-http-companion.mts):
  *
  *   GET   /repos/{o}/{r}/pulls/{n}   one pull request with state, merged,
- *         body, head and base repositories and labels (404 for an issue or a
- *         number no pull request has)
+ *         body, head and base repositories, labels and `mergeable` (null
+ *         while GitHub computes it, see ICompanionConfig.mergeable; 404 for
+ *         an issue or a number no pull request has)
  *   PATCH /repos/{o}/{r}/pulls/{n}   exactly { "state": "closed" }: closes it
  *   POST  /graphql                   three read-only queries:
  *     - a query of one or more `refs(refPrefix: …)` connections, each
@@ -101,6 +102,21 @@ function mentions(host: ICompanionHost, from: string, body: string, number: numb
   return qualified.test(body) || (from === local && bare.test(body));
 }
 
+/**
+ * GitHub's `mergeable` for one read of a pull request (see
+ * ICompanionConfig.mergeable): null while the background computation is
+ * pending, then the configured value. Each read is counted.
+ */
+function mergeableRead(host: ICompanionHost, number: number): boolean | null {
+  const state = host.state();
+  const key = String(number);
+  const reads = state.mergeableReads?.[key] ?? 0;
+  host.save({ ...state, mergeableReads: { ...state.mergeableReads, [key]: reads + 1 } });
+  const configured = host.config().mergeable?.[key];
+  if (configured === undefined || reads < (configured.pendingReads ?? 1)) return null;
+  return configured.value;
+}
+
 /** The cleanup route for one request, or null when the request is not a cleanup route. */
 export function cleanupRoute(host: ICompanionHost, method: string, u: URL, bodyText: () => string, json: Json): Response | null {
   const { owner, repo } = host.repository();
@@ -119,7 +135,7 @@ export function cleanupRoute(host: ICompanionHost, method: string, u: URL, bodyT
       if (failure === 'not-found' || pull === undefined) return json({ message: 'Not Found' }, 404);
       if (failure === 'server-error') return json({ message: 'Server Error' }, 502);
       if (failure === 'malformed') return json({ ...pullJson(host.repository(), host.user, pull), state: 'reopened' });
-      return json(pullJson(host.repository(), host.user, pull));
+      return json({ ...pullJson(host.repository(), host.user, pull), mergeable: mergeableRead(host, number) });
     }
     let request: unknown;
     try {
