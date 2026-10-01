@@ -1,0 +1,62 @@
+{
+  "recorded": "2026-10-01",
+  "endpoint": "POST https://api.github.com/graphql (read-only query)",
+  "note": "associatedPullRequests relates by head, not base (#56, not #58, for the base branch of #58); and another branch, delivery/00-ci-validation, loses its pull request #21 when listed under refs/heads/delivery/.",
+  "query": "query ($owner: String!, $repo: String!) {\n  repository(owner: $owner, name: $repo) {\n    baseOfSuggestion: ref(qualifiedName: \"refs/heads/sarif-issue27-20260929-a\") {\n      name prefix\n      associatedPullRequests(first: 10) { totalCount nodes { number state headRefName baseRefName } }\n    }\n    deliveryDeep: refs(refPrefix: \"refs/heads/delivery/\", query: \"00-ci-validation\", first: 10) {\n      totalCount\n      nodes { name prefix associatedPullRequests(first: 10) { totalCount nodes { number headRefName } } }\n    }\n    deliveryHeads: refs(refPrefix: \"refs/heads/\", query: \"delivery/00-ci-validation\", first: 10) {\n      totalCount\n      nodes { name prefix associatedPullRequests(first: 10) { totalCount nodes { number headRefName } } }\n    }\n  }\n}\n",
+  "variables": {
+    "owner": "mike-north",
+    "repo": "doc-linter"
+  },
+  "response": {
+    "data": {
+      "repository": {
+        "baseOfSuggestion": {
+          "name": "sarif-issue27-20260929-a",
+          "prefix": "refs/heads/",
+          "associatedPullRequests": {
+            "totalCount": 1,
+            "nodes": [
+              {
+                "number": 56,
+                "state": "OPEN",
+                "headRefName": "sarif-issue27-20260929-a",
+                "baseRefName": "main"
+              }
+            ]
+          }
+        },
+        "deliveryDeep": {
+          "totalCount": 1,
+          "nodes": [
+            {
+              "name": "00-ci-validation",
+              "prefix": "refs/heads/delivery/",
+              "associatedPullRequests": {
+                "totalCount": 0,
+                "nodes": []
+              }
+            }
+          ]
+        },
+        "deliveryHeads": {
+          "totalCount": 1,
+          "nodes": [
+            {
+              "name": "delivery/00-ci-validation",
+              "prefix": "refs/heads/",
+              "associatedPullRequests": {
+                "totalCount": 1,
+                "nodes": [
+                  {
+                    "number": 21,
+                    "headRefName": "delivery/00-ci-validation"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

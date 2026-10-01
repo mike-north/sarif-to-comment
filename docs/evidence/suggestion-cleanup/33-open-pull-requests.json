@@ -1,0 +1,371 @@
+{
+  "recorded": "2026-10-01",
+  "endpoint": "POST https://api.github.com/graphql (read-only query)",
+  "note": "Alternative considered: all 70 open pull requests, to filter by head branch client-side (cost scales with the repository).",
+  "query": "query ($owner: String!, $repo: String!) {\n  repository(owner: $owner, name: $repo) {\n    pullRequests(states: OPEN, first: 100) { totalCount nodes { number headRefName baseRefName } }\n  }\n}\n",
+  "variables": {
+    "owner": "mike-north",
+    "repo": "doc-linter"
+  },
+  "response": {
+    "data": {
+      "repository": {
+        "pullRequests": {
+          "totalCount": 70,
+          "nodes": [
+            {
+              "number": 1,
+              "headRefName": "demo/controlled-markdown-review",
+              "baseRefName": "main"
+            },
+            {
+              "number": 2,
+              "headRefName": "docs/verified-github-delivery",
+              "baseRefName": "main"
+            },
+            {
+              "number": 17,
+              "headRefName": "feature/check-authoring-sarif",
+              "baseRefName": "docs/verified-github-delivery"
+            },
+            {
+              "number": 18,
+              "headRefName": "feature/real-document-pilot",
+              "baseRefName": "feature/check-authoring-sarif"
+            },
+            {
+              "number": 21,
+              "headRefName": "delivery/00-ci-validation",
+              "baseRefName": "feature/real-document-pilot"
+            },
+            {
+              "number": 22,
+              "headRefName": "delivery/01-check-infra",
+              "baseRefName": "delivery/00-ci-validation"
+            },
+            {
+              "number": 23,
+              "headRefName": "delivery/02-mapper-0.2.1",
+              "baseRefName": "delivery/00-ci-validation"
+            },
+            {
+              "number": 24,
+              "headRefName": "delivery/03-vale-raw-scope",
+              "baseRefName": "delivery/01-check-infra"
+            },
+            {
+              "number": 25,
+              "headRefName": "delivery/04-checks-terms",
+              "baseRefName": "delivery/03-vale-raw-scope"
+            },
+            {
+              "number": 26,
+              "headRefName": "delivery/05-checks-headings-spacing-links",
+              "baseRefName": "delivery/04-checks-terms"
+            },
+            {
+              "number": 27,
+              "headRefName": "delivery/06-decision-sheet-and-records",
+              "baseRefName": "delivery/05-checks-headings-spacing-links"
+            },
+            {
+              "number": 28,
+              "headRefName": "delivery/07-followups",
+              "baseRefName": "delivery/06-decision-sheet-and-records"
+            },
+            {
+              "number": 29,
+              "headRefName": "delivery/checks-heading-depth",
+              "baseRefName": "delivery/07-followups"
+            },
+            {
+              "number": 30,
+              "headRefName": "delivery/checks-heading-links",
+              "baseRefName": "delivery/checks-heading-depth"
+            },
+            {
+              "number": 31,
+              "headRefName": "delivery/checks-lets",
+              "baseRefName": "delivery/checks-heading-links"
+            },
+            {
+              "number": 32,
+              "headRefName": "sarif-issue4-20260928-reviewed",
+              "baseRefName": "sarif-issue4-20260928-base"
+            },
+            {
+              "number": 33,
+              "headRefName": "sarif-issue7-20260928-draft",
+              "baseRefName": "sarif-issue7-20260928-base"
+            },
+            {
+              "number": 34,
+              "headRefName": "sarif-issue7-20260928-submitted",
+              "baseRefName": "sarif-issue7-20260928-base"
+            },
+            {
+              "number": 36,
+              "headRefName": "sarif-issue5-20260929-reviewed",
+              "baseRefName": "sarif-issue5-20260929-base"
+            },
+            {
+              "number": 38,
+              "headRefName": "sarif-to-comment/suggestions/36/5f72b5f4-8dd1-462a-948b-71b0767ecafe",
+              "baseRefName": "sarif-issue5-20260929-reviewed"
+            },
+            {
+              "number": 39,
+              "headRefName": "sarif-to-comment/suggestions/36/ec69538b-1cf2-4801-b7e1-ae96d9076ff1",
+              "baseRefName": "sarif-issue5-20260929-reviewed"
+            },
+            {
+              "number": 41,
+              "headRefName": "exp-forcepush-20260929-amend",
+              "baseRefName": "exp-forcepush-20260929-amend-base"
+            },
+            {
+              "number": 42,
+              "headRefName": "exp-forcepush-20260929-rebase",
+              "baseRefName": "exp-forcepush-20260929-rebase-base"
+            },
+            {
+              "number": 43,
+              "headRefName": "exp-forcepush-20260929-orphan",
+              "baseRefName": "exp-forcepush-20260929-orphan-base"
+            },
+            {
+              "number": 44,
+              "headRefName": "exp-forcepush-20260929-control",
+              "baseRefName": "exp-forcepush-20260929-control-base"
+            },
+            {
+              "number": 45,
+              "headRefName": "exp-forcepush-20260929-amend-sugg-line6",
+              "baseRefName": "exp-forcepush-20260929-amend"
+            },
+            {
+              "number": 46,
+              "headRefName": "exp-forcepush-20260929-amend-sugg-ctx",
+              "baseRefName": "exp-forcepush-20260929-amend"
+            },
+            {
+              "number": 47,
+              "headRefName": "exp-forcepush-20260929-rebase-sugg-line6",
+              "baseRefName": "exp-forcepush-20260929-rebase"
+            },
+            {
+              "number": 48,
+              "headRefName": "exp-forcepush-20260929-rebase-sugg-ctx",
+              "baseRefName": "exp-forcepush-20260929-rebase"
+            },
+            {
+              "number": 49,
+              "headRefName": "exp-forcepush-20260929-control-sugg-line6",
+              "baseRefName": "exp-forcepush-20260929-control"
+            },
+            {
+              "number": 50,
+              "headRefName": "exp-forcepush-20260929-control-sugg-ctx",
+              "baseRefName": "exp-forcepush-20260929-control"
+            },
+            {
+              "number": 51,
+              "headRefName": "exp-forcepush-20260929-amend-sugg-reapply",
+              "baseRefName": "exp-forcepush-20260929-amend"
+            },
+            {
+              "number": 52,
+              "headRefName": "exp-forcepush-20260929-orphan-sugg-ctx",
+              "baseRefName": "exp-forcepush-20260929-orphan"
+            },
+            {
+              "number": 53,
+              "headRefName": "demo/content-review",
+              "baseRefName": "main"
+            },
+            {
+              "number": 54,
+              "headRefName": "sarif-issue30-20260929-reviewed",
+              "baseRefName": "sarif-issue30-20260929-base"
+            },
+            {
+              "number": 55,
+              "headRefName": "sarif-issue30-20260930-parts-reviewed",
+              "baseRefName": "sarif-issue30-20260930-parts-base"
+            },
+            {
+              "number": 56,
+              "headRefName": "sarif-issue27-20260929-a",
+              "baseRefName": "main"
+            },
+            {
+              "number": 58,
+              "headRefName": "suggestion-pr/56/bb3b8acd-0bdf-4464-b341-8802383b6935",
+              "baseRefName": "sarif-issue27-20260929-a"
+            },
+            {
+              "number": 60,
+              "headRefName": "sarif-issue29-20260929-a",
+              "baseRefName": "main"
+            },
+            {
+              "number": 61,
+              "headRefName": "exp-reapply-20260929-advanced",
+              "baseRefName": "main"
+            },
+            {
+              "number": 62,
+              "headRefName": "exp-reapply-20260929-amended",
+              "baseRefName": "main"
+            },
+            {
+              "number": 63,
+              "headRefName": "sarif-issue29-20260929-b",
+              "baseRefName": "main"
+            },
+            {
+              "number": 64,
+              "headRefName": "exp-reapply-20260929-rewritten",
+              "baseRefName": "main"
+            },
+            {
+              "number": 65,
+              "headRefName": "suggestion-pr/61/706c3c45-9ebf-4b47-942b-2e5ca6d8e44a",
+              "baseRefName": "exp-reapply-20260929-advanced"
+            },
+            {
+              "number": 66,
+              "headRefName": "suggestion-pr/61/eab22112-1bc3-4bbc-9d81-6570e7127f74",
+              "baseRefName": "exp-reapply-20260929-advanced"
+            },
+            {
+              "number": 67,
+              "headRefName": "suggestion-pr/61/0c3a1dc6-be06-4665-bd1b-e31ebaac81f2",
+              "baseRefName": "exp-reapply-20260929-advanced"
+            },
+            {
+              "number": 68,
+              "headRefName": "suggestion-pr/62/8563a35a-b14d-41f5-9d97-372034e64b9d",
+              "baseRefName": "exp-reapply-20260929-amended"
+            },
+            {
+              "number": 69,
+              "headRefName": "suggestion-pr/62/addcbe41-ba68-4858-b41e-f7f0e1527112",
+              "baseRefName": "exp-reapply-20260929-amended"
+            },
+            {
+              "number": 70,
+              "headRefName": "suggestion-pr/62/ca039fbc-33b7-45d2-b53f-33bbc71513e1",
+              "baseRefName": "exp-reapply-20260929-amended"
+            },
+            {
+              "number": 71,
+              "headRefName": "suggestion-pr/64/db27ee45-de28-454c-b521-f46bdafef733",
+              "baseRefName": "exp-reapply-20260929-rewritten"
+            },
+            {
+              "number": 72,
+              "headRefName": "suggestion-pr/60/d9f36f69-f1c8-47d9-8dd0-602daeb1d3b7",
+              "baseRefName": "sarif-issue29-20260929-a"
+            },
+            {
+              "number": 73,
+              "headRefName": "suggestion-pr/63/457b8f95-23ce-46fa-9dc9-9514b33ff700",
+              "baseRefName": "sarif-issue29-20260929-b"
+            },
+            {
+              "number": 74,
+              "headRefName": "exp-fallback-20260930-creation",
+              "baseRefName": "main"
+            },
+            {
+              "number": 75,
+              "headRefName": "exp-fallback-20260930-deletion",
+              "baseRefName": "main"
+            },
+            {
+              "number": 76,
+              "headRefName": "exp-fallback-20260930-group",
+              "baseRefName": "main"
+            },
+            {
+              "number": 77,
+              "headRefName": "exp-fallback-20260930-fix",
+              "baseRefName": "main"
+            },
+            {
+              "number": 78,
+              "headRefName": "suggestion-pr/75/0acdfa96-3a0c-4ab6-8a75-aa99aeb7cdc5",
+              "baseRefName": "exp-fallback-20260930-deletion"
+            },
+            {
+              "number": 79,
+              "headRefName": "exp-fallback-20260930-base",
+              "baseRefName": "exp-fallback-20260930-release"
+            },
+            {
+              "number": 80,
+              "headRefName": "audit-030-a",
+              "baseRefName": "main"
+            },
+            {
+              "number": 81,
+              "headRefName": "audit-030-b",
+              "baseRefName": "main"
+            },
+            {
+              "number": 82,
+              "headRefName": "audit-030-c",
+              "baseRefName": "main"
+            },
+            {
+              "number": 83,
+              "headRefName": "audit-030-d",
+              "baseRefName": "main"
+            },
+            {
+              "number": 84,
+              "headRefName": "audit-030-e",
+              "baseRefName": "main"
+            },
+            {
+              "number": 85,
+              "headRefName": "audit-030-f",
+              "baseRefName": "audit-030-f-base"
+            },
+            {
+              "number": 86,
+              "headRefName": "suggestion-pr/82/ba598127-d81f-487f-b96b-005ad50ca678",
+              "baseRefName": "audit-030-c"
+            },
+            {
+              "number": 87,
+              "headRefName": "suggestion-pr/82/01548a27-f254-4097-a864-590f46513bf4",
+              "baseRefName": "audit-030-c"
+            },
+            {
+              "number": 88,
+              "headRefName": "suggestion-pr/82/a56530c0-b663-4610-b715-a021e0af7cee",
+              "baseRefName": "audit-030-c"
+            },
+            {
+              "number": 89,
+              "headRefName": "suggestion-pr/82/257fb43e-f71e-4e8d-95ab-f23dc696d33a",
+              "baseRefName": "audit-030-c"
+            },
+            {
+              "number": 90,
+              "headRefName": "suggestion-pr/83/497c74d7-f4da-42c8-9f60-2ab7498a5cb5",
+              "baseRefName": "audit-030-d"
+            },
+            {
+              "number": 91,
+              "headRefName": "suggestion-pr/84/9d1c21c3-15d1-4a08-85ee-0a0502b89aca",
+              "baseRefName": "audit-030-e"
+            }
+          ]
+        }
+      }
+    }
+  }
+}
