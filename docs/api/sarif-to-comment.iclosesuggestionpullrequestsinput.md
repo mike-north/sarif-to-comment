@@ -73,7 +73,7 @@ boolean \| undefined
 
 </td><td>
 
-_(Optional)_ Continue a label sweep whose first page shows no suggestion pull request, instead of stopping with the status `label-not-suggestion-prs`<!-- -->. Only a label sweep stops that way.
+_(Optional)_ Continue a label sweep whose first page shows no suggestion pull request, instead of stopping with the status `label-not-suggestion-prs`<!-- -->. Only a label sweep stops that way, so `true` requires `label` and cannot be combined with `originalPullNumber` (a `TypeError` otherwise). It does not lift `maxCandidates`<!-- -->.
 
 
 </td></tr>
@@ -115,7 +115,7 @@ number \| undefined
 
 </td><td>
 
-_(Optional)_ The most candidates a sweep evaluates: suggestion branches, or open pull requests with the label. When GitHub counts more, nothing is evaluated and the status is `too-many-candidates`<!-- -->. A positive integer; the default is 500. Targeted discovery has no limit.
+_(Optional)_ The most candidates a sweep evaluates: suggestion branches, or open pull requests with the label. When GitHub counts more, nothing is evaluated and the status is `too-many-candidates`<!-- -->. A positive integer; the default is 500. Targeted discovery has no limit, so giving it with`originalPullNumber` is a `TypeError`<!-- -->.
 
 
 </td></tr>

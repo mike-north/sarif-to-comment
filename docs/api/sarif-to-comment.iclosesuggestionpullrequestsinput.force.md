@@ -4,7 +4,7 @@
 
 ## ICloseSuggestionPullRequestsInput.force property
 
-Continue a label sweep whose first page shows no suggestion pull request, instead of stopping with the status `label-not-suggestion-prs`<!-- -->. Only a label sweep stops that way.
+Continue a label sweep whose first page shows no suggestion pull request, instead of stopping with the status `label-not-suggestion-prs`<!-- -->. Only a label sweep stops that way, so `true` requires `label` and cannot be combined with `originalPullNumber` (a `TypeError` otherwise). It does not lift `maxCandidates`<!-- -->.
 
 **Signature:**
 

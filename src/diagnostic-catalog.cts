@@ -803,7 +803,7 @@ export const DIAGNOSTIC_CATALOG = {
     title: 'The sweep found more candidates than its limit',
     remedies: [
       'Narrow the cleanup to one original pull request with `--original N` (library: `originalPullNumber`).',
-      'If the count is expected, raise the limit above it with `--max-candidates N` (library: `maxCandidates`).',
+      'If the count is expected, raise the limit above it with `--max-candidates N` (library: `maxCandidates`). The branches under `suggestion-pr/` include those of suggestions already closed, because cleanup never deletes a branch, so the count grows over time.',
     ],
   },
   'label-not-suggestion-prs': {

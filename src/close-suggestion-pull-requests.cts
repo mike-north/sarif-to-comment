@@ -24,18 +24,20 @@
  *   originalPullNumber?: targeted mode: only pull requests referencing it
  *   owner?:              'me' (default): close only suggestion pull requests
  *                        the authenticated account opened; 'all': any
- *   maxCandidates?:      a sweep's candidate limit (default 500)
- *   force?:              a label sweep continues past the early exit
+ *   maxCandidates?:      a sweep's candidate limit (default 500); refused
+ *                        with originalPullNumber, which has no limit
+ *   force?:              a label sweep continues past the early exit;
+ *                        refused (when true) outside a label sweep
  *   dryRun?:             discover and verify, write nothing
  *
  * Sequence (every read completes before the first write):
  *   1. Discovery. Sweep (no originalPullNumber): the first page of the
  *      branches under suggestion-pr/ with their open pull requests, or,
- *      with a label, of the open pull requests carrying it. Its total count
- *      over maxCandidates stops the run (status too-many-candidates); a
- *      label sweep whose first page shows no suggestion marker and no
- *      suggestion-pr/ branch stops too (label-not-suggestion-prs) unless
- *      forced. Otherwise every further page is read. Targeted: the original
+ *      with a label, of the open pull requests carrying it. A label sweep
+ *      whose first page shows no suggestion marker and no suggestion-pr/
+ *      branch stops (label-not-suggestion-prs) unless forced; then a total
+ *      count over maxCandidates stops the run (too-many-candidates), forced
+ *      or not. Otherwise every further page is read. Targeted: the original
  *      is resolved first; if it cannot be verified, or does not exist (404),
  *      nothing else is read; otherwise its cross-referencing pull requests
  *      in this repository (D21). A pull request listed twice counts once.
@@ -149,13 +151,16 @@ export interface ICloseSuggestionPullRequestsInput {
    * The most candidates a sweep evaluates: suggestion branches, or open pull
    * requests with the label. When GitHub counts more, nothing is evaluated
    * and the status is `too-many-candidates`. A positive integer; the
-   * default is 500. Targeted discovery has no limit.
+   * default is 500. Targeted discovery has no limit, so giving it with
+   * `originalPullNumber` is a `TypeError`.
    */
   readonly maxCandidates?: number | undefined;
   /**
    * Continue a label sweep whose first page shows no suggestion pull request,
    * instead of stopping with the status `label-not-suggestion-prs`. Only a
-   * label sweep stops that way.
+   * label sweep stops that way, so `true` requires `label` and cannot be
+   * combined with `originalPullNumber` (a `TypeError` otherwise). It does
+   * not lift `maxCandidates`.
    */
   readonly force?: boolean | undefined;
   /** Read and verify everything, but close nothing; eligible suggestions are reported as `would-close`. */
@@ -457,6 +462,15 @@ function capture(input: unknown): ICaptured {
   if (scope !== undefined && !isOwnerScope(scope)) throw invalid("owner must be 'me' or 'all'");
   const maxCandidates = dataField(input, 'maxCandidates', 'maxCandidates');
   if (maxCandidates !== undefined && !isPositiveInteger(maxCandidates)) throw invalid('maxCandidates must be a positive integer');
+  const force = booleanField(input, 'force');
+  // An option that could change nothing is refused rather than ignored
+  // (contract §2.2): only a label sweep stops early, and only a sweep has a
+  // candidate limit. `force: false` asks for nothing, so it is accepted.
+  if (force && label === undefined) throw invalid('force applies only to a label sweep, so it requires label');
+  if (force && originalPullNumber !== undefined) throw invalid('force applies only to a label sweep, so it cannot be combined with originalPullNumber');
+  if (maxCandidates !== undefined && originalPullNumber !== undefined) {
+    throw invalid('maxCandidates limits a sweep, so it cannot be combined with originalPullNumber (targeted discovery has no limit)');
+  }
   return {
     owner,
     repo,
@@ -465,7 +479,7 @@ function capture(input: unknown): ICaptured {
     originalPullNumber,
     scope: scope ?? 'me',
     maxCandidates: maxCandidates ?? DEFAULT_MAX_CANDIDATES,
-    force: booleanField(input, 'force'),
+    force,
     dryRun: booleanField(input, 'dryRun'),
   };
 }
@@ -561,8 +575,8 @@ function looksLikeSuggestion(pull: IListedPullRequest): boolean {
 }
 
 /**
- * Steps 1-2 of a sweep: its first page, the candidate limit and the early
- * exit, then (unless stopped) the label and every further page. A sweep
+ * Steps 1-2 of a sweep: its first page, the early exit and then the
+ * candidate limit, then (unless stopped) the label and every further page. A sweep
  * stopped by its first page reads nothing else, not even the configuration,
  * so a bad input costs one request. `label` is a label sweep's label, or
  * undefined for the default sweep by suggestion branch.
@@ -575,10 +589,13 @@ async function sweep(captured: ICaptured, client: CleanupClient, label: string |
       : client.listOpenPullRequestsByLabel({ owner, repo, label, first, after });
   const first = await list(label === undefined ? SWEEP_PAGE : EARLY_EXIT_PAGE, null);
   const inspected = first.pullRequests.length;
-  if (first.totalCount > captured.maxCandidates) return { kind: 'stopped', reason: 'too-many-candidates', total: first.totalCount, inspected };
+  // The early exit is decided before the limit, from the same page: a wrong
+  // label is refused as a wrong label however many pull requests carry it.
+  // `force` bypasses only the early exit; the limit still applies.
   if (label !== undefined && !captured.force && inspected > 0 && !first.pullRequests.some(looksLikeSuggestion)) {
     return { kind: 'stopped', reason: 'label-not-suggestion-prs', total: first.totalCount, inspected };
   }
+  if (first.totalCount > captured.maxCandidates) return { kind: 'stopped', reason: 'too-many-candidates', total: first.totalCount, inspected };
   const resolved = await resolveLabel(captured, client);
   const pulls = [...first.pullRequests];
   // The listing may grow while it is read, but not without bound: one page
@@ -1168,11 +1185,15 @@ function renderMarkdown({ captured, label, status, counts, originals: allOrigina
  * referencing that original. By default only suggestion pull requests opened
  * by the authenticated account are closed; with `owner: 'all'`, any.
  *
- * A sweep counts its candidates first, in one request, and evaluates nothing
- * when there are more than `maxCandidates` (default 500). A label sweep
- * whose first 20 pull requests show no suggestion marker and no
- * suggestion branch stops too, unless `force` is set. So a mistyped or
+ * A sweep counts its candidates first, in one request. A label sweep whose
+ * first 20 pull requests show no suggestion marker and no suggestion branch
+ * stops there, unless `force` is set; then any sweep evaluates nothing when
+ * there are more than `maxCandidates` (default 500). So a mistyped or
  * overly broad label costs one request, never a walk through the repository.
+ * The default sweep counts every branch under `suggestion-pr/`, including
+ * those of suggestions already closed (cleanup never deletes a branch), so
+ * an active repository can reach the limit over time; raise it with
+ * `maxCandidates`.
  *
  * A suggestion is closed only after its original has been read and found
  * merged or closed, and after the suggestion itself has been read again and
@@ -1192,7 +1213,9 @@ function renderMarkdown({ captured, label, status, counts, originals: allOrigina
  * with this account), `incomplete` (an original could not be verified or an
  * action failed), or `too-many-candidates` or `label-not-suggestion-prs` (a
  * sweep stopped before evaluating anything).
- * @throws A `TypeError` for invalid input, before any request. An `Error`
+ * @throws A `TypeError` for invalid input, before any request, including
+ * `force: true` outside a label sweep and `maxCandidates` with
+ * `originalPullNumber`. An `Error`
  * when the repository configuration is invalid (naming the file and field)
  * or cannot be read, or when discovery or reading the account fails (GitHub,
  * network, authentication), before anything was closed. Neither a result

@@ -56,13 +56,13 @@ What was checked and done. The status is `complete`<!-- -->, or else `permission
 
 ## Exceptions
 
-A `TypeError` for invalid input, before any request. An `Error` when the repository configuration is invalid (naming the file and field) or cannot be read, or when discovery or reading the account fails (GitHub, network, authentication), before anything was closed. Neither a result nor a rejection contains the token.
+A `TypeError` for invalid input, before any request, including`force: true` outside a label sweep and `maxCandidates` with`originalPullNumber`<!-- -->. An `Error` when the repository configuration is invalid (naming the file and field) or cannot be read, or when discovery or reading the account fails (GitHub, network, authentication), before anything was closed. Neither a result nor a rejection contains the token.
 
 ## Remarks
 
 Suggestion pull requests follow the tool-neutral suggestion pull request convention, whichever tool created them: they are recognized by the structured marker in their description, never by their title. By default the open pull requests of the repository's branches under `suggestion-pr/` are checked, and each must carry the repository's canonical suggestion label (the `label` of `.github/suggestion-prs.json` on the default branch, otherwise `suggestion-pr`<!-- -->); with `label`<!-- -->, the open pull requests carrying that label instead; with `originalPullNumber`<!-- -->, only the pull requests referencing that original. By default only suggestion pull requests opened by the authenticated account are closed; with `owner: 'all'`<!-- -->, any.
 
-A sweep counts its candidates first, in one request, and evaluates nothing when there are more than `maxCandidates` (default 500). A label sweep whose first 20 pull requests show no suggestion marker and no suggestion branch stops too, unless `force` is set. So a mistyped or overly broad label costs one request, never a walk through the repository.
+A sweep counts its candidates first, in one request. A label sweep whose first 20 pull requests show no suggestion marker and no suggestion branch stops there, unless `force` is set; then any sweep evaluates nothing when there are more than `maxCandidates` (default 500). So a mistyped or overly broad label costs one request, never a walk through the repository. The default sweep counts every branch under `suggestion-pr/`<!-- -->, including those of suggestions already closed (cleanup never deletes a branch), so an active repository can reach the limit over time; raise it with`maxCandidates`<!-- -->.
 
 A suggestion is closed only after its original has been read and found merged or closed, and after the suggestion itself has been read again and verified: an original that cannot be read is `unverified`<!-- -->, and one GitHub reports does not exist is `not-found`<!-- -->; neither is ever treated as ended. Everything is read before anything is closed.
 

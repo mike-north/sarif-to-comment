@@ -563,9 +563,12 @@ Exit status:
 
 Usage:
   sarif-to-comment close-suggestion-prs --repo OWNER/REPO [--owner me|all]
-                                        [--label NAME [--force]] [--original N]
+                                        [--label NAME [--force]]
                                         [--max-candidates N] [--dry-run]
                                         [--format human|json|toon]
+  sarif-to-comment close-suggestion-prs --repo OWNER/REPO --original N
+                                        [--owner me|all] [--label NAME]
+                                        [--dry-run] [--format human|json|toon]
 
 Closes open suggestion pull requests (made by publish --allow-suggestion-prs, or
 by any tool following the suggestion pull request convention) whose original
@@ -580,9 +583,12 @@ again; an original that cannot be read is never treated as ended. Everything is
 read before anything is closed. Closing never deletes a branch, and nothing else
 is changed. Running it again is safe.
 
-A sweep first counts its candidates in one request, and checks nothing when
-there are more than the limit. A --label sweep whose first 20 pull requests show
-no suggestion marker and no suggestion-pr/ branch stops as well.
+A sweep first counts its candidates in one request. A --label sweep whose first
+20 pull requests show no suggestion marker and no suggestion-pr/ branch stops
+there. Then a sweep checks nothing when there are more candidates than the
+limit. The suggestion-pr/ branches counted include those of suggestions already
+closed, because closing never deletes a branch, so an active repository can
+reach the limit over time: raise it with --max-candidates.
 
 Options:
   --repo OWNER/REPO              Repository whose suggestion pull requests are
@@ -594,9 +600,9 @@ Options:
                                  instead, for suggestions left under a
                                  previously configured label. The repository's
                                  suggestion label is then not read.
-  --force                        With --label: check every pull request even
+  --force                        Requires --label: check every pull request even
                                  when the first 20 do not look like suggestion
-                                 pull requests.
+                                 pull requests. The limit still applies.
   --original N                   Check only the pull requests that reference
                                  original pull request N, instead of sweeping.
                                  If N does not exist, nothing can reference it:
@@ -604,6 +610,7 @@ Options:
   --max-candidates N             The most candidates a sweep checks: suggestion
                                  branches, or pull requests with the --label
                                  (default 500). More stops it before any check.
+                                 Not with --original, which has no limit.
   --dry-run                      Read and verify everything, close nothing.
 ${FORMAT_OPTION}
 ${CREDENTIALS}
@@ -1908,6 +1915,16 @@ async function closeSuggestionPrs(argv: readonly string[], { env }: IHandlerCont
   const owner = values.get('--owner');
   if (owner !== undefined && owner !== 'me' && owner !== 'all') throw new UsageError('--owner must be me or all');
   const maxCandidates = positiveFlag(values, '--max-candidates');
+  // An option that could change nothing is a usage error, never ignored
+  // (contract §2.2): only a --label sweep stops early, and only a sweep has a
+  // candidate limit.
+  if (flags.has('--force') && label === undefined) throw new UsageError('--force requires --label (only a --label sweep stops early)');
+  if (flags.has('--force') && originalPullNumber !== undefined) {
+    throw new UsageError('--force cannot be combined with --original (only a --label sweep stops early)');
+  }
+  if (maxCandidates !== undefined && originalPullNumber !== undefined) {
+    throw new UsageError('--max-candidates cannot be combined with --original (only a sweep has a candidate limit)');
+  }
   const token = tokenFrom(env);
   if (token === undefined) {
     return errorOutcome(command, tokenMissing());

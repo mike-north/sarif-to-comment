@@ -4,7 +4,7 @@
 
 ## ICloseSuggestionPullRequestsInput.maxCandidates property
 
-The most candidates a sweep evaluates: suggestion branches, or open pull requests with the label. When GitHub counts more, nothing is evaluated and the status is `too-many-candidates`<!-- -->. A positive integer; the default is 500. Targeted discovery has no limit.
+The most candidates a sweep evaluates: suggestion branches, or open pull requests with the label. When GitHub counts more, nothing is evaluated and the status is `too-many-candidates`<!-- -->. A positive integer; the default is 500. Targeted discovery has no limit, so giving it with`originalPullNumber` is a `TypeError`<!-- -->.
 
 **Signature:**
 
