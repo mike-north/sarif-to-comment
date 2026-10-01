@@ -4,8 +4,8 @@
  * `pnpm run check:types` and never executed.
  *
  * Each dimension's list holds only its own vocabulary, an unavailable
- * mechanism always carries at least one obstacle, and every unit states the
- * availability of every mechanism of the dimension that governs it.
+ * mechanism always carries at least one obstacle, and every unit answers,
+ * lazily, for every mechanism of the dimension that governs it.
  */
 import type { DeliveryUnit, IDeliveryPolicyLayer, MechanismAvailability } from '../dist/delivery-policy.cjs';
 
@@ -35,9 +35,11 @@ export const fileOperation: DeliveryUnit = {
   kind: 'file-operation',
   id: 'f',
   description: 'The creation of `a.md`',
-  availability: { manual: { available: true }, companion: unavailable },
+  availability: (mechanism) => (mechanism === 'manual' ? { available: true } : unavailable),
 };
-// @ts-expect-error -- an edit states every edits mechanism's availability, companion included (§3)
-export const editWithoutCompanion: DeliveryUnit = { kind: 'edit', id: 'e', description: 'e', availability: { native: unavailable, 'review-body': unavailable } };
-// @ts-expect-error -- an edit group states every groupedEdits mechanism's availability
-export const partialGroup: DeliveryUnit = { kind: 'edit-group', id: 'g', description: 'g', members: [], availability: { companion: unavailable } };
+// @ts-expect-error -- availability answers for every edits mechanism, companion included (§3, §8.7)
+export const editAnsweringOnlyNative: DeliveryUnit = { kind: 'edit', id: 'e', description: 'e', availability: (mechanism: 'native') => ({ available: false, obstacles: [mechanism] }) };
+// @ts-expect-error -- availability is asked lazily, so it is a function of the mechanism, not a table (§8.7)
+export const eagerTable: DeliveryUnit = { kind: 'file-operation', id: 'f', description: 'f', availability: { manual: unavailable, companion: unavailable } };
+// @ts-expect-error -- a member's native eligibility is asked lazily too (§8.7)
+export const eagerMember: DeliveryUnit = { kind: 'edit-group', id: 'g', description: 'g', members: [{ description: 'm', native: unavailable }], availability: () => unavailable };

@@ -43,6 +43,9 @@ import {
 import type {
   DeliveryPlan,
   DeliveryUnit,
+  EditMechanism,
+  FileOperationMechanism,
+  GroupedEditMechanism,
   IDeliveryPolicyInputs,
   IDeliveryPolicyLayer,
   IEditGroupMember,
@@ -66,6 +69,11 @@ function no(...obstacles: [string, ...string[]]): MechanismAvailability {
   return { available: false, obstacles };
 }
 
+/** Lazy availability (§8.7) answering from a table of each mechanism's availability. */
+function lookup<M extends string>(table: Readonly<Record<M, MechanismAvailability>>): (mechanism: M) => MechanismAvailability {
+  return (mechanism) => table[mechanism];
+}
+
 function edit(
   id: string,
   description: string,
@@ -73,11 +81,11 @@ function edit(
   reviewBody: MechanismAvailability = OK,
   companion: MechanismAvailability = OK,
 ): DeliveryUnit {
-  return { kind: 'edit', id, description, availability: { native, 'review-body': reviewBody, companion } };
+  return { kind: 'edit', id, description, availability: lookup({ native, 'review-body': reviewBody, companion }) };
 }
 
 function member(description: string, native: MechanismAvailability = OK): IEditGroupMember {
-  return { description, native };
+  return { description, native: () => native };
 }
 
 interface IGroupAvailability {
@@ -92,7 +100,7 @@ function editGroup(id: string, description: string, members: readonly IEditGroup
     id,
     description,
     members,
-    availability: { 'native-batch': a.nativeBatch ?? OK, companion: a.companion ?? OK, 'manual-group': a.manualGroup ?? OK },
+    availability: lookup({ 'native-batch': a.nativeBatch ?? OK, companion: a.companion ?? OK, 'manual-group': a.manualGroup ?? OK }),
   };
 }
 
@@ -102,11 +110,11 @@ interface IFileAvailability {
 }
 
 function fileOperation(id: string, description: string, a: IFileAvailability = {}): DeliveryUnit {
-  return { kind: 'file-operation', id, description, availability: { manual: a.manual ?? OK, companion: a.companion ?? OK } };
+  return { kind: 'file-operation', id, description, availability: lookup({ manual: a.manual ?? OK, companion: a.companion ?? OK }) };
 }
 
 function fileOperationGroup(id: string, description: string, a: IFileAvailability = {}): DeliveryUnit {
-  return { kind: 'file-operation-group', id, description, availability: { manual: a.manual ?? OK, companion: a.companion ?? OK } };
+  return { kind: 'file-operation-group', id, description, availability: lookup({ manual: a.manual ?? OK, companion: a.companion ?? OK }) };
 }
 
 function alternative(id: string, description: string): DeliveryUnit {
@@ -788,12 +796,29 @@ describe('blocking and announced fallback (contract §10)', () => {
     ]);
   });
 
-  test('a blocked plan still reports the fallbacks of other units, after the errors', () => {
+  test('a blocked plan carries no fallback warning: nothing is delivered (§10.1, D55)', () => {
     const plan = blocked(planDelivery(policy({ caller: { edits: ['native', 'review-body'] } }), [
       edit('e1', 'The edit of `a.ts` line 1', no('Not inline.')),
       fileOperation('f', 'The creation of `b.md`', { manual: no('Too long.') }),
     ]));
-    assert.deepEqual(plan.diagnostics.map((d) => d.code), ['delivery-unavailable', 'delivery-fallback']);
+    assert.deepEqual(plan.diagnostics.map((d) => d.code), ['delivery-unavailable']);
+  });
+
+  test('a plan blocked by the companion limit carries no fallback warning either (§10.1)', () => {
+    const units = Array.from({ length: 11 }, (_, i) => edit(`e${String(i)}`, `Edit ${String(i)}`, no('Not inline.')));
+    const plan = blocked(planDelivery(policy({ caller: { edits: ['native', 'companion'] } }), units));
+    assert.deepEqual(plan.diagnostics.map((d) => d.code), ['too-many-suggestion-prs']);
+  });
+
+  test('a mechanism reported unavailable without an obstacle is refused (§8.7)', () => {
+    const unit: DeliveryUnit = {
+      kind: 'edit',
+      id: 'e',
+      description: 'The edit',
+      // @ts-expect-error -- a JavaScript caller can break §8.7's rule; the planner refuses it rather than report no reason
+      availability: () => ({ available: false, obstacles: [] }),
+    };
+    assert.throws(() => planDelivery(policy(), [unit]), TypeError);
   });
 
   test('the blocked message lists every mechanism of a longer list, in order (§10.1)', () => {
@@ -863,7 +888,7 @@ describe('blocking and announced fallback (contract §10)', () => {
   });
 
   test('the unit\'s location becomes the diagnostic\'s location', () => {
-    const unit: DeliveryUnit = { kind: 'edit', id: 'e', description: 'The edit', location: { pointer: '/runs/0/results/3' }, availability: { native: no('X.'), 'review-body': no('Y.'), companion: no('Z.') } };
+    const unit: DeliveryUnit = { kind: 'edit', id: 'e', description: 'The edit', location: { pointer: '/runs/0/results/3' }, availability: lookup({ native: no('X.'), 'review-body': no('Y.'), companion: no('Z.') }) };
     const [diagnostic] = blocked(planDelivery(policy(), [unit])).diagnostics;
     assert.deepEqual(diagnostic?.location, { pointer: '/runs/0/results/3' });
   });
@@ -1237,18 +1262,21 @@ function dimensionOf(unit: DeliveryUnit): 'edits' | 'groupedEdits' | 'fileOperat
   }
 }
 
+function isOneOf<T extends string>(value: string, vocabulary: readonly T[]): value is T {
+  return vocabulary.some((entry) => entry === value);
+}
+
 /** Whether `mechanism` can deliver `unit`, by §8.3 and §8.7: native-batch needs the group and every member. */
 function canDeliver(unit: DeliveryUnit, mechanism: string): boolean {
   switch (unit.kind) {
     case 'edit':
-      if (mechanism === 'native') return unit.availability.native.available;
-      return mechanism === 'review-body' ? unit.availability['review-body'].available : unit.availability.companion.available;
+      return isOneOf(mechanism, DELIVERY_MECHANISMS.edits) && unit.availability(mechanism).available;
     case 'edit-group':
-      if (mechanism === 'native-batch') return unit.availability['native-batch'].available && unit.members.every((m) => m.native.available);
-      return mechanism === 'companion' ? unit.availability.companion.available : unit.availability['manual-group'].available;
+      if (mechanism === 'native-batch') return unit.availability('native-batch').available && unit.members.every((m) => m.native().available);
+      return isOneOf(mechanism, DELIVERY_MECHANISMS.groupedEdits) && unit.availability(mechanism).available;
     case 'file-operation':
     case 'file-operation-group':
-      return mechanism === 'manual' ? unit.availability.manual.available : unit.availability.companion.available;
+      return isOneOf(mechanism, DELIVERY_MECHANISMS.fileOperations) && unit.availability(mechanism).available;
     case 'alternative':
       return false;
   }
@@ -1317,7 +1345,7 @@ describe('properties over generated policies and units (contract §4, §8, §9, 
         const inCompanions: number = plan.companions.flatMap((c) => c.sections).filter((s) => s === unit.id).length;
         assert.equal(inCompanions, mechanism === 'companion' ? 1 : 0, 'a group is in one companion section or none');
         if (unit.kind === 'edit-group' && mechanism === 'native-batch') {
-          assert.ok(unit.members.every((m) => m.native.available), 'no partial native batch');
+          assert.ok(unit.members.every((m) => m.native().available), 'no partial native batch');
         }
       }
     }
@@ -1327,7 +1355,8 @@ describe('properties over generated policies and units (contract §4, §8, §9, 
     for (const { resolved, units } of cases) {
       const plan = planDelivery(resolved, units);
       const fallbacks = plan.diagnostics.filter((d) => d.code === 'delivery-fallback');
-      const expected = units.filter((u) => {
+      // A blocked plan delivers nothing, so it announces no fallback (§10.1).
+      const expected = plan.status === 'blocked' ? [] : units.filter((u) => {
         const dimension = dimensionOf(u);
         if (dimension === undefined) return false;
         const used = resolved[dimension].value.find((m) => canDeliver(u, m));
@@ -1337,6 +1366,51 @@ describe('properties over generated policies and units (contract §4, §8, §9, 
       expected.forEach((unit, i) => {
         assert.ok(fallbacks[i]?.message.startsWith(`${unit.description} is delivered as `));
       });
+    }
+  });
+
+  test('availability is asked only for listed mechanisms, in order, at most once, never after the first available (§8.7)', () => {
+    for (const { resolved, units } of cases) {
+      const asked = new Map<string, string[]>();
+      const record = (id: string, what: string): void => {
+        asked.set(id, [...(asked.get(id) ?? []), what]);
+      };
+      const spied = units.map((unit): DeliveryUnit => {
+        switch (unit.kind) {
+          case 'edit':
+            return { ...unit, availability: (m: EditMechanism) => { record(unit.id, m); return unit.availability(m); } };
+          case 'edit-group':
+            return {
+              ...unit,
+              availability: (m: GroupedEditMechanism) => { record(unit.id, m); return unit.availability(m); },
+              members: unit.members.map((m, i) => ({ ...m, native: () => { record(unit.id, `member ${String(i)}`); return m.native(); } })),
+            };
+          case 'file-operation':
+          case 'file-operation-group':
+            return { ...unit, availability: (m: FileOperationMechanism) => { record(unit.id, m); return unit.availability(m); } };
+          case 'alternative':
+            return unit;
+        }
+      });
+      planDelivery(resolved, spied);
+      for (const unit of units) {
+        const dimension = dimensionOf(unit);
+        const calls = asked.get(unit.id) ?? [];
+        if (dimension === undefined) {
+          assert.deepEqual(calls, []);
+          continue;
+        }
+        const listed: readonly string[] = resolved[dimension].value;
+        const first = listed.findIndex((m) => canDeliver(unit, m));
+        const expected = first === -1 ? listed : listed.slice(0, first + 1);
+        assert.deepEqual(calls.filter((c) => !c.startsWith('member ')), expected, unit.id);
+        const members = calls.filter((c) => c.startsWith('member '));
+        if (unit.kind === 'edit-group' && expected.includes('native-batch')) {
+          assert.deepEqual([...members].sort(), unit.members.map((_, i) => `member ${String(i)}`).sort(), 'each member once');
+        } else {
+          assert.deepEqual(members, [], 'members only for native-batch');
+        }
+      }
     }
   });
 
