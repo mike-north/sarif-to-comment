@@ -1,0 +1,318 @@
+{
+  "data": {
+    "repository": {
+      "pullRequest": {
+        "headRefOid": "b3e3ed734b03fc8e4dae2b7cb85f6d8bb1b98801",
+        "baseRefOid": "c29a1b22f7d7b91f12f41893ad25f555b3f9101f",
+        "reviewThreads": {
+          "nodes": [
+            {
+              "path": "docs/experiments/forcepush/sample-amend.md",
+              "isOutdated": true,
+              "line": null,
+              "originalLine": 5,
+              "diffSide": "RIGHT",
+              "startLine": null,
+              "comments": {
+                "nodes": [
+                  {
+                    "databaseId": 4136702045,
+                    "state": "SUBMITTED",
+                    "outdated": true,
+                    "line": null,
+                    "originalLine": 5,
+                    "position": 1,
+                    "originalPosition": 6,
+                    "commit": {
+                      "oid": "30073435e95ecbe4849f2423371d3d5010251cfe"
+                    },
+                    "originalCommit": {
+                      "oid": "e69981ed42926b07d0ff3f25d98558229afd348e"
+                    },
+                    "pullRequestReview": {
+                      "databaseId": 5356480526,
+                      "state": "COMMENTED"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "path": "docs/experiments/forcepush/sample-amend.md",
+              "isOutdated": false,
+              "line": 6,
+              "originalLine": 6,
+              "diffSide": "RIGHT",
+              "startLine": 6,
+              "comments": {
+                "nodes": [
+                  {
+                    "databaseId": 4136702047,
+                    "state": "SUBMITTED",
+                    "outdated": false,
+                    "line": 6,
+                    "originalLine": 6,
+                    "position": 5,
+                    "originalPosition": 7,
+                    "commit": {
+                      "oid": "b3e3ed734b03fc8e4dae2b7cb85f6d8bb1b98801"
+                    },
+                    "originalCommit": {
+                      "oid": "e69981ed42926b07d0ff3f25d98558229afd348e"
+                    },
+                    "pullRequestReview": {
+                      "databaseId": 5356480526,
+                      "state": "COMMENTED"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "path": "docs/experiments/forcepush/sample-amend.md",
+              "isOutdated": false,
+              "line": 6,
+              "originalLine": 6,
+              "diffSide": "RIGHT",
+              "startLine": 6,
+              "comments": {
+                "nodes": [
+                  {
+                    "databaseId": 4150989017,
+                    "state": "SUBMITTED",
+                    "outdated": false,
+                    "line": 6,
+                    "originalLine": 6,
+                    "position": 7,
+                    "originalPosition": 7,
+                    "commit": {
+                      "oid": "e69981ed42926b07d0ff3f25d98558229afd348e"
+                    },
+                    "originalCommit": {
+                      "oid": "e69981ed42926b07d0ff3f25d98558229afd348e"
+                    },
+                    "pullRequestReview": {
+                      "databaseId": 5373957613,
+                      "state": "COMMENTED"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "path": "docs/experiments/forcepush/sample-amend.md",
+              "isOutdated": false,
+              "line": 5,
+              "originalLine": 5,
+              "diffSide": "RIGHT",
+              "startLine": null,
+              "comments": {
+                "nodes": [
+                  {
+                    "databaseId": 4150989117,
+                    "state": "SUBMITTED",
+                    "outdated": false,
+                    "line": 5,
+                    "originalLine": 5,
+                    "position": 6,
+                    "originalPosition": 6,
+                    "commit": {
+                      "oid": "e69981ed42926b07d0ff3f25d98558229afd348e"
+                    },
+                    "originalCommit": {
+                      "oid": "e69981ed42926b07d0ff3f25d98558229afd348e"
+                    },
+                    "pullRequestReview": {
+                      "databaseId": 5373957705,
+                      "state": "COMMENTED"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "path": "docs/experiments/forcepush/sample-amend.md",
+              "isOutdated": false,
+              "line": 6,
+              "originalLine": 6,
+              "diffSide": "LEFT",
+              "startLine": 6,
+              "comments": {
+                "nodes": [
+                  {
+                    "databaseId": 4150989226,
+                    "state": "SUBMITTED",
+                    "outdated": false,
+                    "line": 6,
+                    "originalLine": 6,
+                    "position": 5,
+                    "originalPosition": 5,
+                    "commit": {
+                      "oid": "e69981ed42926b07d0ff3f25d98558229afd348e"
+                    },
+                    "originalCommit": {
+                      "oid": "e69981ed42926b07d0ff3f25d98558229afd348e"
+                    },
+                    "pullRequestReview": {
+                      "databaseId": 5373957807,
+                      "state": "COMMENTED"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "path": "docs/experiments/forcepush/sample-amend.md",
+              "isOutdated": false,
+              "line": 5,
+              "originalLine": 5,
+              "diffSide": "LEFT",
+              "startLine": 5,
+              "comments": {
+                "nodes": [
+                  {
+                    "databaseId": 4150989346,
+                    "state": "SUBMITTED",
+                    "outdated": false,
+                    "line": 5,
+                    "originalLine": 5,
+                    "position": 4,
+                    "originalPosition": 4,
+                    "commit": {
+                      "oid": "e69981ed42926b07d0ff3f25d98558229afd348e"
+                    },
+                    "originalCommit": {
+                      "oid": "e69981ed42926b07d0ff3f25d98558229afd348e"
+                    },
+                    "pullRequestReview": {
+                      "databaseId": 5373957926,
+                      "state": "COMMENTED"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "path": "docs/experiments/forcepush/sample-amend.md",
+              "isOutdated": false,
+              "line": 2,
+              "originalLine": 2,
+              "diffSide": "RIGHT",
+              "startLine": 2,
+              "comments": {
+                "nodes": [
+                  {
+                    "databaseId": 4150989431,
+                    "state": "SUBMITTED",
+                    "outdated": false,
+                    "line": 2,
+                    "originalLine": 2,
+                    "position": 1,
+                    "originalPosition": 1,
+                    "commit": {
+                      "oid": "e69981ed42926b07d0ff3f25d98558229afd348e"
+                    },
+                    "originalCommit": {
+                      "oid": "e69981ed42926b07d0ff3f25d98558229afd348e"
+                    },
+                    "pullRequestReview": {
+                      "databaseId": 5373958025,
+                      "state": "COMMENTED"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "path": "docs/experiments/forcepush/sample-amend.md",
+              "isOutdated": false,
+              "line": 3,
+              "originalLine": 3,
+              "diffSide": "RIGHT",
+              "startLine": 3,
+              "comments": {
+                "nodes": [
+                  {
+                    "databaseId": 4151501976,
+                    "state": "PENDING",
+                    "outdated": false,
+                    "line": 3,
+                    "originalLine": 3,
+                    "position": 2,
+                    "originalPosition": 2,
+                    "commit": {
+                      "oid": "e69981ed42926b07d0ff3f25d98558229afd348e"
+                    },
+                    "originalCommit": {
+                      "oid": "e69981ed42926b07d0ff3f25d98558229afd348e"
+                    },
+                    "pullRequestReview": {
+                      "databaseId": 5374560867,
+                      "state": "PENDING"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "path": "docs/experiments/forcepush/sample-amend.md",
+              "isOutdated": false,
+              "line": 6,
+              "originalLine": 6,
+              "diffSide": "RIGHT",
+              "startLine": 6,
+              "comments": {
+                "nodes": [
+                  {
+                    "databaseId": 4151501982,
+                    "state": "PENDING",
+                    "outdated": false,
+                    "line": 6,
+                    "originalLine": 6,
+                    "position": 7,
+                    "originalPosition": 7,
+                    "commit": {
+                      "oid": "e69981ed42926b07d0ff3f25d98558229afd348e"
+                    },
+                    "originalCommit": {
+                      "oid": "e69981ed42926b07d0ff3f25d98558229afd348e"
+                    },
+                    "pullRequestReview": {
+                      "databaseId": 5374560867,
+                      "state": "PENDING"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "timelineItems": {
+          "filteredCount": 2,
+          "nodes": [
+            {
+              "__typename": "HeadRefForcePushedEvent",
+              "createdAt": "2026-09-29T18:04:37Z",
+              "beforeCommit": {
+                "oid": "e69981ed42926b07d0ff3f25d98558229afd348e"
+              },
+              "afterCommit": {
+                "oid": "30073435e95ecbe4849f2423371d3d5010251cfe"
+              }
+            },
+            {
+              "__typename": "HeadRefForcePushedEvent",
+              "createdAt": "2026-09-29T18:17:32Z",
+              "beforeCommit": {
+                "oid": "30073435e95ecbe4849f2423371d3d5010251cfe"
+              },
+              "afterCommit": {
+                "oid": "b3e3ed734b03fc8e4dae2b7cb85f6d8bb1b98801"
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

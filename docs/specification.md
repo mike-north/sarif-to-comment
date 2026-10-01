@@ -225,6 +225,8 @@ Let R be the reviewed commit and H the pull request's current head. A review is 
 
 **Native suggestions.** A native suggestion at R is offered whenever its lines have a valid RIGHT anchor on the reviewed diff and the other eligibility rules hold: the fix edits R, and GitHub's observed application reproduces exactly the intended file. R need not be H. The tool does not predict applicability from GitHub's `outdated` field: GH-19 observed the API report a suggestion current that the web interface treated as outdated. **[D4, D58]**
 
+**Live verification.** A pending review published by the tool on a fixture pull request at a reviewed commit a force-push had discarded carried an inline comment on an unchanged line and a native suggestion, both accepted at that commit ([evidence](evidence/historical-placement/README.md)).
+
 **Host behavior relied on, not enforced.** GH-19 observed, for one-line LF replacements on same-repository draft pull requests, with one account that was also the pull request's author: on lines the head left unchanged, GitHub offered a suggestion at R and applied it to the head's file byte for byte, singly and in batches; on lines the head changed, GitHub marked the suggestion Outdated and disabled applying it, so it could not overwrite the head's change. The tool relies on GitHub for this. It does not check whether the head changed a suggestion's lines, and does not withhold a suggestion because it did.
 
 ### R17. Publish only about a commit of the pull request

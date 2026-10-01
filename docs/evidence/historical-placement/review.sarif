@@ -1,0 +1,20 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": { "driver": { "name": "Historical placement check", "version": "1.0.0" } },
+      "columnKind": "utf16CodeUnits",
+      "results": [
+        {
+          "message": { "text": "Historical placement check: this unchanged context line is anchored inline at the reviewed commit e69981e, which a force-push replaced. Fixture only; do not act on this review." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "docs/experiments/forcepush/sample-amend.md" }, "region": { "startLine": 3 } } }]
+        },
+        {
+          "message": { "text": "Historical placement check: a native suggestion at the reviewed commit, on line 6, which the current head left unchanged. Fixture only; do not apply." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "docs/experiments/forcepush/sample-amend.md" }, "region": { "startLine": 6 } } }],
+          "fixes": [{ "description": { "text": "Mark line 6 as checked." }, "artifactChanges": [{ "artifactLocation": { "uri": "docs/experiments/forcepush/sample-amend.md" }, "replacements": [{ "deletedRegion": { "startLine": 6 }, "insertedContent": { "text": "Line 06: reviewed change two (added by C1), checked historically." } }] }] }]
+        }
+      ]
+    }
+  ]
+}

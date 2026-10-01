@@ -1,0 +1,11 @@
+{
+  "command": "publish",
+  "status": "published",
+  "review": {
+    "id": 5374560867,
+    "url": "https://github.com/mike-north/doc-linter/pull/41#pullrequestreview-5374560867"
+  },
+  "statePath": "/Users/mnorth/Development/sarif-to-comment/.claude/worktrees/u7a-historical-placement/scratch/live/state.json",
+  "message": "## Draft review published\n\nCreated the draft [review 5374560867](https://github.com/mike-north/doc-linter/pull/41#pullrequestreview-5374560867) on mike-north/doc-linter#41 at commit `e69981ed42926b07d0ff3f25d98558229afd348e`. It stays a draft until someone submits it on GitHub.",
+  "diagnostics": []
+}
